@@ -4,7 +4,7 @@ import Charts
 // صفحتا النادي واللاعب — تُفتحان عند النقر على شعار نادٍ (الترتيب/مركز المباراة)
 // أو على لاعب (التشكيلة/الهدّافون). مبنيّتان 1:1 على مرجع كأس العالم في تطبيق سبق
 // (WCTeamSheet / WCPlayerSheet): تمرير واحد متواصل بلا تبويبات، ترويسة بطلة،
-// بلاطات حقائق، وشبكات أرقام — بثيم «سبق الرياضي» الأبيض النظيف.
+// بلاطات حقائق، وشبكات أرقام — بثيم VARA الأبيض النظيف.
 
 // MARK: - صفحة النادي
 
@@ -937,14 +937,10 @@ func photoCircle(_ url: String, size: CGFloat, fallback: String, ring: Bool = fa
                 .frame(width: size, height: size)
                 .background(Circle().fill(SpTheme.chipFill))
         } else {
-            AsyncImage(url: URL(string: url)) { phase in
-                switch phase {
-                case .success(let image): image.resizable().aspectRatio(contentMode: .fill)
-                default: SpTheme.chipFill
-                }
-            }
-            .frame(width: size, height: size)
-            .clipShape(Circle())
+            // SpRemoteImage (كاش @State) بدل AsyncImage — يمنع وميض الصور عند إعادة الرسم.
+            SpRemoteImage(url: url, contentMode: .fill)
+                .frame(width: size, height: size)
+                .clipShape(Circle())
         }
     }
     .overlay(Circle().stroke(ring ? SpTheme.green : SpTheme.cardStroke, lineWidth: ring ? 3 : 1))

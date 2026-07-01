@@ -163,13 +163,9 @@ struct CompetitionDetailView: View {
                 // دوري روشن — الشعار الرسمي (أصل محلّي).
                 Image("RSLLogo").resizable().scaledToFit().padding(6)
             } else if let l = comp.logo, !l.isEmpty {
-                AsyncImage(url: URL(string: l)) { phase in
-                    if case .success(let img) = phase {
-                        img.resizable().scaledToFit().padding(8)
-                    } else {
-                        Image(systemName: "trophy.fill").font(.system(size: 24)).foregroundStyle(.white.opacity(0.9))
-                    }
-                }
+                // SpRemoteImage (كاش @State) بدل AsyncImage — يمنع وميض الشعار عند إعادة الرسم.
+                SpRemoteImage(url: l)
+                    .padding(8)
             } else {
                 Image(systemName: "trophy.fill").font(.system(size: 24)).foregroundStyle(.white.opacity(0.9))
             }

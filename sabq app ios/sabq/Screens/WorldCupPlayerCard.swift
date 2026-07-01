@@ -356,7 +356,9 @@ struct WCPlayerFormSection: View {
     private var hasXg: Bool { matches.contains { $0.xg != nil } }
 
     var body: some View {
-        Group {
+        // ZStack+Color.clear وليس Group+EmptyView: الحالة الفارغة تُسقط .task فلا يبدأ الجلب أبدًا
+        ZStack {
+            Color.clear.frame(height: 0)
             if let form, form.available, !form.matches.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     header
@@ -366,8 +368,6 @@ struct WCPlayerFormSection: View {
                         ForEach(matches) { m in matchRow(m) }
                     }
                 }
-            } else {
-                EmptyView()
             }
         }
         .task(id: playerId) {
@@ -537,7 +537,9 @@ struct WCPlayerMarketSection: View {
     private var current: Double? { market?.marketValue ?? history.last?.value }
 
     var body: some View {
-        Group {
+        // ZStack+Color.clear وليس Group+EmptyView: الحالة الفارغة تُسقط .task فلا يبدأ الجلب أبدًا
+        ZStack {
+            Color.clear.frame(height: 0)
             if let m = market, m.available, (current != nil || history.count >= 2) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 6) {
@@ -557,8 +559,6 @@ struct WCPlayerMarketSection: View {
                 .padding(14)
                 .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.card))
                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(WCTheme.gold.opacity(0.25), lineWidth: 1))
-            } else {
-                EmptyView()
             }
         }
         .task(id: playerId) {

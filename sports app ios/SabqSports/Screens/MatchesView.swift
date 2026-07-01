@@ -1083,11 +1083,16 @@ struct MatchesView: View {
         .joined(separator: "|")
     }
 
-    // تحديث صامت أثناء العرض — يتسارع (15ث) عند وجود مباراة جارية، ويتباطأ (45ث) عداها.
+    // تحديث صامت أثناء العرض — يتسارع (15ث) عند مباراة جارية أو انطلاقة وشيكة
+    // (خلال دقيقتين حول الموعد، كي لا ننتظر 45ث لالتقاط بداية المباراة)، ويتباطأ (45ث) عداها.
     private func pollLive() async {
         while !Task.isCancelled {
+            let now = Date().timeIntervalSince1970
             let hasLive = fixtures.contains { $0.status.live }
-            let delay: UInt64 = hasLive ? 15_000_000_000 : 45_000_000_000
+            let nearKickoff = fixtures.contains {
+                !$0.status.finished && !$0.status.live && abs($0.timestamp - now) <= 120
+            }
+            let delay: UInt64 = (hasLive || nearKickoff) ? 15_000_000_000 : 45_000_000_000
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
             await load(force: true)
@@ -1095,7 +1100,7 @@ struct MatchesView: View {
     }
 }
 
-// MARK: - صفّ مباراة المونديال (يطابق طراز SpMatchCard: أبيض/أخضر مسطّح)
+// MARK: - صفّ مباراة المونديال (الطراز المرجعي: أبيض/أخضر مسطّح)
 
 private struct SpWcMatchRow: View {
     let fixture: SpWcFixture
@@ -1307,6 +1312,8 @@ struct WcMatchCenter: View {
     @State private var commentary: SpCommentary?
     @State private var selectedTeam: IDBox?
     @State private var selectedPlayer: IDBox?
+    /// قوّة المنتخبين من جداول المجموعات — تغذّي «توقّع VARA» (كانت nil فيتراجع لأفضلية الأرض فقط).
+    @State private var strengths: [Int: VaraTeamStrength] = [:]
 
     private var fx: SpWcFixture { detail?.fixture ?? preview }
     private var started: Bool { fx.status.live || fx.status.finished }
@@ -1331,6 +1338,9 @@ struct WcMatchCenter: View {
                 }
                 if !started {
                     predictionCard
+                }
+                if fx.status.finished {
+                    varaVerdictCard
                 }
                 if loading && detail == nil {
                     SpLoading().padding(.top, 24)
@@ -1470,7 +1480,7 @@ struct WcMatchCenter: View {
         .padding(.horizontal, 16)
     }
 
-    // توقّع VARA الديناميكي — من المواجهات السابقة + أفضلية الأرض (ملاعب محايدة).
+    // توقّع VARA الديناميكي — من جداول المجموعات (قوّة المنتخبين) + المواجهات السابقة (ملاعب محايدة).
     private var wcVaraPick: VaraPick {
         var hw = 0, dr = 0, aw = 0
         for m in (detail?.headToHead ?? []) {
@@ -1481,7 +1491,8 @@ struct WcMatchCenter: View {
             if curHome > curAway { hw += 1 } else if curHome == curAway { dr += 1 } else { aw += 1 }
         }
         let tuple = (hw + dr + aw) > 0 ? (home: hw, draw: dr, away: aw) : nil
-        return VaraPredict.compute(home: nil, away: nil, homeName: fx.home.name, awayName: fx.away.name,
+        return VaraPredict.compute(home: strengths[fx.home.id], away: strengths[fx.away.id],
+                                   homeName: fx.home.name, awayName: fx.away.name,
                                    neutralVenue: true, h2h: tuple)
     }
 
@@ -1521,6 +1532,16 @@ struct WcMatchCenter: View {
         .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
             .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1)))
         .padding(.horizontal, 16)
+    }
+
+    // حكم ما بعد النهاية — لقطة توقّع VARA المؤرشفة قبل الانطلاق ضد النتيجة النهائية.
+    @ViewBuilder private var varaVerdictCard: some View {
+        if let gh = fx.goals.home, let ga = fx.goals.away,
+           let snap = VaraPickArchive.load(fixtureId: fx.id) {
+            VaraVerdictCard(homeName: fx.home.name, awayName: fx.away.name,
+                            finalHome: gh, finalAway: ga, vara: snap, mine: nil)
+                .padding(.horizontal, 16)
+        }
     }
 
     private func predStat(_ value: String, _ label: String, _ color: Color) -> some View {
@@ -1691,7 +1712,7 @@ struct WcMatchCenter: View {
             case "goal": Image(systemName: "soccerball").foregroundStyle(SpTheme.green)
             case "missed-penalty": Image(systemName: "exclamationmark.shield.fill").foregroundStyle(SpTheme.crimson)
             case "var": Image(systemName: "play.tv.fill").foregroundStyle(varPurple)
-            case "yellow-card": cardChip(Color(red: 0.95, green: 0.76, blue: 0.22))
+            case "yellow-card": cardChip(SpTheme.yellowCard)
             case "red-card": cardChip(SpTheme.crimson)
             case "substitution": Image(systemName: "arrow.left.arrow.right").foregroundStyle(subSky)
             default: Image(systemName: "dot.radiowaves.left.and.right").foregroundStyle(SpTheme.onDarkFaint)
@@ -2264,6 +2285,19 @@ struct WcMatchCenter: View {
         pressure = await pressureOpt
         facts = await factsOpt
         commentary = await commentaryOpt
+        // جداول المجموعات تغذّي «توقّع VARA» بقوّة المنتخبين — تلزم قبل المباراة فقط.
+        if !started, strengths.isEmpty,
+           let s = try? await APIClient.shared.fetchWorldCupStandings() {
+            var map: [Int: VaraTeamStrength] = [:]
+            for g in s.groups {
+                for r in g.rows { map[r.team.id] = VaraTeamStrength(wcRow: r) }
+            }
+            strengths = map
+        }
+        // أرشفة لقطة توقّع VARA قبل الانطلاق — تُعرض بعد النهاية في «نتيجة التوقّعات».
+        if !started {
+            VaraPickArchive.save(fixtureId: fx.id, pick: wcVaraPick)
+        }
         loading = false
     }
 

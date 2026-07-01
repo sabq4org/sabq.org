@@ -646,6 +646,10 @@ struct MuqtarabTopicView: View {
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var didReportView = false
+    /// memoization لنتيجة ArticleHtmlParser.parse — نفس نمط cachedBlocks في
+    /// ArticleDetailView: بدونها كان الماسح/الـregex يعاد على كامل HTML
+    /// الموضوع مع كل إعادة رسم (تمرير/تغيّر حالة) — تقطيع محسوس في الطويل.
+    @State private var cachedBlocks: (html: String, items: [ArticleBlock]) = ("", [])
 
     private var theme: MuqTheme { MuqTheme(angle?.colorHex) }
 
@@ -800,8 +804,14 @@ struct MuqtarabTopicView: View {
         let html = t.html
         if !html.isEmpty {
             let cleaned = muqStripDuplicateLead(html: html, title: t.title, excerpt: t.excerpt)
+            let blocks: [ArticleBlock] = {
+                if cachedBlocks.html == cleaned { return cachedBlocks.items }
+                let parsed = ArticleHtmlParser.parse(cleaned)
+                DispatchQueue.main.async { cachedBlocks = (cleaned, parsed) }
+                return parsed
+            }()
             ArticleContentView(
-                blocks: ArticleHtmlParser.parse(cleaned),
+                blocks: blocks,
                 fontSize: 16, lineSpacing: 6, useReaderFont: false
             )
         } else if !t.fallbackText.isEmpty {

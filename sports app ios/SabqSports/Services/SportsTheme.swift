@@ -101,6 +101,10 @@ nonisolated enum SpTheme {
     static let goldDeep  = dyn(Color(red: 0.70, green: 0.52, blue: 0.12), Color(red: 0.86, green: 0.69, blue: 0.28))
     static let goldSoft  = dyn(Color(red: 0.93, green: 0.80, blue: 0.42), Color(red: 0.98, green: 0.86, blue: 0.56))
     static let crimson   = dyn(Color(red: 0.86, green: 0.18, blue: 0.24), Color(red: 0.98, green: 0.40, blue: 0.45))
+    // ألوان دلالية مركزية — لا تثبّت قيمها في الشاشات: الكرت الأصفر وميداليتا الفضة/البرونز (الذهب = gold أعلاه).
+    static let yellowCard  = dyn(Color(red: 0.95, green: 0.76, blue: 0.22), Color(red: 0.98, green: 0.83, blue: 0.34))
+    static let medalSilver = dyn(Color(red: 0.74, green: 0.76, blue: 0.80), Color(red: 0.80, green: 0.82, blue: 0.86))
+    static let medalBronze = dyn(Color(red: 0.80, green: 0.55, blue: 0.35), Color(red: 0.88, green: 0.64, blue: 0.44))
     static var leaf: Color { dyn(spActivePalette.softLight, spActivePalette.softDark) }
 
     /// اللون المحوري للإبراز/الأيقونات (يتبع لوحة النادي).

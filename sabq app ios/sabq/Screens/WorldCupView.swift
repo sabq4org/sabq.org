@@ -68,10 +68,20 @@ struct WorldCupView: View {
         // والدقيقة تلقائيًّا (كما في مركز المباراة). بدونه كانت الشاشة تُحمّل مرة
         // واحدة فلا يتغيّر الوقت إلا بسحب يدوي. force=true لتجاوز الكاش.
         .task {
+            var tick = 0
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 8_000_000_000)
                 if Task.isCancelled { return }
-                if isAnyLive { await loadAll(force: true) }
+                tick += 1
+                if isAnyLive {
+                    await loadAll(force: true)
+                } else if isKickoffImminent, tick % 3 == 0 {
+                    // قبل الصافرة: تحديث خفيف كل ~24ث (النظرة والمباريات فقط —
+                    // الترتيب والهدّافون لا يتغيّران قبل البدء) لالتقاط قادمة→مباشر.
+                    async let a: Void = loadOverview(force: true)
+                    async let b: Void = loadFixtures(force: true)
+                    _ = await (a, b)
+                }
             }
         }
         .refreshable { await loadAll(force: true) }
@@ -93,6 +103,17 @@ struct WorldCupView: View {
     private var isAnyLive: Bool {
         (overview?.live.contains { $0.status.live } ?? false)
             || fixtures.contains { $0.status.live }
+    }
+
+    /// انطلاقة وشيكة (خلال 10 دقائق أو منذ أقل من ربع ساعة بلا تحوّل حالة بعد):
+    /// بدونها كان الهيرو يتجمّد على «حان موعد الانطلاق» لأن حلقة الاستطلاع
+    /// تشترط isAnyLive الذي لا يصبح صحيحًا أبدًا دون إعادة جلب.
+    private var isKickoffImminent: Bool {
+        let now = Int(Date().timeIntervalSince1970)
+        return fixtures.contains {
+            !$0.status.live && !$0.status.finished
+                && $0.timestamp - now <= 600 && now - $0.timestamp <= 900
+        }
     }
 
     /// مباراة ودجت النبض: حيّة أولًا → أقرب قادمة → أحدث منتهية (مطابق اختيار الويب #434)
@@ -508,16 +529,29 @@ func wcBuildArabTeams(fixtures: [WCFixture], groups: [WCGroup]) -> [WCArabTeamDi
 }
 
 /// حالة تأهّل المنتخب لعرضها كشارة — 4 حالات (يطابق teamState على الويب):
-/// بانتظار الترتيب (لا صفّ بعد) / متأهل / خرج / في المنافسة.
-private func wcArabTeamState(_ row: WCStandingRow?) -> (label: String, bg: Color, fg: Color) {
+/// بانتظار الترتيب (لا صفّ بعد) / متأهل / خارج المنافسة / في المنافسة.
+///
+/// الخادم يرسل `qualifyStatus` أثناء دور المجموعات فقط، ويجعله `null` بعد
+/// انتهائه — لذا لا يكفي الاعتماد عليه وحده وإلا ظهر الجميع «في المنافسة» بعد
+/// اكتمال المجموعات. عند غياب القيمة نستنتج الحالة محليًا (مطابق computeQualified):
+/// المجموعة مكتملة والمركز ضمن الأوّلين ⇒ متأهل، وله مباراة قادمة (أفضل ثالث
+/// تأهّل) ⇒ في المنافسة، وإلا ⇒ خارج المنافسة.
+private func wcArabTeamState(
+    _ row: WCStandingRow?, groupComplete: Bool, hasUpcoming: Bool
+) -> (label: String, bg: Color, fg: Color) {
     guard let row = row else {
         return ("بانتظار الترتيب", Color.white.opacity(0.10), Color.white.opacity(0.90))
     }
     switch row.qualifyStatus {
     case "qualified": return ("متأهل", WCTheme.leaf, WCTheme.stadiumTop)
-    case "eliminated": return ("خرج", Color.white.opacity(0.12), Color.white.opacity(0.85))
-    default: return ("في المنافسة", Color.white.opacity(0.92), WCTheme.stadiumTop)
+    case "eliminated": return ("خارج المنافسة", Color.white.opacity(0.12), Color.white.opacity(0.85))
+    case "contention": return ("في المنافسة", Color.white.opacity(0.92), WCTheme.stadiumTop)
+    default: break // qualifyStatus == null (انتهى دور المجموعات) — نستنتج أدناه
     }
+    if !groupComplete { return ("في المنافسة", Color.white.opacity(0.92), WCTheme.stadiumTop) }
+    if row.rank <= 2 { return ("متأهل", WCTheme.leaf, WCTheme.stadiumTop) }
+    if hasUpcoming { return ("في المنافسة", Color.white.opacity(0.92), WCTheme.stadiumTop) }
+    return ("خارج المنافسة", Color.white.opacity(0.12), Color.white.opacity(0.85))
 }
 
 /// بطاقة المنتخبات العربية — شريط تبديل أعلى بطاقة المنتخب المختار (حالة +
@@ -571,9 +605,10 @@ struct WCArabTeamsSpotlight: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Image(systemName: "flag.fill")
-                        .font(SabqFonts.app(size: 15)).foregroundStyle(WCTheme.emerald.opacity(0.85))
+                        .font(SabqFonts.app(size: 13)).foregroundStyle(WCTheme.emerald.opacity(0.85))
                     Text("المنتخبات العربية في المونديال")
-                        .font(SabqFonts.headline(size: 24)).foregroundStyle(.white)
+                        .font(SabqFonts.headline(size: 18)).foregroundStyle(.white)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Text("نتائج ومواعيد المنتخبات العربية المتبقية في البطولة، مع وضع المجموعة في بطاقة واحدة.")
                     .font(SabqFonts.app(size: 12)).foregroundStyle(.white.opacity(0.75))
@@ -609,7 +644,12 @@ struct WCArabTeamsSpotlight: View {
     }
 
     private func teamPanel(_ digest: WCArabTeamDigest) -> some View {
-        let state = wcArabTeamState(digest.row)
+        // اكتمال المجموعة = كل مباريات فرقها انتهت — نستخدمه لاستنتاج الحالة عند
+        // غياب qualifyStatus من الخادم بعد دور المجموعات.
+        let groupIds = Set(digest.group?.rows.map { $0.team.id } ?? [])
+        let groupMatches = fixtures.filter { groupIds.contains($0.home.id) && groupIds.contains($0.away.id) }
+        let groupComplete = !groupMatches.isEmpty && groupMatches.allSatisfy { $0.status.finished }
+        let state = wcArabTeamState(digest.row, groupComplete: groupComplete, hasUpcoming: digest.next != nil)
         let diff = digest.row.map { $0.goalsDiff > 0 ? "+\($0.goalsDiff)" : "\($0.goalsDiff)" } ?? "-"
 
         return VStack(alignment: .leading, spacing: 14) {
@@ -1136,12 +1176,12 @@ struct WCPulseCard: View {
     private var highPulse: Bool { (pulse?.momentum.value ?? 0) > 70 && (pulse?.status.live ?? false) }
 
     var body: some View {
-        Group {
+        // ZStack+Color.clear وليس Group+EmptyView: الحالة الفارغة تُسقط .task فلا يبدأ الجلب أبدًا
+        ZStack {
+            Color.clear.frame(height: 0)
             if let p = pulse {
                 card(p)
                     .onTapGesture { onOpen(fixtureId) }
-            } else {
-                EmptyView()
             }
         }
         .task(id: fixtureId) {

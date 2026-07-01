@@ -400,9 +400,9 @@ actor APIClient {
         ).items
     }
 
-    func fetchAudioSummary(slug: String) async throws -> APIAudioSummary {
-        try await get(WrappedObject<APIAudioSummary>.self, path: "/articles/\(slug)/summary-audio").item
-    }
+    // ملاحظة: /articles/:slug/summary-audio يعيد بايتات MP3 خامًا لا JSON —
+    // fetchAudioSummary القديمة كانت تفشل فكًّا دائمًا وتشغّل توليدًا صوتيًا
+    // عبثًا مع كل فتح مقال، فحُذفت. التشغيل يتم بتمرير الرابط لـ AVPlayer مباشرة.
 
     func fetchAIInsights(slug: String) async throws -> [String: String] {
         try await get([String: String].self, path: "/articles/\(slug)/ai-insights")
@@ -592,17 +592,16 @@ actor APIClient {
     }
 
     func fetchArticlesByKeyword(_ keyword: String) async throws -> [APIArticle] {
-        let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
-        let encodedKeyword = keyword.addingPercentEncoding(withAllowedCharacters: allowed) ?? keyword
-
+        // لا ترميز مسبق هنا: buildURL يرمّز كل مقطع بنفسه، والترميز المزدوج
+        // يجعل الخادم يبحث عن "%D8%B1..." حرفيًا فتعود كل كلمة عربية فارغة
         do {
             return try await get(
                 WrappedArray<APIArticle>.self,
-                path: "/keyword/\(encodedKeyword)",
+                path: "/keyword/\(keyword)",
                 apiRoot: publicAPIBaseURL
             ).items
         } catch {
-            return try await get(WrappedArray<APIArticle>.self, path: "/keyword/\(encodedKeyword)").items
+            return try await get(WrappedArray<APIArticle>.self, path: "/keyword/\(keyword)").items
         }
     }
 
@@ -754,8 +753,9 @@ actor APIClient {
         // version always failed with "الصورة مطلوبة (base64)" because
         // `req.body.image` was undefined.
         let base64 = imageData.base64EncodedString()
+        let mime = Self.detectImageMimeType(imageData) ?? "image/png"
         struct Body: Encodable { let image: String }
-        let body = Body(image: "data:image/png;base64,\(base64)")
+        let body = Body(image: "data:\(mime);base64,\(base64)")
         return try await post(APIAvatarUploadResponse.self, path: "/members/profile/image", body: body).user
     }
 

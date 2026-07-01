@@ -79,6 +79,8 @@ struct WCPredictionsView: View {
     // احتفال الفوز (يُعرض مرّة واحدة لكل مباراة فائزة) — نتتبّع المعروضة محليًّا.
     @AppStorage("wc_seen_wins") private var seenWinsRaw = ""
     @State private var celebration: WCPredictionHistoryItem?
+    /// آخر مباراة عُرض احتفالها — يقرؤها onDismiss لأن item يكون nil لحظتها.
+    @State private var lastCelebratedFixtureId: String?
 
     private var seenWins: Set<String> {
         Set(seenWinsRaw.split(separator: ",").map(String.init))
@@ -113,9 +115,14 @@ struct WCPredictionsView: View {
             }
             .sheet(isPresented: $showLogin) { LoginSheet() }
             .task(id: authStore.isLoggedIn) { await detectWin() }
-            .sheet(item: $celebration) { item in
+            // onDismiss يسجّل «شوهد» أيضًا: السحب لأسفل كان يغلق الورقة دون
+            // تسجيل فيتكرر الاحتفال ذاته في كل فتح لاحق للشاشة.
+            .sheet(item: $celebration, onDismiss: {
+                if let seen = lastCelebratedFixtureId { markWinSeen(seen) }
+            }) { item in
                 WCWinCelebration(item: item) { markWinSeen(item.fixtureId) }
                     .presentationDetents([.large])
+                    .onAppear { lastCelebratedFixtureId = item.fixtureId }
             }
         }
         // شريط حالة أبيض على الرأس الأخضر: نفرض تفضيل النمط الداكن (يبيّض ساعة/

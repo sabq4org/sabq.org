@@ -11,7 +11,7 @@ import UIKit
 // من القرص. اسم الملف يُخزَّن في سمات النشاط (ثابتة طوال عمره).
 
 enum SpSharedContainer {
-    static let appGroup = "group.com.sabq.sports"
+    nonisolated static let appGroup = "group.com.sabq.sports"
 
     static func logosDir() -> URL? {
         guard let base = FileManager.default
@@ -65,6 +65,41 @@ private extension UIImage {
     }
 }
 #endif
+
+// MARK: - لقطة ودجت الشاشة الرئيسية «المباراة القادمة» (App Group)
+//
+// التطبيق يكتبها بعد تحميل الرئيسية، وودجت الشاشة الرئيسية يقرؤها بلا شبكة:
+// الفريقان + البطولة + موعد الانطلاق (عدّ تنازلي ذاتي). النتائج الحيّة مسؤولية
+// Live Activity — هذا الودجت للترقّب قبل المباراة.
+
+nonisolated struct SpWidgetSnapshot: Codable {
+    let fixtureId: Int
+    let homeName: String
+    let awayName: String
+    let homeLogoFile: String?
+    let awayLogoFile: String?
+    let competition: String
+    let kickoff: Date
+    let isFavoriteTeam: Bool
+
+    static let defaultsKey = "sp_widget_next_match"
+
+    static func load() -> SpWidgetSnapshot? {
+        guard let d = UserDefaults(suiteName: SpSharedContainer.appGroup),
+              let data = d.data(forKey: defaultsKey) else { return nil }
+        return try? JSONDecoder().decode(SpWidgetSnapshot.self, from: data)
+    }
+
+    func save() {
+        guard let d = UserDefaults(suiteName: SpSharedContainer.appGroup),
+              let data = try? JSONEncoder().encode(self) else { return }
+        d.set(data, forKey: Self.defaultsKey)
+    }
+
+    static func clear() {
+        UserDefaults(suiteName: SpSharedContainer.appGroup)?.removeObject(forKey: defaultsKey)
+    }
+}
 
 // MARK: - سمات Live Activity للمباراة (مشتركة بين التطبيق وإضافة الويدجت)
 //

@@ -82,7 +82,7 @@ struct LoyaltyStripView: View {
                     }
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.backward")
+                Image(systemName: "chevron.forward")
                     .font(SabqFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }

@@ -45,7 +45,7 @@ struct LiveMatchLiveActivity: Widget {
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundStyle(WidgetTheme.dim)
                         } else {
-                            scoreText(context.state)
+                            ScoreText(state: context.state)
                                 .font(.system(size: 22, weight: .black, design: .rounded))
                             minutePill(context.state)
                         }
@@ -81,7 +81,7 @@ struct LiveMatchLiveActivity: Widget {
                 if isUpcoming(context) {
                     Image(systemName: "clock.fill")
                 } else {
-                    scoreText(context.state)
+                    ScoreText(state: context.state)
                         .font(.system(size: 12, weight: .black).monospacedDigit())
                 }
             }
@@ -149,13 +149,22 @@ private func staticStatusLabel(_ s: LiveMatchAttributes.ContentState) -> String 
     return s.statusLabel
 }
 
-// البطاقة RTL: المضيف يمينًا والضيف يسارًا. نرسم النتيجة LTR لكن بترتيب
-// "الضيف - المضيف" كي يقع رقم المضيف يمينًا (تحت اسم المضيف) ورقم الضيف
-// يسارًا — مطابقًا لمواضع الفريقين فلا تنقلب النتيجة.
-private func scoreText(_ state: LiveMatchAttributes.ContentState) -> some View {
-    Text("\(state.awayScore) - \(state.homeScore)")
-        .foregroundStyle(.white)
-        .environment(\.layoutDirection, .leftToRight)
+// النتيجة تُرسم أرقامًا LTR دائمًا، لكن ترتيب الفريقين يتبع اتجاه الواجهة:
+// شاشة القفل مفروضة RTL (المضيف يمينًا) → «الضيف - المضيف» فيقع رقم المضيف
+// يمينًا تحت عموده. أمّا Dynamic Island فمناطق leading/trailing تتبع لغة
+// النظام: بواجهة إنجليزية leading=يسار=المضيف، فيجب قلب الترتيب وإلا وقع
+// رقم كل فريق تحت اسم خصمه — نفس عائلة خلل قلب المضيف/الضيف التاريخي.
+private struct ScoreText: View {
+    let state: LiveMatchAttributes.ContentState
+    @Environment(\.layoutDirection) private var direction
+
+    var body: some View {
+        Text(direction == .rightToLeft
+             ? "\(state.awayScore) - \(state.homeScore)"
+             : "\(state.homeScore) - \(state.awayScore)")
+            .foregroundStyle(.white)
+            .environment(\.layoutDirection, .leftToRight)
+    }
 }
 
 // قبل الانطلاق: لم تبدأ، ولم تنتهِ، وموعدها في المستقبل ← نعرض عدّادًا تنازليًا
@@ -275,7 +284,7 @@ struct LockScreenMatchView: View {
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(WidgetTheme.emerald)
                     } else {
-                        scoreText(context.state)
+                        ScoreText(state: context.state)
                             .font(.system(size: 38, weight: .black, design: .rounded))
                         statusPill
                     }

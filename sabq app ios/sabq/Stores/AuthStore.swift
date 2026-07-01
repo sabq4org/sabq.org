@@ -7,7 +7,6 @@ final class AuthStore {
     private(set) var isLoading = false
     private(set) var errorMessage: String?
     private(set) var successMessage: String?
-    private(set) var unreadNotifications = 0
     private(set) var registrationPending = false
     /// True when the last login attempt hit a `pending` account — drives
     /// the "إعادة إرسال رمز التفعيل" affordance on the login sheet so
@@ -31,9 +30,9 @@ final class AuthStore {
     private static let loginLockoutDuration: TimeInterval = 120 // 2 minutes
     private static let sessionTimeoutDuration: TimeInterval = 30 * 24 * 3600 // 30 days
 
-    init() {
-        Task { await checkAuth() }
-    }
+    // لا آثار جانبية في init: قيمة @State الابتدائية تُنشأ مع كل إعادة تقييم
+    // لجسم sabqApp (تبديل مظهر/عودة من الخلفية) وتُهمل النسخ الزائدة — كان
+    // فحص الجلسة ينطلق من كل نسخة مهملة. ContentView.task يستدعي checkAuth.
 
     func checkAuth() async {
         guard await APIClient.shared.hasSession else { return }
@@ -361,7 +360,7 @@ final class AuthStore {
             try await APIClient.shared.deleteAccount(password: password)
             currentUser = nil
             isLoggedIn = false
-            unreadNotifications = 0
+            NotificationsStore.shared.unreadCount = 0
             successMessage = "تم حذف الحساب بنجاح"
         } catch {
             errorMessage = error.localizedDescription
@@ -417,7 +416,7 @@ final class AuthStore {
         isLoggedIn = false
         needsProfileCompletion = false
         SabqAnalytics.setUserId(nil)
-        unreadNotifications = 0
+        NotificationsStore.shared.unreadCount = 0
         successMessage = nil
         errorMessage = nil
     }
@@ -443,11 +442,6 @@ final class AuthStore {
         isLoading = false
     }
 
-    @MainActor
-    func markAllNotificationsReadLocally() {
-        unreadNotifications = 0
-    }
-
     private func fetchFullProfile() async {
         do {
             let user = try await APIClient.shared.fetchCurrentUser()
@@ -464,7 +458,6 @@ final class AuthStore {
                 }
                 SabqAnalytics.setUserId(user.id)
             }
-            await refreshUnreadCount()
         } catch {
             // Only clear the session on an authoritative auth failure
             // (401/403 from the server). Previously ANY error — including
@@ -499,9 +492,4 @@ final class AuthStore {
         }
     }
 
-    func refreshUnreadCount() async {
-        guard isLoggedIn else { return }
-        let count = (try? await APIClient.shared.fetchUnreadCount()) ?? 0
-        await MainActor.run { unreadNotifications = count }
-    }
 }

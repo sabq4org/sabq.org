@@ -234,6 +234,10 @@ final class SpAuthStore {
     }
 
     func signOut() {
+        // إلغاء ربط رمز الدفع على الخادم أولًا كي لا تستمر تنبيهات العضو السابق لهذا الجهاز.
+        if let push = pushToken {
+            Task { try? await APIClient.shared.unregisterDevice(deviceToken: push) }
+        }
         token = nil
         member = nil
         followedKeys = []

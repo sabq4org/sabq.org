@@ -180,6 +180,16 @@ struct ContentView: View {
                     notificationsStore.pendingDeepLink = nil
                 }
             }
+            // sabq:// links arriving through the system — the Live Activity /
+            // Dynamic Island tap (`.widgetURL`) lands here, NOT in the push
+            // userInfo path. Without this handler (and the CFBundleURLTypes
+            // registration) tapping the island opened the app on whatever
+            // screen was last visible and never reached the match center.
+            .onOpenURL { url in
+                if let link = notificationsStore.parseSabqDeepLink(url: url) {
+                    handleDeepLink(link)
+                }
+            }
             .sheet(item: $deepLinkMatch) { sel in
                 WorldCupMatchCenter(fixtureId: sel.id)
             }
@@ -243,6 +253,17 @@ struct ContentView: View {
             .allowsHitTesting(tabBarVisibility.isVisible)
         }
         .sabqRTL()
+        // Boot-time loads live here (NOT in the stores' inits): the @State
+        // initial-value expression re-runs on every sabqApp body re-eval
+        // (scene phase / appearance changes), spawning throwaway store
+        // instances whose init-side network calls all fired and got dumped.
+        // `.task` runs once per view identity — exactly one session check
+        // and one home feed load per launch.
+        .task {
+            async let auth: Void = authStore.checkAuth()
+            async let articles: Void = articlesStore.loadArticles()
+            _ = await (auth, articles)
+        }
         .onChange(of: navigationPath.count) { _, _ in
             // Whenever the stack pops/pushes, restore the bar so the
             // reader never lands on a screen with the bar already hidden.
