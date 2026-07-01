@@ -128,14 +128,23 @@ struct LiveMatchLiveActivity: Widget {
     }
 }
 
-// MARK: - عرض الدقيقة (نص مدفوع من الخادم)
+// MARK: - عرض الدقيقة
 //
-// نعرض الدقيقة كنصّ ثابت يأتي من ContentState (يحدّثه الخادم عبر الدفع).
-// لا ساعة ذاتية على الجهاز.
+// أثناء جريان الساعة يرسل التطبيق `clockStartEpoch` (مرساة بداية العدّ) فنعرض
+// ساعة ذاتية التقدّم عبر Text(timerInterval:) — تتحرّك بين الدفعات بلا تحديث.
+// عند التوقّف (استراحة/ترجيح) تكون المرساة nil فنجمّد على النص المدفوع.
 
 @ViewBuilder
 private func minutePillContent(_ state: LiveMatchAttributes.ContentState) -> some View {
-    Text(state.isFinished ? state.statusLabel : (state.minute.isEmpty ? state.statusLabel : state.minute))
+    if state.isLive, let epoch = state.clockStartEpoch {
+        let start = Date(timeIntervalSince1970: epoch)
+        Text(timerInterval: start...start.addingTimeInterval(200 * 60),
+             countsDown: false, showsHours: false)
+            .monospacedDigit()
+            .multilineTextAlignment(.center)
+    } else {
+        Text(state.isFinished ? state.statusLabel : (state.minute.isEmpty ? state.statusLabel : state.minute))
+    }
 }
 
 @ViewBuilder

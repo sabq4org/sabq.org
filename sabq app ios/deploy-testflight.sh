@@ -1,10 +1,14 @@
 #!/bin/bash
 # 🚀 سكربت رفع تطبيق سبق لـ TestFlight
 # الاستخدام: ./deploy-testflight.sh
+#
+# ⚠️ مسار احتياطي فقط — النشر المعتمد عبر Xcode Cloud (الرفع المحلي مرفوض
+# على macOS 27). السكربت لا يزيد CURRENT_PROJECT_VERSION فقد يصطدم رقم
+# البناء برقم رفعه Xcode Cloud — تحقق قبل الاستخدام.
 
 set -euo pipefail
 
-PROJECT_DIR="/Users/alialhazmi/sabq/sabq app ios"
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCHEME="sabq"
 ARCHIVE_PATH="$HOME/Desktop/sabq.xcarchive"
 EXPORT_PATH="$HOME/Desktop/sabq-export"

@@ -1,3 +1,7 @@
+> **مستند تاريخي (أُرشف 2026-07-01)** — يصف حالة التطبيق حتى ربيع 2026 ولا يعكس الكود الحالي.
+> لا تتّبع تعليماته: الـ Base URL الصحيح اليوم `api.sabq.org` مباشرة (انظر `sabq app ios/sabq/Services/URLConstants.swift`)
+> والحد الأدنى iOS 17.0. المرجع الحي: CLAUDE.md وذاكرة المشروع.
+
 # Sabq (سبق) — Design Specification
 # This file is a complete UI/UX blueprint for an AI agent to replicate the app exactly.
 

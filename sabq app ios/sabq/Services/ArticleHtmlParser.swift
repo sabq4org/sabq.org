@@ -26,10 +26,15 @@ enum ArticleHtmlParser {
             scanner.skipWhitespace()
             if scanner.isAtEnd { break }
 
+            let before = scanner.index
             if let block = parseNextBlock(scanner: &scanner) {
                 if case .paragraph(let runs) = block, runsAreEmpty(runs) { continue }
                 blocks.append(block)
-            } else {
+            } else if scanner.index == before {
+                // التقدّم القسري فقط عندما لا يتحرك الماسح (وقاية من حلقة
+                // لا نهائية على مدخل مشوّه). كان يتقدّم بعد كل nil حتى لو
+                // استُهلك الوسم كاملًا (فقرة فارغة/<br>) فيأكل '<' الوسم
+                // التالي ويحوّل "p>نص" إلى فقرة نصية مشوّهة.
                 scanner.advance(1)
             }
         }
