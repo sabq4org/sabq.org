@@ -408,7 +408,7 @@ struct SettingsView: View {
 
                 Button { showLogin = true } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: "arrow.right.circle.fill")
+                        Image(systemName: "arrow.forward.circle.fill")
                             .font(SabqFonts.app(size: 16))
                         Text("تسجيل الدخول")
                             .font(SabqFonts.app(size: 15, weight: .bold))
@@ -567,7 +567,7 @@ struct SettingsView: View {
 
             Spacer(minLength: 0)
 
-            Image(systemName: "chevron.left")
+            Image(systemName: "chevron.forward")
                 .font(SabqFonts.app(size: 13, weight: .heavy))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
@@ -612,7 +612,7 @@ struct SettingsView: View {
                         .font(SabqFonts.app(size: 14, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                     Spacer()
-                    Image(systemName: "chevron.left")
+                    Image(systemName: "chevron.forward")
                         .font(SabqFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
@@ -677,7 +677,7 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Image(systemName: "chevron.left")
+            Image(systemName: "chevron.forward")
                 .font(SabqFonts.app(size: 13, weight: .semibold))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
@@ -742,7 +742,7 @@ struct SettingsView: View {
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.backward")
+                Image(systemName: "chevron.forward")
                     .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
@@ -781,7 +781,7 @@ struct SettingsView: View {
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.backward")
+                Image(systemName: "chevron.forward")
                     .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
@@ -822,7 +822,7 @@ struct SettingsView: View {
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.backward")
+                Image(systemName: "chevron.forward")
                     .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
@@ -865,7 +865,7 @@ struct SettingsView: View {
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.backward")
+                Image(systemName: "chevron.forward")
                     .font(SabqFonts.app(size: 13, weight: .semibold))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
@@ -901,7 +901,7 @@ struct SettingsView: View {
                             .lineLimit(2)
                     }
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.left")
+                    Image(systemName: "chevron.forward")
                         .font(SabqFonts.app(size: 13, weight: .semibold))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
@@ -1234,7 +1234,7 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Image(systemName: "chevron.left")
+            Image(systemName: "chevron.forward")
                 .font(SabqFonts.app(size: 13, weight: .semibold))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
@@ -1335,7 +1335,7 @@ struct LoginSheet: View {
                 isRegisterMode = false
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "arrow.right.circle.fill")
+                    Image(systemName: "arrow.forward.circle.fill")
                         .font(SabqFonts.app(size: 16))
                     Text("تسجيل الدخول")
                         .font(SabqFonts.app(size: 16, weight: .bold))

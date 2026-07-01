@@ -490,6 +490,7 @@ struct HomeFeedView: View {
                     headerIcon("magnifyingglass")
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("البحث")
 
                 // Editorial notifications bell — fast access to the user's
                 // own notifications (article scheduled/published/rejected/
@@ -529,6 +530,9 @@ struct HomeFeedView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(notificationsStore.unreadCount > 0
+                        ? "الإشعارات — لديك إشعارات غير مقروءة"
+                        : "الإشعارات")
                 }
 
                 // "لحظة بلحظة" entry point. The red pulsing dot was removed
@@ -553,6 +557,7 @@ struct HomeFeedView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("لحظة بلحظة — التغطية المباشرة")
 
                 // Appearance cycle — taps walk system → light → dark →
                 // system. The full 3-state picker lives in Settings; this
@@ -569,6 +574,7 @@ struct HomeFeedView: View {
                     headerIcon(mode.iconName)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("تبديل المظهر — الحالي: \((AppAppearance(rawValue: appearanceRaw) ?? .system).arabicLabel)")
             }
         }
     }

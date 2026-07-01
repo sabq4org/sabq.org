@@ -199,12 +199,87 @@ extension View {
     }
 }
 
-// MARK: - Scroll Geometry Compat (iOS 18+ → iOS 17 no-op)
+// MARK: - Scroll Geometry Compat (iOS 18+ native / iOS 17 KVO fallback)
 
-/// Reports the scroll Y offset using `.onScrollGeometryChange` on
-/// iOS 18+ and silently no-ops on iOS 17. Callers that depend on the
-/// offset (scroll-to-top thresholds, parallax) should pick safe
-/// defaults so the absence of updates degrades gracefully.
+/// iOS 17 fallback for `.onScrollGeometryChange`: a zero-size probe placed
+/// as the ScrollView's background locates the backing `UIScrollView` in the
+/// hosting UIKit tree and observes `contentOffset` via KVO. Before this,
+/// the fallback was a silent no-op — on iOS 17 (the minimum we ship to)
+/// re-tapping Home never scrolled to top, the reading-progress bar stayed
+/// at zero, reading-depth analytics reported nothing, and the tab bar
+/// never auto-hid. The traversal only ever executes on iOS 17.x (18+ takes
+/// the native path), so it is frozen against a fixed OS and cannot rot
+/// with future releases.
+private struct LegacyScrollObserver: UIViewRepresentable {
+    let onScroll: (_ offsetY: CGFloat, _ progress: CGFloat) -> Void
+
+    func makeUIView(context: Context) -> LegacyScrollProbeView {
+        let view = LegacyScrollProbeView()
+        view.onScroll = onScroll
+        return view
+    }
+
+    func updateUIView(_ uiView: LegacyScrollProbeView, context: Context) {
+        uiView.onScroll = onScroll
+    }
+}
+
+final class LegacyScrollProbeView: UIView {
+    var onScroll: ((CGFloat, CGFloat) -> Void)?
+    private var observation: NSKeyValueObservation?
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil, observation == nil else { return }
+        // انتظر دورة تخطيط واحدة حتى تكتمل شجرة الـ UIKit المضيفة.
+        DispatchQueue.main.async { [weak self] in self?.attach() }
+    }
+
+    private func attach() {
+        guard observation == nil, let scrollView = findScrollView() else { return }
+        observation = scrollView.observe(\.contentOffset, options: [.new]) { [weak self] sv, _ in
+            // نفس القيم الخام التي يمررها مسار iOS 18 (onScrollGeometryChange)
+            // كي تصح عتبات المستهلكين (120 للعودة للأعلى، 80 لإخفاء الشريط).
+            let y = sv.contentOffset.y
+            let h = max(1, sv.contentSize.height - sv.bounds.height)
+            let p = min(1, max(0, y / h))
+            DispatchQueue.main.async { self?.onScroll?(y, p) }
+        }
+    }
+
+    private func findScrollView() -> UIScrollView? {
+        // الـ probe خلفية للـ ScrollView فليس داخله — نصعد للأسلاف ونبحث
+        // نزولًا، ونختار الأكبر مساحةً كي لا نلتقط rail أفقيًا متداخلًا.
+        var ancestor: UIView? = superview
+        var hops = 0
+        while let container = ancestor, hops < 6 {
+            var found: [UIScrollView] = []
+            Self.collectScrollViews(in: container, depth: 0, into: &found)
+            if let best = found.max(by: {
+                $0.bounds.width * $0.bounds.height < $1.bounds.width * $1.bounds.height
+            }) {
+                return best
+            }
+            ancestor = container.superview
+            hops += 1
+        }
+        return nil
+    }
+
+    private static func collectScrollViews(in view: UIView, depth: Int, into result: inout [UIScrollView]) {
+        if let sv = view as? UIScrollView {
+            result.append(sv)
+            return
+        }
+        guard depth < 8 else { return }
+        for sub in view.subviews {
+            collectScrollViews(in: sub, depth: depth + 1, into: &result)
+        }
+    }
+}
+
+/// Reports the scroll Y offset — `.onScrollGeometryChange` on iOS 18+,
+/// KVO probe on iOS 17 (see `LegacyScrollObserver`).
 private struct ScrollOffsetTracker: ViewModifier {
     let onChange: (CGFloat) -> Void
 
@@ -216,15 +291,14 @@ private struct ScrollOffsetTracker: ViewModifier {
                 onChange(y)
             }
         } else {
-            content
+            content.background(LegacyScrollObserver { y, _ in onChange(y) })
         }
     }
 }
 
-/// Reports scroll progress in [0, 1] using `.onScrollGeometryChange`
-/// on iOS 18+ and no-ops on iOS 17. The reading-progress bar in the
-/// article/opinion detail screens uses this; on iOS 17 the bar simply
-/// stays at zero, which is acceptable.
+/// Reports scroll progress in [0, 1] — `.onScrollGeometryChange` on
+/// iOS 18+, KVO probe on iOS 17. Drives the reading-progress bar and
+/// reading-depth analytics in the article/opinion detail screens.
 private struct ScrollProgressTracker: ViewModifier {
     let onChange: (CGFloat) -> Void
 
@@ -237,7 +311,7 @@ private struct ScrollProgressTracker: ViewModifier {
                 onChange(p)
             }
         } else {
-            content
+            content.background(LegacyScrollObserver { _, p in onChange(p) })
         }
     }
 }
@@ -253,7 +327,7 @@ extension View {
 
     /// Auto-hide the floating tab bar when this ScrollView scrolls down,
     /// re-show it on upward scroll or when the user returns near the top.
-    /// No-op on iOS 17 (the tab bar stays put), so the layout never breaks.
+    /// iOS 18+ uses onScrollGeometryChange; iOS 17 uses the KVO probe.
     func sabqAutoHideTabBar() -> some View {
         modifier(TabBarAutoHideTracker())
     }
@@ -333,7 +407,9 @@ private struct TabBarAutoHideTracker: ViewModifier {
                 TabBarVisibility.shared.report(y)
             }
         } else {
-            content
+            content.background(LegacyScrollObserver { y, _ in
+                TabBarVisibility.shared.report(y)
+            })
         }
     }
 }
@@ -1839,6 +1915,10 @@ struct SabqTabBar: View {
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity)
+                // التبويب غير المحدد أيقونة فقط — بدون توصيف لا يعرف مستخدم
+                // VoiceOver أسماء التبويبات ولا أيّها المحدد حاليًا.
+                .accessibilityLabel(tab.title)
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
             }
         }
         .padding(.horizontal, 8)

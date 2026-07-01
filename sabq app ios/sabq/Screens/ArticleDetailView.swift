@@ -292,6 +292,7 @@ struct ArticleDetailView: View {
                             .fill(.ultraThinMaterial)
                     )
                 }
+                .accessibilityLabel("رجوع")
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -313,6 +314,7 @@ struct ArticleDetailView: View {
                                     .fill(.ultraThinMaterial)
                             )
                     }
+                    .accessibilityLabel(bookmarksStore.isBookmarked(displayArticle.id) ? "إزالة من المحفوظات" : "حفظ المقال")
 
                     Button {
                         SabqHaptics.light()
@@ -328,6 +330,7 @@ struct ArticleDetailView: View {
                             )
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("مشاركة المقال")
                 }
             }
         }
@@ -403,6 +406,7 @@ struct ArticleDetailView: View {
         }
         .disabled(isLikeBusy)
         .buttonStyle(.plain)
+        .accessibilityLabel(isLiked ? "إلغاء الإعجاب" : "أعجبني")
     }
 
     @MainActor

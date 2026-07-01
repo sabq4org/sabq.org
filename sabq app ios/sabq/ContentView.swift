@@ -180,6 +180,16 @@ struct ContentView: View {
                     notificationsStore.pendingDeepLink = nil
                 }
             }
+            // sabq:// links arriving through the system — the Live Activity /
+            // Dynamic Island tap (`.widgetURL`) lands here, NOT in the push
+            // userInfo path. Without this handler (and the CFBundleURLTypes
+            // registration) tapping the island opened the app on whatever
+            // screen was last visible and never reached the match center.
+            .onOpenURL { url in
+                if let link = notificationsStore.parseSabqDeepLink(url: url) {
+                    handleDeepLink(link)
+                }
+            }
             .sheet(item: $deepLinkMatch) { sel in
                 WorldCupMatchCenter(fixtureId: sel.id)
             }

@@ -118,7 +118,10 @@ final class NotificationsStore {
         return nil
     }
 
-    private func parseSabqDeepLink(url: URL) -> NotificationDeepLink? {
+    /// internal (لا private): يُستدعى أيضًا من onOpenURL في ContentView —
+    /// ضغطة الـ Live Activity/Dynamic Island تصل كرابط sabq:// عبر النظام
+    /// لا عبر userInfo الإشعارات، وكانت طريقًا مسدودًا قبل ربطها.
+    func parseSabqDeepLink(url: URL) -> NotificationDeepLink? {
         // sabq://article/<slug>   — news article detail
         // sabq://opinion/<slug>   — opinion article detail
         // sabq://draft/<id>       — editorial notifications (draft surface)

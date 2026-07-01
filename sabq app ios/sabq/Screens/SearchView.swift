@@ -6,8 +6,10 @@ struct SearchView: View {
     @State private var searchText = ""
     @FocusState private var isSearchFocused: Bool
     
+    // لا قيم افتراضية وهمية: كانت «نيوم، رؤية 2030…» تظهر للمستخدم الجديد
+    // بعنوان «عمليات بحث سابقة» وهو لم يبحث قط — القسم يختفي حتى أول بحث فعلي.
     @State private var recentSearches: [String] = {
-        (UserDefaults.standard.stringArray(forKey: "sabq_recent_searches")) ?? ["نيوم", "رؤية 2030", "الدوري السعودي", "أرامكو"]
+        (UserDefaults.standard.stringArray(forKey: "sabq_recent_searches")) ?? []
     }()
     @State private var trendingKeywords: [String] = []
     @State private var suggestions: [String] = []
@@ -160,7 +162,7 @@ struct SearchView: View {
 
                         Spacer(minLength: 0)
 
-                        Image(systemName: "arrow.up.left")
+                        Image(systemName: "arrow.up.backward")
                             .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
@@ -208,7 +210,7 @@ struct SearchView: View {
 
                                 Spacer(minLength: 0)
 
-                                Image(systemName: "arrow.up.left")
+                                Image(systemName: "arrow.up.backward")
                                     .font(SabqFonts.app(size: 12, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }
@@ -250,7 +252,7 @@ struct SearchView: View {
 
                                 Spacer(minLength: 0)
 
-                                Image(systemName: "arrow.up.left")
+                                Image(systemName: "arrow.up.backward")
                                     .font(SabqFonts.app(size: 13, weight: .medium))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }

@@ -250,10 +250,11 @@ struct WCEmptyState: View {
     }
 }
 
-/// مؤشر تحميل بلون العلامة.
+/// مؤشر تحميل بلون العلامة. الأخضر العميق لا الأبيض: يُعرض غالبًا على
+/// sectionBackground شبه الأبيض في النمط الفاتح، وكان الأبيض غير مرئي عمليًا.
 struct WCLoading: View {
     var body: some View {
-        HStack { Spacer(); ProgressView().tint(.white); Spacer() }
+        HStack { Spacer(); ProgressView().tint(WCTheme.emeraldDeep); Spacer() }
             .padding(.vertical, 32)
     }
 }
