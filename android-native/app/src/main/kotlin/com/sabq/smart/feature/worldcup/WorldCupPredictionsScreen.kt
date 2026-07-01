@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -23,9 +25,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -41,8 +46,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.CompositionLocalProvider
@@ -417,44 +424,132 @@ private fun SummaryTile(value: String, label: String, accent: Color?, modifier: 
     }
 }
 
+// بطاقة توقّع احترافية مطابقة لتصميم الويب (MyPredictionsList) و iOS: شريط علوي
+// (اليوم + حالة)، ثم الشعارات (المضيف يمينًا) وكتلتا «توقّعي/النتيجة»، وتذييل
+// للترجيح إن وُجد. توحيد بصري كامل بين المنصّات الثلاث.
 @Composable
 private fun MineRow(item: WcPredictionHistoryItem) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(WcColors.card).padding(horizontal = 12.dp, vertical = 10.dp),
+    val settled = item.matchStatus == "settled" && item.finalHome != null && item.finalAway != null
+    val isWin = settled && item.status == "correct"
+    val borderColor = if (isWin) WcColors.emeraldDeep.copy(alpha = 0.5f) else WcColors.cardStroke.copy(alpha = 0.5f)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(WcColors.card)
+            .border(if (isWin) 1.dp else 0.5.dp, borderColor, RoundedCornerShape(18.dp)),
     ) {
-        MineLogo(item.homeTeamLogo)
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp)) {
-            LtrText("${item.predAway} - ${item.predHome}", WcColors.onDark, 14, FontWeight.Black)
-            if (item.finalHome != null && item.finalAway != null) {
-                LtrText("النتيجة ${item.finalAway}-${item.finalHome}", WcColors.onDarkDim, 10, FontWeight.Normal)
+        // شريط علوي: اليوم + شارة الحالة
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (isWin) WcColors.emeraldDeep.copy(alpha = 0.10f) else WcColors.chipFill.copy(alpha = 0.6f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Text(WcFormat.dayFromIso(item.kickoffAt), color = WcColors.onDarkDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            MineStatusPill(settled, isWin, item.pointsAwarded)
+        }
+
+        // الشعارات + توقّعي/النتيجة
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+        ) {
+            MineCrest(item.homeTeamName, item.homeTeamLogo)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+                modifier = Modifier.weight(1f),
+            ) {
+                ScoreBlockMine("توقّعي", item.predAway, item.predHome, if (isWin) WcColors.emeraldDeep else WcColors.onDark)
+                if (settled && item.finalHome != null && item.finalAway != null) {
+                    Box(Modifier.width(1.dp).height(34.dp).background(WcColors.cardStroke))
+                    ScoreBlockMine("النتيجة", item.finalAway, item.finalHome, WcColors.onDarkDim)
+                }
+            }
+            MineCrest(item.awayTeamName, item.awayTeamLogo)
+        }
+
+        // تذييل: الفائز بركلات الترجيح
+        val ph = item.finalPenHome
+        val pa = item.finalPenAway
+        if (ph != null && pa != null && ph != pa) {
+            val winner = if (ph > pa) item.homeTeamName else item.awayTeamName
+            Box(Modifier.fillMaxWidth().height(1.dp).background(WcColors.cardStroke.copy(alpha = 0.6f)))
+            Text(
+                "فاز ${winner ?: ""} بالترجيح (${maxOf(ph, pa)}-${minOf(ph, pa)})",
+                color = WcColors.emeraldDeep, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 8.dp),
+            )
+        }
+    }
+}
+
+// شعار + اسم منتخب — عمود متمركز بعرض ثابت (المضيف يمينًا في RTL)
+@Composable
+private fun MineCrest(name: String?, logo: String?) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.width(62.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.White).border(1.dp, WcColors.cardStroke, CircleShape),
+        ) {
+            if (!logo.isNullOrEmpty()) {
+                AsyncImage(model = logo, contentDescription = null, modifier = Modifier.size(30.dp))
             }
         }
-        MineLogo(item.awayTeamLogo)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
-            Text("${item.homeTeamName ?: ""} × ${item.awayTeamName ?: ""}", color = WcColors.onDark, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من تأهّل بالترجيح.
-            val ph = item.finalPenHome
-            val pa = item.finalPenAway
-            if (ph != null && pa != null && ph != pa) {
-                val winner = if (ph > pa) item.homeTeamName else item.awayTeamName
-                Text(
-                    "فاز ${winner ?: ""} بالترجيح (${maxOf(ph, pa)}-${minOf(ph, pa)})",
-                    color = WcColors.emeraldDeep, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                )
+        Text(name ?: "—", color = WcColors.onDark, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 2, textAlign = TextAlign.Center)
+    }
+}
+
+// كتلة نتيجة (توقّعي/النتيجة): عنوان صغير + رقم كبير موحّد الاتجاه (LTR: الضيف يسارًا)
+@Composable
+private fun ScoreBlockMine(label: String, away: Int, home: Int, tint: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, color = WcColors.onDarkDim, fontSize = 10.sp)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("$away", color = tint, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text("-", color = WcColors.onDarkDim, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                Text("$home", color = tint, fontSize = 22.sp, fontWeight = FontWeight.Black)
             }
-            StatusBadge(item.status, item.pointsAwarded)
         }
     }
 }
 
 @Composable
-private fun MineLogo(url: String?) {
-    if (!url.isNullOrEmpty()) {
-        AsyncImage(model = url, contentDescription = null, modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.White))
-    } else {
-        Box(Modifier.size(28.dp).clip(CircleShape).background(WcColors.chipFill))
+private fun MineStatusPill(settled: Boolean, isWin: Boolean, points: Int) {
+    when {
+        settled && isWin -> Pill(WcColors.emeraldDeep) {
+            Icon(Icons.Filled.EmojiEvents, null, tint = Color.White, modifier = Modifier.size(12.dp))
+            Text("+$points نقطة", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
+        }
+        settled -> Pill(WcColors.chipFill) {
+            Icon(Icons.Filled.Close, null, tint = WcColors.onDarkDim, modifier = Modifier.size(11.dp))
+            Text("لم تُصب", color = WcColors.onDarkDim, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        else -> Pill(WcColors.gold.copy(alpha = 0.15f)) {
+            Icon(Icons.Filled.Schedule, null, tint = WcColors.gold, modifier = Modifier.size(11.dp))
+            Text("قيد الانتظار", color = WcColors.gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
     }
+}
+
+@Composable
+private fun Pill(bg: Color, content: @Composable RowScope.() -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
+        content = content,
+    )
 }
 
 // ---------- تبويب: المتصدّرون ----------
