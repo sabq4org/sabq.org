@@ -8449,11 +8449,18 @@ router.get("/world-cup/predictions/mine", async (req: Request, res: Response) =>
   }
 });
 
-router.get("/world-cup/predictions/leaderboard", async (_req: Request, res: Response) => {
+router.get("/world-cup/predictions/leaderboard", async (req: Request, res: Response) => {
   if (!wcPredGuard(res)) return;
   try {
-    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
-    res.json({ leaders: await getLeaderboard() });
+    // مسؤولو النظام مخفيّون عن بقية الزوار (انظر wcPredictionsService.getLeaderboard) —
+    // نحدّد صاحب الجلسة (إن وُجدت) ليبقى ظاهرًا لنفسه فقط، ولا نُخزّن الرد في
+    // الكاش العام حين يكون مخصّصًا لمستخدم مسجَّل.
+    const session = await verifyMemberSession(req);
+    res.set(
+      "Cache-Control",
+      session ? "private, no-store" : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+    );
+    res.json({ leaders: await getLeaderboard(100, session?.userId) });
   } catch (error) {
     console.error("[Mobile WC Predictions] leaderboard error:", error);
     res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });

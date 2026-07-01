@@ -112,11 +112,15 @@ router.get("/api/world-cup/predictions/mine", requireAuth, async (req: any, res)
   }
 });
 
-router.get("/api/world-cup/predictions/leaderboard", async (_req, res) => {
+router.get("/api/world-cup/predictions/leaderboard", async (req: any, res) => {
   if (!guard(res)) return;
   try {
-    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
-    res.json({ leaders: await getLeaderboard() });
+    const userId = req.isAuthenticated?.() && req.user ? req.user.id : undefined;
+    // كاش الحافة يبقى للزائر المجهول فقط — رد المستخدم المسجَّل قد يتضمّن
+    // صفّه الخاص (لو كان مسؤول نظام) فلا يجوز أن يُشارَك بين المستخدمين.
+    if (userId) noStore(res);
+    else res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json({ leaders: await getLeaderboard(100, userId) });
   } catch (error) {
     console.error("[WC Predictions] leaderboard error:", error);
     res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });
