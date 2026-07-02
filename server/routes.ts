@@ -610,15 +610,28 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // News Analytics Endpoint - Smart statistics and insights
 
+  // استراتيجيات OAuth تُسجَّل في setupAuth() فقط عند اكتمال متغيرات البيئة
+  // (APPLE_*/GOOGLE_*). استدعاء authenticate() على استراتيجية غير مسجلة يرمي
+  // «Unknown authentication strategy» — 500 للمستخدم وضجيج في Sentry. الحارس
+  // يحوّل الحالة إلى تحويل نظيف لصفحة الدخول مع سجل تشغيلي واضح.
+  const requireOAuthStrategy = (name: string) =>
+    (req: any, res: Response, next: any) => {
+      if ((passport as any)._strategy(name)) return next();
+      console.error(`❌ OAuth "${name}" غير مهيأة — تحقق من متغيرات البيئة على الخادم`);
+      return res.redirect(`/ar/login?error=${name}_auth_failed`);
+    };
+
   // Google OAuth Routes
-  app.get("/api/auth/google", 
+  app.get("/api/auth/google",
+    requireOAuthStrategy("google"),
     passport.authenticate("google", { scope: ["profile", "email"] })
   );
 
-  app.get("/api/auth/google/callback", 
-    passport.authenticate("google", { 
+  app.get("/api/auth/google/callback",
+    requireOAuthStrategy("google"),
+    passport.authenticate("google", {
       failureRedirect: "/ar/login?error=google_auth_failed",
-      failureMessage: true 
+      failureMessage: true
     }),
     (req, res) => {
       console.log("✅ Google OAuth callback successful");
@@ -633,11 +646,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   );
 
   // Apple OAuth Routes
-  app.get("/api/auth/apple", 
+  app.get("/api/auth/apple",
+    requireOAuthStrategy("apple"),
     passport.authenticate("apple")
   );
 
   app.post("/api/auth/apple/callback",
+    requireOAuthStrategy("apple"),
     passport.authenticate("apple", {
       failureRedirect: "/ar/login?error=apple_auth_failed",
       failureMessage: true

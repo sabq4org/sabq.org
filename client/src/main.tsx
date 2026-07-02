@@ -37,6 +37,16 @@ if (import.meta.env.PROD) {
       "ResizeObserver loop completed with undelivered notifications.",
       // تتبّع خارجي محجوب بمانع إعلانات — السلسلة ليست في كودنا أصلًا
       "Failed to track Pageview",
+      // سكربت إعلانات محقون (GTM/DMS) يمشّط DOM الصفحة بحثًا عن البطاقة
+      // الرابعة ليحقن إعلانًا داخل الشبكة — في الصفحات التي تعرض أقل من 4
+      // بطاقات يرمي TypeError. ليس في مستودعنا إطلاقًا (السيلكتور لا يظهر
+      // إلا كـtestid في NewsArticleCard)، لكنه أكبر مصدر ضجيج في Sentry
+      // (3,400+ حدث/أسبوع) وقد يصل بلا إطارات فلا يسقطه allowUrls.
+      /card-article-grid/,
+      /reading 'parentNode'/,
+      // GPT غير محمّل (مانع إعلانات) وسكربت خارجي يستدعيه بلا حارس —
+      // كودنا (DmsAdSlot) يفحص window.googletag.pubads قبل أي استدعاء
+      /googletag\.pubads is not a function/,
     ],
   });
 }
