@@ -66,6 +66,56 @@ const imgOf = (a: ArticleWithDetails) => getCacheBustedImageUrl(a.imageUrl || a.
 // زمن الخبر للترتيب — نعتمد النشر ثم الإنشاء حتى لا يتصدّر خبر قديم مثبّت يدويًا (displayOrder).
 const articleTime = (a: ArticleWithDetails) => new Date(a.publishedAt || (a as any).createdAt || 0).getTime();
 const byRecency = (a: ArticleWithDetails, b: ArticleWithDetails) => articleTime(b) - articleTime(a);
+const DEFAULT_COMPETITION_SLUG = "kings-cup";
+const FALLBACK_COMPETITION_SLUG = "pro-league";
+
+function competitionStartTs(c: SpCompetition): number {
+  if (!c.start) return Number.POSITIVE_INFINITY;
+  const ts = new Date(c.start).getTime();
+  return Number.isFinite(ts) ? ts : Number.POSITIVE_INFINITY;
+}
+
+function competitionSeasonLabel(c: SpCompetition, firstFixtureTs?: number | null): string {
+  const anchor = firstFixtureTs
+    ? new Date(firstFixtureTs * 1000)
+    : c.start
+      ? new Date(c.start)
+      : null;
+  if (anchor && Number.isFinite(anchor.getTime())) {
+    const year = anchor.getFullYear();
+    const month = anchor.getMonth() + 1;
+    const startYear = month >= 7 ? year : year - 1;
+    return `${startYear}/${startYear + 1}`;
+  }
+  return c.season != null ? `${c.season}/${c.season + 1}` : "";
+}
+
+function competitionRank(c: SpCompetition, selectedSlug: string): number {
+  if (c.slug === selectedSlug) return -10;
+  if (c.slug === DEFAULT_COMPETITION_SLUG) return -5;
+  if (c.status === "ongoing") return 0;
+  if (c.status === "upcoming") return 1;
+  if (c.status === "unknown") return 2;
+  return 3;
+}
+
+function sortCompetitionsForPortal(rows: SpCompetition[], selectedSlug: string): SpCompetition[] {
+  return rows
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => {
+      const ra = competitionRank(a.c, selectedSlug);
+      const rb = competitionRank(b.c, selectedSlug);
+      if (ra !== rb) return ra - rb;
+      const sa = competitionStartTs(a.c);
+      const sb = competitionStartTs(b.c);
+      if (sa !== sb) return sa - sb;
+      const statusA = COMP_STATUS_RANK[a.c.status ?? "unknown"];
+      const statusB = COMP_STATUS_RANK[b.c.status ?? "unknown"];
+      if (statusA !== statusB) return statusA - statusB;
+      return a.i - b.i;
+    })
+    .map(({ c }) => c);
+}
 
 
 // ============================================================
@@ -566,7 +616,7 @@ function TransfersBanner() {
 // ============================================================
 export default function SportsDashboard() {
   const { user } = useAuth();
-  const [compSlug, setCompSlug] = useState("pro-league");
+  const [compSlug, setCompSlug] = useState(DEFAULT_COMPETITION_SLUG);
   const [openMatch, setOpenMatch] = useState<number | null>(null);
   const [scorersTab, setScorersTab] = useState<"scorers" | "assists" | "cards">("scorers");
 
@@ -586,19 +636,22 @@ export default function SportsDashboard() {
   const hasStandings = comp?.hasStandings ?? compSlug === "pro-league";
   const hasScorers = comp?.hasScorers ?? compSlug === "pro-league";
 
+  useEffect(() => {
+    if (competitions.length === 0 || competitions.some((c) => c.slug === compSlug)) return;
+    const fallback =
+      competitions.find((c) => c.slug === DEFAULT_COMPETITION_SLUG) ??
+      competitions.find((c) => c.slug === FALLBACK_COMPETITION_SLUG) ??
+      competitions[0];
+    if (fallback) setCompSlug(fallback.slug);
+  }, [competitions, compSlug]);
+
   const catOf = (c: SpCompetition): SpCompetitionCategory => c.category ?? "saudi";
   const activeCat: SpCompetitionCategory = comp ? catOf(comp) : "saudi";
   const presentCats = COMP_CATEGORY_ORDER.filter((cat) => competitions.some((c) => catOf(c) === cat));
-  // داخل الفئة: الجارية أولًا، ثم القادمة، ثم المنتهية (مع الحفاظ على الترتيب الأصلي عند التعادل).
-  const compsInActiveCat = competitions
-    .filter((c) => catOf(c) === activeCat)
-    .map((c, i) => ({ c, i }))
-    .sort((a, b) => {
-      const ra = COMP_STATUS_RANK[a.c.status ?? "unknown"];
-      const rb = COMP_STATUS_RANK[b.c.status ?? "unknown"];
-      return ra !== rb ? ra - rb : a.i - b.i;
-    })
-    .map(({ c }) => c);
+  const compsInActiveCat = sortCompetitionsForPortal(
+    competitions.filter((c) => catOf(c) === activeCat),
+    compSlug,
+  );
 
   const { data: matchesData } = useQuery<{ configured: boolean; live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] }>({
     queryKey: [`/api/sports/${compSlug}/matches`],
@@ -622,6 +675,10 @@ export default function SportsDashboard() {
     upcoming: Array.isArray(matchesData?.upcoming) ? matchesData!.upcoming : [],
     results: Array.isArray(matchesData?.results) ? matchesData!.results : [],
   };
+  const firstKnownFixtureTs = [...matches.live, ...matches.today, ...matches.upcoming, ...matches.results]
+    .map((f) => f.timestamp)
+    .filter((ts) => Number.isFinite(ts))
+    .sort((a, b) => a - b)[0] ?? null;
 
   const { data: todayData } = useQuery<{ today: SpLiveItem[] }>({
     queryKey: ["/api/sports/today"],
@@ -765,7 +822,13 @@ export default function SportsDashboard() {
                       <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-1">
                         {presentCats.map((cat) => (
                           <button key={cat}
-                            onClick={() => { const first = competitions.find((c) => catOf(c) === cat); if (first) setCompSlug(first.slug); }}
+                            onClick={() => {
+                              const first = sortCompetitionsForPortal(
+                                competitions.filter((c) => catOf(c) === cat),
+                                DEFAULT_COMPETITION_SLUG,
+                              )[0];
+                              if (first) setCompSlug(first.slug);
+                            }}
                             className={`shrink-0 whitespace-nowrap rounded-[10px] px-3.5 py-1.5 text-xs font-bold transition-colors ${activeCat === cat ? "bg-foreground text-background" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}>
                             {COMP_CATEGORY_LABELS[cat]}
                           </button>
@@ -798,7 +861,7 @@ export default function SportsDashboard() {
                           </span>
                         )}
                       </div>
-                      {comp.season && <div className="sbq-mono text-xs text-muted-foreground">موسم {comp.season}</div>}
+                      {comp.season && <div className="sbq-mono text-xs text-muted-foreground">موسم {competitionSeasonLabel(comp, firstKnownFixtureTs)}</div>}
                     </div>
                   </div>
                 )}
