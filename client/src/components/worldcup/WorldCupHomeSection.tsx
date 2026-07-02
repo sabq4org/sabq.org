@@ -33,9 +33,13 @@ export default function WorldCupHomeSection() {
     staleTime: 2 * 60 * 1000,
   });
 
+  // المفتاح في لوحة التحكم مُطفأ → القسم كله يختفي (شامل الأخبار والستوريز)
+  if (overview?.hidden) return null;
+
   const hasMatch = Boolean(overview?.matchOfTheDay?.fixture);
+  const hasChampion = Boolean(overview?.champion);
   const hasNews = Array.isArray(newsData?.news) && newsData.news.length > 0;
-  if (!hasMatch && !hasNews) return null;
+  if (!hasMatch && !hasChampion && !hasNews) return null;
 
   // مطابق لصيغة الحيّ في WorldCupHomeStrip/refetchInterval أعلاه — نقطة النبض
   // الحمراء على أيقونة «مباراة اليوم» في صفّ الستوريز.

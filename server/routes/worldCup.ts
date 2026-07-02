@@ -4,6 +4,7 @@
  * مع Cache-Control متدرّج حسب سخونة البيانات.
  */
 import type { Express } from "express";
+import { storage } from "../storage";
 import {
   getFixtures,
   getLiveFixtures,
@@ -27,6 +28,7 @@ import {
   getTopAssists,
   getTopCards,
   getTopScorers,
+  getManualChampion,
   isWorldCupConfigured,
   type WcFixture,
   type WcMatchDetail,
@@ -251,10 +253,56 @@ export function registerWorldCupRoutes(app: Express) {
     return true;
   };
 
+  // إعدادات البلوك من لوحة التحكم (system_settings) — مفتاح الإخفاء يعمل على
+  // الويب والتطبيقات المثبّتة معًا لأن الجميع يقرأ من overview: عند الإخفاء
+  // نُرجع حمولة صالحة فارغة فتختفي الواجهات دون تحديث متجر. تعطّل القراءة
+  // لا يُسقط البلوك — الافتراضي «ظاهر».
+  const getBlockSettings = async (): Promise<{
+    visible: boolean;
+    manualChampionTeamId: number | null;
+  }> => {
+    try {
+      const s = await storage.getSystemSetting("world_cup_block");
+      return {
+        visible: s?.visible ?? true,
+        manualChampionTeamId: Number(s?.manualChampionTeamId) || null,
+      };
+    } catch {
+      return { visible: true, manualChampionTeamId: null };
+    }
+  };
+
   app.get("/api/world-cup/overview", async (_req, res) => {
     if (!guard(res)) return;
     try {
+      const settings = await getBlockSettings();
+      if (!settings.visible) {
+        // s-maxage=30: إعادة تفعيل المفتاح من اللوحة تصل الواجهات خلال ≤30ث
+        res.set("Cache-Control", "public, max-age=0, s-maxage=30, stale-while-revalidate=60");
+        return res.json({
+          hidden: true,
+          live: [],
+          today: [],
+          matchOfTheDay: null,
+          matchOfDayPeers: [],
+          predictions: {},
+          saudi: { next: null, fixtures: [], group: null },
+          champion: null,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
       const ov = await getOverview();
+
+      // البطل اليدوي من اللوحة يتقدّم على المكتشف تلقائيًا — إلا إذا تطابقا
+      // فنُبقي التلقائي لأنه أغنى (نتيجة النهائي + الوصيف + الترجيح)
+      let champion = ov.champion;
+      if (settings.manualChampionTeamId) {
+        if (champion?.team.id !== settings.manualChampionTeamId) {
+          champion = (await getManualChampion(settings.manualChampionTeamId)) ?? champion;
+        }
+      }
+      ov.champion = champion;
       // تركيب النتيجة اللحظية على كل المباريات الحيّة في النظرة العامة
       const [live, today, saudiFixtures] = await Promise.all([
         overlayLiveList(ov.live),

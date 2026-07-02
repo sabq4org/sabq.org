@@ -92,4 +92,42 @@ router.post("/api/system/ifox-block-visibility", requireAuth, requirePermission(
   }
 });
 
+// Get World Cup home-block settings (public — web + iOS + Android read this)
+router.get("/api/system/world-cup-block", async (req, res) => {
+  try {
+    const setting = await storage.getSystemSetting("world_cup_block");
+    res.json({
+      visible: setting?.visible ?? true,
+      manualChampionTeamId: setting?.manualChampionTeamId ?? null,
+    });
+  } catch (error) {
+    console.error("Error fetching world cup block settings:", error);
+    res.json({ visible: true, manualChampionTeamId: null });
+  }
+});
+
+// Update World Cup home-block settings (admin only) — partial merge so the
+// visibility toggle and the manual-champion select can save independently
+router.post("/api/system/world-cup-block", requireAuth, requirePermission("system.manage_settings"), async (req: any, res) => {
+  try {
+    const { visible, manualChampionTeamId } = req.body;
+    const current = (await storage.getSystemSetting("world_cup_block")) ?? {};
+
+    const next = {
+      visible: visible !== undefined ? !!visible : (current.visible ?? true),
+      manualChampionTeamId:
+        manualChampionTeamId !== undefined
+          ? (manualChampionTeamId == null ? null : Number(manualChampionTeamId) || null)
+          : (current.manualChampionTeamId ?? null),
+    };
+
+    await storage.upsertSystemSetting("world_cup_block", next, "system", true);
+
+    res.json({ success: true, ...next });
+  } catch (error) {
+    console.error("Error updating world cup block settings:", error);
+    res.status(500).json({ message: "Failed to update world cup block settings" });
+  }
+});
+
 export default router;

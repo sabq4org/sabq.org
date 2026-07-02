@@ -469,6 +469,18 @@ export interface WcPlayerCard {
   injury: { reason: string } | null;
 }
 
+/** بطل البطولة — يظهر في بلوك الواجهة بدل مربع المباراة بعد حسم النهائي */
+export interface WcChampion {
+  team: WcTeam;
+  runnerUp: WcTeam | null;
+  /** نتيجة النهائي بترتيب «الفائز أولًا» (W-L) — نفس اتفاقية الترجيح الموحّدة */
+  score: string | null;
+  /** نتيجة ركلات الترجيح بترتيب «الفائز أولًا» — null إن حُسم النهائي دونها */
+  penalties: string | null;
+  decidedAt: string | null;
+  source: "auto" | "manual";
+}
+
 export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
@@ -483,6 +495,10 @@ export interface WcOverview {
     fixtures: WcFixture[];
     group: WcGroup | null;
   };
+  /** بطل البطولة بعد حسم النهائي (أو المعيَّن يدويًا من اللوحة) */
+  champion?: WcChampion | null;
+  /** true عندما أُطفئ البلوك من لوحة التحكم — القسم كله يختفي */
+  hidden?: boolean;
   updatedAt: string;
 }
 
