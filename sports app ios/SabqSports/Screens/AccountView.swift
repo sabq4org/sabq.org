@@ -44,10 +44,14 @@ struct AccountView: View {
 
                     if auth.isLoggedIn { signOutButton }
 
-                    Text("VARA · تطبيقك الرياضي")
-                        .font(SportsFonts.app(size: 11, weight: .semibold))
-                        .foregroundStyle(SpTheme.onDarkFaint)
-                        .padding(.top, 2)
+                    HStack(spacing: 7) {
+                        SpWordmark(size: 11, color: SpTheme.onDarkFaint)
+                        Text("· دقّة الرياضة")
+                            .font(SportsFonts.app(size: 11, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkFaint)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 2)
                 }
                 .padding(16)
             }

@@ -191,20 +191,22 @@ struct HomeView: View {
         .animation(.easeInOut(duration: 0.25), value: loading)
     }
 
-    // شعار التطبيق (VARA) أعلى الصفحة الرئيسية — علامة الهوية.
+    // شعار التطبيق (VARA) أعلى الصفحة الرئيسية — علامة الهوية:
+    // الأيقونة + VA(R ذهبية)A + «دقّة الرياضة» (دليل الهوية).
     private var brandBar: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 10) {
             Image("VaraLogo")
                 .resizable()
                 .scaledToFill()
                 .frame(width: 32, height: 32)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(SpTheme.cardStroke, lineWidth: 1))
-            Text("VARA")
-                .font(SportsFonts.app(size: 19, weight: .heavy))
-                .foregroundStyle(SpTheme.onDark)
-                .tracking(1)
-                .environment(\.layoutDirection, .leftToRight)
+            VStack(alignment: .leading, spacing: 0) {
+                SpWordmark(size: 18)
+                Text("دقّة الرياضة")
+                    .font(SportsFonts.app(size: 9.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 6)
