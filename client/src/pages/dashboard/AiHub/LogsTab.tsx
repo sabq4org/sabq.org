@@ -131,7 +131,7 @@ export default function LogsTab() {
       {/* Filters */}
       <Card className="rounded-2xl shadow-sm">
         <CardContent className="p-3.5 flex flex-wrap items-center gap-3">
-          <Select value={feature} onValueChange={resetFilters(setFeature)}>
+          <Select dir="rtl" value={feature} onValueChange={resetFilters(setFeature)}>
             <SelectTrigger className="w-48 h-9">
               <SelectValue placeholder="كل الميزات" />
             </SelectTrigger>
@@ -144,7 +144,7 @@ export default function LogsTab() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={provider} onValueChange={resetFilters(setProvider)}>
+          <Select dir="rtl" value={provider} onValueChange={resetFilters(setProvider)}>
             <SelectTrigger className="w-36 h-9">
               <SelectValue />
             </SelectTrigger>
@@ -157,7 +157,7 @@ export default function LogsTab() {
               ))}
             </SelectContent>
           </Select>
-          <Select value={status} onValueChange={resetFilters(setStatus)}>
+          <Select dir="rtl" value={status} onValueChange={resetFilters(setStatus)}>
             <SelectTrigger className="w-32 h-9">
               <SelectValue />
             </SelectTrigger>
@@ -203,11 +203,11 @@ export default function LogsTab() {
                         {format(new Date(row.createdAt), "d MMM HH:mm:ss", { locale: ar })}
                       </TableCell>
                       <TableCell className="text-xs">{row.featureKey}</TableCell>
-                      <TableCell className="text-xs tabular-nums" dir="ltr">
-                        {row.provider}/{row.modelId}
+                      <TableCell className="text-xs tabular-nums">
+                        <span dir="ltr">{row.provider}/{row.modelId}</span>
                       </TableCell>
                       <TableCell className="text-xs">{row.operation}</TableCell>
-                      <TableCell className="text-xs tabular-nums" dir="ltr">
+                      <TableCell className="text-xs tabular-nums">
                         {row.inputTokens || row.outputTokens
                           ? `${formatTokens(row.inputTokens)} ← ${formatTokens(row.outputTokens)}`
                           : row.unitCount
@@ -365,6 +365,7 @@ export default function LogsTab() {
                 <div className="space-y-1.5">
                   <Label className="text-xs">النطاق</Label>
                   <Select
+                    dir="rtl"
                     value={budgetEdit.scope}
                     onValueChange={(v) => setBudgetEdit({ ...budgetEdit, scope: v, scopeKey: v === "global" ? "" : budgetEdit.scopeKey })}
                   >
@@ -380,7 +381,7 @@ export default function LogsTab() {
                 {budgetEdit.scope === "provider" && (
                   <div className="space-y-1.5">
                     <Label className="text-xs">المزود</Label>
-                    <Select value={budgetEdit.scopeKey || "openai"} onValueChange={(v) => setBudgetEdit({ ...budgetEdit, scopeKey: v })}>
+                    <Select dir="rtl" value={budgetEdit.scopeKey || "openai"} onValueChange={(v) => setBudgetEdit({ ...budgetEdit, scopeKey: v })}>
                       <SelectTrigger className="h-9">
                         <SelectValue />
                       </SelectTrigger>
