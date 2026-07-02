@@ -10,6 +10,7 @@ export const TOURNAMENT_BLOCK_KEYS = {
   "world-cup": "world_cup_block",
   "gulf-cup": "gulf_cup_block",
   "asian-cup": "asian_cup_block",
+  "kings-cup": "kings_cup_block",
 } as const;
 
 export type TournamentBlockSlug = keyof typeof TOURNAMENT_BLOCK_KEYS;

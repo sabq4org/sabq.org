@@ -2866,6 +2866,70 @@ export const sportsPredictions = pgTable("sports_predictions", {
 export type SportsPrediction = typeof sportsPredictions.$inferSelect;
 export type InsertSportsPrediction = typeof sportsPredictions.$inferInsert;
 
+// سجلّ البطولات الموحّد (Sabq Sports 2.0) — مصدر الحقيقة لظهور البطولات في هَب
+// الرياضة (/sports22) والتطبيقات معًا. يُدار من الداشبورد (بدون deploy):
+// kind: 'anchor' (روشن — يظهر دائمًا أولًا) | 'seasonal' (تظهر وتختفي حسب حالتها).
+// status: 'hidden' | 'upcoming' | 'active' | 'finished'.
+// theme: لمسة هوية اختيارية للبطولة (ألوان فوق هوية سبق الأساسية).
+// features: الميزات المفعّلة في قالب البطولة (predictions/bracket/scorers/standings/teams/news).
+// entryPath داخل features يوجّه بطولات «الجزر» القائمة (آسيا/خليجي/مونديال) لصفحاتها
+// الحالية حتى اكتمال ترحيلها للقالب الموحّد.
+export const sportsTournaments = pgTable("sports_tournaments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
+  apiFootballLeagueId: integer("api_football_league_id"),
+  name: text("name").notNull(),
+  shortName: text("short_name"),
+  logo: text("logo"),
+  kind: text("kind").default("seasonal").notNull(),
+  status: text("status").default("hidden").notNull(),
+  visibleWeb: boolean("visible_web").default(false).notNull(),
+  visibleApp: boolean("visible_app").default(false).notNull(),
+  featured: boolean("featured").default(false).notNull(),
+  sortOrder: integer("sort_order").default(100).notNull(),
+  season: integer("season"),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  theme: jsonb("theme").$type<{
+    primary?: string;
+    accent?: string;
+    dark?: string;
+  }>(),
+  features: jsonb("features").$type<{
+    predictions?: boolean;
+    bracket?: boolean;
+    scorers?: boolean;
+    standings?: boolean;
+    teams?: boolean;
+    news?: boolean;
+    /** مسار صفحة خارجية قائمة (جزيرة لم تُرحَّل بعد) بدل القالب الموحّد */
+    entryPath?: string;
+  }>(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sports_tournaments_order").on(table.sortOrder),
+  index("idx_sports_tournaments_status").on(table.status),
+]);
+
+export type SportsTournament = typeof sportsTournaments.$inferSelect;
+export type InsertSportsTournament = typeof sportsTournaments.$inferInsert;
+
+// سجل تغييرات إعدادات البطولات — من غيّر ماذا ومتى (يُعرض في صفحة الإدارة).
+export const sportsTournamentAudit = pgTable("sports_tournament_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tournamentId: varchar("tournament_id").references(() => sportsTournaments.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  action: text("action").notNull(),
+  changes: jsonb("changes").$type<Record<string, { from: unknown; to: unknown }>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sports_tournament_audit_t").on(table.tournamentId, table.createdAt.desc()),
+]);
+
+export type SportsTournamentAudit = typeof sportsTournamentAudit.$inferSelect;
+
 // Story notifications (notification log)
 export const storyNotifications = pgTable("story_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

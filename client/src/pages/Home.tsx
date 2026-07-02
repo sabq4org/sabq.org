@@ -41,6 +41,7 @@ const QuadCategoriesBlock = lazyNamed(() => import("@/components/QuadCategoriesB
 const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
 const WorldCupHomeSection = lazyDefault(() => import("@/components/worldcup/WorldCupHomeSection"));
 const GulfCupHomeSection = lazyDefault(() => import("@/components/gulfcup/GulfCupHomeSection"));
+const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/KingsCupHomeSection"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
@@ -454,6 +455,14 @@ export default function Home() {
         {/* Gulf Cup 27 + Asian Cup 2027 strips — each hides itself entirely
             when toggled off from dashboard (blockHidden / schedule window)
             or when no data */}
+        {/* King's Cup strip — hides itself entirely when toggled off from
+            dashboard (blockHidden / schedule window) or when no data */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <KingsCupHomeSection />
+          </Suspense>
+        </ErrorBoundary>
+
         <ErrorBoundary fallback={null}>
           <Suspense fallback={null}>
             <GulfCupHomeSection />

@@ -185,6 +185,7 @@ const SuspiciousWordsManagement = lazy(() => retryImport(() => import("@/pages/a
 // === LAZY IMPORTS (System Settings) ===
 const StoryAdmin = lazy(() => retryImport(() => import("@/pages/StoryAdmin")));
 const SystemSettings = lazy(() => retryImport(() => import("@/pages/SystemSettings")));
+const SportsTournamentsAdmin = lazy(() => retryImport(() => import("@/pages/dashboard/SportsTournamentsAdmin")));
 const AutoImageSettings = lazy(() => retryImport(() => import("@/pages/AutoImageSettings")));
 const FocalPointDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/FocalPointDashboard")));
 const EditorAlertsSettings = lazy(() => retryImport(() => import("@/pages/dashboard/EditorAlertsSettings")));
@@ -362,6 +363,9 @@ const AsianCup = lazy(() => retryImport(() => import("@/pages/AsianCup")));
 const AsianCupPredictions = lazy(() => retryImport(() => import("@/pages/AsianCupPredictions")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
 const GulfCupPredictions = lazy(() => retryImport(() => import("@/pages/GulfCupPredictions")));
+const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
+const KingsCupTeam = lazy(() => retryImport(() => import("@/pages/KingsCupTeam")));
+const KingsCupPredictions = lazy(() => retryImport(() => import("@/pages/KingsCupPredictions")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
@@ -378,6 +382,9 @@ const SportsMatch = lazy(() => retryImport(() => import("@/pages/SportsMatch")))
 const SportsTransfers = lazy(() => retryImport(() => import("@/pages/SportsTransfers")));
 // بوابة رياضية متخصصة بتصميم مستقل على /sports10
 const Sports10 = lazy(() => retryImport(() => import("@/pages/Sports10")));
+// سبق الرياضية 2.0 — هَب البطولات الموحّد (مسار تجريبي قبل اعتماده مكان /sports)
+const Sports22 = lazy(() => retryImport(() => import("@/pages/Sports22")));
+const Sports22Competition = lazy(() => retryImport(() => import("@/pages/Sports22Competition")));
 // هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
 const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
@@ -888,10 +895,16 @@ function Router() {
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         <Route path="/gulf-cup/predictions">{() => <LazyRoute component={GulfCupPredictions} />}</Route>
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
+
+        <Route path="/kings-cup/predictions">{() => <LazyRoute component={KingsCupPredictions} />}</Route>
+        <Route path="/kings-cup/team/:teamId">{() => <LazyRoute component={KingsCupTeam} />}</Route>
+        <Route path="/kings-cup">{() => <LazyRoute component={KingsCup} />}</Route>
         {/* هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية */}
         <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
         {/* بوابة رياضية متخصصة مطلوبة على /sports10 — قبل /sports/:id الأرشيفي */}
         <Route path="/sports10">{() => <LazyRoute component={Sports10} />}</Route>
+        <Route path="/sports22/competition/:slug">{() => <LazyRoute component={Sports22Competition} />}</Route>
+        <Route path="/sports22">{() => <LazyRoute component={Sports22} />}</Route>
         {/* البوابة الرياضية المعتمدة على /sports — تُسجّل قبل /sports/:id الأرشيفي ولا تتعارض مع /category/sports */}
         <Route path="/sports/competition/:slug">{() => <LazyRoute component={SportsCompetition} />}</Route>
         <Route path="/sports/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>
@@ -979,6 +992,7 @@ function Router() {
         <Route path="/my-keywords">{() => <LazyRoute component={MyKeywords} />}</Route>
         <Route path="/dashboard/story-admin">{() => <LazyRoute component={StoryAdmin} />}</Route>
         <Route path="/dashboard/system-settings">{() => <LazyRoute component={SystemSettings} />}</Route>
+        <Route path="/dashboard/sports-tournaments">{() => <LazyRoute component={SportsTournamentsAdmin} />}</Route>
         <Route path="/dashboard/auto-image-settings">{() => <LazyRoute component={AutoImageSettings} />}</Route>
         <Route path="/dashboard/focal-points">{() => <LazyRoute component={FocalPointDashboard} />}</Route>
         <Route path="/dashboard/editor-alerts">{() => <LazyRoute component={EditorAlertsSettings} />}</Route>
