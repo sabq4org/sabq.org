@@ -48,15 +48,31 @@ function goalsForTeam(fixture: WcFixture, teamId: number): { team: number | null
     : { team: fixture.goals.away, opponent: fixture.goals.home };
 }
 
-function teamState(row: WcStandingRow | null): { label: string; className: string } {
+const WC_STATE_QUALIFIED = { label: "متأهل", className: "bg-emerald-300 text-emerald-950 border-0" };
+const WC_STATE_ELIMINATED = { label: "خارج المنافسة", className: "bg-white/[0.12] text-emerald-100 border-white/10" };
+const WC_STATE_CONTENTION = { label: "في المنافسة", className: "bg-emerald-100 text-emerald-950 border-0" };
+
+/**
+ * الخادم يرسل qualifyStatus أثناء دور المجموعات فقط ويجعله null بعد انتهائه —
+ * فلا يكفي الاعتماد عليه وحده وإلا ظهر الجميع «في المنافسة» بعد اكتمال المجموعات.
+ * عند غياب القيمة نستنتج الحالة محليًا (مطابق iOS/computeQualified): المجموعة
+ * مكتملة والمركز ضمن الأوّلين ⇒ متأهل، وله مباراة قادمة (أفضل ثالث تأهّل) ⇒ في
+ * المنافسة، وإلا ⇒ خارج المنافسة.
+ */
+function teamState(
+  row: WcStandingRow | null,
+  groupComplete: boolean,
+  hasUpcoming: boolean,
+): { label: string; className: string } {
   if (!row) return { label: "بانتظار الترتيب", className: "bg-white/10 text-emerald-50 border-white/10" };
-  if (row.qualifyStatus === "qualified") {
-    return { label: "متأهل", className: "bg-emerald-300 text-emerald-950 border-0" };
-  }
-  if (row.qualifyStatus === "eliminated") {
-    return { label: "خرج", className: "bg-white/[0.12] text-emerald-100 border-white/10" };
-  }
-  return { label: "في المنافسة", className: "bg-emerald-100 text-emerald-950 border-0" };
+  if (row.qualifyStatus === "qualified") return WC_STATE_QUALIFIED;
+  if (row.qualifyStatus === "eliminated") return WC_STATE_ELIMINATED;
+  if (row.qualifyStatus === "contention") return WC_STATE_CONTENTION;
+  // qualifyStatus == null (انتهى دور المجموعات) — نستنتج
+  if (!groupComplete) return WC_STATE_CONTENTION;
+  if (row.rank <= 2) return WC_STATE_QUALIFIED;
+  if (hasUpcoming) return WC_STATE_CONTENTION;
+  return WC_STATE_ELIMINATED;
 }
 
 function buildArabTeams(fixtures: WcFixture[], groups: WcGroup[]): ArabTeamDigest[] {
@@ -238,14 +254,20 @@ function TeamSquadStrip({ teamId, onOpenPlayer }: { teamId: number; onOpenPlayer
 
 function TeamPanel({
   digest,
+  fixtures,
   onOpenMatch,
   onOpenPlayer,
 }: {
   digest: ArabTeamDigest;
+  fixtures: WcFixture[];
   onOpenMatch: (fixtureId: number) => void;
   onOpenPlayer: (id: number) => void;
 }) {
-  const state = teamState(digest.row);
+  // اكتمال المجموعة = كل مباريات فرقها انتهت — لاستنتاج الحالة عند غياب qualifyStatus.
+  const groupIds = new Set((digest.group?.rows ?? []).map((r) => r.team.id));
+  const groupMatches = fixtures.filter((f) => groupIds.has(f.home.id) && groupIds.has(f.away.id));
+  const groupComplete = groupMatches.length > 0 && groupMatches.every((f) => f.status.finished);
+  const state = teamState(digest.row, groupComplete, digest.next != null);
   const diff = digest.row ? `${digest.row.goalsDiff > 0 ? "+" : ""}${digest.row.goalsDiff}` : "-";
 
   return (
@@ -383,7 +405,7 @@ export function ArabTeamsSpotlight({ fixtures, groups, onOpenMatch }: ArabTeamsS
             </div>
 
             <TeamRail teams={arabTeams} selectedId={selected.team.id} onSelect={setSelectedId} />
-            <TeamPanel digest={selected} onOpenMatch={onOpenMatch} onOpenPlayer={setOpenPlayerId} />
+            <TeamPanel digest={selected} fixtures={fixtures} onOpenMatch={onOpenMatch} onOpenPlayer={setOpenPlayerId} />
           </div>
         </motion.div>
       </div>
