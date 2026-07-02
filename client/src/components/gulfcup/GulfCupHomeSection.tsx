@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import gulfCupLogoHorizontal from "@assets/gulf-cup-27-logo-horizontal.svg";
 import CupHomeStrip, {
   type CupChampion,
   type CupFixture,
@@ -53,6 +54,8 @@ export default function GulfCupHomeSection() {
       theme={GULF_THEME}
       fixture={data.nextMatch ?? null}
       champion={data.champion ?? null}
+      emblemSrc={gulfCupLogoHorizontal}
+      emblemAlt="شعار خليجي 27 الرسمي"
     />
   );
 }

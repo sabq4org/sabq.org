@@ -69,6 +69,9 @@ interface CupHomeStripProps {
   theme: CupStripTheme;
   fixture: CupFixture | null;
   champion: CupChampion | null;
+  /** شعار البطولة الرسمي — يُعرض على رقعة بيضاء بدل أيقونة الكأس العامة */
+  emblemSrc?: string;
+  emblemAlt?: string;
 }
 
 function arabicDays(n: number): string {
@@ -227,6 +230,8 @@ export default function CupHomeStrip({
   theme,
   fixture,
   champion,
+  emblemSrc,
+  emblemAlt,
 }: CupHomeStripProps) {
   if (!fixture && !champion) return null;
 
@@ -257,9 +262,21 @@ export default function CupHomeStrip({
             {/* هوية البطولة */}
             <Link href={href}>
               <span className="flex items-center gap-3 cursor-pointer group">
-                <span className="rounded-xl bg-white/10 ring-1 ring-white/20 p-2.5 shadow-lg shrink-0">
-                  <Trophy className="h-8 w-8 text-amber-300" />
-                </span>
+                {emblemSrc ? (
+                  // الشعار الرسمي على رقعة بيضاء — نص الهوية الداكن يحتاج خلفية فاتحة
+                  <span className="rounded-xl bg-white p-1.5 shadow-lg shrink-0">
+                    <img
+                      src={emblemSrc}
+                      alt={emblemAlt ?? title}
+                      className="h-11 w-auto object-contain"
+                      loading="lazy"
+                    />
+                  </span>
+                ) : (
+                  <span className="rounded-xl bg-white/10 ring-1 ring-white/20 p-2.5 shadow-lg shrink-0">
+                    <Trophy className="h-8 w-8 text-amber-300" />
+                  </span>
+                )}
                 <span className="text-right">
                   <span className="block text-lg font-black text-white leading-tight group-hover:text-amber-200 transition-colors">
                     {title}

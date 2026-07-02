@@ -4,7 +4,9 @@ import { motion } from "framer-motion";
 import { CalendarDays, Crown, MapPin, Radio, Sparkles, Trophy, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import gulfCupEmblem from "@assets/gulf-cup-27-emblem.png";
+// الشعار الرسمي (SVG متجهي — حادّ على كل المقاسات). نصّه أخضر داكن،
+// لذا يُعرض دائمًا فوق لوح فاتح لا فوق الخلفية الداكنة مباشرة.
+import gulfCupLogo from "@assets/gulf-cup-27-logo.svg";
 import { countdownFromIso, formatDateRange, type GcOverview, type GcTeam } from "./gcTypes";
 
 interface GcHeroProps {
@@ -87,20 +89,25 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
         >
           <div className="relative">
             <motion.div
-              className="absolute inset-0 -m-6 rounded-full bg-emerald-400/20 blur-2xl"
-              animate={{ scale: [1, 1.12, 1], opacity: [0.5, 0.8, 0.5] }}
+              className="absolute inset-0 -m-8 rounded-[2.5rem] bg-amber-300/20 blur-2xl"
+              animate={{ scale: [1, 1.1, 1], opacity: [0.45, 0.75, 0.45] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
             />
-            <motion.img
-              src={gulfCupEmblem}
-              alt="شعار خليجي 27 — كأس الخليج العربي في السعودية"
-              className="relative h-36 w-auto object-contain drop-shadow-2xl sm:h-44"
-              loading="eager"
-              decoding="async"
-              initial={{ scale: 0.85, rotate: -3 }}
+            {/* لوح عاجي خلف الشعار الرسمي — نص الهوية الداكن يبقى واضحًا فوق الهيرو الداكن */}
+            <motion.div
+              className="relative rounded-[2rem] bg-gradient-to-b from-white to-amber-50/90 px-8 py-6 shadow-2xl ring-1 ring-amber-300/40"
+              initial={{ scale: 0.88, rotate: -2 }}
               animate={{ scale: 1, rotate: 0 }}
               transition={{ type: "spring", stiffness: 120, damping: 12 }}
-            />
+            >
+              <img
+                src={gulfCupLogo}
+                alt="شعار خليجي 27 — كأس الخليج العربي في السعودية 2026"
+                className="h-40 w-auto object-contain sm:h-48"
+                loading="eager"
+                decoding="async"
+              />
+            </motion.div>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2">
