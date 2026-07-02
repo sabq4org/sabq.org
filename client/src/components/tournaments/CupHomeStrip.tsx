@@ -44,6 +44,17 @@ export interface CupChampion {
   source: "auto" | "manual";
 }
 
+/** ملخّص «يوم الجولة» — لأدوار الكؤوس التي تُلعب دفعة واحدة (عدة مباريات في يوم) */
+export interface CupMatchday {
+  count: number;
+  round: string | null;
+  date: string;
+  nextKickoffTs: number | null;
+  sameKickoff: boolean;
+  liveCount: number;
+  finishedCount: number;
+}
+
 /** ثيم ألوان الشريط — Tailwind classes جاهزة (لا قيم ديناميكية كي لا تسقط من الـpurge) */
 export interface CupStripTheme {
   /** خلفية الحزام كامل العرض */
@@ -69,6 +80,11 @@ interface CupHomeStripProps {
   theme: CupStripTheme;
   fixture: CupFixture | null;
   champion: CupChampion | null;
+  /**
+   * ملخّص يوم الجولة — متى بلغت مبارياته 3 فأكثر يعرض الشريط عدّاد الجولة
+   * بدل إبراز مباراة اعتباطية (أدوار الكؤوس المبكرة تُلعب دفعة واحدة).
+   */
+  matchday?: CupMatchday | null;
   /** شعار البطولة الرسمي — يُعرض على رقعة بيضاء بدل أيقونة الكأس العامة */
   emblemSrc?: string;
   emblemAlt?: string;
@@ -116,6 +132,68 @@ function TickingCountdown({ timestamp, accent, soft }: { timestamp: number; acce
         {text}
       </span>
     </p>
+  );
+}
+
+/** عدّاد تنازلي بشرائح (يوم/ساعة/دقيقة/ثانية) — نسخة مدمجة من عدّاد هيرو الأقسام */
+function CountdownChipsRow({ timestamp, soft }: { timestamp: number; soft: string }) {
+  const [countdown, setCountdown] = useState(() => countdownTo(timestamp));
+  useEffect(() => {
+    const interval = setInterval(() => setCountdown(countdownTo(timestamp)), 1000);
+    return () => clearInterval(interval);
+  }, [timestamp]);
+
+  if (countdown.total <= 0) {
+    return <p className={`text-[11px] font-bold ${soft}`}>حان موعد الانطلاق — التغطية خلال لحظات</p>;
+  }
+
+  const chips = [
+    { value: countdown.days, label: "يوم" },
+    { value: countdown.hours, label: "ساعة" },
+    { value: countdown.minutes, label: "دقيقة" },
+    { value: countdown.seconds, label: "ثانية" },
+  ];
+  return (
+    <div className="flex items-center justify-center gap-1.5" aria-label="العد التنازلي لانطلاق الجولة">
+      {chips.map((chip) => (
+        <div key={chip.label} className="flex min-w-[2.75rem] flex-col items-center rounded-lg bg-white/10 px-2 py-1 backdrop-blur-sm">
+          <span className="text-base font-black text-white tabular-nums leading-tight">{chip.value}</span>
+          <span className={`text-[9px] ${soft}`}>{chip.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * كتلة «يوم الجولة» — تحل محل مربع المباراة عندما يضم اليوم 3 مباريات فأكثر:
+ * اسم الدور + التاريخ وعدد المباريات + عدّاد تنازلي مشترك (توقيت الانطلاق واحد
+ * غالبًا)، وتتحوّل لمؤشّر مباشر عند انطلاق المباريات.
+ */
+function MatchdayBlock({ matchday, theme }: { matchday: CupMatchday; theme: CupStripTheme }) {
+  return (
+    <div className="flex flex-col items-center gap-1.5 min-w-0 text-center" data-testid="cup-matchday-block">
+      <p className="text-lg font-black text-white leading-tight">
+        {matchday.round ?? "جولة البطولة"}
+      </p>
+      <p className={`text-[11px] ${theme.soft}`}>
+        {formatKickoffDay(matchday.date)} · {matchday.count} {matchday.count === 2 ? "مباراتان" : "مباريات"}
+        {matchday.sameKickoff && matchday.nextKickoffTs != null && (
+          <> · تنطلق جميعها {formatKickoffTime(new Date(matchday.nextKickoffTs * 1000).toISOString())}</>
+        )}
+      </p>
+      {matchday.liveCount > 0 ? (
+        <p className="flex items-center gap-1.5 text-sm font-bold text-red-300">
+          <Radio className="h-3.5 w-3.5 animate-pulse" />
+          {matchday.liveCount === 1 ? "مباراة تجري الآن" : `${matchday.liveCount} مباريات تجري الآن`}
+          {matchday.finishedCount > 0 && (
+            <span className={`font-semibold ${theme.soft}`}>· انتهت {matchday.finishedCount}</span>
+          )}
+        </p>
+      ) : matchday.nextKickoffTs != null ? (
+        <CountdownChipsRow timestamp={matchday.nextKickoffTs} soft={theme.soft} />
+      ) : null}
+    </div>
   );
 }
 
@@ -230,10 +308,13 @@ export default function CupHomeStrip({
   theme,
   fixture,
   champion,
+  matchday,
   emblemSrc,
   emblemAlt,
 }: CupHomeStripProps) {
   if (!fixture && !champion) return null;
+  // 3 مباريات فأكثر في اليوم = إبراز مباراة واحدة اعتباطي — نعرض عدّاد الجولة
+  const matchdayMode = !champion && !!matchday && matchday.count >= 3;
 
   return (
     <div className={`border-y py-8 ${theme.band}`}>
@@ -290,10 +371,12 @@ export default function CupHomeStrip({
 
             <div className="hidden md:block h-12 w-px bg-white/10 shrink-0" />
 
-            {/* البطل بعد حسم النهائي — وإلا المباراة القادمة/الحية */}
+            {/* البطل بعد حسم النهائي — وإلا عدّاد الجولة (أيام الدفعة الواحدة) — وإلا المباراة القادمة/الحية */}
             <div className="flex-1 flex flex-wrap items-center justify-center gap-3 sm:gap-6 min-w-0">
               {champion ? (
                 <ChampionBlock champion={champion} championLabel={championLabel} theme={theme} />
+              ) : matchdayMode ? (
+                <MatchdayBlock matchday={matchday!} theme={theme} />
               ) : (
                 fixture && <MatchBlock fixture={fixture} theme={theme} />
               )}

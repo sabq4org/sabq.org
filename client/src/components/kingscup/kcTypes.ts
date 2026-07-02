@@ -73,12 +73,27 @@ export interface KcChampion {
   source: "auto" | "manual";
 }
 
+/** ملخّص «يوم الجولة» — يُحسب خادميًّا في /api/kings-cup/overview */
+export interface KcMatchday {
+  count: number;
+  /** اسم الدور إن كانت كل مباريات اليوم من دور واحد، وإلا null */
+  round: string | null;
+  date: string;
+  /** أقرب انطلاقة لم تبدأ بعد (ثوانٍ يونكس) — null إن بدأت كلها */
+  nextKickoffTs: number | null;
+  /** كل المباريات المتبقية تنطلق في التوقيت نفسه */
+  sameKickoff: boolean;
+  liveCount: number;
+  finishedCount: number;
+}
+
 export interface KcOverview {
   blockHidden?: boolean;
   live: KcFixture[];
   today: KcFixture[];
   nextMatch: KcFixture | null;
   matchOfTheDay: { fixture: KcFixture; prediction: unknown | null } | null;
+  matchday?: KcMatchday | null;
   started: boolean;
   champion: KcChampion | null;
   updatedAt: string;
@@ -206,12 +221,3 @@ export interface KcHistory {
   champion: { id: number; name: string; logo: string } | null;
   topScorer: { id: number; name: string; photo: string; team: KcTeam; goals: number } | null;
 }
-
-export const KINGS_CUP_THEME = {
-  band: "bg-amber-50 dark:bg-amber-950/25 border-amber-600/10 dark:border-amber-400/10",
-  card: "bg-gradient-to-bl from-[#0b3d2e] via-[#0f5138] to-[#08301f]",
-  ring: "ring-emerald-900/40",
-  soft: "text-emerald-100/80",
-  accent: "text-amber-300",
-  cta: "bg-amber-300 text-emerald-950 hover:bg-amber-200",
-} as const;

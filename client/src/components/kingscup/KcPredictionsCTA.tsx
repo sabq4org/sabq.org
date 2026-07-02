@@ -1,29 +1,32 @@
 import { Link } from "wouter";
-import { Sparkles, ChevronLeft } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Trophy, ChevronLeft } from "lucide-react";
 
+/**
+ * بانر دعوة لمسابقة التوقّعات داخل هب كأس الملك — نفس بانر المونديال
+ * (PredictionsCTA) ويربط /kings-cup/predictions.
+ */
 export function KcPredictionsCTA() {
   return (
-    <section className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      <div className="rounded-2xl bg-gradient-to-bl from-emerald-600 to-emerald-800 p-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-white">
-        <div className="flex items-center gap-3">
-          <span className="rounded-xl bg-white/15 p-2.5">
-            <Sparkles className="h-6 w-6 text-amber-300" />
-          </span>
-          <div>
-            <p className="text-lg font-black">توقّع نتائج كأس الملك</p>
-            <p className="text-sm text-emerald-100/80">
-              توقّع نتائج المباريات والبطل والهدّاف، واجمع النقاط وتصدّر لوحة المتوقّعين
-            </p>
-          </div>
+    <section className="mx-auto max-w-6xl px-3 sm:px-4 py-3">
+      <Link
+        href="/kings-cup/predictions"
+        className="group flex cursor-pointer items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-bl from-emerald-600 via-emerald-700 to-emerald-800 p-4 text-white shadow-sm transition hover:shadow-md"
+        data-testid="kc-predictions-cta"
+      >
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">
+          <Trophy className="h-6 w-6 text-amber-300" />
         </div>
-        <Button asChild className="bg-amber-300 text-emerald-950 hover:bg-amber-200 font-bold rounded-full gap-1 shrink-0">
-          <Link href="/kings-cup/predictions">
-            ابدأ التوقّع
-            <ChevronLeft className="h-4 w-4" />
-          </Link>
-        </Button>
-      </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-black sm:text-lg">شارك في توقّعات كأس الملك 🏆</p>
+          <p className="truncate text-sm text-emerald-50/90">
+            توقّع نتائج المباريات والبطل والهدّاف، واجمع النقاط وتصدّر لوحة المتوقّعين
+          </p>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-4 py-2 text-sm font-bold text-emerald-700 transition group-hover:bg-emerald-50">
+          ابدأ التوقّع
+          <ChevronLeft className="h-4 w-4" />
+        </span>
+      </Link>
     </section>
   );
 }

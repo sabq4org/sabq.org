@@ -3,19 +3,22 @@ import kingsCupLogo from "@assets/kings-cup-logo.png";
 import CupHomeStrip, {
   type CupChampion,
   type CupFixture,
+  type CupMatchday,
   type CupStripTheme,
 } from "../tournaments/CupHomeStrip";
 
 /**
  * بلوك «كأس خادم الحرمين الشريفين» في الصفحة الرئيسية — نفس تجربة بلوك المونديال:
- * المباراة القادمة/الحية أو بطاقة البطل، ويختفي كليًا عند إطفائه من لوحة التحكم
- * (blockHidden، شامل نافذة التوقيت) أو غياب البيانات.
+ * عدّاد الجولة (أدوار الدفعة الواحدة) أو المباراة القادمة/الحية أو بطاقة البطل،
+ * ويختفي كليًا عند إطفائه من لوحة التحكم (blockHidden، شامل نافذة التوقيت)
+ * أو غياب البيانات.
  */
 
 interface KcOverviewLite {
   started: boolean;
   nextMatch: CupFixture | null;
   champion?: CupChampion | null;
+  matchday?: CupMatchday | null;
   blockHidden?: boolean;
 }
 
@@ -51,6 +54,7 @@ export default function KingsCupHomeSection() {
       theme={KINGS_CUP_THEME}
       fixture={data.nextMatch ?? null}
       champion={data.champion ?? null}
+      matchday={data.matchday ?? null}
       emblemSrc={kingsCupLogo}
       emblemAlt="شعار كأس خادم الحرمين الشريفين"
     />

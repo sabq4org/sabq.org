@@ -1,283 +1,347 @@
-import { useEffect, useState } from "react";
+/**
+ * صفحة توقّعات كأس خادم الحرمين الشريفين — نفس بنية صفحة توقّعات المونديال
+ * (WorldCupPredictions): بانر بطل بتدرّج أخضر وشرائح نقاطي، تبويبات حبوب
+ * (المباريات / البطل والهدّاف / توقّعاتي / المتصدّرون)، وبطاقات توقّع
+ * بعدّادات أهداف. التخزين على نظام sports_pool الموحّد (/api/sports/*).
+ */
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { ChevronRight, Trophy, Target, ListOrdered } from "lucide-react";
+import { useSearch } from "wouter";
+import { Target, Trophy, Sparkles } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, getQueryFn } from "@/lib/queryClient";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { formatKickoffDay, formatKickoffTime, type KcFixture, type KcTeam } from "@/components/kingscup/kcTypes";
+import { formatNumber } from "@/lib/format";
+import {
+  formatKickoffDay,
+  riyadhDayKey,
+  todayRiyadhKey,
+  type KcFixture,
+} from "@/components/kingscup/kcTypes";
+import { KcPredictionMatchCard } from "@/components/kingscup/predictions/KcPredictionMatchCard";
+import { KcMyPredictions } from "@/components/kingscup/predictions/KcMyPredictions";
+import { KcPredictionsLeaderboard } from "@/components/kingscup/predictions/KcPredictionsLeaderboard";
+import { KcLongPredictions } from "@/components/kingscup/predictions/KcLongPredictions";
+import {
+  KC_COMPETITION_SLUG,
+  type KcLeaderRow,
+  type KcLongData,
+  type KcPredictionStats,
+  type KcSavedPrediction,
+} from "@/components/kingscup/predictions/kcPredictionsTypes";
 
-const COMP = "kings-cup";
+type Tab = "matches" | "tournament" | "mine" | "leaders";
+const TAB_VALUES: Tab[] = ["matches", "tournament", "mine", "leaders"];
 
-interface LongResponse {
-  teams: { id: number; name: string; logo: string }[];
-  locked: boolean;
-  championVotes: { teamId: number | null; n: number }[];
-  mine: { kind: string; teamId: number | null; teamName: string | null; playerName: string | null; status: string; pointsAwarded: number }[];
-}
-
-interface LeaderboardEntry {
-  userId: string;
-  name: string;
-  avatar: string | null;
-  totalPoints: number;
-  predictions: number;
-  rank: number;
-}
-
-function MatchPredictRow({ fixture, canEdit }: { fixture: KcFixture; canEdit: boolean }) {
-  const { toast } = useToast();
-  const { data } = useQuery<{ prediction: { predHome: number; predAway: number } | null }>({
-    queryKey: [`/api/sports/match/${fixture.id}/predict`],
-    queryFn: getQueryFn({ on401: "returnNull", silent: true }),
-    enabled: canEdit,
-  });
-  const [home, setHome] = useState("");
-  const [away, setAway] = useState("");
-  useEffect(() => {
-    if (data?.prediction) {
-      setHome(String(data.prediction.predHome));
-      setAway(String(data.prediction.predAway));
-    }
-  }, [data?.prediction]);
-
-  const mutation = useMutation({
-    mutationFn: async () =>
-      apiRequest(`/api/sports/match/${fixture.id}/predict`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          predHome: Number(home),
-          predAway: Number(away),
-          kickoffTs: fixture.timestamp,
-          competitionSlug: COMP,
-          homeId: fixture.home.id,
-          awayId: fixture.away.id,
-          homeName: fixture.home.name,
-          awayName: fixture.away.name,
-          homeLogo: fixture.home.logo,
-          awayLogo: fixture.away.logo,
-        }),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/sports/match/${fixture.id}/predict`] });
-      toast({ title: "تم حفظ توقّعك" });
-    },
-    onError: () => toast({ title: "تعذّر حفظ التوقّع", variant: "destructive" }),
-  });
-
-  const locked = fixture.status.live || fixture.status.finished || fixture.timestamp * 1000 <= Date.now();
-
-  return (
-    <div className="rounded-xl border border-border bg-card p-3">
-      <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-2">
-        <span>{fixture.round}</span>
-        <span>{formatKickoffDay(fixture.date)} · {formatKickoffTime(fixture.date)}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <img src={fixture.home.logo} alt="" className="h-8 w-8 object-contain shrink-0" />
-          <span className="text-sm font-bold truncate">{fixture.home.name}</span>
-        </div>
-        <div className="flex items-center gap-1 shrink-0" dir="ltr">
-          <Input
-            type="number" min={0} max={30}
-            value={home} onChange={(e) => setHome(e.target.value)}
-            disabled={!canEdit || locked}
-            className="w-12 h-9 text-center px-1"
-          />
-          <span className="text-muted-foreground">-</span>
-          <Input
-            type="number" min={0} max={30}
-            value={away} onChange={(e) => setAway(e.target.value)}
-            disabled={!canEdit || locked}
-            className="w-12 h-9 text-center px-1"
-          />
-        </div>
-        <div className="flex items-center gap-2 flex-1 min-w-0 flex-row-reverse">
-          <img src={fixture.away.logo} alt="" className="h-8 w-8 object-contain shrink-0" />
-          <span className="text-sm font-bold truncate">{fixture.away.name}</span>
-        </div>
-      </div>
-      {canEdit && !locked && (
-        <div className="flex justify-end mt-2">
-          <Button
-            size="sm"
-            onClick={() => mutation.mutate()}
-            disabled={mutation.isPending || home === "" || away === ""}
-          >
-            حفظ التوقّع
-          </Button>
-        </div>
-      )}
-      {locked && <p className="text-[11px] text-muted-foreground mt-2 text-left">أُقفل التوقّع</p>}
-    </div>
-  );
-}
+const MINE_KEY = ["/api/sports/predictions/me"];
 
 export default function KingsCupPredictions() {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const isLoggedIn = Boolean(user);
+  // يتيح الربط المباشر بتبويب محدّد، مثل ?tab=tournament
+  const search = useSearch();
+  const tabParam = new URLSearchParams(search).get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(tabParam && TAB_VALUES.includes(tabParam) ? tabParam : "matches");
 
   useEffect(() => {
-    document.title = "توقّعات كأس خادم الحرمين الشريفين | سبق";
+    document.title = "توقّعات كأس الملك — توقّع واربح النقاط | سبق";
   }, []);
 
-  const { data: fixturesData } = useQuery<{ fixtures: KcFixture[] }>({
+  const { data: fixturesData, isLoading: fixturesLoading } = useQuery<{ fixtures: KcFixture[] }>({
     queryKey: ["/api/kings-cup/fixtures"],
-    staleTime: 60_000,
+    refetchInterval: (query) =>
+      (query.state.data?.fixtures ?? []).some((f) => f.status.live) ? 15_000 : 60_000,
+    refetchIntervalInBackground: false,
   });
-  const fixtures = Array.isArray(fixturesData?.fixtures) ? fixturesData.fixtures : [];
-  const openFixtures = fixtures.filter((f) => !f.status.finished).sort((a, b) => a.timestamp - b.timestamp);
 
-  const { data: longData } = useQuery<LongResponse>({
-    queryKey: [`/api/sports/predictions/long?comp=${COMP}`],
+  // توقّعاتي + ملخّص نقاطي — جلبة واحدة تُغذّي بطاقات المباريات وتبويب «توقّعاتي»
+  const { data: mineData, isLoading: mineLoading } = useQuery<{
+    predictions: KcSavedPrediction[];
+    stats: KcPredictionStats;
+  }>({
+    queryKey: MINE_KEY,
     queryFn: getQueryFn({ on401: "returnNull", silent: true }),
+    enabled: isAuthenticated,
+    staleTime: 30_000,
   });
-  const teams: KcTeam[] = (longData?.teams ?? []).map((t) => ({ ...t, winner: null }));
 
-  const { data: leaderboardData } = useQuery<{ leaderboard: LeaderboardEntry[] }>({
+  const { data: leaderData, isLoading: leaderLoading } = useQuery<{ leaderboard: KcLeaderRow[] }>({
     queryKey: ["/api/sports/leaderboard"],
     staleTime: 60_000,
   });
-  const leaderboard = Array.isArray(leaderboardData?.leaderboard) ? leaderboardData.leaderboard : [];
 
-  const [champion, setChampion] = useState("");
-  const [scorer, setScorer] = useState("");
-  useEffect(() => {
-    const myChamp = longData?.mine?.find((m) => m.kind === "champion");
-    const myScorer = longData?.mine?.find((m) => m.kind === "top_scorer");
-    if (myChamp?.teamId) setChampion(String(myChamp.teamId));
-    if (myScorer?.playerName) setScorer(myScorer.playerName);
-  }, [longData?.mine]);
+  // توقّعات البطولة طويلة المدى — التبويب يظهر فقط متى توفّرت الميزة من الخادم
+  // (فشل الجلب ⇒ نُخفي التبويب) — نفس سلوك صفحة توقّعات المونديال.
+  const { data: longData } = useQuery<KcLongData>({
+    queryKey: [`/api/sports/predictions/long?comp=${KC_COMPETITION_SLUG}`],
+    retry: false,
+    staleTime: 60_000,
+  });
+  const longAvailable = !!longData;
 
-  const longMutation = useMutation({
-    mutationFn: async (payload: { kind: "champion" | "top_scorer"; teamId?: number; playerName?: string }) =>
-      apiRequest("/api/sports/predictions/long", {
+  const fixtures = Array.isArray(fixturesData?.fixtures) ? fixturesData.fixtures : [];
+  const openFixtures = useMemo(
+    () => fixtures.filter((f) => !f.status.finished).sort((a, b) => a.timestamp - b.timestamp),
+    [fixtures],
+  );
+  const allMine = Array.isArray(mineData?.predictions) ? mineData.predictions : [];
+  // توقّعاتي في هذه البطولة فقط — النظام موحّد لكل البطولات
+  const myKcPredictions = useMemo(
+    () => allMine.filter((p) => p.competitionSlug === KC_COMPETITION_SLUG),
+    [allMine],
+  );
+  const myByFixture = useMemo(() => {
+    const m = new Map<number, KcSavedPrediction>();
+    for (const p of myKcPredictions) m.set(p.fixtureId, p);
+    return m;
+  }, [myKcPredictions]);
+
+  const stats = mineData?.stats;
+  const leaders = Array.isArray(leaderData?.leaderboard) ? leaderData.leaderboard : [];
+  const myRank = user ? leaders.find((l) => l.userId === user.id) : undefined;
+
+  const submitMutation = useMutation({
+    mutationFn: (vars: { fixture: KcFixture; predHome: number; predAway: number }) =>
+      apiRequest(`/api/sports/match/${vars.fixture.id}/predict`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ competitionSlug: COMP, ...payload }),
+        body: JSON.stringify({
+          predHome: vars.predHome,
+          predAway: vars.predAway,
+          kickoffTs: vars.fixture.timestamp,
+          competitionSlug: KC_COMPETITION_SLUG,
+          homeId: vars.fixture.home.id,
+          awayId: vars.fixture.away.id,
+          homeName: vars.fixture.home.name,
+          awayName: vars.fixture.away.name,
+          homeLogo: vars.fixture.home.logo,
+          awayLogo: vars.fixture.away.logo,
+        }),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/sports/predictions/long?comp=${COMP}`] });
-      toast({ title: "تم حفظ توقّعك" });
+      toast({ title: "تم حفظ توقّعك ✅", description: "بالتوفيق! النقاط تُحتسب فور انتهاء المباراة." });
+      queryClient.invalidateQueries({ queryKey: MINE_KEY });
     },
-    onError: () => toast({ title: "تعذّر الحفظ — قد تكون التوقّعات مُقفلة", variant: "destructive" }),
+    onError: (err: any) => {
+      toast({
+        title: "تعذّر حفظ التوقّع",
+        description: err?.message || "قد تكون المباراة انطلقت — حاول مرة أخرى",
+        variant: "destructive",
+      });
+      queryClient.invalidateQueries({ queryKey: MINE_KEY });
+    },
   });
+
+  const goLogin = () => {
+    window.location.href = "/login";
+  };
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "matches", label: "المباريات" },
+    ...(longAvailable ? ([{ key: "tournament", label: "البطل والهدّاف" }] as const) : []),
+    { key: "mine", label: "توقّعاتي" },
+    { key: "leaders", label: "المتصدّرون" },
+  ];
 
   return (
     <div className="min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       <NavigationBar />
 
-      <main className="flex-1 container max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Link href="/kings-cup">
-          <a className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
-            <ChevronRight className="h-4 w-4" />
-            العودة لمركز كأس الملك
-          </a>
-        </Link>
-
-        <h1 className="text-2xl font-black mb-1">توقّعات كأس خادم الحرمين الشريفين</h1>
-        <p className="text-sm text-muted-foreground mb-6">
-          توقّع نتائج المباريات والبطل والهدّاف، واجمع النقاط.
-        </p>
-
-        {!isLoggedIn && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-50 dark:bg-amber-950/20 p-4 mb-6 text-sm">
-            سجّل الدخول لحفظ توقّعاتك والمنافسة على لوحة المتصدّرين.{" "}
-            <Link href="/login"><a className="font-bold text-amber-700 dark:text-amber-400 underline">تسجيل الدخول</a></Link>
-          </div>
-        )}
-
-        <Tabs defaultValue="matches">
-          <TabsList className="grid grid-cols-3 mb-4">
-            <TabsTrigger value="matches" className="gap-1"><Target className="h-4 w-4" /> المباريات</TabsTrigger>
-            <TabsTrigger value="long" className="gap-1"><Trophy className="h-4 w-4" /> البطل والهدّاف</TabsTrigger>
-            <TabsTrigger value="board" className="gap-1"><ListOrdered className="h-4 w-4" /> المتصدّرون</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="matches" className="space-y-3">
-            {openFixtures.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">لا توجد مباريات قادمة للتوقّع حاليًا.</p>
-            ) : (
-              openFixtures.map((fx) => <MatchPredictRow key={fx.id} fixture={fx} canEdit={isLoggedIn} />)
-            )}
-          </TabsContent>
-
-          <TabsContent value="long" className="space-y-6">
-            {longData?.locked && (
-              <p className="text-sm text-amber-600">أُقفلت توقّعات البطل والهدّاف (انطلقت الأدوار الحاسمة).</p>
-            )}
-            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-              <div className="flex items-center gap-2 font-bold"><Trophy className="h-4 w-4 text-amber-500" /> توقّع بطل البطولة</div>
-              <Select value={champion} onValueChange={setChampion} disabled={!isLoggedIn || longData?.locked}>
-                <SelectTrigger><SelectValue placeholder="اختر النادي البطل" /></SelectTrigger>
-                <SelectContent>
-                  {teams.map((t) => (
-                    <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="sm"
-                disabled={!isLoggedIn || !champion || longData?.locked || longMutation.isPending}
-                onClick={() => longMutation.mutate({ kind: "champion", teamId: Number(champion) })}
-              >
-                حفظ توقّع البطل
-              </Button>
+      <main className="flex-1">
+        {/* بانر البطل */}
+        <section className="relative overflow-hidden bg-gradient-to-bl from-emerald-600 via-emerald-700 to-emerald-800 text-white">
+          <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(circle_at_20%_30%,white_1px,transparent_1px)] [background-size:24px_24px]" />
+          <div className="relative mx-auto max-w-4xl px-4 py-10 sm:py-12">
+            <div className="flex items-center gap-2 text-emerald-100">
+              <Trophy className="h-5 w-5 text-amber-300" />
+              <span className="text-sm font-bold">كأس خادم الحرمين الشريفين</span>
             </div>
+            <h1 className="mt-2 text-3xl font-black sm:text-4xl">توقّعات كأس الملك</h1>
+            <p className="mt-2 max-w-xl text-emerald-50/90">
+              توقّع النتيجة بالأهداف قبل صافرة البداية — النتيجة الدقيقة تمنحك
+              <span className="font-black"> 3 نقاط</span> والاتجاه الصحيح
+              <span className="font-black"> نقطة</span>، وتوقّع البطل والهدّاف يربحك آلاف النقاط.
+            </p>
 
-            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-              <div className="flex items-center gap-2 font-bold"><Target className="h-4 w-4 text-emerald-500" /> توقّع هدّاف البطولة</div>
-              <Input
-                placeholder="اسم اللاعب"
-                value={scorer}
-                onChange={(e) => setScorer(e.target.value)}
-                disabled={!isLoggedIn || longData?.locked}
-              />
-              <Button
-                size="sm"
-                disabled={!isLoggedIn || scorer.trim().length < 2 || longData?.locked || longMutation.isPending}
-                onClick={() => longMutation.mutate({ kind: "top_scorer", playerName: scorer.trim() })}
-              >
-                حفظ توقّع الهدّاف
-              </Button>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="board">
-            {leaderboard.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">لا توجد نقاط بعد — كن أول المتوقّعين.</p>
-            ) : (
-              <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">
-                {leaderboard.map((e) => (
-                  <div key={e.userId} className="flex items-center gap-3 p-3">
-                    <span className="w-6 text-center font-black text-muted-foreground tabular-nums">{e.rank}</span>
-                    {e.avatar ? (
-                      <img src={e.avatar} alt="" className="h-9 w-9 rounded-full object-cover bg-muted" />
-                    ) : (
-                      <span className="h-9 w-9 rounded-full bg-muted" />
-                    )}
-                    <span className="flex-1 text-sm font-bold truncate">{e.name}</span>
-                    <span className="text-sm font-black text-emerald-600 tabular-nums">{e.totalPoints} نقطة</span>
-                  </div>
-                ))}
+            {isAuthenticated ? (
+              <div className="mt-5 inline-flex items-center gap-4 rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur">
+                <div className="text-center">
+                  <p className="text-xl font-black tabular-nums">{formatNumber(stats?.totalPoints ?? 0)}</p>
+                  <p className="text-[11px] text-emerald-100">نقاط التوقّعات</p>
+                </div>
+                <div className="h-8 w-px bg-white/25" />
+                <div className="text-center">
+                  <p className="text-xl font-black tabular-nums">{formatNumber(stats?.exact ?? 0)}</p>
+                  <p className="text-[11px] text-emerald-100">نتيجة دقيقة</p>
+                </div>
+                {myRank && (
+                  <>
+                    <div className="h-8 w-px bg-white/25" />
+                    <div className="text-center">
+                      <p className="text-xl font-black tabular-nums">#{formatNumber(myRank.rank)}</p>
+                      <p className="text-[11px] text-emerald-100">ترتيبك</p>
+                    </div>
+                  </>
+                )}
               </div>
+            ) : (
+              <button
+                onClick={goLogin}
+                className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50"
+              >
+                <Sparkles className="h-4 w-4" /> سجّل دخولك وابدأ التوقّع
+              </button>
             )}
-          </TabsContent>
-        </Tabs>
+          </div>
+        </section>
+
+        <div className="mx-auto max-w-4xl px-4 py-6">
+          {/* التبويبات */}
+          <div className="mb-5 inline-flex w-full gap-1 rounded-full bg-muted p-1 sm:w-auto">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setTab(t.key)}
+                className={`flex-1 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition sm:flex-none ${
+                  tab === t.key
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+                data-testid={`kc-pred-tab-${t.key}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* المحتوى */}
+          {tab === "matches" && (
+            <MatchesTab
+              fixtures={openFixtures}
+              myByFixture={myByFixture}
+              isLoading={fixturesLoading}
+              isAuthenticated={isAuthenticated}
+              submittingFixtureId={submitMutation.isPending ? submitMutation.variables?.fixture.id : undefined}
+              onSubmit={(fixture, predHome, predAway) => submitMutation.mutate({ fixture, predHome, predAway })}
+              onRequireLogin={goLogin}
+            />
+          )}
+
+          {tab === "tournament" && (
+            <KcLongPredictions isAuthenticated={isAuthenticated} onRequireLogin={goLogin} />
+          )}
+
+          {tab === "mine" &&
+            (isAuthenticated ? (
+              <KcMyPredictions predictions={myKcPredictions} isLoading={mineLoading} />
+            ) : (
+              <SignInPrompt onLogin={goLogin} />
+            ))}
+
+          {tab === "leaders" && (
+            <KcPredictionsLeaderboard leaders={leaders} currentUserId={user?.id} isLoading={leaderLoading} />
+          )}
+        </div>
       </main>
 
       <Footer />
+    </div>
+  );
+}
+
+function MatchesTab({
+  fixtures,
+  myByFixture,
+  isLoading,
+  isAuthenticated,
+  submittingFixtureId,
+  onSubmit,
+  onRequireLogin,
+}: {
+  fixtures: KcFixture[];
+  myByFixture: Map<number, KcSavedPrediction>;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  submittingFixtureId?: number;
+  onSubmit: (fixture: KcFixture, predHome: number, predAway: number) => void;
+  onRequireLogin: () => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-56 animate-pulse rounded-xl bg-muted/60" />
+        ))}
+      </div>
+    );
+  }
+
+  if (fixtures.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border py-14 text-center">
+        <Target className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
+        <p className="font-bold">لا مباريات متاحة للتوقّع حاليًا</p>
+        <p className="mt-1 text-sm text-muted-foreground">عُد قريبًا — المباريات تُفتح للتوقّع هنا فور جدولتها.</p>
+      </div>
+    );
+  }
+
+  // تجميع حسب اليوم مع وسم نسبي اليوم/غدًا — نفس تبويب مباريات المونديال
+  const todayKey = todayRiyadhKey();
+  const tomorrowKey = new Date(Date.now() + 27 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const groups: { key: string; label: string; items: KcFixture[] }[] = [];
+  for (const f of fixtures) {
+    const key = riyadhDayKey(f.date);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.items.push(f);
+    else {
+      const rel = key === todayKey ? "اليوم · " : key === tomorrowKey ? "غدًا · " : "";
+      groups.push({ key, label: rel + formatKickoffDay(f.date), items: [f] });
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {groups.map((g) => (
+        <section key={g.key}>
+          <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-emerald-700 dark:text-emerald-300">
+            <span className="h-4 w-1 rounded-full bg-emerald-500" />
+            {g.label}
+            <span className="text-xs font-normal text-muted-foreground">({formatNumber(g.items.length)})</span>
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {g.items.map((f) => (
+              <KcPredictionMatchCard
+                key={f.id}
+                fixture={f}
+                myPrediction={myByFixture.get(f.id) ?? null}
+                isAuthenticated={isAuthenticated}
+                isSubmitting={submittingFixtureId === f.id}
+                onSubmit={onSubmit}
+                onRequireLogin={onRequireLogin}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function SignInPrompt({ onLogin }: { onLogin: () => void }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-border py-14 text-center">
+      <Trophy className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
+      <p className="font-bold">سجّل دخولك لعرض توقّعاتك</p>
+      <button
+        onClick={onLogin}
+        className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
+      >
+        تسجيل الدخول
+      </button>
     </div>
   );
 }

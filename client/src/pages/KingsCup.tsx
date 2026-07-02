@@ -62,12 +62,22 @@ export default function KingsCup() {
       <NavigationBar />
 
       <main className="flex-1">
-        <KcHero overview={overview} isLoading={overviewLoading} onOpenMatch={setOpenFixtureId} />
+        <KcHero
+          overview={overview}
+          fixtures={fixtures}
+          isLoading={overviewLoading}
+          onOpenMatch={setOpenFixtureId}
+        />
         <KcFacts onOpenPlayer={setOpenPlayerId} />
-        <KcPredictionsCTA />
         <KcMatches fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
+        <KcPredictionsCTA />
         <KcBracket onOpenMatch={setOpenFixtureId} />
-        <KcScorers scorers={scorers} isLoading={scorersLoading} onOpenPlayer={setOpenPlayerId} />
+        <KcScorers
+          scorers={scorers}
+          isLoading={scorersLoading}
+          tournamentStarted={fixtures.some((f) => f.status.live || f.status.finished)}
+          onOpenPlayer={setOpenPlayerId}
+        />
         <KcTeams teams={teams} isLoading={teamsLoading} />
       </main>
 
