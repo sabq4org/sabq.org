@@ -1731,7 +1731,19 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting cleanup jobs:", error);
           }
         }, BACKGROUND_JOB_DELAY + 50000);
-        
+
+        // AI Hub — إعادة فحص النماذج الموقوفة بالقاطع + التجميع اليومي للاستهلاك
+        setTimeout(async () => {
+          try {
+            const { startAiProviderHealthCheckJob } = await import("./jobs/aiProviderHealthCheck");
+            startAiProviderHealthCheckJob();
+            const { startAiUsageRollupJob } = await import("./jobs/aiUsageRollup");
+            startAiUsageRollupJob();
+          } catch (error) {
+            console.error("[Server] Error starting AI Hub jobs:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 55000);
+
         // iFox Content Generator — مستهلك للتوكن (مقالات كاملة + صور)، خلف flag مستقل
         if (enableIfoxGenerator) {
           setTimeout(async () => {
