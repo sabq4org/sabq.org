@@ -1,10 +1,14 @@
 /**
- * لوحة "مباريات اليوم" — صفحة مستقلة على /sports/matches
+ * لوحة "مباريات اليوم" — /sports/matches بهوية سبق البصرية v1.0.
  *
- * كل مباريات اليوم عبر بطولاتنا، مرتّبة بالوقت ومجمّعة حسب البطولة، بجدول
- * أنيق يعرض حالة كل مباراة (لم تبدأ / جارية الآن / انتهت) والنتيجة، مع توسيع
- * كل مباراة لإظهار مسجّلي الأهداف. فلترة قوية أعلى الجدول: التاريخ، الحالة،
- * الفئة، البحث، وطريقة العرض (حسب البطولة / حسب الوقت).
+ * غلاف كحلي مدمج بأسلوب أغلفة الدليل (eyebrow أحادي المسافة + عنوان Alexandria
+ * + موتيف الأعمدة الصاعدة)، طبقة تحكّم بحقول 10px وحدود الدليل، شريط فلاتر
+ * لاصق، ومجموعات بطولات ببطاقات 16px وترويسة سماوية. الأرقام كلها Plex Mono.
+ * الألوان عبر توكنز .sbq-sport (فاتح + داكن «حبري») من SportsBrand.tsx.
+ *
+ * كل مباريات اليوم عبر بطولاتنا، مرتّبة بالوقت ومجمّعة حسب البطولة، مع توسيع
+ * كل مباراة لإظهار الأهداف والبطاقات. فلترة: التاريخ، الحالة، الفئة، البحث،
+ * وطريقة العرض (حسب البطولة / حسب الوقت).
  *
  * تستهلك نفس مصادر البوابة الرياضية /sports دون أي اعتماد جديد:
  *   GET /api/sports/today?date=YYYY-MM-DD   (لوحة اليوم)
@@ -38,6 +42,7 @@ import {
   type SpCompetitionCategory,
   type SpLiveItem,
 } from "./SportsHub";
+import { BRAND_CSS, useBrandFonts, RisingBars } from "./SportsBrand";
 
 // ---------- أدوات التاريخ (بتوقيت الرياض) ----------
 
@@ -255,7 +260,7 @@ function MatchScorers({ fixture }: { fixture: SpLiveItem }) {
               )}
             </span>
             {/* الوقت */}
-            <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{eventMinute(e)}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums sbq-mono">{eventMinute(e)}</span>
             {/* علم/شعار المنتخب أو اسم الفريق */}
             <span className="shrink-0 w-16 flex items-center justify-end gap-1">
               {team?.logo ? (
@@ -339,7 +344,7 @@ export function MatchRow({
         >
           {isLive ? (
             <span className="inline-flex flex-col items-center gap-0.5 text-red-500">
-              <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums">
+              <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums sbq-mono">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                 {liveClockLabel(f)}
               </span>
@@ -350,7 +355,7 @@ export function MatchRow({
           ) : st === "finished" ? (
             <span aria-label={f.status.label || "انتهت"} />
           ) : (
-            <span className="text-sm font-black text-foreground tabular-nums" dir="ltr">
+            <span className="text-sm font-black text-foreground tabular-nums sbq-mono" dir="ltr">
               {kickoffTime(f)}
             </span>
           )}
@@ -377,7 +382,7 @@ export function MatchRow({
         >
           {decided && hg != null && ag != null ? (
             <span
-              className={`inline-flex min-w-[3.75rem] flex-col items-center justify-center rounded-lg px-2 py-1 text-base font-black tabular-nums leading-none sm:rounded-md sm:py-0.5 ${isLive && !flat ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
+              className={`inline-flex min-w-[3.75rem] flex-col items-center justify-center rounded-[10px] px-2 py-1 text-base font-black tabular-nums leading-none sbq-mono sm:py-0.5 ${isLive && !flat ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
               dir="ltr"
             >
               <span>{ag} - {hg}</span>
@@ -447,8 +452,8 @@ function CompetitionGroup({
 }) {
   const liveCount = matches.filter((m) => m.status.live).length;
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
-      <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border bg-gradient-to-l from-muted/60 to-transparent sm:px-4 sm:py-3">
+    <div className="sbq-shadow-1 overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-2.5 border-b border-border bg-accent/50 px-3 py-2.5 sm:px-4 sm:py-3">
         {slug ? (
           <Link
             href={`/sports/competition/${slug}`}
@@ -458,28 +463,28 @@ function CompetitionGroup({
             {logo ? (
               <img src={logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
             ) : (
-              <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} />
+              <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} strokeWidth={1.8} />
             )}
-            <span className="font-black text-foreground truncate group-hover:text-primary transition-colors">{name}</span>
-            <ChevronLeft className="w-4 h-4 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span className="sbq-display truncate font-bold text-foreground transition-colors group-hover:text-accent-foreground">{name}</span>
+            <ChevronLeft className="w-4 h-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent-foreground" strokeWidth={1.8} />
           </Link>
         ) : (
           <>
             {logo ? (
               <img src={logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
             ) : (
-              <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} />
+              <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} strokeWidth={1.8} />
             )}
-            <span className="font-black text-foreground truncate flex-1">{name}</span>
+            <span className="sbq-display truncate font-bold text-foreground flex-1">{name}</span>
           </>
         )}
         {liveCount > 0 ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[10px] font-black text-red-600 dark:text-red-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#DD5C5C] px-2.5 py-0.5 text-[10px] font-bold text-white">
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             {liveCount} مباشر
           </span>
         ) : (
-          <span className="text-[11px] font-bold text-muted-foreground tabular-nums">{matches.length}</span>
+          <span className="sbq-mono text-[11px] font-bold text-muted-foreground">{matches.length}</span>
         )}
       </div>
       <div>
@@ -510,6 +515,7 @@ export default function SportsMatchesBoard() {
     document.title = "مباريات اليوم | سبق";
   }, []);
   useCanonical("https://sabq.org/sports/matches");
+  useBrandFonts();
 
   const { data: compsData } = useQuery<{ competitions: SpCompetition[] }>({
     queryKey: ["/api/sports/competitions"],
@@ -641,228 +647,235 @@ export default function SportsMatchesBoard() {
       {/* هيدر الموقع غير لاصق — يمرّ طبيعيًا ويختفي عند النزول لتحرير المساحة */}
       <Header user={user || undefined} sticky={false} />
 
-      <main className="flex-1">
-        {/* ترويسة الصفحة — تمرّ طبيعيًا وتختفي عند النزول */}
-        <div className="bg-card border-b border-border">
-          <div className="max-w-5xl mx-auto px-3 py-4 sm:px-4 sm:py-5">
-            <div className="flex items-start justify-between gap-3 flex-wrap sm:items-center">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-accent-blue/30 shrink-0">
-                  <CalendarDays className={`w-5 h-5 ${ACCENT}`} />
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-muted-foreground tracking-wide uppercase">سبق سبورت</span>
-                  <h1 className="text-[1.7rem] sm:text-3xl font-black text-foreground tracking-tight leading-none">مباريات اليوم</h1>
-                </div>
-              </div>
-              <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:w-auto sm:overflow-visible sm:pb-0">
+      <div className="sbq-sport flex flex-1 flex-col bg-background text-foreground">
+        <style>{BRAND_CSS}</style>
+
+        <main className="flex-1">
+          {/* ===== غلاف كحلي مدمج — بأسلوب أغلفة الدليل ===== */}
+          <header className="sbq-ink relative overflow-hidden">
+            <RisingBars
+              className="absolute -bottom-5 left-4 opacity-[0.13] sm:left-8"
+              bars={[36, 60, 88, 118, 72]}
+              width={18}
+              gap={7}
+            />
+            <div className="relative mx-auto max-w-5xl px-4 pb-5 pt-7 sm:pt-8">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span dir="ltr" className="sbq-mono text-[11px] tracking-[2px] text-[#4CBCFD]">SABQ SPORT — MATCH BOARD</span>
                 {liveTotal > 0 && (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-background text-foreground text-[11px] font-bold">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> {liveTotal} مباشر الآن
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#DD5C5C] px-3 py-1 text-[11px] font-bold text-white">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {liveTotal} مباشر الآن
                   </span>
                 )}
-                {isToday && (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
-                    {isLiveFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5 text-red-500" />}
-                    تحديث تلقائي
-                  </span>
-                )}
-                <Link
-                  href="/sports/live"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-foreground hover:border-primary/40 transition-colors"
-                >
-                  <Radio className="w-3.5 h-3.5 text-red-500" /> البث المباشر · العالم
-                </Link>
-                <Link
-                  href="/sports"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-foreground hover:border-primary/40 transition-colors"
-                >
-                  البوابة الرياضية <ChevronLeft className="w-3.5 h-3.5" />
-                </Link>
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* التاريخ + البحث — يمرّان طبيعيًا ويختفيان عند النزول (ليس لاصقًا) */}
-        <div className="border-b border-border bg-card">
-          <div className="max-w-5xl mx-auto px-3 py-2.5 sm:px-4 sm:py-3">
-            {/* التاريخ */}
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="grid w-full grid-cols-[40px_minmax(0,1fr)_40px_auto] items-center gap-1 sm:flex sm:w-auto">
-                <button
-                  type="button"
-                  onClick={() => setDate((d) => shiftDate(d, -1))}
-                  className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-card hover:border-primary/40 transition-colors sm:h-9 sm:w-9"
-                  aria-label="اليوم السابق"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-                <div className="min-w-0 px-2 text-center sm:min-w-[150px] sm:px-3">
-                  <div className="truncate text-sm font-black text-foreground">{humanDate(date)}</div>
-                  <div className="text-[10px] text-muted-foreground tabular-nums" dir="ltr">{date}</div>
+              <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h1 className="sbq-display text-3xl font-extrabold leading-none text-white sm:text-4xl">مباريات اليوم</h1>
+                  <p className="mt-2 text-[13px] text-[#8CA3B5]">كل مباريات بطولاتنا مرتّبة بالوقت — نتيجة لحظية ومسجّلو أهداف فور التسجيل.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setDate((d) => shiftDate(d, 1))}
-                  className="grid h-10 w-10 place-items-center rounded-lg border border-border bg-card hover:border-primary/40 transition-colors sm:h-9 sm:w-9"
-                  aria-label="اليوم التالي"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                {!isToday && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {isToday && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-bold text-[#CFE0EC]">
+                      {isLiveFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5 text-[#DD5C5C]" strokeWidth={1.8} />}
+                      تحديث تلقائي
+                    </span>
+                  )}
+                  <Link
+                    href="/sports/live"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-bold text-[#CFE0EC] transition-colors hover:border-[#4CBCFD] hover:text-white"
+                  >
+                    <Radio className="h-3.5 w-3.5 text-[#DD5C5C]" strokeWidth={1.8} /> البث المباشر · العالم
+                  </Link>
+                  <Link
+                    href="/sports"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-bold text-[#CFE0EC] transition-colors hover:border-[#4CBCFD] hover:text-white"
+                  >
+                    البوابة الرياضية <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* ===== طبقة التحكم: التاريخ + البحث ===== */}
+          <div className="border-b border-border bg-card">
+            <div className="mx-auto max-w-5xl px-3 py-3 sm:px-4">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="grid w-full grid-cols-[40px_minmax(0,1fr)_40px_auto] items-center gap-1 sm:flex sm:w-auto">
                   <button
                     type="button"
-                    onClick={() => setDate(today)}
-                    className="mr-0 h-10 rounded-lg bg-primary px-3 text-xs font-bold text-white transition-colors hover:bg-primary/90 sm:mr-1 sm:h-auto sm:py-1.5"
+                    onClick={() => setDate((d) => shiftDate(d, -1))}
+                    className="grid h-10 w-10 place-items-center rounded-[10px] border border-border bg-card transition-colors hover:border-ring sm:h-9 sm:w-9"
+                    aria-label="اليوم السابق"
                   >
-                    اليوم
+                    <ChevronRight className="w-4 h-4" strokeWidth={1.8} />
                   </button>
-                )}
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(e) => e.target.value && setDate(e.target.value)}
-                  className="col-span-4 mt-1 h-10 rounded-lg border border-border bg-card px-2 text-xs text-foreground sm:col-span-1 sm:mt-0 sm:mr-1 sm:h-9"
-                />
-              </div>
+                  <div className="min-w-0 px-2 text-center sm:min-w-[150px] sm:px-3">
+                    <div className="sbq-display truncate text-sm font-bold text-foreground">{humanDate(date)}</div>
+                    <div className="sbq-mono text-[10px] text-muted-foreground" dir="ltr">{date}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDate((d) => shiftDate(d, 1))}
+                    className="grid h-10 w-10 place-items-center rounded-[10px] border border-border bg-card transition-colors hover:border-ring sm:h-9 sm:w-9"
+                    aria-label="اليوم التالي"
+                  >
+                    <ChevronLeft className="w-4 h-4" strokeWidth={1.8} />
+                  </button>
+                  {!isToday && (
+                    <button
+                      type="button"
+                      onClick={() => setDate(today)}
+                      className="sbq-action mr-0 h-10 rounded-[10px] px-3 text-xs font-bold sm:mr-1 sm:h-9"
+                    >
+                      اليوم
+                    </button>
+                  )}
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) => e.target.value && setDate(e.target.value)}
+                    className="sbq-mono col-span-4 mt-1 h-10 rounded-[10px] border border-border bg-card px-2 text-xs text-foreground sm:col-span-1 sm:mt-0 sm:mr-1 sm:h-9"
+                  />
+                </div>
 
-              {/* البحث */}
-              <div className="relative w-full sm:min-w-[180px] sm:max-w-xs sm:flex-1">
-                <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="search"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="ابحث عن فريق أو بطولة…"
-                  className="h-10 w-full rounded-lg border border-border bg-card pr-9 pl-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none sm:h-9"
-                />
+                {/* البحث */}
+                <div className="relative w-full sm:min-w-[180px] sm:max-w-xs sm:flex-1">
+                  <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" strokeWidth={1.8} />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="ابحث عن فريق أو بطولة…"
+                    className="h-10 w-full rounded-[10px] border border-border bg-card pr-9 pl-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/40 sm:h-9"
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* شريط الأزرار وحده لاصق أعلى الشاشة — يبقى عند النزول لتحرير المساحة */}
-        <div className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
-          <div className="max-w-5xl mx-auto px-3 py-2 sm:px-4 sm:py-2.5">
-            {/* الحالة + الفئة + طريقة العرض */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:pb-0">
-              <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5 shrink-0">
-                {STATE_FILTERS.map((s) => (
-                  <button
-                    key={s.key}
-                    type="button"
-                    onClick={() => setStateFilter(s.key)}
-                    className={`min-h-9 px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${stateFilter === s.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    {s.key === "live" && stateFilter !== "live" && liveTotal > 0 && (
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-red-500 ml-1 align-middle animate-pulse" />
-                    )}
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-
-              {presentCats.length > 0 && (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="w-px h-5 bg-border mx-1" />
-                  <button
-                    type="button"
-                    onClick={() => setCatFilter("all")}
-                    className={`min-h-9 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${catFilter === "all" ? "bg-foreground text-background" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}
-                  >
-                    كل الفئات
-                  </button>
-                  {presentCats.map((cat) => (
+          {/* شريط الفلاتر وحده لاصق أعلى الشاشة — يبقى عند النزول لتحرير المساحة */}
+          <div className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
+            <div className="mx-auto max-w-5xl px-3 py-2 sm:px-4 sm:py-2.5">
+              {/* الحالة + الفئة + طريقة العرض */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:pb-0">
+                <div className="flex items-center gap-1 rounded-[10px] bg-muted p-0.5 shrink-0">
+                  {STATE_FILTERS.map((s) => (
                     <button
-                      key={cat}
+                      key={s.key}
                       type="button"
-                      onClick={() => setCatFilter(cat)}
-                      className={`min-h-9 px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${catFilter === cat ? "bg-foreground text-background" : "bg-card border border-border text-muted-foreground hover:text-foreground"}`}
+                      onClick={() => setStateFilter(s.key)}
+                      className={`min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${stateFilter === s.key ? "bg-card text-foreground sbq-shadow-1" : "text-muted-foreground hover:text-foreground"}`}
                     >
-                      {COMP_CATEGORY_LABELS[cat]}
+                      {s.key === "live" && stateFilter !== "live" && liveTotal > 0 && (
+                        <span className="ml-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#DD5C5C] align-middle" />
+                      )}
+                      {s.label}
                     </button>
                   ))}
                 </div>
-              )}
 
-              <div className="flex items-center gap-1 rounded-lg bg-muted p-0.5 shrink-0 mr-auto">
-                <button
-                  type="button"
-                  onClick={() => setGroupByComp(true)}
-                  className={`min-h-9 px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${groupByComp ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  حسب البطولة
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setGroupByComp(false)}
-                  className={`min-h-9 px-3 py-1.5 rounded-md text-xs font-bold whitespace-nowrap transition-colors sm:min-h-0 ${!groupByComp ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-                >
-                  حسب الوقت
-                </button>
+                {presentCats.length > 0 && (
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="mx-1 h-5 w-px bg-border" />
+                    <button
+                      type="button"
+                      onClick={() => setCatFilter("all")}
+                      className={`min-h-9 whitespace-nowrap rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${catFilter === "all" ? "bg-foreground text-background" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}
+                    >
+                      كل الفئات
+                    </button>
+                    {presentCats.map((cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setCatFilter(cat)}
+                        className={`min-h-9 whitespace-nowrap rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${catFilter === cat ? "bg-foreground text-background" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}
+                      >
+                        {COMP_CATEGORY_LABELS[cat]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mr-auto flex shrink-0 items-center gap-1 rounded-[10px] bg-muted p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setGroupByComp(true)}
+                    className={`min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${groupByComp ? "bg-card text-foreground sbq-shadow-1" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    حسب البطولة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGroupByComp(false)}
+                    className={`min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${!groupByComp ? "bg-card text-foreground sbq-shadow-1" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    حسب الوقت
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* المحتوى */}
-        <div className="max-w-5xl mx-auto px-3 py-4 sm:px-4 sm:py-6">
-          {isLoading ? (
-            <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
-              <Loader2 className="w-5 h-5 animate-spin" /> جارٍ تحميل المباريات…
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center text-muted-foreground py-20 bg-card rounded-2xl border border-dashed border-border">
-              <CalendarDays className="w-10 h-10 mx-auto mb-3 opacity-40" />
-              {allMatches.length === 0
-                ? "لا توجد مباريات في هذا اليوم ضمن بطولاتنا."
-                : "لا توجد مباريات مطابقة للفلاتر المختارة."}
-            </div>
-          ) : groupByComp ? (
-            <div className="space-y-4">
-              {sortedGroups.map((g) => (
-                <CompetitionGroup
-                  key={g.name}
-                  name={g.name}
-                  logo={g.logo}
-                  slug={g.slug}
-                  matches={g.matches}
-                  expandedIds={expandedIds}
-                  toggle={toggle}
-                  onOpen={setOpenMatch}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
-              {flat.map((m) => (
-                <div key={m.id} className="border-b border-border last:border-b-0">
-                  {m.competitionSlug ? (
-                    <Link
-                      href={`/sports/competition/${m.competitionSlug}`}
-                      className="flex w-fit items-center gap-1 px-4 pt-2 text-[11px] font-bold text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      {m.competition}
-                      <ChevronLeft className="w-3 h-3" />
-                    </Link>
-                  ) : (
-                    <div className="flex items-center gap-2 px-4 pt-2 text-[11px] font-bold text-muted-foreground">
-                      {m.competition}
-                    </div>
-                  )}
-                  <MatchRow
-                    f={m}
-                    expanded={expandedIds.has(m.id)}
-                    onToggle={() => toggle(m.id)}
+          {/* المحتوى */}
+          <div className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" /> جارٍ تحميل المباريات…
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-border bg-card py-20 text-center text-muted-foreground">
+                <CalendarDays className="mx-auto mb-3 h-10 w-10 opacity-40" strokeWidth={1.8} />
+                {allMatches.length === 0
+                  ? "لا توجد مباريات في هذا اليوم ضمن بطولاتنا."
+                  : "لا توجد مباريات مطابقة للفلاتر المختارة."}
+              </div>
+            ) : groupByComp ? (
+              <div className="space-y-4">
+                {sortedGroups.map((g) => (
+                  <CompetitionGroup
+                    key={g.name}
+                    name={g.name}
+                    logo={g.logo}
+                    slug={g.slug}
+                    matches={g.matches}
+                    expandedIds={expandedIds}
+                    toggle={toggle}
                     onOpen={setOpenMatch}
                   />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </main>
+                ))}
+              </div>
+            ) : (
+              <div className="sbq-shadow-1 overflow-hidden rounded-2xl border border-border bg-card">
+                {flat.map((m) => (
+                  <div key={m.id} className="border-b border-border last:border-b-0">
+                    {m.competitionSlug ? (
+                      <Link
+                        href={`/sports/competition/${m.competitionSlug}`}
+                        className="flex w-fit items-center gap-1 px-4 pt-2 text-[11px] font-bold text-muted-foreground transition-colors hover:text-accent-foreground"
+                      >
+                        {m.competition}
+                        <ChevronLeft className="w-3 h-3" strokeWidth={1.8} />
+                      </Link>
+                    ) : (
+                      <div className="flex items-center gap-2 px-4 pt-2 text-[11px] font-bold text-muted-foreground">
+                        {m.competition}
+                      </div>
+                    )}
+                    <MatchRow
+                      f={m}
+                      expanded={expandedIds.has(m.id)}
+                      onToggle={() => toggle(m.id)}
+                      onOpen={setOpenMatch}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
 
       <MatchDialog id={openMatch} onClose={() => setOpenMatch(null)} />
       <Footer />
