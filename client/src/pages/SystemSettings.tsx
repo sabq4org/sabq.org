@@ -22,9 +22,8 @@ import {
   Calendar, 
   Clock, 
   BarChart3, 
-  Eye, 
-  EyeOff, 
-  Sparkles, 
+  Eye,
+  EyeOff,
   PartyPopper,
   Megaphone,
   Bell,
@@ -32,7 +31,6 @@ import {
   Trophy,
   Loader2
 } from "lucide-react";
-import { useIFoxBlockVisibility } from "@/hooks/useIFoxBlockVisibility";
 import { useWorldCupBlockSettings } from "@/hooks/useWorldCupBlockSettings";
 
 interface CelebrationModeState {
@@ -126,7 +124,6 @@ function FeatureToggleCard({
 
 export default function SystemSettings() {
   const { toast } = useToast();
-  const { showIFoxBlock, setShowIFoxBlock } = useIFoxBlockVisibility();
   const wcBlock = useWorldCupBlockSettings();
 
   const { data: announcement, isLoading } = useQuery<AnnouncementData>({
@@ -309,7 +306,7 @@ export default function SystemSettings() {
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="gap-1.5">
                   <ToggleRight className="h-3.5 w-3.5" />
-                  {(celebrationMode?.enabled ? 1 : 0) + (showIFoxBlock ? 1 : 0) + (wcBlock.visible ? 1 : 0)} مميزات نشطة
+                  {(celebrationMode?.enabled ? 1 : 0) + (wcBlock.visible ? 1 : 0)} مميزات نشطة
                 </Badge>
               </div>
             </div>
@@ -320,16 +317,6 @@ export default function SystemSettings() {
         <div className="space-y-4">
           <SectionHeader title="إعدادات العرض" color="bg-blue-500" icon={Eye} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <FeatureToggleCard
-              title="إظهار بلوك آي فوكس"
-              description="بوابة الذكاء الاصطناعي في الصفحة الرئيسية للجميع"
-              enabled={showIFoxBlock}
-              onToggle={setShowIFoxBlock}
-              icon={Sparkles}
-              iconColorEnabled="text-violet-500"
-              testId="switch-ifox-visibility"
-              bgColor="bg-violet-50 dark:bg-card"
-            />
             <FeatureToggleCard
               title="بلوك كأس العالم"
               description="شريط المونديال في واجهة الويب وبانر تطبيقَي iOS وأندرويد — الإطفاء يخفيه عند الجميع فورًا دون رفع تحديث للمتاجر"
