@@ -1,6 +1,24 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
 dotenv.config();
+import * as Sentry from "@sentry/node";
+// Sentry error monitoring — enabled only when SENTRY_DSN is set. Errors-only:
+// tracing/profiling/logs deliberately off (quota + overhead on a site this
+// size). exitEvenIfOtherHandlersAreRegistered=false preserves the
+// long-standing "log but don't exit" uncaughtException behavior below.
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "development",
+    release: process.env.RAILWAY_GIT_COMMIT_SHA || undefined,
+    integrations: [
+      Sentry.onUncaughtExceptionIntegration({ exitEvenIfOtherHandlersAreRegistered: false }),
+    ],
+  });
+  console.log("[Server] ✅ Sentry error monitoring enabled");
+} else {
+  console.warn("[Server] ⚠️ SENTRY_DSN not set — Sentry error monitoring disabled");
+}
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import rateLimit from "express-rate-limit";
@@ -1106,6 +1124,12 @@ if (!(globalThis as any).__sabqServer) {
       console.log("[Server] ✅ SEO injector middleware registered (dynamic meta tags)");
     } else {
       console.log("[Server] 🛰  Headless mode — crawler/SEO middleware skipped (SERVE_SPA=false). SEO is handled by the frontend deployment + Cloudflare edge worker.");
+    }
+
+    // Sentry must see errors before the final handler consumes them — the SDK
+    // middleware captures 5xx (its default filter) then forwards via next(err).
+    if (process.env.SENTRY_DSN) {
+      Sentry.setupExpressErrorHandler(app);
     }
 
     app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
