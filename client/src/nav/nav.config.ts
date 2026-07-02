@@ -551,6 +551,17 @@ export const navConfig: NavItem[] = [
     ],
   },
 
+  // ===== مركز التحكم بالذكاء الاصطناعي / AI Hub (admin) =====
+  {
+    id: "ai_hub",
+    labelKey: "nav.ai_hub",
+    labelAr: "مركز التحكم بالذكاء الاصطناعي",
+    path: "/dashboard/ai-hub",
+    icon: Brain,
+    roles: ["admin", "system_admin"],
+    permissions: ["ai_hub.view"],
+  },
+
   // ===== الأدوات الذكية / Smart Tools =====
   {
     id: "smart_tools",

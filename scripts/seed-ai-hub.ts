@@ -114,7 +114,18 @@ async function main() {
       `✅ ai_feature_configs: ${featuresInserted} inserted, ${DEFAULT_FEATURES.length - featuresInserted - featuresSkipped} already present, ${featuresSkipped} skipped`,
     );
 
-    // 3. Sanity check: embeddings must stay pinned.
+    // 3. RBAC permission codes for the dashboard (superusers pass without
+    //    these; rows exist so they can be granted to non-superuser roles).
+    const aiHubPermissions = [
+      { code: "ai_hub.view", label: "View AI Hub", labelAr: "عرض مركز الذكاء الاصطناعي", module: "ai_hub" },
+      { code: "ai_hub.manage", label: "Manage AI Hub", labelAr: "إدارة مركز الذكاء الاصطناعي", module: "ai_hub" },
+    ];
+    for (const p of aiHubPermissions) {
+      await db.insert(schema.permissions).values(p).onConflictDoNothing();
+    }
+    console.log("✅ permissions: ai_hub.view / ai_hub.manage ensured");
+
+    // 4. Sanity check: embeddings must stay pinned.
     const [embeddings] = await db
       .select()
       .from(schema.aiFeatureConfigs)
