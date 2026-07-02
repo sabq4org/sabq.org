@@ -198,8 +198,8 @@ export default function ModelsTab() {
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: providerColor(m.provider, isDark) }} />
                         <div>
                           <div className="font-semibold text-sm">{m.displayName}</div>
-                          <div className="text-[11px] text-muted-foreground" dir="ltr">
-                            {providerName(m.provider)} · {m.modelId}
+                          <div className="text-[11px] text-muted-foreground">
+                            <span dir="ltr">{providerName(m.provider)} · {m.modelId}</span>
                           </div>
                         </div>
                       </div>
@@ -231,8 +231,8 @@ export default function ModelsTab() {
                         </div>
                       )}
                       {health?.lastErrorCode && (
-                        <div className="text-[10px] text-muted-foreground mt-0.5" dir="ltr">
-                          {health.lastErrorCode}
+                        <div className="text-[10px] text-muted-foreground mt-0.5">
+                          <span dir="ltr">{health.lastErrorCode}</span>
                         </div>
                       )}
                     </TableCell>
@@ -365,7 +365,7 @@ export default function ModelsTab() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">المزود</Label>
-                <Select value={newModel.provider} onValueChange={(v) => setNewModel({ ...newModel, provider: v })}>
+                <Select dir="rtl" value={newModel.provider} onValueChange={(v) => setNewModel({ ...newModel, provider: v })}>
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
@@ -381,6 +381,7 @@ export default function ModelsTab() {
               <div className="space-y-1.5">
                 <Label className="text-xs">القدرة</Label>
                 <Select
+                  dir="rtl"
                   value={newModel.capabilities[0]}
                   onValueChange={(v) =>
                     setNewModel({
