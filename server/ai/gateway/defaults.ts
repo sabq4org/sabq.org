@@ -124,6 +124,11 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
 
   // ── Audio (voice/provider selection stays in ttsProviderRegistry) ──
   { featureKey: "audio-newsletter", displayName: "النشرات الصوتية", category: "audio", primary: OPENAI_TTS, fallbackChain: [] },
+
+  // ── Phase-3 wave 0: traffic still flowing through the ai-manager façade.
+  //    Callers pick their model explicitly, so the chain here is unused —
+  //    the row exists for usage attribution in the dashboard. ──
+  { featureKey: "legacy-ai-manager", displayName: "استدعاءات ai-manager (قيد الهجرة)", category: "general", primary: GPT_5_1, fallbackChain: [] },
 ];
 
 const modelIndex = new Map<string, DefaultModel>(

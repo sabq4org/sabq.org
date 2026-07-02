@@ -1,7 +1,10 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { aiGateway } from "./ai/gateway";
 import { SABQ_CATEGORY_RULE_AR } from "./ai/sabqEditorialPrompt";
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+// Model routing comes from the AI Hub ("article-classification" feature,
+// dashboard-editable). ANTHROPIC_MODEL env keeps working as a hard override
+// for backward compatibility with existing deployments.
+const ENV_MODEL_OVERRIDE = process.env.ANTHROPIC_MODEL;
 
 // Helper: Strip HTML tags and decode entities
 function stripHtml(html: string): string {
@@ -22,21 +25,6 @@ function stripHtml(html: string): string {
   text = text.replace(/\s+/g, ' ').trim();
   
   return text;
-}
-
-let anthropicClient: Anthropic | null = null;
-
-function getAnthropicClient(): Anthropic {
-  if (!anthropicClient) {
-    if (!process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY) {
-      throw new Error("ANTHROPIC_API_KEY (or AI_INTEGRATIONS_ANTHROPIC_API_KEY) is not configured");
-    }
-    anthropicClient = new Anthropic({
-      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY,
-      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-    });
-  }
-  return anthropicClient;
 }
 
 export interface CategoryPrediction {
@@ -106,26 +94,16 @@ ${SABQ_CATEGORY_RULE_AR}
 }`;
 
   try {
-    const anthropic = getAnthropicClient();
-    const message = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
+    const response = await aiGateway.complete({
+      feature: "article-classification",
+      prompt,
+      options: { maxTokens: 1024 },
+      ...(ENV_MODEL_OVERRIDE
+        ? { model: { provider: "anthropic" as const, modelId: ENV_MODEL_OVERRIDE } }
+        : {}),
     });
 
-    // Iterate over all content blocks to find JSON (more robust than regex)
-    let responseText = "";
-    for (const block of message.content) {
-      if (block.type === "text") {
-        responseText += block.text;
-      }
-    }
-    
+    const responseText = response.content;
     if (!responseText) {
       throw new Error("No text content in AI response");
     }
@@ -168,8 +146,8 @@ ${SABQ_CATEGORY_RULE_AR}
         reasoning: parsed.primaryCategory.reasoning,
       },
       suggestedCategories: suggestedCats,
-      provider: "anthropic",
-      model: MODEL,
+      provider: response.provider,
+      model: response.modelId,
     };
   } catch (error) {
     console.error("Error classifying article:", error);
