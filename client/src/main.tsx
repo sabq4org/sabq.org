@@ -18,6 +18,14 @@ if (import.meta.env.PROD) {
       import.meta.env.VITE_SENTRY_DSN ||
       "https://1b0d0e5e036519383e22c0e20f9eddc0@o4511664870391808.ingest.us.sentry.io/4511665077420032",
     environment: "production",
+    // أول 90 دقيقة تشغيل أثبتت أن denyUrls وحدها لا تكفي: الضجيج الأكبر جاء من
+    // إطارات مجهولة (<anonymous>) وسكربتات لا يغطيها النمط (beacon.min.js حقن
+    // كلاودفلير، player.ima إعلانات فيديو، «moment-by-moment» يمشّط الـDOM).
+    // allowUrls يقلب المنطق: لا يُقبل إلا خطأ إطارُ رميه من حزمتنا نحن
+    // (sabq.org/assets أو معاينات Pages) — وأخطاء chunks «الشاشة البيضاء» منها،
+    // فتمرّ. ملاحظة: أحداث بلا إطارات (captureMessage/رفض غير-Error) لا يسقطها
+    // allowUrls — لذلك تبقى ignoreErrors لنصوصها المعروفة.
+    allowUrls: [/sabq\.org\/assets\//, /\.pages\.dev\/assets\//],
     denyUrls: [
       /googletagmanager|googlesyndication|doubleclick|adservice|novatiq|permutive/i,
       /^chrome-extension:\/\//,
@@ -27,6 +35,8 @@ if (import.meta.env.PROD) {
     ignoreErrors: [
       "ResizeObserver loop limit exceeded",
       "ResizeObserver loop completed with undelivered notifications.",
+      // تتبّع خارجي محجوب بمانع إعلانات — السلسلة ليست في كودنا أصلًا
+      "Failed to track Pageview",
     ],
   });
 }
