@@ -71,7 +71,9 @@ export default function AiHubPage() {
           </div>
         </div>
 
-        <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+        {/* Radix defaults to dir="ltr" on its root regardless of document dir —
+            without this prop the whole tabs subtree renders LTR. */}
+        <Tabs value={tab} onValueChange={setTab} dir="rtl" className="space-y-4">
           <TabsList className="bg-card border shadow-sm p-1 h-auto rounded-xl">
             <TabsTrigger value="overview" className="gap-2 rounded-lg px-4 py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
               <LayoutDashboard className="w-4 h-4" />

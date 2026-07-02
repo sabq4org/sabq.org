@@ -481,11 +481,11 @@ export default function OverviewTab() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs">{row.featureKey}</TableCell>
-                      <TableCell className="text-xs tabular-nums" dir="ltr">
-                        {row.provider}/{row.modelId}
+                      <TableCell className="text-xs tabular-nums">
+                        <span dir="ltr">{row.provider}/{row.modelId}</span>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground" dir="ltr">
-                        {row.errorCode ?? "—"}
+                      <TableCell className="text-xs text-muted-foreground">
+                        <span dir="ltr">{row.errorCode ?? "—"}</span>
                       </TableCell>
                     </TableRow>
                   );

@@ -148,7 +148,7 @@ export default function FeaturesTab() {
             onChange={(e) => setSearch(e.target.value)}
             className="max-w-56 h-9"
           />
-          <Select value={category} onValueChange={setCategory}>
+          <Select dir="rtl" value={category} onValueChange={setCategory}>
             <SelectTrigger className="w-40 h-9">
               <SelectValue />
             </SelectTrigger>
@@ -193,8 +193,8 @@ export default function FeaturesTab() {
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] text-muted-foreground" dir="ltr">
-                      {f.featureKey}
+                    <div className="text-[11px] text-muted-foreground">
+                      <span dir="ltr">{f.featureKey}</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -206,8 +206,8 @@ export default function FeaturesTab() {
                     {f.primaryModel ? (
                       <div className="text-xs">
                         <div className="font-semibold">{f.primaryModel.displayName}</div>
-                        <div className="text-muted-foreground" dir="ltr">
-                          {providerName(f.primaryModel.provider)}
+                        <div className="text-muted-foreground">
+                          <span dir="ltr">{providerName(f.primaryModel.provider)}</span>
                         </div>
                       </div>
                     ) : (
@@ -278,7 +278,7 @@ export default function FeaturesTab() {
             <div className="space-y-4">
               <div className="space-y-1.5">
                 <Label className="text-xs">النموذج الأساسي</Label>
-                <Select value={edit.primaryModelId} onValueChange={(v) => setEdit({ ...edit, primaryModelId: v })}>
+                <Select dir="rtl" value={edit.primaryModelId} onValueChange={(v) => setEdit({ ...edit, primaryModelId: v })}>
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="اختر نموذجًا" />
                   </SelectTrigger>
@@ -330,6 +330,7 @@ export default function FeaturesTab() {
                   ))}
                   {!edit.locked && (
                     <Select
+                      dir="rtl"
                       value=""
                       onValueChange={(v) => v && setEdit({ ...edit, fallbackChain: [...edit.fallbackChain, v] })}
                     >
