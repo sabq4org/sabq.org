@@ -4,7 +4,10 @@
  * مع Cache-Control متدرّج حسب سخونة البيانات.
  */
 import type { Express } from "express";
-import { storage } from "../storage";
+import {
+  getTournamentBlockSettings,
+  isBlockHidden,
+} from "../services/tournamentBlockSettings";
 import {
   getFixtures,
   getLiveFixtures,
@@ -253,30 +256,14 @@ export function registerWorldCupRoutes(app: Express) {
     return true;
   };
 
-  // إعدادات البلوك من لوحة التحكم (system_settings) — مفتاح الإخفاء يعمل على
-  // الويب والتطبيقات المثبّتة معًا لأن الجميع يقرأ من overview: عند الإخفاء
-  // نُرجع حمولة صالحة فارغة فتختفي الواجهات دون تحديث متجر. تعطّل القراءة
-  // لا يُسقط البلوك — الافتراضي «ظاهر».
-  const getBlockSettings = async (): Promise<{
-    visible: boolean;
-    manualChampionTeamId: number | null;
-  }> => {
-    try {
-      const s = await storage.getSystemSetting("world_cup_block");
-      return {
-        visible: s?.visible ?? true,
-        manualChampionTeamId: Number(s?.manualChampionTeamId) || null,
-      };
-    } catch {
-      return { visible: true, manualChampionTeamId: null };
-    }
-  };
-
   app.get("/api/world-cup/overview", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      const settings = await getBlockSettings();
-      if (!settings.visible) {
+      // إعدادات البلوك من لوحة التحكم — الإخفاء (بالمفتاح أو خارج نافذة
+      // التوقيت) يعمل على الويب والتطبيقات المثبّتة معًا لأن الجميع يقرأ من
+      // overview: نُرجع حمولة صالحة فارغة فتختفي الواجهات دون تحديث متجر.
+      const settings = await getTournamentBlockSettings("world-cup");
+      if (isBlockHidden(settings)) {
         // s-maxage=30: إعادة تفعيل المفتاح من اللوحة تصل الواجهات خلال ≤30ث
         res.set("Cache-Control", "public, max-age=0, s-maxage=30, stale-while-revalidate=60");
         return res.json({
