@@ -73,6 +73,113 @@ export interface GcOverview {
   nextMatch: GcFixture | null;
 }
 
+// ---------- مركز المباراة (يطابق GcMatchDetail في الخادم) ----------
+
+export interface GcMatchEvent {
+  minute: number;
+  extraMinute: number | null;
+  teamId: number;
+  type: string;
+  label: string;
+  player: string | null;
+}
+
+export interface GcLineupPlayer {
+  id: number;
+  name: string;
+  number: number | null;
+  position: string | null;
+}
+
+export interface GcLineup {
+  teamId: number;
+  teamName: string;
+  formation: string | null;
+  coach: string;
+  startXI: GcLineupPlayer[];
+  substitutes: GcLineupPlayer[];
+}
+
+export interface GcStatistic {
+  key: string;
+  label: string;
+  home: string;
+  away: string;
+}
+
+export interface GcH2HMatch {
+  date: string;
+  competition: string;
+  home: GcTeam;
+  away: GcTeam;
+  goals: { home: number | null; away: number | null };
+}
+
+export interface GcH2HSummary {
+  total: number;
+  homeWins: number;
+  awayWins: number;
+  draws: number;
+  recent: GcH2HMatch[];
+}
+
+export interface GcMatchDetail {
+  fixture: GcFixture;
+  events: GcMatchEvent[];
+  lineups: GcLineup[];
+  statistics: GcStatistic[];
+  headToHead: GcFixture[];
+  history: GcH2HSummary | null;
+}
+
+// ---------- الهدّافون + سجلّ البطولة (يطابقان الخادم) ----------
+
+export interface GcScorer {
+  rank: number;
+  id: number;
+  name: string;
+  photo: string;
+  team: GcTeam;
+  goals: number;
+  assists: number;
+  penalties: number;
+  matches: number;
+  minutes: number;
+}
+
+export interface GcScorersBoard {
+  /** الموسم الذي جاءت منه البيانات (2026 = النسخة الحالية، 2024 = خليجي 26). */
+  season: number;
+  isCurrent: boolean;
+  scorers: GcScorer[];
+  assists: GcScorer[];
+}
+
+export interface GcEditionDto {
+  edition: number;
+  title: string;
+  year: string;
+  host: GcTeam;
+  hostCity: string | null;
+  champion: GcTeam | null;
+  runnerUp: GcTeam | null;
+  finalNote: string | null;
+  upcoming: boolean;
+}
+
+export interface GcTitleRow {
+  team: GcTeam;
+  titles: number;
+  runnerUps: number;
+  hosted: number;
+  lastTitleYear: string | null;
+}
+
+export interface GcHistory {
+  editions: GcEditionDto[];
+  titles: GcTitleRow[];
+}
+
 /** عدّ تنازلي من سلسلة ISO (تصل بإزاحة +03:00 فالتحويل مباشر). */
 export function countdownFromIso(iso: string | null): {
   days: number;

@@ -3,7 +3,13 @@ import { Star } from "lucide-react";
 import { GcMatchCard } from "./GcMatchCard";
 import type { GcOverview } from "./gcTypes";
 
-export function GcSaudiSpotlight({ saudi }: { saudi: GcOverview["saudi"] | undefined }) {
+export function GcSaudiSpotlight({
+  saudi,
+  onOpenMatch,
+}: {
+  saudi: GcOverview["saudi"] | undefined;
+  onOpenMatch?: (fixtureId: number) => void;
+}) {
   if (!saudi?.team) return null;
   const fixtures = (saudi.fixtures ?? []).slice(0, 6);
 
@@ -41,7 +47,7 @@ export function GcSaudiSpotlight({ saudi }: { saudi: GcOverview["saudi"] | undef
             <h3 className="mb-3 text-sm font-bold text-emerald-50/90">مباريات الأخضر</h3>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {fixtures.map((f) => (
-                <GcMatchCard key={f.id} fixture={f} />
+                <GcMatchCard key={f.id} fixture={f} onOpen={onOpenMatch} />
               ))}
             </div>
           </div>

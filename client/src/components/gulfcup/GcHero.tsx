@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { CalendarDays, MapPin, Radio, Sparkles, Trophy, Users } from "lucide-react";
+import { CalendarDays, Crown, MapPin, Radio, Sparkles, Trophy, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import gulfCupEmblem from "@assets/gulf-cup-27-emblem.png";
-import { countdownFromIso, formatDateRange, type GcOverview } from "./gcTypes";
+import { countdownFromIso, formatDateRange, type GcOverview, type GcTeam } from "./gcTypes";
 
 interface GcHeroProps {
   overview: GcOverview | undefined;
   onJump: (id: "schedule" | "teams") => void;
+  /** حامل اللقب (بطل آخر نسخة منتهية) — من /api/gulf-cup/history */
+  titleHolder?: GcTeam | null;
 }
 
 function CountdownUnit({ value, label }: { value: number; label: string }) {
@@ -57,7 +60,7 @@ function Countdown({ startsAt }: { startsAt: string | null }) {
   );
 }
 
-export function GcHero({ overview, onJump }: GcHeroProps) {
+export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
   const dateRange = formatDateRange(overview?.startsAt ?? null, overview?.endsAt ?? null);
 
   return (
@@ -109,6 +112,12 @@ export function GcHero({ overview, onJump }: GcHeroProps) {
               <MapPin className="h-3.5 w-3.5" />
               تستضيفها جدة — السعودية
             </Badge>
+            {titleHolder && (
+              <Badge className="gap-1.5 border border-amber-300/30 bg-white/5 px-3 py-1 text-amber-100">
+                <Crown className="h-3.5 w-3.5 text-amber-300" />
+                حامل اللقب: {titleHolder.name}
+              </Badge>
+            )}
           </div>
 
           <h1 className="text-4xl font-black tracking-tight text-white sm:text-6xl">
@@ -160,6 +169,12 @@ export function GcHero({ overview, onJump }: GcHeroProps) {
             >
               جدول المباريات
             </Button>
+            <Link href="/gulf-cup/predictions">
+              <Button className="rounded-full bg-amber-300 px-6 font-black text-emerald-950 hover:bg-amber-200">
+                <Sparkles className="h-4 w-4" />
+                توقّع واربح
+              </Button>
+            </Link>
             <Button
               onClick={() => onJump("teams")}
               variant="outline"
