@@ -15,6 +15,11 @@ import {
   getGcHistory,
   isGulfCupConfigured,
 } from "../services/gulfCupService";
+import {
+  getTournamentBlockSettings,
+  isBlockHidden,
+} from "../services/tournamentBlockSettings";
+import { detectCupChampion, manualCupChampion } from "../services/cupChampion";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -33,8 +38,21 @@ export function registerGulfCupRoutes(app: Express) {
   app.get("/api/gulf-cup/overview", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=600");
-      res.json(await getGcOverview());
+      // إعدادات بلوك الرئيسية من اللوحة: blockHidden يخفي بلوك الواجهة فقط —
+      // لا نفرّغ الحمولة لأن صفحة /gulf-cup نفسها تستهلك overview هذا.
+      // champion يُكشف تلقائيًا من النهائي، واليدوي من اللوحة يتقدّم عليه.
+      const [ov, fixtures, settings] = await Promise.all([
+        getGcOverview(),
+        getGcFixtures().catch(() => []),
+        getTournamentBlockSettings("gulf-cup"),
+      ]);
+      let champion = detectCupChampion(fixtures);
+      if (settings.manualChampionTeamId && champion?.team.id !== settings.manualChampionTeamId) {
+        champion = manualCupChampion(fixtures, settings.manualChampionTeamId) ?? champion;
+      }
+      // كاش أقصر من السابق (كان 60/120) كي يصل تبديل المفتاح خلال ≤دقيقة
+      res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
+      res.json({ ...ov, blockHidden: isBlockHidden(settings), champion });
     } catch (error) {
       console.error("[GulfCup] overview failed:", error);
       res.status(502).json({ message: "تعذر جلب نظرة خليجي 27 حاليًا" });
