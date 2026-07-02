@@ -257,7 +257,21 @@ function Masthead({
       <div className="relative mx-auto max-w-[1200px] px-5 pb-0 pt-9 sm:px-8 sm:pt-12">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <span dir="ltr" className="sbq-mono text-[12px] tracking-[2px] text-[#4CBCFD]">SABQ SPORT — LIVE COVERAGE</span>
-          <span className="text-[12px] text-[#5A7186]">{today} · الرياض <span dir="ltr" className="sbq-mono">GMT+3</span></span>
+          <div className="flex flex-wrap items-center gap-3">
+            {/* زر المباشر — في أعلى الغلاف ليُرى فورًا، وعدّاده يشمل كل المباريات
+                العالمية الجارية عبر بطولاتنا (مصدر نبض المباشر نفسه). */}
+            {liveCount > 0 && (
+              <button
+                type="button"
+                onClick={() => onJump("live-pulse")}
+                className="inline-flex items-center gap-2 rounded-full bg-[#DD5C5C] px-4 py-1.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+                data-testid="masthead-live-chip"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveCount} مباشر الآن
+              </button>
+            )}
+            <span className="text-[12px] text-[#5A7186]">{today} · الرياض <span dir="ltr" className="sbq-mono">GMT+3</span></span>
+          </div>
         </div>
 
         <div className="mt-8 flex flex-wrap items-end justify-between gap-6 sm:mt-10">
@@ -273,16 +287,6 @@ function Masthead({
               {liveCount > 0 && <span className="text-[#DD5C5C]">{liveCount} LIVE · </span>}
               {todayCount} TODAY · {compCount} COMPETITIONS
             </span>
-            {liveCount > 0 && (
-              <button
-                type="button"
-                onClick={() => onJump("matches")}
-                className="inline-flex items-center gap-2 rounded-full bg-[#DD5C5C] px-4 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
-                data-testid="masthead-live-chip"
-              >
-                <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveCount} مباشر الآن
-              </button>
-            )}
           </div>
         </div>
 
@@ -333,13 +337,13 @@ function PulseTeamRow({ team, goal }: { team: SpTeam; goal: number | null }) {
 function LivePulse({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: number) => void }) {
   if (items.length === 0) return null;
   return (
-    <div className="border-b border-border bg-destructive/[0.05]">
+    <div id="live-pulse" className="scroll-mt-16 border-b border-border bg-destructive/[0.05]">
       <div className="mx-auto max-w-[1200px] px-5 py-3.5 sm:px-8">
         <div className="mb-2.5 flex items-center gap-2.5">
           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-destructive">
             <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" /> نبض المباشر
           </span>
-          <span dir="ltr" className="sbq-mono text-[11px] text-muted-foreground">{items.length} LIVE</span>
+          <span className="sbq-mono text-[11px] font-bold text-muted-foreground">{items.length} مباراة</span>
         </div>
         <div className="scrollbar-hide flex gap-2.5 overflow-x-auto pb-1">
           {items.map((f) => (
@@ -821,7 +825,12 @@ export default function SportsDashboard() {
   const featured = sortedNews[0];
   const latest = sortedNews.slice(1, 9);
 
-  const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  // عدّاد المباشر الشامل: نبض /api/sports/live يغطي كل بطولاتنا (بما فيها
+  // العالمية)، ومباريات اليوم احتياط ريثما يصل أول ردّ من نداء النبض.
+  const liveNow = liveMatches.length || liveCount;
+
+  const scrollTo = (id: string) =>
+    (document.getElementById(id) ?? document.getElementById("matches"))?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // التنقّل المرقّم على الغلاف — بأسلوب فهرس دليل الهوية، حسب الأقسام المتاحة فعلًا.
   const mastNav = [
@@ -845,7 +854,7 @@ export default function SportsDashboard() {
         <main className="flex-1">
           {/* ===== الغلاف الكحلي — بأسلوب غلاف دليل الهوية ===== */}
           <Masthead
-            liveCount={liveCount}
+            liveCount={liveNow}
             todayCount={todayMatches.length}
             compCount={competitions.length}
             nav={mastNav}
