@@ -8,9 +8,11 @@ import { groupFixturesByDay, type GcFixture } from "./gcTypes";
 export function GcSchedule({
   fixtures,
   isLoading,
+  onOpenMatch,
 }: {
   fixtures: GcFixture[];
   isLoading: boolean;
+  onOpenMatch?: (fixtureId: number) => void;
 }) {
   const rounds = useMemo(() => {
     const set: string[] = [];
@@ -86,7 +88,7 @@ export function GcSchedule({
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {day.items.map((f) => (
-                  <GcMatchCard key={f.id} fixture={f} />
+                  <GcMatchCard key={f.id} fixture={f} onOpen={onOpenMatch} />
                 ))}
               </div>
             </motion.div>
