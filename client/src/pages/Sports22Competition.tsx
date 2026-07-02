@@ -561,7 +561,7 @@ export default function Sports22Competition() {
             <SectionHead
               en="TEAMS"
               title="الفرق"
-              subtitle="ادخل صفحة الفريق: التشكيلة، الإصابات، الانتقالات، والإحصاءات."
+              subtitle="ادخل صفحة الفريق: التشكيلة، الإصابات، والإحصاءات."
             />
             <TeamsGrid standings={standings} fixtures={allFixtures} />
           </section>
