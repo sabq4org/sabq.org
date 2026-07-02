@@ -89,13 +89,14 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
         >
           <div className="relative">
             <motion.div
-              className="absolute inset-0 -m-8 rounded-[2.5rem] bg-amber-300/20 blur-2xl"
+              className="absolute inset-0 -m-5 rounded-3xl bg-amber-300/20 blur-2xl"
               animate={{ scale: [1, 1.1, 1], opacity: [0.45, 0.75, 0.45] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
             />
-            {/* لوح عاجي خلف الشعار الرسمي — نص الهوية الداكن يبقى واضحًا فوق الهيرو الداكن */}
+            {/* لوح عاجي خلف الشعار الرسمي — نص الهوية الداكن يبقى واضحًا فوق
+                الهيرو الداكن. المقاس مضبوط على مرجع هيرو المونديال (h-20) */}
             <motion.div
-              className="relative rounded-[2rem] bg-gradient-to-b from-white to-amber-50/90 px-8 py-6 shadow-2xl ring-1 ring-amber-300/40"
+              className="relative rounded-2xl bg-gradient-to-b from-white to-amber-50/90 px-4 py-3 shadow-2xl ring-1 ring-amber-300/40"
               initial={{ scale: 0.88, rotate: -2 }}
               animate={{ scale: 1, rotate: 0 }}
               transition={{ type: "spring", stiffness: 120, damping: 12 }}
@@ -103,7 +104,7 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
               <img
                 src={gulfCupLogo}
                 alt="شعار خليجي 27 — كأس الخليج العربي في السعودية 2026"
-                className="h-40 w-auto object-contain sm:h-48"
+                className="h-20 w-auto object-contain sm:h-24"
                 loading="eager"
                 decoding="async"
               />
