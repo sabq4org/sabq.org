@@ -7,8 +7,8 @@ import UIKit
 //
 // الفاتح (الافتراضي): أبيض نظيف + أخضر زمردي مقتصد، خلفية رمادية فاتحة جدًّا،
 // بطاقات بيضاء بحدود رمادية خفيفة، نص أسود/رمادي.
-// الداكن: فحميّ عميق نظيف (لا أسود صرف، لا زجاج موحل)، أسطح مرتفعة #1C2129،
-// حدود خفيفة، نص أبيض/رمادي، والأخضر الزمردي أكثر سطوعًا ليُقرأ على الداكن.
+// الداكن: سُخامي مزرقّ هادئ على طراز «Dim» (لا أسود كالح) — خلفية #1B2129،
+// أسطح مرتفعة #252C36، حدود خفيفة، نص أبيض/رمادي، والأخضر أسطع ليُقرأ.
 //
 // كل لون يُحلّ ديناميكيًّا حسب مظهر الجهاز عبر `dyn(فاتح:داكن:)` — فتبديل المظهر
 // (تلقائي/فاتح/داكن من «حسابي») يسري على كل الشاشات فورًا بلا تغيير أي رمز.
@@ -135,30 +135,30 @@ nonisolated enum SpTheme {
                        startPoint: .topTrailing, endPoint: .bottomLeading)
     }
 
-    /// خلفية الشاشة — رمادي فاتح جدًّا (فاتح) / فحميّ عميق نظيف (داكن).
+    /// خلفية الشاشة — رمادي فاتح جدًّا (فاتح) / سُخامي مزرقّ هادئ (داكن، لا أسود كالح).
     static var screenGradient: LinearGradient {
         LinearGradient(
             colors: [
-                dyn(Color(red: 0.942, green: 0.949, blue: 0.957), Color(red: 0.047, green: 0.057, blue: 0.068)),
-                dyn(Color(red: 0.928, green: 0.936, blue: 0.945), Color(red: 0.028, green: 0.035, blue: 0.044)),
+                dyn(Color(red: 0.942, green: 0.949, blue: 0.957), Color(red: 0.106, green: 0.128, blue: 0.160)),
+                dyn(Color(red: 0.928, green: 0.936, blue: 0.945), Color(red: 0.090, green: 0.110, blue: 0.140)),
             ],
             startPoint: .top, endPoint: .bottom
         )
     }
 
-    // ── أسطح: بيضاء (فاتح) / فحميّة مرتفعة (داكن) ──
-    static var surface: Color { dyn(.white, Color(red: 0.110, green: 0.130, blue: 0.160)) }
-    static var surfaceRaised: Color { dyn(.white, Color(red: 0.135, green: 0.158, blue: 0.190)) }
+    // ── أسطح: بيضاء (فاتح) / سُخامية مزرقّة مرتفعة (داكن) ──
+    static var surface: Color { dyn(.white, Color(red: 0.145, green: 0.172, blue: 0.212)) }
+    static var surfaceRaised: Color { dyn(.white, Color(red: 0.172, green: 0.203, blue: 0.247)) }
 
     /// سطح البطاقة.
-    static var card: Color { dyn(.white, Color(red: 0.110, green: 0.130, blue: 0.160)) }
+    static var card: Color { dyn(.white, Color(red: 0.145, green: 0.172, blue: 0.212)) }
 
     /// تدرّج البطاقة — شبه مسطّح.
     static var cardGradient: LinearGradient {
         LinearGradient(
             colors: [
-                dyn(.white, Color(red: 0.120, green: 0.142, blue: 0.172)),
-                dyn(Color(red: 0.992, green: 0.994, blue: 0.996), Color(red: 0.100, green: 0.120, blue: 0.148)),
+                dyn(.white, Color(red: 0.157, green: 0.186, blue: 0.227)),
+                dyn(Color(red: 0.992, green: 0.994, blue: 0.996), Color(red: 0.137, green: 0.163, blue: 0.203)),
             ],
             startPoint: .topLeading, endPoint: .bottomTrailing
         )
@@ -167,12 +167,12 @@ nonisolated enum SpTheme {
     // بلا إطارات للبطاقات — نعتمد التباعد والتدرّج اللوني (tonal elevation) للفصل
     // بدل الحدّ الصريح الذي كان يجعل كل قسم صندوقًا، خصوصًا في الوضع الداكن.
     static var cardStroke: Color { .clear }
-    static var cardFill: Color { dyn(.white, Color(red: 0.110, green: 0.130, blue: 0.160)) }
-    static var chipFill: Color { dyn(Color(red: 0.945, green: 0.955, blue: 0.965), Color(red: 0.160, green: 0.190, blue: 0.230)) }  // شريحة
-    /// حبّة شريط الأيام — أقرب للأسود في الداكن كي تذوب مع خلفية الشاشة (أبيض في الفاتح).
-    static var railChipFill: Color { dyn(.white, Color(red: 0.078, green: 0.090, blue: 0.106)) }
+    static var cardFill: Color { dyn(.white, Color(red: 0.145, green: 0.172, blue: 0.212)) }
+    static var chipFill: Color { dyn(Color(red: 0.945, green: 0.955, blue: 0.965), Color(red: 0.196, green: 0.230, blue: 0.278)) }  // شريحة
+    /// حبّة شريط الأيام — أغمق قليلًا من الخلفية في الداكن كي تذوب معها (أبيض في الفاتح).
+    static var railChipFill: Color { dyn(.white, Color(red: 0.082, green: 0.100, blue: 0.128)) }
     /// فاصل داخليّ خافت جدًّا — خطوط شعرية بدل حدود ثقيلة.
-    static var outline: Color { dyn(Color(red: 0.912, green: 0.922, blue: 0.934), Color(red: 0.165, green: 0.188, blue: 0.220)) }
+    static var outline: Color { dyn(Color(red: 0.912, green: 0.922, blue: 0.934), Color(red: 0.216, green: 0.250, blue: 0.298)) }
 
     /// لا ظلّ للبطاقات — تصميم مسطّح يعتمد الحدّ الحادّ الخفيف للفصل.
     static var cardShadow: Color { .clear }

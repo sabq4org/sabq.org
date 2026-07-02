@@ -390,22 +390,40 @@ private struct SpDayScrollRequest: Equatable {
     var animated: Bool = true
 }
 
-// طيّ الترويسة العلوية (التولبار + شريط الأدوار) حسب اتجاه التمرير — نفس منطق
-// `autoHideTabBar`: التمرير لأسفل يخفي، لأعلى/قرب القمة يُظهر. `armed` تتجاهل قفزة
-// التمرير البرمجية الأولى (الانتقال لليوم) كي لا تُطوى الترويسة فور الإقلاع. iOS 18+.
+// ارتفاع الترويسة المقاس (العنوان + شريط الأدوار) — يحدد مقدار إزاحة الطيّ.
+private struct SpHeaderHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+// طيّ الترويسة العلوية (التولبار + شريط الأدوار) **وشريط التبويب السفلي معًا**
+// حسب اتجاه التمرير — مراقب تمرير واحد يقود الاثنين فيبقيان متزامنين دائمًا:
+// التمرير لأسفل (قراءة، وبعد عمق كافٍ عن القمة) يخفيهما، لأعلى/قرب القمة يُظهرهما.
+// شريط الأيام لا يتأثر إطلاقًا (مثبّت خارج منطقة الطيّ في `pinnedTopBar`).
+// `armed` تتجاهل قفزة التمرير البرمجية (الانتقال لليوم) كي لا يُطوى شيء فور
+// الإقلاع أو عند نقر شريحة يوم/دور. iOS 18+.
 private struct SpAutoCollapseHeader: ViewModifier {
     @Binding var hidden: Bool
     @Binding var armed: Bool
+    @Environment(SpTabBarVisibility.self) private var tabBarVis
     @State private var lastY: CGFloat = 0
+    // نافذة كتم بعد كل تبديل: إخفاء/إظهار الشريط السفلي يغيّر هندسة التمرير
+    // (هوامش الأمان) فيولّد حدث إزاحة اصطناعيًّا بالاتجاه المعاكس يعكس القرار
+    // فورًا (يرتد الرأس عائدًا). نتجاهل أحداث التمرير لحظة التبديل حتى تستقر.
+    @State private var suppressUntil: Date = .distantPast
 
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
             content.onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y } action: { _, newY in
                 defer { lastY = newY }
-                guard armed else { return }
+                guard armed, Date() >= suppressUntil else { return }
                 let delta = newY - lastY
                 if newY < 24 { set(false) }
-                else if delta > 8 { set(true) }
+                // بوابة عمق (90pt): لا طيّ عند أول القائمة — يمنع اختفاء الرأس
+                // من حركة صغيرة أو ارتداد لمس قرب القمة.
+                else if delta > 8, newY > 90 { set(true) }
                 else if delta < -8 { set(false) }
             }
         } else {
@@ -414,8 +432,14 @@ private struct SpAutoCollapseHeader: ViewModifier {
     }
 
     private func set(_ h: Bool) {
-        guard hidden != h else { return }
-        withAnimation(.easeInOut(duration: 0.25)) { hidden = h }
+        guard hidden != h || tabBarVis.hidden != h else { return }
+        suppressUntil = Date().addingTimeInterval(0.4)
+        if hidden != h {
+            withAnimation(.easeInOut(duration: 0.25)) { hidden = h }
+        }
+        if tabBarVis.hidden != h {
+            withAnimation(.easeInOut(duration: 0.25)) { tabBarVis.hidden = h }
+        }
     }
 }
 
@@ -454,6 +478,8 @@ struct MatchesView: View {
     // التمرير البرمجية كي لا تُطوى الترويسة فور الإقلاع أو عند القفز ليوم/مرحلة.
     @State private var headerHidden = false
     @State private var headerArmed = false
+    // ارتفاع الترويسة المقاس — مقدار الإزاحة التحويلية عند الطيّ.
+    @State private var headerHeight: CGFloat = 0
 
     private static let riyadhCal: Calendar = {
         var c = Calendar(identifier: .gregorian)
@@ -486,6 +512,22 @@ struct MatchesView: View {
         }
         .refreshable { await load(force: true) }
         .sheet(isPresented: $showDatePicker) { datePickerSheet }
+        // تعافي شريط الأيام بعد طيّ/بسط الترويسة: انكماش الارتفاع فوق ScrollView
+        // أفقي كان يُفسد إزاحته الداخلية فتخرج الشرائح كلها عن النافذة (شريط
+        // فارغ). بعد استقرار حركة الطيّ نعيد التمركز قسرًا (nil ثم القيمة تضمن
+        // إطلاق onChange في dateRail حتى لو لم تتغيّر القيمة نفسها) — محاولتان
+        // لأن توقيت الجهاز الحقيقي (ProMotion/Release) يختلف عن المحاكي.
+        .onChange(of: headerHidden) { _, _ in
+            let target = railCenterId ?? scrolledDayId
+            Task { @MainActor in
+                for delay: UInt64 in [350_000_000, 800_000_000] {
+                    try? await Task.sleep(nanoseconds: delay)
+                    railCenterId = nil
+                    try? await Task.sleep(nanoseconds: 30_000_000)
+                    railCenterId = target
+                }
+            }
+        }
     }
 
     // MARK: الترويسة + أدوات التحكّم
@@ -564,44 +606,52 @@ struct MatchesView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ZStack(alignment: .bottom) {
+                // الطيّ = **إزاحة تحويلية (offset) للكتلة كلها** لا تغيير تخطيط
+                // للترويسة: تحريك/تحجيم إطار ScrollView الأفقي (شريط الأيام)
+                // بتخطيط متحرك كان يجعل محتواه يُرسَم منزاحًا عن إزاحته المحسوبة
+                // (الهندسة سليمة x=456 والرسم فارغ — مُقاس بالسجل) فيبدو الشريط
+                // فارغًا عشوائيًّا. مع offset لا يتغيّر إطار الشريط إطلاقًا؛
+                // padding سالب يمدّد القائمة (تمدّد عمودي آمن) لملء الفراغ.
                 VStack(spacing: 0) {
                     pinnedTopBar
                     matchesList
                 }
+                .padding(.bottom, headerHidden ? -headerHeight : 0)
+                .offset(y: headerHidden ? -headerHeight : 0)
                 floatingToday
             }
-            .overlay(alignment: .top) { topSafeAreaCover }
+            // لا تُعِد `topSafeAreaCover` كطبقة overlay فوق الشاشة: كان غطاءً
+            // معتمًا يُعاد حساب موضعه عند إخفاء الشريط السفلي فيهبط ويغطي شريط
+            // الأيام بعد الطيّ. تغطية شريط الحالة الآن من خلفية `pinnedTopBar`
+            // الممتدة عبر ignoresSafeArea.
         }
     }
 
-    // الترويسة المثبّتة أعلى الشاشة: العنوان + شريط الأدوار يطويان مع التمرير،
+    // الترويسة المثبّتة أعلى الشاشة: العنوان + شريط الأدوار يطويان مع التمرير,
     // بينما شريط الأيام يبقى ظاهرًا دائمًا (يثبت عند طيّ الترويسة).
+    // لا طيّ تخطيطيًّا هنا (لا frame(0) ولا if+transition — كلاهما جُرّب وكسر
+    // رسم شريط الأيام): الترويسة تبقى بحجمها، تُخفى بالشفافية فقط، والحركة كلها
+    // offset على الكتلة في bodyContent. ارتفاعها يُقاس بـPreferenceKey ليحدد
+    // مقدار الإزاحة.
     private var pinnedTopBar: some View {
         VStack(spacing: 0) {
-            if !headerHidden {
-                header
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
+            header
+                .opacity(headerHidden ? 0 : 1)
+                .allowsHitTesting(!headerHidden)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(key: SpHeaderHeightKey.self, value: geo.size.height)
+                    }
+                )
             if !visibleDays.isEmpty {
                 dateRail
             }
         }
-        .background(SpTheme.screenGradient)
+        .onPreferenceChange(SpHeaderHeightKey.self) { headerHeight = $0 }
+        // الخلفية تمتد لأعلى الشاشة فتغطي منطقة شريط الحالة أيضًا (بديل
+        // topSafeAreaCover المحذوف — امتداد الخلفية لا يغطي المحتوى أبدًا).
+        .background(SpTheme.screenGradient.ignoresSafeArea(.container, edges: .top))
         .zIndex(5)
-    }
-
-    private var topSafeAreaInset: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .first?.keyWindow?.safeAreaInsets.top ?? 0
-    }
-
-    private var topSafeAreaCover: some View {
-        SpTheme.screenGradient
-            .frame(height: topSafeAreaInset)
-            .frame(maxWidth: .infinity)
-            .ignoresSafeArea(.container, edges: .top)
-            .allowsHitTesting(false)
     }
 
     // شريط أدوار البطولة — يفعّل الدور إن وُجدت مباريات **أو** خانات في شجرة
@@ -636,16 +686,44 @@ struct MatchesView: View {
     // شريط التواريخ المتزامن — نقر شريحة ينزل للقسم؛ والتمرير اليدوي يحدّث اليوم
     // النشط فقط عند عبور قسم جديد، لا مع كل إطار تمرير. خلفيته شفّافة ليتدفّق مع
     // الترويسة (توولبار + أدوار + تواريخ = منطقة واحدة)، ويفصله عن القائمة فاصل واحد.
+    // التمركز عبر `ScrollViewReader.scrollTo` (أمر لحظي عند تغيّر اليوم) لا عبر
+    // ربط `scrollPosition(id:)` الدائم، والحاوية **LTR داخليًّا** والمصفوفة معكوسة
+    // يدويًّا (نفس الترتيب البصري: الأحدث يسارًا والأقدم يمينًا): فساد الإزاحة عند
+    // انكماش الترويسة فوق ScrollView أفقي هو علّة RTL حصرًا (الإزاحة تُشتق من
+    // الحافة اليمنى وتنقلب مع كل تغيّر هندسي) — ظهرت على جهاز TestFlight الحقيقي
+    // حتى بعد إصلاح المحاكي، وقلب الحاوية LTR يلغي الصنف كله. نصوص الشرائح تبقى
+    // عربية سليمة (اتجاه النص مستقل عن اتجاه تخطيط الحاوية). الـHStack غير كسول
+    // فالقفز لأي شريحة موثوق (قيد ScrollViewReader مع LazyVStack لا ينطبق هنا).
     private var dateRail: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(visibleDays) { day in dateChip(day) }
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(visibleDays.reversed())) { day in dateChip(day).id(day.id) }
+                }
+                .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
             }
-            .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
-            .scrollTargetLayout()
+            .environment(\.layoutDirection, .leftToRight)
+            .onChange(of: railCenterId) { _, id in
+                guard let id else { return }
+                withAnimation(.easeInOut(duration: 0.22)) {
+                    proxy.scrollTo(id, anchor: .center)
+                }
+            }
+            // التمركز الأول مؤجَّل حتى تستقر أي حركة تخطيط جارية (طيّ الترويسة)
+            // — scrollTo أثناء تحرّك الإطار الأب هو أصل فساد الإزاحة.
+            .onAppear {
+                guard let id = railCenterId else { return }
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    proxy.scrollTo(id, anchor: .center)
+                }
+            }
         }
-        .scrollPosition(id: $railCenterId, anchor: .center)
         .overlay(alignment: .bottom) { Divider().overlay(SpTheme.outline) }
+        // تحذير: لا تعطِ الشريط هوية جديدة عند الطيّ (`.id(headerHidden)`) —
+        // جُرّبت كضمانة وأتت بعكسها: البناء من الصفر أثناء حركة الانكماش يخلق
+        // تخطيطًا فاسدًا لا يصلحه scrollTo. العلاج الصحيح = التعافي المؤجَّل
+        // في onChange(of: headerHidden) أعلى الشاشة.
     }
 
     // شريحة يوم على طراز دوري: حبّة بيضاء بحدّ رمادي فاتح, المحدّد = حدّ أخضر فاتح
@@ -753,6 +831,7 @@ struct MatchesView: View {
         scrolledDayId = target
         railCenterId = target
         headerHidden = false
+        SpTabBarVisibility.shared.hidden = false
         headerArmed = false
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 80_000_000)
@@ -767,9 +846,12 @@ struct MatchesView: View {
         guard !id.isEmpty else { return }
         scrolledDayId = id
         railCenterId = id
-        // القفز ليوم/مرحلة يُظهر الترويسة، ونُعطّل الطيّ مؤقّتًا حتى لا تطويها قفزة
-        // التمرير البرمجية نفسها — يعاد تفعيله بعد استقرار الحركة.
+        // القفز ليوم/مرحلة يُظهر الترويسة والشريط السفلي، ونُعطّل الطيّ مؤقّتًا حتى
+        // لا تطويهما قفزة التمرير البرمجية نفسها — يعاد تفعيله بعد استقرار الحركة.
         if headerHidden { withAnimation(.easeInOut(duration: 0.25)) { headerHidden = false } }
+        if SpTabBarVisibility.shared.hidden {
+            withAnimation(.easeInOut(duration: 0.25)) { SpTabBarVisibility.shared.hidden = false }
+        }
         headerArmed = false
         Task { @MainActor in
             try? await Task.sleep(nanoseconds: 500_000_000)
