@@ -1,6 +1,6 @@
-import OpenAI from "openai";
-
-const openai = new OpenAI();
+// Routed through the AI Hub ("comment-moderation" feature): gpt-4o-mini by
+// default with automatic failover to the mini-tier chain, dashboard-editable.
+import { aiGateway } from "./gateway";
 
 export interface ModerationResult {
   score: number; // 0-100
@@ -51,8 +51,8 @@ export async function moderateComment(commentText: string): Promise<ModerationRe
   try {
     console.log(`[Comment Moderation] Analyzing comment: ${commentText.substring(0, 50)}...`);
     
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+    const response = await aiGateway.complete({
+      feature: "comment-moderation",
       messages: [
         {
           role: "system",
@@ -63,12 +63,10 @@ export async function moderateComment(commentText: string): Promise<ModerationRe
           content: `"${commentText}"`
         }
       ],
-      response_format: { type: "json_object" },
-      temperature: 0.1,
-      max_tokens: 500,
+      options: { jsonMode: true, temperature: 0.1, maxTokens: 500 },
     });
 
-    const content = response.choices[0]?.message?.content;
+    const content = response.content;
     
     if (!content) {
       console.error("[Comment Moderation] Empty response from AI");

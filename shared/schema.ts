@@ -13171,3 +13171,173 @@ export const wcPlayerNames = pgTable("wc_player_names", {
 });
 
 export type WcPlayerName = typeof wcPlayerNames.$inferSelect;
+
+// ============================================
+// SABQ AI HUB — central gateway for all AI usage
+// ============================================
+// Single entry point (server/ai/gateway/) routes every AI call through
+// DB-driven model configs with automatic failover + circuit breaker.
+// See docs: issue #589.
+
+export const aiHubProviders = ["openai", "anthropic", "gemini", "elevenlabs"] as const;
+export type AiHubProviderName = (typeof aiHubProviders)[number];
+
+export const aiHubCapabilities = ["complete", "embed", "image", "tts"] as const;
+export const aiHubPricingUnits = ["tokens", "chars", "image"] as const;
+export const aiHubUsageStatuses = ["success", "fallback", "failed"] as const;
+export const aiHubHealthStatuses = ["healthy", "degraded", "quota_exceeded", "down"] as const;
+
+// Model catalog: providers' models with pricing. Pricing is editable from the
+// dashboard; cost math depends on pricingUnit (tokens → per-1M in/out tokens,
+// chars → per-1M input chars, image → costPerUnit per generated image).
+export const aiModels = pgTable("ai_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  displayName: varchar("display_name", { length: 128 }).notNull(),
+  capabilities: jsonb("capabilities").$type<string[]>().default([]).notNull(),
+  pricingUnit: varchar("pricing_unit", { length: 16 }).default("tokens").notNull(),
+  costPer1MInput: real("cost_per_1m_input").default(0).notNull(),
+  costPer1MOutput: real("cost_per_1m_output").default(0).notNull(),
+  costPerUnit: real("cost_per_unit").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  priority: integer("priority").default(100).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_models_provider_model").on(table.provider, table.modelId),
+]);
+
+// Per-feature routing config. fallbackChain holds ai_models.id values in
+// failover order. allowFailover=false pins the feature to its primary model
+// (embeddings MUST stay pinned — vectors are incompatible across models).
+export const aiFeatureConfigs = pgTable("ai_feature_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  featureKey: varchar("feature_key", { length: 64 }).notNull().unique(),
+  displayName: varchar("display_name", { length: 128 }).notNull(),
+  category: varchar("category", { length: 32 }).default("general").notNull(),
+  primaryModelId: varchar("primary_model_id").references(() => aiModels.id),
+  fallbackChain: jsonb("fallback_chain").$type<string[]>().default([]).notNull(),
+  maxTokens: integer("max_tokens"),
+  temperature: real("temperature"),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  allowFailover: boolean("allow_failover").default(true).notNull(),
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Raw per-call log. Grows fast: rolled up nightly into ai_usage_daily and
+// pruned after 90 days by server/jobs/aiUsageRollup.ts.
+export const aiUsageLogs = pgTable("ai_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  featureKey: varchar("feature_key", { length: 64 }).notNull(),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  operation: varchar("operation", { length: 16 }).default("complete").notNull(),
+  inputTokens: integer("input_tokens").default(0).notNull(),
+  outputTokens: integer("output_tokens").default(0).notNull(),
+  unitCount: integer("unit_count").default(0).notNull(),
+  estimatedCostUsd: real("estimated_cost_usd").default(0).notNull(),
+  latencyMs: integer("latency_ms").default(0).notNull(),
+  status: varchar("status", { length: 16 }).notNull(),
+  errorCode: varchar("error_code", { length: 32 }),
+  errorMessage: text("error_message"),
+  userId: varchar("user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ai_usage_logs_created").on(table.createdAt),
+  index("idx_ai_usage_logs_feature").on(table.featureKey, table.createdAt),
+  index("idx_ai_usage_logs_provider").on(table.provider, table.createdAt),
+  index("idx_ai_usage_logs_status").on(table.status, table.createdAt),
+]);
+
+// Daily rollup — dashboard charts read from here, never from raw logs.
+export const aiUsageDaily = pgTable("ai_usage_daily", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: date("date").notNull(),
+  featureKey: varchar("feature_key", { length: 64 }).notNull(),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  operation: varchar("operation", { length: 16 }).default("complete").notNull(),
+  requests: integer("requests").default(0).notNull(),
+  successCount: integer("success_count").default(0).notNull(),
+  fallbackCount: integer("fallback_count").default(0).notNull(),
+  failedCount: integer("failed_count").default(0).notNull(),
+  inputTokens: bigint("input_tokens", { mode: "number" }).default(0).notNull(),
+  outputTokens: bigint("output_tokens", { mode: "number" }).default(0).notNull(),
+  unitCount: integer("unit_count").default(0).notNull(),
+  estimatedCostUsd: real("estimated_cost_usd").default(0).notNull(),
+  avgLatencyMs: real("avg_latency_ms").default(0).notNull(),
+  p50LatencyMs: real("p50_latency_ms").default(0).notNull(),
+  p95LatencyMs: real("p95_latency_ms").default(0).notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_usage_daily_unique").on(
+    table.date, table.featureKey, table.provider, table.modelId, table.operation,
+  ),
+  index("idx_ai_usage_daily_date").on(table.date),
+]);
+
+// Circuit-breaker state, persisted so it survives restarts and is shared
+// across instances; the dashboard's live provider strip reads from here.
+export const aiProviderHealth = pgTable("ai_provider_health", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  status: varchar("status", { length: 24 }).default("healthy").notNull(),
+  failCount: integer("fail_count").default(0).notNull(),
+  lastError: text("last_error"),
+  lastErrorCode: varchar("last_error_code", { length: 32 }),
+  cooldownUntil: timestamp("cooldown_until"),
+  lastCheckedAt: timestamp("last_checked_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_provider_health_unique").on(table.provider, table.modelId),
+]);
+
+// Audit trail for config changes made from the dashboard (who switched which
+// model, when) — multiple admins manage the hub, accountability is required.
+export const aiConfigAudit = pgTable("ai_config_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: varchar("entity_type", { length: 32 }).notNull(),
+  entityKey: varchar("entity_key", { length: 128 }).notNull(),
+  action: varchar("action", { length: 32 }).notNull(),
+  changes: jsonb("changes").$type<Record<string, { from: unknown; to: unknown }>>(),
+  userId: varchar("user_id"),
+  userName: varchar("user_name", { length: 128 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ai_config_audit_created").on(table.createdAt),
+  index("idx_ai_config_audit_entity").on(table.entityType, table.entityKey),
+]);
+
+// Monthly budget limits (global / per provider / per feature) with 80%/100%
+// alert thresholds. lastAlertMonth+lastAlertLevel throttle repeat alerts.
+export const aiBudgets = pgTable("ai_budgets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scope: varchar("scope", { length: 16 }).notNull(),
+  scopeKey: varchar("scope_key", { length: 64 }).default("").notNull(),
+  monthlyLimitUsd: real("monthly_limit_usd").notNull(),
+  alertAt80: boolean("alert_at_80").default(true).notNull(),
+  alertAt100: boolean("alert_at_100").default(true).notNull(),
+  lastAlertMonth: varchar("last_alert_month", { length: 7 }),
+  lastAlertLevel: integer("last_alert_level").default(0).notNull(),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_budgets_scope").on(table.scope, table.scopeKey),
+]);
+
+export type AiModel = typeof aiModels.$inferSelect;
+export type InsertAiModel = typeof aiModels.$inferInsert;
+export type AiFeatureConfig = typeof aiFeatureConfigs.$inferSelect;
+export type InsertAiFeatureConfig = typeof aiFeatureConfigs.$inferInsert;
+export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
+export type InsertAiUsageLog = typeof aiUsageLogs.$inferInsert;
+export type AiUsageDailyRow = typeof aiUsageDaily.$inferSelect;
+export type AiProviderHealthRow = typeof aiProviderHealth.$inferSelect;
+export type AiConfigAuditRow = typeof aiConfigAudit.$inferSelect;
+export type AiBudget = typeof aiBudgets.$inferSelect;
