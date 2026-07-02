@@ -992,6 +992,15 @@ export const navConfig: NavItem[] = [
         permissions: ["system.manage_settings"],
       },
       {
+        id: "sports_tournaments",
+        labelKey: "nav.sports_tournaments",
+        labelAr: "البطولات الرياضية",
+        path: "/dashboard/sports-tournaments",
+        icon: Trophy,
+        roles: ["admin"],
+        permissions: ["system.manage_settings"],
+      },
+      {
         id: "admin_tools",
         labelKey: "nav.admin_tools",
         labelAr: "أدوات الإدارة",
