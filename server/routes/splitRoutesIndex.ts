@@ -34,6 +34,7 @@ import { registerWalletRoutes } from "./wallet";
 import { registerWorldCupRoutes } from "./worldCup";
 import { registerAsianCupRoutes } from "./asianCup";
 import { registerGulfCupRoutes } from "./gulfCup";
+import { registerKingsCupRoutes } from "./kingsCup";
 import { registerSportsRoutes } from "./sports";
 import sportsTournamentsRouter from "./sportsTournaments";
 import { registerSportsLiveStreamRoutes } from "./sportsLiveStream";
@@ -91,6 +92,7 @@ export function registerSplitRoutes(app: Express) {
   registerWorldCupRoutes(app);
   registerAsianCupRoutes(app);
   registerGulfCupRoutes(app);
+  registerKingsCupRoutes(app);
   registerSportsRoutes(app);
   app.use(sportsTournamentsRouter);
   registerSportsLiveStreamRoutes(app);

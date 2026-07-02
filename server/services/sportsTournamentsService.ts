@@ -78,7 +78,7 @@ const SEED_TOURNAMENTS: InsertSportsTournament[] = [
     visibleApp: false,
     sortOrder: 20,
     season: 2026,
-    features: { bracket: true, scorers: true, predictions: true, teams: true, news: true },
+    features: { bracket: true, scorers: true, predictions: true, teams: true, news: true, entryPath: "/kings-cup" },
   },
   {
     slug: "super-cup",

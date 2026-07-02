@@ -768,6 +768,10 @@ app.use("/api", generalApiLimiter);
 app.use("/api", writeLimiter);
 // Anti-scraping read throttle scoped to the public World Cup feed (see above).
 app.use("/api/world-cup", worldCupReadLimiter);
+// Same anti-scraping throttle for the public King's Cup feed (also re-exposes
+// the paid API-Football feed verbatim). Reuses the same generous per-minute
+// limiter — genuine visitors are served from the CDN and never reach origin.
+app.use("/api/kings-cup", worldCupReadLimiter);
 
 // ============================================
 // APM (Application Performance Monitoring) Middleware
@@ -1868,6 +1872,19 @@ if (!(globalThis as any).__sabqServer) {
             startWorldCupNewsJob();
           } catch (error) {
             console.error("[Server] Error starting world cup news job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // أخبار كأس خادم الحرمين الشريفين: نفس نمط التسجيل الدائم وفحص القيادة
+      // داخل الدورة (kingsCupNewsJob). خلف KC_NEWS_ENABLED.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startKingsCupNewsJob } = await import("./jobs/kingsCupNewsJob");
+            startKingsCupNewsJob();
+          } catch (error) {
+            console.error("[Server] Error starting kings cup news job:", error);
           }
         }, BACKGROUND_JOB_DELAY);
       }

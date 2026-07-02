@@ -1536,4 +1536,53 @@ export function registerSportsRoutes(app: Express) {
       res.status(502).json({ message: "تعذر جلب لوحة المتصدّرين حاليًا" });
     }
   });
+
+  // ============================================================
+  // توقّعات طويلة المدى (البطل + الهدّاف) — نظير الويب لنقاط الموبايل
+  // (sportsPoolPredictionsService). ?comp=<slug> — البطل 5000 والهدّاف 5000،
+  // تُقفل عند بدء ربع النهائي. GET عام، POST يتطلّب جلسة ويب.
+  // ============================================================
+  app.get("/api/sports/predictions/long", async (req: any, res) => {
+    const comp = typeof req.query.comp === "string" ? req.query.comp.trim() : "";
+    if (!comp) {
+      res.status(400).json({ message: "البطولة مطلوبة" });
+      return;
+    }
+    try {
+      const svc = await import("../services/sportsPoolPredictionsService");
+      const data = await svc.getLongPredictions(comp, req.user?.id);
+      res.set("Cache-Control", req.user ? "private, no-store" : "public, max-age=60, s-maxage=120");
+      res.json(data);
+    } catch (error) {
+      console.error("[Sports] long predictions failed:", error);
+      res.status(502).json({ message: "تعذر جلب التوقّعات طويلة المدى حاليًا" });
+    }
+  });
+
+  app.post("/api/sports/predictions/long", requireAuth, async (req: any, res) => {
+    const { competitionSlug, kind, teamId, playerName } = req.body ?? {};
+    if (!competitionSlug || (kind !== "champion" && kind !== "top_scorer")) {
+      res.status(400).json({ message: "بيانات غير صحيحة" });
+      return;
+    }
+    try {
+      const svc = await import("../services/sportsPoolPredictionsService");
+      const result = await svc.submitLongPrediction(req.user.id, String(competitionSlug), kind, {
+        teamId: Number.isFinite(Number(teamId)) ? Number(teamId) : undefined,
+        playerName: playerName != null ? String(playerName) : undefined,
+      });
+      res.set("Cache-Control", "private, no-store");
+      if (!result.ok) {
+        const status = result.reason === "LOCKED" ? 409 : 400;
+        const message =
+          result.reason === "LOCKED" ? "أُقفلت التوقّعات — انطلقت البطولة" : "بيانات غير صحيحة";
+        res.status(status).json({ reason: result.reason, message });
+        return;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[Sports] submit long prediction failed:", error);
+      res.status(502).json({ message: "تعذر حفظ توقّعك حاليًا" });
+    }
+  });
 }

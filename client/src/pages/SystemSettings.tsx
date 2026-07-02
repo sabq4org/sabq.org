@@ -500,6 +500,16 @@ export default function SystemSettings() {
               iconBg="bg-sky-500/10"
               bgColor="bg-sky-50 dark:bg-card"
             />
+            <TournamentBlockCard
+              slug="kings-cup"
+              title="بلوك كأس خادم الحرمين الشريفين"
+              description="شريط كأس الملك (بطولة الأندية السعودية الإقصائية) في واجهة الويب — الإطفاء يخفيه فورًا، واضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
+              championLabel="بطل كأس الملك (تلقائي من النهائي أو يدوي)"
+              teamsEndpoint="/api/kings-cup/teams"
+              iconColor="text-amber-500"
+              iconBg="bg-amber-500/10"
+              bgColor="bg-amber-50 dark:bg-card"
+            />
           </div>
         </div>
 

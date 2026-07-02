@@ -362,6 +362,9 @@ const AsianCup = lazy(() => retryImport(() => import("@/pages/AsianCup")));
 const AsianCupPredictions = lazy(() => retryImport(() => import("@/pages/AsianCupPredictions")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
 const GulfCupPredictions = lazy(() => retryImport(() => import("@/pages/GulfCupPredictions")));
+const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
+const KingsCupTeam = lazy(() => retryImport(() => import("@/pages/KingsCupTeam")));
+const KingsCupPredictions = lazy(() => retryImport(() => import("@/pages/KingsCupPredictions")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
@@ -889,6 +892,10 @@ function Router() {
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         <Route path="/gulf-cup/predictions">{() => <LazyRoute component={GulfCupPredictions} />}</Route>
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
+
+        <Route path="/kings-cup/predictions">{() => <LazyRoute component={KingsCupPredictions} />}</Route>
+        <Route path="/kings-cup/team/:teamId">{() => <LazyRoute component={KingsCupTeam} />}</Route>
+        <Route path="/kings-cup">{() => <LazyRoute component={KingsCup} />}</Route>
         {/* هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية */}
         <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
         {/* بوابة رياضية متخصصة مطلوبة على /sports10 — قبل /sports/:id الأرشيفي */}
