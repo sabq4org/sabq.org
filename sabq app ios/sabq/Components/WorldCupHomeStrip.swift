@@ -90,7 +90,14 @@ struct WorldCupHomeStrip: View {
         // عندما لا تكون البيانات قد وصلت بعد — فخ Group+EmptyView المعروف.
         ZStack {
             Color.clear.frame(width: 0, height: 0)
-            if !matches.isEmpty {
+            // البطل (بعد حسم النهائي) يتقدّم على مربع المباراة — يبقي البانر
+            // حيًّا بعد انتهاء آخر مباراة حتى يُطفأ البلوك من لوحة التحكم.
+            if let champion = store.overview?.champion {
+                NavigationLink(value: WorldCupRoute()) {
+                    championCard(champion)
+                }
+                .buttonStyle(.plain)
+            } else if !matches.isEmpty {
                 NavigationLink(value: WorldCupRoute()) {
                     VStack(spacing: 10) {
                         ForEach(matches) { f in
@@ -202,6 +209,89 @@ struct WorldCupHomeStrip: View {
             .padding(3).frame(width: 32, height: 32)
             .background(Circle().fill(.white))
             .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 1))
+    }
+
+    /// بطاقة البطل — تحل محل مربع المباراة بعد حسم النهائي. سطر النتيجة
+    /// بصيغة «فاز على {الوصيف} W-L» الموحّدة (الفائز أولًا من الخادم).
+    private func championCard(_ c: WCChampion) -> some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 10) {
+                Image("WorldCupEmblem")
+                    .resizable().scaledToFit()
+                    .frame(height: 32)
+                    .padding(.horizontal, 6).padding(.vertical, 4)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white))
+                    .shadow(color: .black.opacity(0.20), radius: 5, y: 2)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("مونديال 2026")
+                        .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(.white)
+                        .lineLimit(1).minimumScaleFactor(0.8)
+                    Text("اكتملت البطولة")
+                        .font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.leaf)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(width: 126, alignment: .leading)
+
+            Spacer(minLength: 4)
+
+            HStack(spacing: 8) {
+                ZStack(alignment: .bottomLeading) {
+                    WCRemoteImage(url: c.team.logo)
+                        .padding(4).frame(width: 40, height: 40)
+                        .background(Circle().fill(.white))
+                        .overlay(Circle().stroke(WCTheme.gold.opacity(0.8), lineWidth: 1.5))
+                    Image(systemName: "trophy.fill")
+                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .foregroundStyle(WCTheme.gold)
+                        .shadow(color: .black.opacity(0.35), radius: 2)
+                        .offset(x: -4, y: 3)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("🏆 بطل كأس العالم 2026")
+                        .font(SabqFonts.app(size: 10, weight: .bold))
+                        .foregroundStyle(WCTheme.gold)
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                    Text(c.team.name)
+                        .font(SabqFonts.app(size: 18, weight: .black))
+                        .foregroundStyle(.white)
+                        .lineLimit(1).minimumScaleFactor(0.75)
+                    if let runnerUp = c.runnerUp, let score = c.score {
+                        Text("فاز على \(runnerUp.name) \(score)\(c.penalties.map { " (ركلات الترجيح \($0))" } ?? "")")
+                            .font(SabqFonts.app(size: 9, weight: .semibold))
+                            .foregroundStyle(WCTheme.leaf)
+                            .lineLimit(1).minimumScaleFactor(0.65)
+                    }
+                }
+            }
+
+            Spacer(minLength: 2)
+
+            Image(systemName: "chevron.left")
+                .font(SabqFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(.white.opacity(0.9))
+        }
+        .padding(.horizontal, 16).padding(.vertical, 13)
+        .background(
+            cardGradient
+                .overlay(alignment: .topLeading) {
+                    // توهّج ذهبي احتفالي بدل الأخضر — لحظة التتويج
+                    Circle()
+                        .fill(WCTheme.gold.opacity(0.22))
+                        .frame(width: 140, height: 140)
+                        .blur(radius: 50)
+                        .offset(x: -30, y: -50)
+                }
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(WCTheme.gold.opacity(0.35), lineWidth: 1)
+        )
+        .shadow(color: WCTheme.royal.opacity(0.30), radius: 14, x: 0, y: 7)
     }
 
     /// السطر الثاني تحت العنوان: «مباشر» عند البث، أو شعار التغطية.
