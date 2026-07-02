@@ -210,7 +210,18 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
   const { data: detail, isLoading } = useQuery<GcMatchDetail>({
     queryKey: [`/api/gulf-cup/match/${fixtureId}`],
     enabled: fixtureId != null,
-    refetchInterval: (query) => (query.state.data?.fixture.status.live ? 15_000 : false),
+    // الفتح يجلب دائمًا (staleTime العام 5 دقائق كان يعيد لقطة «قادمة» قديمة).
+    refetchOnMount: "always",
+    // حية → 15ث. حول الانطلاق (≤30د قبله وحتى ساعتين بعده إن ظلّت «لم تبدأ») →
+    // 25ث لالتقاط قادمة→مباشر — الصيغة القديمة كانت قفل جمود قبل الصافرة.
+    refetchInterval: (query) => {
+      const f = query.state.data?.fixture;
+      if (!f) return false;
+      if (f.status.live) return 15_000;
+      if (f.status.finished) return false;
+      const msToKickoff = f.timestamp * 1000 - Date.now();
+      return msToKickoff <= 30 * 60_000 && msToKickoff > -2 * 3_600_000 ? 25_000 : false;
+    },
     refetchIntervalInBackground: false,
   });
 

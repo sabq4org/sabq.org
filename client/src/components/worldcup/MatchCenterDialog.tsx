@@ -1366,8 +1366,21 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
   const { data: detail, isLoading } = useQuery<WcMatchDetail>({
     queryKey: [`/api/world-cup/match/${fixtureId}`],
     enabled: fixtureId != null,
-    // مباراة حية → 8ث لتطازج النتيجة اللحظية (الخادم يركّب نتيجة SportMonks الحيّة)
-    refetchInterval: (query) => (query.state.data?.fixture.status.live ? 8_000 : false),
+    // كاش staleTime العام 5 دقائق — إعادة فتح المركز حول الانطلاق كانت تعيد
+    // لقطة «قادمة» القديمة بلا جلب؛ الفتح يجلب دائمًا.
+    refetchOnMount: "always",
+    // حية → 8ث لتطازج النتيجة اللحظية. قبل الانطلاق (≤30د) وبعده ما دامت الحالة
+    // «لم تبدأ» (تأخّر المزوّد) → 25ث لالتقاط قادمة→مباشر. الصيغة القديمة
+    // (حية؟ 8ث : لا شيء) كانت قفل جمود: من يفتح المركز قبل الصافرة لا تنقلب
+    // حالته أبدًا لأن الانقلاب نفسه يحتاج جلبًا.
+    refetchInterval: (query) => {
+      const f = query.state.data?.fixture;
+      if (!f) return false;
+      if (f.status.live) return 8_000;
+      if (f.status.finished) return false;
+      const msToKickoff = f.timestamp * 1000 - Date.now();
+      return msToKickoff <= 30 * 60_000 && msToKickoff > -2 * 3_600_000 ? 25_000 : false;
+    },
   });
 
   const fixture = detail?.fixture;
