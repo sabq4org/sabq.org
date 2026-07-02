@@ -76,6 +76,21 @@ nonisolated struct WCMatchOfDay: Decodable, Hashable {
     let prediction: WCPrediction?
 }
 
+/// بطل البطولة بعد حسم النهائي (أو المعيَّن يدويًا من لوحة التحكم) — يظهر في
+/// بانر الرئيسية بدل مربع المباراة. النتائج بترتيب «الفائز أولًا» من الخادم
+/// (نفس اتفاقية الترجيح الموحّدة) فلا تنقلب بصريًّا في RTL.
+nonisolated struct WCChampion: Decodable, Hashable {
+    let team: WCTeam
+    let runnerUp: WCTeam?
+    /// نتيجة النهائي (W-L) — nil للتعيين اليدوي
+    let score: String?
+    /// نتيجة ركلات الترجيح (W-L) — nil إن حُسم النهائي دونها
+    let penalties: String?
+    let decidedAt: String?
+    /// "auto" (من نتيجة النهائي) أو "manual" (من اللوحة)
+    let source: String
+}
+
 nonisolated struct WCStandingRow: Decodable, Identifiable, Hashable {
     let rank: Int
     let team: WCTeam
@@ -142,6 +157,8 @@ nonisolated struct WCOverview: Decodable, Hashable {
     /// JSON نصّية دائمًا فنفكّها [String: …] ثم نبحث بالمعرّف عبر prediction(for:).
     /// optional حتى تبقى الاستجابات الأقدم (قبل #483) قابلة للفكّ.
     let predictions: [String: WCPrediction]?
+    /// بطل البطولة بعد حسم النهائي — optional للاستجابات الأقدم.
+    let champion: WCChampion?
 
     /// توقع مباراة بعينها من خريطة overview (إن أرسله الخادم).
     func prediction(for fixtureId: Int) -> WCPrediction? {

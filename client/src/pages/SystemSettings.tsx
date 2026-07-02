@@ -29,9 +29,11 @@ import {
   Megaphone,
   Bell,
   ToggleRight,
+  Trophy,
   Loader2
 } from "lucide-react";
 import { useIFoxBlockVisibility } from "@/hooks/useIFoxBlockVisibility";
+import { useWorldCupBlockSettings } from "@/hooks/useWorldCupBlockSettings";
 
 interface CelebrationModeState {
   enabled: boolean;
@@ -125,10 +127,18 @@ function FeatureToggleCard({
 export default function SystemSettings() {
   const { toast } = useToast();
   const { showIFoxBlock, setShowIFoxBlock } = useIFoxBlockVisibility();
+  const wcBlock = useWorldCupBlockSettings();
 
   const { data: announcement, isLoading } = useQuery<AnnouncementData>({
     queryKey: ["/api/system/announcement"],
   });
+
+  // قائمة منتخبات البطولة لخيار «تعيين البطل يدويًا» — كاش طويل، القائمة ثابتة
+  const { data: wcTeamsData } = useQuery<{ teams: { id: number; name: string }[] }>({
+    queryKey: ["/api/world-cup/teams"],
+    staleTime: 10 * 60 * 1000,
+  });
+  const wcTeams = Array.isArray(wcTeamsData?.teams) ? wcTeamsData.teams : [];
 
   const { data: celebrationMode } = useQuery<CelebrationModeState>({
     queryKey: ["/api/celebration-mode"],
@@ -299,7 +309,7 @@ export default function SystemSettings() {
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="gap-1.5">
                   <ToggleRight className="h-3.5 w-3.5" />
-                  {(celebrationMode?.enabled ? 1 : 0) + (showIFoxBlock ? 1 : 0)} مميزات نشطة
+                  {(celebrationMode?.enabled ? 1 : 0) + (showIFoxBlock ? 1 : 0) + (wcBlock.visible ? 1 : 0)} مميزات نشطة
                 </Badge>
               </div>
             </div>
@@ -320,6 +330,53 @@ export default function SystemSettings() {
               testId="switch-ifox-visibility"
               bgColor="bg-violet-50 dark:bg-card"
             />
+            <FeatureToggleCard
+              title="بلوك كأس العالم"
+              description="شريط المونديال في واجهة الويب وبانر تطبيقَي iOS وأندرويد — الإطفاء يخفيه عند الجميع فورًا دون رفع تحديث للمتاجر"
+              enabled={wcBlock.visible}
+              onToggle={wcBlock.setVisible}
+              isPending={wcBlock.isSaving}
+              icon={Trophy}
+              iconColorEnabled="text-emerald-500"
+              testId="switch-worldcup-visibility"
+              bgColor="bg-emerald-50 dark:bg-card"
+            />
+            <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
+              <CardContent className="pt-6">
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-amber-500/10">
+                      <Trophy className="h-6 w-6 text-amber-500" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="font-semibold text-foreground">بطل كأس العالم</p>
+                      <p className="text-sm text-muted-foreground leading-relaxed max-w-md">
+                        يُكتشف تلقائيًا من نتيجة النهائي ويظهر في البلوك بدل مربع المباراة.
+                        التعيين اليدوي احتياط فقط إن تأخر المزوّد أو أخطأ.
+                      </p>
+                    </div>
+                  </div>
+                  <Select
+                    value={wcBlock.manualChampionTeamId ? String(wcBlock.manualChampionTeamId) : "auto"}
+                    onValueChange={(v) =>
+                      wcBlock.setManualChampionTeamId(v === "auto" ? null : Number(v))
+                    }
+                  >
+                    <SelectTrigger data-testid="select-worldcup-champion">
+                      <SelectValue placeholder="تلقائي (من نتيجة النهائي)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="auto">تلقائي (من نتيجة النهائي)</SelectItem>
+                      {wcTeams.map((t) => (
+                        <SelectItem key={t.id} value={String(t.id)}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
 

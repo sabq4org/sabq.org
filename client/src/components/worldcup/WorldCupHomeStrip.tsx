@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ChevronLeft, Radio } from "lucide-react";
+import { ChevronLeft, Radio, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
@@ -9,6 +9,7 @@ import {
   countdownTo,
   formatKickoffDay,
   formatKickoffTime,
+  type WcChampion,
   type WcFixture,
   type WcOverview,
 } from "./wcTypes";
@@ -132,6 +133,50 @@ function MatchBlock({ fixture }: { fixture: WcFixture }) {
   );
 }
 
+// بطاقة البطل — تحل محل مربع المباراة بعد حسم النهائي (أو بالتعيين اليدوي).
+// النتائج بترتيب «الفائز أولًا» من الخادم فلا تنقلب بصريًّا في RTL.
+function ChampionBlock({ champion }: { champion: WcChampion }) {
+  return (
+    <div className="flex items-center justify-center gap-4 min-w-0" data-testid="wc-champion-block">
+      <span className="relative h-14 w-14 shrink-0 rounded-full bg-white p-1.5 ring-2 ring-amber-300/70 shadow-lg">
+        <img
+          src={champion.team.logo}
+          alt={champion.team.name}
+          className="h-full w-full object-contain"
+          loading="lazy"
+        />
+        <Trophy className="absolute -bottom-1 -left-1 h-5 w-5 text-amber-300 drop-shadow" />
+      </span>
+      <div className="text-right min-w-0">
+        <p className="text-[11px] font-bold text-amber-300/90 leading-tight">
+          🏆 بطل كأس العالم 2026
+        </p>
+        <p className="text-2xl font-black text-white leading-tight truncate">
+          {champion.team.name}
+        </p>
+        {champion.runnerUp && champion.score && (
+          <p className="text-[11px] text-emerald-200/90">
+            فاز على {champion.runnerUp.name} في النهائي{" "}
+            <span dir="ltr" className="font-black text-emerald-300 tabular-nums">
+              {champion.score}
+            </span>
+            {champion.penalties && (
+              <>
+                {" "}
+                (بركلات الترجيح{" "}
+                <span dir="ltr" className="font-black text-emerald-300 tabular-nums">
+                  {champion.penalties}
+                </span>
+                )
+              </>
+            )}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function WorldCupHomeStrip() {
   const { data } = useQuery<WcOverview>({
     queryKey: ["/api/world-cup/overview"],
@@ -148,7 +193,10 @@ export default function WorldCupHomeStrip() {
   });
 
   const fixture = data?.matchOfTheDay?.fixture ?? null;
-  if (!fixture) return null;
+  const champion = data?.champion ?? null;
+  // المفتاح في اللوحة مُطفأ → لا أثر للبلوك؛ والبطل (بعد النهائي) يُبقي
+  // الشريط حيًّا حتى بعد انتهاء آخر مباراة
+  if (data?.hidden || (!fixture && !champion)) return null;
 
   // المباريات المتزامنة: مباراتان (أو أكثر) تجريان الآن، أو قادمتان تنطلقان في
   // التوقيت نفسه (ختام دور المجموعات). الشقيقات تأتي من الخادم (matchOfDayPeers)
@@ -156,7 +204,7 @@ export default function WorldCupHomeStrip() {
   const peers = Array.isArray(data?.matchOfDayPeers) ? data.matchOfDayPeers : [];
   const liveMatches = Array.isArray(data?.live) ? data.live.filter((f) => f.status.live) : [];
   const upcomingGroup =
-    !fixture.status.live && !fixture.status.finished
+    fixture && !fixture.status.live && !fixture.status.finished
       ? [
           fixture,
           ...peers.filter(
@@ -169,11 +217,13 @@ export default function WorldCupHomeStrip() {
         ]
       : [];
   const multi = liveMatches.length >= 2 || upcomingGroup.length >= 2;
-  const matches = !multi
-    ? [fixture]
-    : liveMatches.length >= 2
-      ? liveMatches
-      : upcomingGroup;
+  const matches = !fixture
+    ? []
+    : !multi
+      ? [fixture]
+      : liveMatches.length >= 2
+        ? liveMatches
+        : upcomingGroup;
 
   return (
     <section
@@ -210,21 +260,27 @@ export default function WorldCupHomeStrip() {
               <span className="block text-lg font-black text-white leading-tight group-hover:text-emerald-300 transition-colors">
                 مونديال 2026
               </span>
-              <span className="block text-[11px] text-emerald-200/80">تغطية حية بتوقيت الرياض</span>
+              <span className="block text-[11px] text-emerald-200/80">
+                {champion ? "اكتملت البطولة" : "تغطية حية بتوقيت الرياض"}
+              </span>
             </span>
           </span>
         </Link>
 
         <div className="hidden md:block h-12 w-px bg-white/10 shrink-0" />
 
-        {/* المباراة — أو مباراتان متجاورتان عند التزامن */}
+        {/* البطل بعد حسم النهائي — وإلا المباراة (أو مباريات متزامنة) */}
         <div className="flex-1 flex flex-wrap items-center justify-center gap-3 sm:gap-6 min-w-0">
-          {matches.map((f, i) => (
-            <Fragment key={f.id}>
-              {i > 0 && <div className="hidden sm:block h-12 w-px bg-white/10 shrink-0" />}
-              <MatchBlock fixture={f} />
-            </Fragment>
-          ))}
+          {champion ? (
+            <ChampionBlock champion={champion} />
+          ) : (
+            matches.map((f, i) => (
+              <Fragment key={f.id}>
+                {i > 0 && <div className="hidden sm:block h-12 w-px bg-white/10 shrink-0" />}
+                <MatchBlock fixture={f} />
+              </Fragment>
+            ))
+          )}
         </div>
 
         {/* الدعوة للقسم */}

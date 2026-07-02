@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.worldcup
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
@@ -111,6 +112,8 @@ data class WcStandingRow(
     val goalsDiff: Int = 0,
     val points: Int = 0,
     val form: String? = null,
+    // حالة التأهّل من الخادم (qualified/eliminated/…): تُستخدم لشارة حالة المنتخب.
+    val qualifyStatus: String? = null,
 )
 
 @Serializable
@@ -127,12 +130,32 @@ data class WcSaudi(
     val group: WcGroup? = null,
 )
 
+/**
+ * بطل البطولة بعد حسم النهائي (أو المعيَّن يدويًا من لوحة التحكم) — يظهر في
+ * بانر الرئيسية بدل مربع المباراة. النتائج بترتيب «الفائز أولًا» من الخادم
+ * (نفس اتفاقية الترجيح الموحّدة) فلا تنقلب بصريًّا في RTL.
+ */
+@Serializable
+data class WcChampion(
+    val team: WcTeam = WcTeam(),
+    val runnerUp: WcTeam? = null,
+    /** نتيجة النهائي (W-L) — null للتعيين اليدوي */
+    val score: String? = null,
+    /** نتيجة ركلات الترجيح (W-L) — null إن حُسم النهائي دونها */
+    val penalties: String? = null,
+    val decidedAt: String? = null,
+    /** "auto" (من نتيجة النهائي) أو "manual" (من اللوحة) */
+    val source: String = "auto",
+)
+
 @Serializable
 data class WcOverview(
     val live: List<WcFixture> = emptyList(),
     val today: List<WcFixture> = emptyList(),
     val matchOfTheDay: WcMatchOfDay? = null,
     val saudi: WcSaudi = WcSaudi(),
+    /** بطل البطولة بعد حسم النهائي — null قبل ذلك */
+    val champion: WcChampion? = null,
     val updatedAt: String = "",
 )
 
@@ -717,6 +740,101 @@ data class WcPredictionSubmitBody(
     val predHome: Int,
     val predAway: Int,
 )
+
+// ---------- توقّعات البطولة (البطل + الهدّاف) — /api/v1/world-cup/predictions/long ----------
+// مرآة لأنواع iOS (WCLongData …). البطل مرجّح بوزن المبادر (يُغلق عند نصف النهائي)
+// والهدّاف يُقسَّم بالتساوي (يُغلق عند ربع النهائي).
+
+@Serializable
+data class WcLongTeam(
+    val id: Int = 0,
+    val name: String = "",
+    val logo: String = "",
+    val eliminated: Boolean = false,
+)
+
+@Serializable
+data class WcLongScorerTeam(
+    val name: String = "",
+    val logo: String = "",
+)
+
+@Serializable
+data class WcLongScorer(
+    val id: Int = 0,
+    val name: String = "",
+    val photo: String = "",
+    val team: WcLongScorerTeam = WcLongScorerTeam(),
+    val goals: Int = 0,
+    val eliminated: Boolean = false,
+)
+
+@Serializable
+data class WcLongMine(
+    val kind: String = "",          // champion | top_scorer
+    val teamId: Int? = null,
+    val teamName: String? = null,
+    val teamLogo: String? = null,
+    val playerId: Int? = null,
+    val playerName: String? = null,
+    val playerPhoto: String? = null,
+    val weight: Int = 0,
+    val status: String = "pending", // pending | correct | incorrect
+    val pointsAwarded: Int = 0,
+)
+
+@Serializable
+data class WcLongChampionVote(
+    val teamId: Int? = null,
+    val n: Int = 0,
+    val w: Int = 0,
+)
+
+@Serializable
+data class WcLongChampionState(
+    val open: Boolean = false,
+    val weight: Int? = null,
+    val stage: String = "",         // r32 | r16 | qf | closed
+    val votes: List<WcLongChampionVote> = emptyList(),
+)
+
+@Serializable
+data class WcLongScorerVote(
+    val playerId: Int? = null,
+    val n: Int = 0,
+)
+
+@Serializable
+data class WcLongScorerState(
+    val open: Boolean = false,
+    val votes: List<WcLongScorerVote> = emptyList(),
+)
+
+@Serializable
+data class WcLongPools(
+    val champion: Int = 0,
+    @SerialName("top_scorer") val topScorer: Int = 0,
+)
+
+@Serializable
+data class WcLongData(
+    val pools: WcLongPools = WcLongPools(),
+    val teams: List<WcLongTeam> = emptyList(),
+    val scorers: List<WcLongScorer> = emptyList(),
+    val champion: WcLongChampionState = WcLongChampionState(),
+    val topScorer: WcLongScorerState = WcLongScorerState(),
+    val mine: List<WcLongMine> = emptyList(),
+)
+
+@Serializable
+data class WcLongSubmitBody(
+    val kind: String,
+    val teamId: Int? = null,
+    val playerId: Int? = null,
+)
+
+@Serializable
+data class WcLongSubmitResponse(val ok: Boolean = false)
 
 // ---------- المتابعة + تنبيهات المباريات (/api/v1/sports/*) ----------
 

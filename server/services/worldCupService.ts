@@ -2800,6 +2800,88 @@ const STAR_WEIGHT: Record<number, number> = {
 const starWeight = (fixture: WcFixture): number =>
   (STAR_WEIGHT[fixture.home.id] ?? 1) + (STAR_WEIGHT[fixture.away.id] ?? 1);
 
+/** بطل البطولة — يظهر في بلوك الواجهة بدل مربع المباراة بعد حسم النهائي */
+export interface WcChampion {
+  team: WcTeam;
+  runnerUp: WcTeam | null;
+  /** نتيجة النهائي بترتيب «الفائز أولًا» (W-L) — نفس اتفاقية الترجيح الموحّدة */
+  score: string | null;
+  /** نتيجة ركلات الترجيح بترتيب «الفائز أولًا» — null إن حُسم النهائي دونها */
+  penalties: string | null;
+  decidedAt: string | null;
+  source: "auto" | "manual";
+}
+
+/**
+ * كشف بطل المونديال من مباراة النهائي المنتهية. الفائز يُحسم بعلم المزوّد
+ * (team.winner) أولًا، ثم بالترجيح، ثم بالأهداف — المزوّد قد يترك winner
+ * فارغًا في مباريات الترجيح. «3rd Place Final» لا تبدأ بـFinal فلا تُلتقط خطأً.
+ */
+export function detectChampion(fixtures: WcFixture[]): WcChampion | null {
+  const final = fixtures.find(
+    (f) => (f.roundEn ?? "").trim().startsWith("Final") && f.status.finished
+  );
+  if (!final) return null;
+
+  const pen = final.penalties;
+  let winnerSide: "home" | "away" | null = null;
+  if (final.home.winner === true) winnerSide = "home";
+  else if (final.away.winner === true) winnerSide = "away";
+  else if (pen && pen.home != null && pen.away != null && pen.home !== pen.away)
+    winnerSide = pen.home > pen.away ? "home" : "away";
+  else if (
+    final.goals.home != null &&
+    final.goals.away != null &&
+    final.goals.home !== final.goals.away
+  )
+    winnerSide = final.goals.home > final.goals.away ? "home" : "away";
+  if (!winnerSide) return null;
+
+  const winner = winnerSide === "home" ? final.home : final.away;
+  const loser = winnerSide === "home" ? final.away : final.home;
+  const winnerGoals = winnerSide === "home" ? final.goals.home : final.goals.away;
+  const loserGoals = winnerSide === "home" ? final.goals.away : final.goals.home;
+  const score =
+    winnerGoals != null && loserGoals != null ? `${winnerGoals}-${loserGoals}` : null;
+  const penalties =
+    pen && pen.home != null && pen.away != null
+      ? winnerSide === "home"
+        ? `${pen.home}-${pen.away}`
+        : `${pen.away}-${pen.home}`
+      : null;
+
+  return {
+    team: winner,
+    runnerUp: loser,
+    score,
+    penalties,
+    decidedAt: final.date ?? null,
+    source: "auto",
+  };
+}
+
+/**
+ * بطل مُعيَّن يدويًا من لوحة التحكم (احتياط تأخّر/خطأ المزوّد) — يُبنى من
+ * بيانات المنتخب (الاسم المعرّب + الشعار) في أي مباراة خاضها بالبطولة.
+ */
+export async function getManualChampion(teamId: number): Promise<WcChampion | null> {
+  const fixtures = await getFixtures().catch(() => [] as WcFixture[]);
+  for (const f of fixtures) {
+    const team = f.home.id === teamId ? f.home : f.away.id === teamId ? f.away : null;
+    if (team) {
+      return {
+        team,
+        runnerUp: null,
+        score: null,
+        penalties: null,
+        decidedAt: null,
+        source: "manual",
+      };
+    }
+  }
+  return null;
+}
+
 export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
@@ -2815,6 +2897,8 @@ export interface WcOverview {
     fixtures: WcFixture[];
     group: WcGroup | null;
   };
+  /** بطل البطولة بعد حسم النهائي — الواجهات تعرضه بدل مربع المباراة */
+  champion: WcChampion | null;
   updatedAt: string;
 }
 
@@ -2893,6 +2977,7 @@ export async function getOverview(): Promise<WcOverview> {
     matchOfDayPeers: motdPeers,
     predictions,
     saudi: { next: saudiNext, fixtures: saudiFixtures, group: saudiGroup },
+    champion: detectChampion(fixtures),
     updatedAt: new Date().toISOString(),
   };
 }
