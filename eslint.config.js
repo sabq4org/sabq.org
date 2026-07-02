@@ -97,6 +97,32 @@ export default tseslint.config(
     rules: { "max-lines": ["error", { max: 21240 }] },
   },
   {
+    // AI Hub (issue #589, Phase 3): every AI call goes through
+    // server/ai/gateway (aiGateway.complete/embed/generateImage/tts) so it
+    // gets usage tracking, cost accounting, and automatic failover. Direct
+    // SDK clients bypass all of that. WARN while the wave-by-wave migration
+    // is in flight — flip to "error" once the last consumer is migrated.
+    files: ["server/**/*.ts"],
+    ignores: ["server/ai/gateway/**"],
+    rules: {
+      "no-restricted-syntax": [
+        "warn",
+        {
+          selector: "NewExpression[callee.name='OpenAI']",
+          message: "Use aiGateway (server/ai/gateway) instead of a direct OpenAI client — see issue #589.",
+        },
+        {
+          selector: "NewExpression[callee.name='Anthropic']",
+          message: "Use aiGateway (server/ai/gateway) instead of a direct Anthropic client — see issue #589.",
+        },
+        {
+          selector: "NewExpression[callee.name='GoogleGenerativeAI']",
+          message: "Use aiGateway (server/ai/gateway) instead of a direct Gemini client — see issue #589.",
+        },
+      ],
+    },
+  },
+  {
     // ADR-001 (docs/architecture/ADR-001-data-access-layer.md): route modules
     // are HTTP-only. Drizzle queries belong in server/services/<feature>.ts;
     // routes call the service. The `ignores` list below is the 46 legacy

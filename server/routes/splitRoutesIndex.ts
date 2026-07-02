@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { aiHubRouter } from "./aiHub";
 import systemSettingsRouter from "./systemSettings";
 import adminActivityLogsRouter from "./adminActivityLogs";
 import keywordFollowingRouter from "./keywordFollowing";
@@ -56,6 +57,7 @@ import keywordRouter from "./keywordRoutes";
  */
 export function registerSplitRoutes(app: Express) {
   app.use(systemSettingsRouter);
+  app.use(aiHubRouter);
   app.use(adminActivityLogsRouter);
   app.use(keywordFollowingRouter);
   app.use(interestsRouter);
