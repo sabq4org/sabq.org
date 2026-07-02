@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import asianCupLogo from "@assets/asian-cup-2027-logo.png";
 import CupHomeStrip, {
   type CupChampion,
   type CupFixture,
@@ -53,6 +54,8 @@ export default function AsianCupHomeSection() {
       theme={ASIAN_THEME}
       fixture={data.nextMatch ?? null}
       champion={data.champion ?? null}
+      emblemSrc={asianCupLogo}
+      emblemAlt="شعار كأس آسيا AFC 2027 الرسمي"
     />
   );
 }
