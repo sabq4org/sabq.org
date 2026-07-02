@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Sparkles } from "lucide-react";
+import gulfCupLogoHorizontal from "@assets/gulf-cup-27-logo-horizontal.svg";
 
 /**
  * شريط تنقّل داخلي لاصق أسفل الهيرو — قفزات سلسة لأقسام الصفحة + زر
@@ -27,6 +28,15 @@ export function GcSectionNav() {
       className="sticky top-0 z-30 border-b border-emerald-900/20 bg-[#03241a]/95 backdrop-blur supports-[backdrop-filter]:bg-[#03241a]/85"
     >
       <div className="container max-w-6xl mx-auto flex items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
+        {/* الشعار الرسمي مصغّرًا على رقعة بيضاء — مرجع بصري ثابت أثناء التمرير */}
+        <span className="ml-1 hidden shrink-0 rounded-lg bg-white px-1.5 py-1 shadow sm:block">
+          <img
+            src={gulfCupLogoHorizontal}
+            alt="خليجي 27"
+            className="h-6 w-auto object-contain"
+            loading="lazy"
+          />
+        </span>
         {SECTIONS.map((s) => (
           <button
             key={s.id}
