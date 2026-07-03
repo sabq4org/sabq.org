@@ -15,7 +15,7 @@ import { getFixtureIdentity, type WcFixtureIdentity } from "./worldCupService";
 import { translateCommentaries, type SmCommentary } from "./worldCupCommentaryTranslator";
 
 const SM_BASE = "https://api.sportmonks.com/v3/football";
-const WC_LEAGUE_ID = 732; // World Cup عند SportMonks
+export const WC_LEAGUE_ID = 732; // World Cup عند SportMonks
 
 // إيقاعات الكاش — الحيّ يتجدد بالثواني، والمنتهي ثابت
 const SM_LIVE_TTL = 20 * 1000;
@@ -807,6 +807,76 @@ export async function getExpectedLineups(
   return withSWR(`wc:explineup:${r.smId}`, CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, () =>
     buildExpectedLineups(r.smId)
   );
+}
+
+// ---------- تشكيلة الجولة (Team of the Week) ----------
+
+export interface WcTotwPlayer {
+  name: string;
+  photo: string | null;
+  teamName: string;
+  teamLogo: string | null;
+  rating: number;
+  /** خانة اللاعب 1..11 (1 = الحارس) */
+  slot: number;
+  /** صف الخطة (1 = الحارس) — يُشتق من الخانة وشكل الخطة */
+  row: number;
+}
+
+export interface WcTeamOfTheWeek {
+  available: boolean;
+  formation: string | null;
+  players: WcTotwPlayer[];
+}
+
+const EMPTY_TOTW: WcTeamOfTheWeek = { available: false, formation: null, players: [] };
+
+/** يوزّع الخانات 1..11 على صفوف الخطة ("4-2-3-1" → حارس ثم 4 صفوف) */
+function totwRowOfSlot(slot: number, formation: string | null): number {
+  if (slot <= 1) return 1;
+  const parts = (formation || "")
+    .split("-")
+    .map((n) => parseInt(n, 10))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  let start = 2;
+  for (let i = 0; i < parts.length; i++) {
+    if (slot < start + parts[i]) return i + 2;
+    start += parts[i];
+  }
+  return parts.length + 1;
+}
+
+/**
+ * تشكيلة الجولة لبطولة (الأعلى تقييمًا في آخر جولة مكتملة).
+ * تتجدد مرة لكل جولة — كاش طويل. أفضل جهد: أي غياب → { available:false }.
+ */
+export async function getTeamOfTheWeek(leagueId: number): Promise<WcTeamOfTheWeek> {
+  if (!isSportmonksConfigured()) return EMPTY_TOTW;
+  return withSWR(`sm:totw:${leagueId}`, CACHE_TTL.VERY_LONG, CACHE_TTL.VERY_LONG * 6, async () => {
+    const data = await smGet(`team-of-the-week/leagues/${leagueId}/latest`, {
+      include: "player;team",
+    });
+    const rows: any[] = Array.isArray(data?.data) ? data.data : [];
+    if (!rows.length) return EMPTY_TOTW;
+    const formation = typeof rows[0]?.formation === "string" ? rows[0].formation : null;
+    const players: WcTotwPlayer[] = rows
+      .map((r: any) => {
+        const slot = Number(r?.formation_position) || 0;
+        return {
+          name: String(r?.player?.display_name || r?.player?.name || "").trim(),
+          photo: r?.player?.image_path ?? null,
+          teamName: String(r?.team?.name || "").trim(),
+          teamLogo: r?.team?.image_path ?? null,
+          rating: Math.round(Number(r?.rating || 0) * 100) / 100,
+          slot,
+          row: totwRowOfSlot(slot, formation),
+        };
+      })
+      .filter((p: WcTotwPlayer) => p.name && p.slot > 0)
+      .sort((a: WcTotwPlayer, b: WcTotwPlayer) => a.slot - b.slot);
+    if (!players.length) return EMPTY_TOTW;
+    return { available: true, formation, players };
+  });
 }
 
 // ---------- معطيات المباراة: إحصائيات + طقس + غيابات (Match Facts) ----------

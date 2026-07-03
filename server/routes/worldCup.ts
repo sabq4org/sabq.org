@@ -48,9 +48,11 @@ import {
   getMatchFacts,
   getXg,
   getExpectedLineups,
+  getTeamOfTheWeek,
   getLiveScore,
   getPlayerForm,
   isSportmonksConfigured,
+  WC_LEAGUE_ID as SM_WC_LEAGUE_ID,
 } from "../services/sportmonksService";
 import {
   getTheSportsFastScore,
@@ -700,6 +702,31 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[WorldCup] xg ${fixtureId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب xG حاليًا", available: false });
+    }
+  });
+
+  // تشكيلة الجولة (SportMonks Team of the Week) — الأعلى تقييمًا في آخر جولة.
+  app.get("/api/world-cup/totw", async (_req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({ configured: false, available: false });
+    }
+    try {
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getTeamOfTheWeek(SM_WC_LEAGUE_ID));
+      if (data.available) {
+        const tr = await resolveNames(
+          data.players.flatMap((p) => [p.name, p.teamName])
+        );
+        for (const p of data.players) {
+          p.name = tr(p.name);
+          p.teamName = tr(p.teamName);
+        }
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error("[WorldCup] totw failed:", error);
+      res.status(502).json({ message: "تعذر جلب تشكيلة الجولة حاليًا", available: false });
     }
   });
 

@@ -249,6 +249,23 @@ export interface WcExpectedLineups {
   away: WcExpectedLineupSide | null;
 }
 
+// تشكيلة الجولة (SportMonks Team of the Week)
+export interface WcTotwPlayer {
+  name: string;
+  photo: string | null;
+  teamName: string;
+  teamLogo: string | null;
+  rating: number;
+  slot: number;
+  row: number;
+}
+
+export interface WcTeamOfTheWeek {
+  available: boolean;
+  formation: string | null;
+  players: WcTotwPlayer[];
+}
+
 export interface WcStatistic {
   key: string;
   label: string;
