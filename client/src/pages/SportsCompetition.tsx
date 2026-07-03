@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { TeamOfTheWeekSection } from "@/components/worldcup/TeamOfTheWeekSection";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import {
@@ -324,11 +325,18 @@ function ScorersPane({ slug }: { slug: string }) {
   if (isLoading) return <TabLoader />;
   if (rows.length === 0) return <TabEmpty text="لا تتوفّر قائمة هدّافين لهذه البطولة." />;
   return (
-    <PodiumCard
-      entries={rows.map((s) => ({ rank: s.rank, id: s.id, name: s.name, photo: s.photo, team: s.team, primary: s.goals, secondary: s.assists }))}
-      primaryLabel="عدد الأهداف"
-      secondaryLabel="الصناعة"
-    />
+    <>
+      <PodiumCard
+        entries={rows.map((s) => ({ rank: s.rank, id: s.id, name: s.name, photo: s.photo, team: s.team, primary: s.goals, secondary: s.assists }))}
+        primaryLabel="عدد الأهداف"
+        secondaryLabel="الصناعة"
+      />
+      {/* تشكيلة الجولة (SportMonks) — تظهر فقط للبطولات المغطاة وعند توفر جولة */}
+      <TeamOfTheWeekSection
+        endpoint={`/api/sports/${slug}/totw`}
+        subtitle="الأعلى تقييمًا في آخر جولة"
+      />
+    </>
   );
 }
 
