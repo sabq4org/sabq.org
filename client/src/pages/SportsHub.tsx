@@ -68,6 +68,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCacheBustedImageUrl, getObjectPosition } from "@/lib/imageUtils";
+import { SmartMatchCardView } from "@/components/sportsIntel/SmartMatchCardView";
 import type { ArticleWithDetails, Category } from "@shared/schema";
 
 // ============================================================
@@ -2237,6 +2238,12 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
         )}
         <div className={`${scrollable ? "flex-1 min-h-0 overflow-y-auto overscroll-contain " : ""}p-4 lg:p-6`}>
           {isLoading && <div className="py-10 text-center text-muted-foreground text-sm">جارٍ تحميل التفاصيل…</div>}
+          {/* بطاقة المباراة الذكية (قبل/أثناء/بعد) — موحّدة عبر كل البطولات */}
+          {id != null && (
+            <div className="mb-4">
+              <SmartMatchCardView fixtureId={id} />
+            </div>
+          )}
           {!isLoading && activeKey === "events" && (() => {
             // ترتيب تنازلي (الأحدث أعلى)، ومطابقة تفصيل SportMonks (طريقة الهدف/سبب البطاقة/VAR).
             const sorted = [...events].sort(

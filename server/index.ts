@@ -1927,6 +1927,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // محرّك الذكاء الرياضي: قارئ المشهد + قصص الموسم. تسجيل دائم وفحص القيادة
+      // داخل الدورة، خلف SPORTS_INTEL_ENABLED (مُطفأ افتراضياً) + مفتاح API.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsSceneJob } = await import("./jobs/sportsSceneJob");
+            startSportsSceneJob();
+          } catch (error) {
+            console.error("[Server] Error starting sports intelligence job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // تسوية توقّعات كأس آسيا الذكية: نفس نمط المونديال — تسجيل دائم وفحص
       // القيادة داخل الدورة، يمنح كل مستخدم نقاطه المهاريّة فور انتهاء المباراة.
       if (enableBackgroundWorkers) {

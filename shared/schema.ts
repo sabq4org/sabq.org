@@ -2965,6 +2965,39 @@ export const sportsAlertPrefs = pgTable("sports_alert_prefs", {
 export type SportsAlertPref = typeof sportsAlertPrefs.$inferSelect;
 export type InsertSportsAlertPref = typeof sportsAlertPrefs.$inferInsert;
 
+// محرّك الذكاء الرياضي (Sabq Sports Intelligence) — «التقاطات» يولّدها الـAI من
+// المشهد الرياضي الحيّ ويخزّنها لتقدَّم جاهزة للواجهة (لا توليد لكل طلب).
+//   scope: نطاق اللقطة — global (المشهد العام) | competition | match | user (موجز مخصّص).
+//   refId: المعرّف داخل النطاق (competitionSlug أو fixtureId أو userId؛ "global" للعام).
+//   kind: نوع اللقطة (scene | pressure | streak | anomaly | prediction | digest | preview | live | post ...).
+//   importance: 0-100 لترتيب العرض (كلّما أعلى كان أبرز).
+//   sourceStats: الأرقام المُحقونة التي بُنيت عليها اللقطة (تأريض + تدقيق + منع الاختلاق).
+//   ttlAt: متى تصير اللقطة بائتة (تُنظَّف/تُتجاهل بعده). dedupeKey: مفتاح حتمي لمنع التكرار.
+export const sportsInsights = pgTable("sports_insights", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scope: text("scope").notNull(),
+  refId: text("ref_id").notNull(),
+  competitionSlug: text("competition_slug"),
+  kind: text("kind").notNull(),
+  importance: integer("importance").default(50).notNull(),
+  headline: text("headline").notNull(),
+  body: text("body").notNull(),
+  entities: jsonb("entities"),
+  sourceStats: jsonb("source_stats"),
+  lang: text("lang").default("ar").notNull(),
+  dedupeKey: text("dedupe_key"),
+  ttlAt: timestamp("ttl_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_insights_dedupe").on(table.dedupeKey),
+  index("idx_sports_insights_scope").on(table.scope, table.refId, table.importance.desc()),
+  index("idx_sports_insights_comp").on(table.competitionSlug, table.createdAt.desc()),
+  index("idx_sports_insights_ttl").on(table.ttlAt),
+]);
+
+export type SportsInsight = typeof sportsInsights.$inferSelect;
+export type InsertSportsInsight = typeof sportsInsights.$inferInsert;
+
 // Sports predictions — توقّع المستخدم لنتيجة مباراة (المرحلة 4 — المجتمع).
 // توقّع واحد لكل (مستخدم، مباراة)؛ يُقفل التعديل عند انطلاق المباراة. النقاط:
 // نتيجة مطابقة تمامًا = 3، اتجاه صحيح (فوز/تعادل/خسارة) = 1، خطأ = 0.

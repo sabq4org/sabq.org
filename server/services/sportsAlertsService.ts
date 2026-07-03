@@ -139,6 +139,30 @@ const tsEventSig = (e: TsEvent): string => {
 
 const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?? 0}`;
 
+// «تنبيه ذكي» = الحدث + لماذا يهمّ. نحسب سياق النتيجة حتمياً من المباراة نفسها
+// (بلا نداء API ولا LLM في المسار الحسّاس — التزاماً بضوابط كلفة/كمون المحرّك):
+// حسم متأخّر، فوز عريض، تعادل مثير... جملةٌ قصيرة تُضاف لجسم الإشعار.
+function resultContext(m: SplLiveBoardItem): string | null {
+  const gh = m.goals.home ?? 0;
+  const ga = m.goals.away ?? 0;
+  const total = gh + ga;
+  const diff = Math.abs(gh - ga);
+  const winner = gh > ga ? m.home.name : ga > gh ? m.away.name : null;
+  if (winner && diff >= 3) return `فوز عريض لـ${winner}`;
+  if (!winner && total >= 4) return "تعادل مثير غزير الأهداف";
+  if (!winner && total >= 2) return "تعادل يقسّم النقاط";
+  if (winner && diff === 1) return `${winner} يخطف الفوز بفارق هدف`;
+  if (winner) return `فوز مستحقّ لـ${winner}`;
+  return null;
+}
+
+// سياق الهدف: هل جاء في الوقت القاتل؟ (يرفع أهمية الإشعار للمتابع).
+function goalContext(m: SplLiveBoardItem): string | null {
+  const el = m.status.elapsed;
+  if (el != null && el >= 85) return "في الدقائق الأخيرة";
+  return null;
+}
+
 // ── صمود خطّ الأساس لإعادة التشغيل/النشر (Redis، أفضل جهد) ──
 // خرائط التتبّع أعلاه في الذاكرة فقط، فكل نشر/إعادة تشغيل يمسحها فتُعيد الدورة
 // التالية «تأسيس» المباراة الجارية بصمت وتكبت أحداثها (انطلاق/بطاقة كانت قبل
@@ -242,22 +266,24 @@ function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): D
       const homeScored = cur.homeGoals > prev.homeGoals;
       const scorer = homeScored ? m.home.name : m.away.name;
       const minute = m.status.elapsed != null ? ` · د${m.status.elapsed}` : "";
+      const why = goalContext(m);
       alerts.push({
         fixtureId: m.id,
         kind: "goal",
         title: `⚽️ ${m.home.name} ${fmtScore(m)} ${m.away.name}`,
-        body: `هدف ${scorer}${minute}`,
+        body: `هدف ${scorer}${minute}${why ? ` — ${why}` : ""}`,
         teamRefIds,
       });
     }
 
     // نهاية المباراة
     if (!prev.finished && cur.finished) {
+      const why = resultContext(m);
       alerts.push({
         fixtureId: m.id,
         kind: "fulltime",
         title: `🏁 انتهت المباراة · ${m.home.name} ${fmtScore(m)} ${m.away.name}`,
-        body: m.competition,
+        body: why ? `${m.competition} · ${why}` : m.competition,
         teamRefIds,
       });
     }
