@@ -172,7 +172,15 @@ async function tsGet(path: string, params: Record<string, string> = {}): Promise
   url.searchParams.set("user", user);
   url.searchParams.set("secret", secret);
 
-  const json = await httpsGetJson(url, TS_HTTP_TIMEOUT_MS);
+  let json: any;
+  try {
+    json = await httpsGetJson(url, TS_HTTP_TIMEOUT_MS);
+  } catch {
+    // خطأ شبكة عابر (socket hang up / مهلة): محاولة ثانية واحدة قبل إشهار
+    // الفشل — تقي من تفعيل قاطع الدائرة (60ث) بسبب عطل لحظة واحدة
+    await new Promise((r) => setTimeout(r, 150));
+    json = await httpsGetJson(url, TS_HTTP_TIMEOUT_MS);
+  }
   // الأخطاء تأتي 200 بجسم {err:"..."} (نقطة محجوبة / IP غير مُدرَج)
   if (json && typeof json === "object" && "err" in json) {
     throw new Error(`[TheSports] ${json.err}`);
@@ -783,85 +791,6 @@ export async function getTsCompetitionMatchPairs(
     armCooldown(e);
     return [];
   }
-}
-
-// ───────────────────── الترتيب اللحظي (real-time standings) ─────────────────────
-// صفّ ترتيب واحد بمعرّف فريق TheSports (uuid). يُطابَق لاحقًا بصفوفنا عبر الجسر.
-export interface TsStandingRow {
-  teamId: string;
-  position: number;
-  points: number;
-  played: number;
-  won: number;
-  draw: number;
-  loss: number;
-  goals: number;
-  goalsAgainst: number;
-  goalDiff: number;
-}
-
-function parseStandingTables(resultsRaw: any, seasonId: string | null): Map<string, TsStandingRow> {
-  const out = new Map<string, TsStandingRow>();
-  // season/recent/table/detail يُرجع كائنًا واحدًا {promotions,tables}؛ table/live مصفوفة.
-  const results = Array.isArray(resultsRaw) ? resultsRaw : resultsRaw ? [resultsRaw] : [];
-  for (const res of results) {
-    if (seasonId && res?.season_id && res.season_id !== seasonId) continue;
-    for (const table of Array.isArray(res?.tables) ? res.tables : []) {
-      for (const r of Array.isArray(table?.rows) ? table.rows : []) {
-        if (!r?.team_id) continue;
-        out.set(String(r.team_id), {
-          teamId: String(r.team_id),
-          position: Number(r.position) || 0,
-          points: Number(r.points) || 0,
-          played: Number(r.total) || 0,
-          won: Number(r.won) || 0,
-          draw: Number(r.draw) || 0,
-          loss: Number(r.loss) || 0,
-          goals: Number(r.goals) || 0,
-          goalsAgainst: Number(r.goals_against) || 0,
-          goalDiff: Number(r.goal_diff) || 0,
-        });
-      }
-    }
-  }
-  return out;
-}
-
-/**
- * الترتيب اللحظي لبطولة عبر TheSports (المسار الصحيح المؤكَّد من الدعم 2026‑06‑23):
- * `season/recent/table/detail?uuid=<seasonId>` — الترتيب الكامل المحدَّث آنيًّا (متاح
- * دائمًا، لا أثناء المباريات فقط). يتراجع إلى `table/live` (الجداول الجارية عالميًّا،
- * يُصفّى بموسم البطولة) عند تعذّره. فارغ = لا إثراء.
- */
-export async function getTsLiveStandings(
-  competitionId: string,
-  seasonId: string | null,
-): Promise<Map<string, TsStandingRow>> {
-  if (!isTheSportsConfigured() || Date.now() < tsCooldownUntil) return new Map();
-  // 1) الترتيب الرسمي المحدَّث آنيًّا — الباراميتر هو `uuid` (معرّف الموسم)
-  if (seasonId) {
-    try {
-      const data = await withSWR(`ts:seasontable:${seasonId}`, 20 * 1000, 60 * 1000, () =>
-        tsGet("season/recent/table/detail", { uuid: seasonId }),
-      );
-      const map = parseStandingTables(data?.results, null);
-      if (map.size > 0) return map;
-    } catch {
-      /* نتراجع إلى table/live */
-    }
-  }
-  // 2) table/live (نافذة المباراة المباشرة) — يُصفّى بموسم البطولة
-  if (competitionId) {
-    try {
-      const data = await withSWR(`ts:tablelive:${competitionId}`, 15 * 1000, 45 * 1000, () =>
-        tsGet("table/live", { competition_id: competitionId }),
-      );
-      return parseStandingTables(data?.results, seasonId);
-    } catch (e) {
-      armCooldown(e);
-    }
-  }
-  return new Map();
 }
 
 // ───────────────────── قنوات بثّ المباراة (match/tv/list) ─────────────────────
