@@ -27,15 +27,36 @@ function TeamRow({ team, highlight }: { team: GcFixture["home"]; highlight: bool
   );
 }
 
-export function GcMatchCard({ fixture }: { fixture: GcFixture }) {
+export function GcMatchCard({
+  fixture,
+  onOpen,
+}: {
+  fixture: GcFixture;
+  /** فتح مركز المباراة — البطاقة قابلة للنقر عندما يُمرَّر والفريقان محسومان */
+  onOpen?: (fixtureId: number) => void;
+}) {
   const started = fixture.status.live || fixture.status.finished;
   const homeSaudi = fixture.home.id === SAUDI_TEAM_ID;
   const awaySaudi = fixture.away.id === SAUDI_TEAM_ID;
   const involvesSaudi = homeSaudi || awaySaudi;
+  // مباريات الأدوار قبل حسم المتأهلَين (id=0) لا تفاصيل لها بعد
+  const clickable = !!onOpen && !!fixture.home.id && !!fixture.away.id;
 
   return (
     <div
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? () => onOpen!(fixture.id) : undefined}
+      onKeyDown={
+        clickable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") onOpen!(fixture.id);
+            }
+          : undefined
+      }
       className={`rounded-2xl border p-3.5 transition-shadow hover:shadow-md ${
+        clickable ? "cursor-pointer hover:ring-2 hover:ring-emerald-400/40" : ""
+      } ${
         involvesSaudi
           ? "border-emerald-300/50 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-950/20"
           : "border-border bg-card"
@@ -73,12 +94,19 @@ export function GcMatchCard({ fixture }: { fixture: GcFixture }) {
       </div>
 
       {fixture.venue?.name && (
-        <div className="mt-2.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-          <MapPin className="h-3 w-3" />
-          <span className="truncate">
-            {fixture.venue.name}
-            {fixture.venue.city ? ` — ${fixture.venue.city}` : ""}
+        <div className="mt-2.5 flex items-center justify-between gap-1 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1 min-w-0">
+            <MapPin className="h-3 w-3 shrink-0" />
+            <span className="truncate">
+              {fixture.venue.name}
+              {fixture.venue.city ? ` — ${fixture.venue.city}` : ""}
+            </span>
           </span>
+          {clickable && (
+            <span className="shrink-0 font-bold text-emerald-600 dark:text-emerald-400">
+              التفاصيل ‹
+            </span>
+          )}
         </div>
       )}
     </div>

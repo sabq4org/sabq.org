@@ -228,6 +228,44 @@ export interface WcLineup {
   substitutes: WcLineupPlayer[];
 }
 
+// التشكيلة المتوقعة قبل المباراة (SportMonks expectedLineups)
+export interface WcExpectedLineupPlayer {
+  name: string;
+  jersey: number | null;
+  slot: number | null;
+  grid: string | null;
+  row: number | null;
+}
+
+export interface WcExpectedLineupSide {
+  formation: string | null;
+  starters: WcExpectedLineupPlayer[];
+  bench: WcExpectedLineupPlayer[];
+}
+
+export interface WcExpectedLineups {
+  available: boolean;
+  home: WcExpectedLineupSide | null;
+  away: WcExpectedLineupSide | null;
+}
+
+// تشكيلة الجولة (SportMonks Team of the Week)
+export interface WcTotwPlayer {
+  name: string;
+  photo: string | null;
+  teamName: string;
+  teamLogo: string | null;
+  rating: number;
+  slot: number;
+  row: number;
+}
+
+export interface WcTeamOfTheWeek {
+  available: boolean;
+  formation: string | null;
+  players: WcTotwPlayer[];
+}
+
 export interface WcStatistic {
   key: string;
   label: string;
@@ -469,6 +507,18 @@ export interface WcPlayerCard {
   injury: { reason: string } | null;
 }
 
+/** بطل البطولة — يظهر في بلوك الواجهة بدل مربع المباراة بعد حسم النهائي */
+export interface WcChampion {
+  team: WcTeam;
+  runnerUp: WcTeam | null;
+  /** نتيجة النهائي بترتيب «الفائز أولًا» (W-L) — نفس اتفاقية الترجيح الموحّدة */
+  score: string | null;
+  /** نتيجة ركلات الترجيح بترتيب «الفائز أولًا» — null إن حُسم النهائي دونها */
+  penalties: string | null;
+  decidedAt: string | null;
+  source: "auto" | "manual";
+}
+
 export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
@@ -483,6 +533,10 @@ export interface WcOverview {
     fixtures: WcFixture[];
     group: WcGroup | null;
   };
+  /** بطل البطولة بعد حسم النهائي (أو المعيَّن يدويًا من اللوحة) */
+  champion?: WcChampion | null;
+  /** true عندما أُطفئ البلوك من لوحة التحكم — القسم كله يختفي */
+  hidden?: boolean;
   updatedAt: string;
 }
 
@@ -581,7 +635,14 @@ export interface WcPenaltyOutcome {
   loserScore: number;
 }
 
-export function penaltyOutcome(fixture: WcFixture): WcPenaltyOutcome | null {
+/** الحد الأدنى البنيوي لحساب الترجيح — يقبل مباريات المونديال وكأس الملك معًا */
+export interface PenaltyFixtureLike {
+  penalties?: { home: number | null; away: number | null } | null;
+  home: { name: string };
+  away: { name: string };
+}
+
+export function penaltyOutcome(fixture: PenaltyFixtureLike): WcPenaltyOutcome | null {
   const pen = fixture.penalties;
   if (!pen || pen.home == null || pen.away == null || pen.home === pen.away) return null;
   const homeWon = pen.home > pen.away;

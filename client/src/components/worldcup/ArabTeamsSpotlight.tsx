@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, Flag, Shield } from "lucide-react";
 import { Link } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "./MatchCard";
+import { PlayerCardDialog } from "./PlayerCardDialog";
 import {
   formatKickoffDay,
   formatKickoffTime,
   type WcFixture,
   type WcGroup,
+  type WcSquad,
+  type WcSquadPlayer,
   type WcStandingRow,
   type WcTeam,
 } from "./wcTypes";
@@ -44,15 +48,31 @@ function goalsForTeam(fixture: WcFixture, teamId: number): { team: number | null
     : { team: fixture.goals.away, opponent: fixture.goals.home };
 }
 
-function teamState(row: WcStandingRow | null): { label: string; className: string } {
+const WC_STATE_QUALIFIED = { label: "متأهل", className: "bg-emerald-300 text-emerald-950 border-0" };
+const WC_STATE_ELIMINATED = { label: "خارج المنافسة", className: "bg-white/[0.12] text-emerald-100 border-white/10" };
+const WC_STATE_CONTENTION = { label: "في المنافسة", className: "bg-emerald-100 text-emerald-950 border-0" };
+
+/**
+ * الخادم يرسل qualifyStatus أثناء دور المجموعات فقط ويجعله null بعد انتهائه —
+ * فلا يكفي الاعتماد عليه وحده وإلا ظهر الجميع «في المنافسة» بعد اكتمال المجموعات.
+ * عند غياب القيمة نستنتج الحالة محليًا (مطابق iOS/computeQualified): المجموعة
+ * مكتملة والمركز ضمن الأوّلين ⇒ متأهل، وله مباراة قادمة (أفضل ثالث تأهّل) ⇒ في
+ * المنافسة، وإلا ⇒ خارج المنافسة.
+ */
+function teamState(
+  row: WcStandingRow | null,
+  groupComplete: boolean,
+  hasUpcoming: boolean,
+): { label: string; className: string } {
   if (!row) return { label: "بانتظار الترتيب", className: "bg-white/10 text-emerald-50 border-white/10" };
-  if (row.qualifyStatus === "qualified") {
-    return { label: "متأهل", className: "bg-emerald-300 text-emerald-950 border-0" };
-  }
-  if (row.qualifyStatus === "eliminated") {
-    return { label: "خرج", className: "bg-white/[0.12] text-emerald-100 border-white/10" };
-  }
-  return { label: "في المنافسة", className: "bg-emerald-100 text-emerald-950 border-0" };
+  if (row.qualifyStatus === "qualified") return WC_STATE_QUALIFIED;
+  if (row.qualifyStatus === "eliminated") return WC_STATE_ELIMINATED;
+  if (row.qualifyStatus === "contention") return WC_STATE_CONTENTION;
+  // qualifyStatus == null (انتهى دور المجموعات) — نستنتج
+  if (!groupComplete) return WC_STATE_CONTENTION;
+  if (row.rank <= 2) return WC_STATE_QUALIFIED;
+  if (hasUpcoming) return WC_STATE_CONTENTION;
+  return WC_STATE_ELIMINATED;
 }
 
 function buildArabTeams(fixtures: WcFixture[], groups: WcGroup[]): ArabTeamDigest[] {
@@ -189,11 +209,69 @@ function GroupMiniTable({ group, selectedId }: { group: WcGroup | null; selected
   );
 }
 
-function TeamPanel({ digest, onOpenMatch }: { digest: ArabTeamDigest; onOpenMatch: (fixtureId: number) => void }) {
-  const state = teamState(digest.row);
+/**
+ * شريط تشكيلة المنتخب المختار — مطابق لتطبيق iOS (WCTeamSquadStrip). يُعاد
+ * الجلب عند تبدّل المنتخب، وكل لاعب يفتح بطاقته الشاملة عبر PlayerCardDialog.
+ */
+function TeamSquadStrip({ teamId, onOpenPlayer }: { teamId: number; onOpenPlayer: (id: number) => void }) {
+  const { data } = useQuery<WcSquad>({
+    queryKey: [`/api/world-cup/squad/${teamId}`],
+    enabled: teamId > 0,
+    staleTime: 60 * 60 * 1000,
+  });
+  const players: WcSquadPlayer[] = Array.isArray(data?.players) ? data!.players : [];
+  if (players.length === 0) return null;
+
+  return (
+    <div className="space-y-2.5">
+      <p className="text-xs font-bold text-emerald-100/85">التشكيلة — اضغط على اللاعب لملفه الكامل</p>
+      <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+        {players.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => p.id > 0 && onOpenPlayer(p.id)}
+            disabled={p.id <= 0}
+            className="flex w-16 shrink-0 flex-col items-center gap-1.5 text-center disabled:cursor-default"
+            data-testid={`wc-arab-squad-player-${p.id}`}
+          >
+            <div className="h-12 w-12 overflow-hidden rounded-full bg-white/10 ring-2 ring-white/25">
+              {p.photo ? (
+                <img src={p.photo} alt={p.name} className="h-full w-full object-cover" loading="lazy" />
+              ) : (
+                <span className="flex h-full w-full items-center justify-center text-xs font-black text-white/70">
+                  {p.name.slice(0, 2)}
+                </span>
+              )}
+            </div>
+            <span className="line-clamp-2 text-[10px] font-semibold leading-tight text-white/90">{p.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TeamPanel({
+  digest,
+  fixtures,
+  onOpenMatch,
+  onOpenPlayer,
+}: {
+  digest: ArabTeamDigest;
+  fixtures: WcFixture[];
+  onOpenMatch: (fixtureId: number) => void;
+  onOpenPlayer: (id: number) => void;
+}) {
+  // اكتمال المجموعة = كل مباريات فرقها انتهت — لاستنتاج الحالة عند غياب qualifyStatus.
+  const groupIds = new Set((digest.group?.rows ?? []).map((r) => r.team.id));
+  const groupMatches = fixtures.filter((f) => groupIds.has(f.home.id) && groupIds.has(f.away.id));
+  const groupComplete = groupMatches.length > 0 && groupMatches.every((f) => f.status.finished);
+  const state = teamState(digest.row, groupComplete, digest.next != null);
   const diff = digest.row ? `${digest.row.goalsDiff > 0 ? "+" : ""}${digest.row.goalsDiff}` : "-";
 
   return (
+    <div className="space-y-5">
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
       <div className="min-w-0 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -241,6 +319,9 @@ function TeamPanel({ digest, onOpenMatch }: { digest: ArabTeamDigest; onOpenMatc
 
       <GroupMiniTable group={digest.group} selectedId={digest.team.id} />
     </div>
+
+      <TeamSquadStrip teamId={digest.team.id} onOpenPlayer={onOpenPlayer} />
+    </div>
   );
 }
 
@@ -284,6 +365,7 @@ export function ArabTeamsSpotlight({ fixtures, groups, onOpenMatch }: ArabTeamsS
   const arabTeams = useMemo(() => buildArabTeams(fixtures, groups), [fixtures, groups]);
   const preferredTeam = arabTeams[0]?.team.id ?? null;
   const [selectedId, setSelectedId] = useState<number | null>(preferredTeam);
+  const [openPlayerId, setOpenPlayerId] = useState<number | null>(null);
 
   useEffect(() => {
     if (selectedId != null && arabTeams.some((team) => team.team.id === selectedId)) return;
@@ -312,8 +394,8 @@ export function ArabTeamsSpotlight({ fixtures, groups, onOpenMatch }: ArabTeamsS
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <Flag className="h-5 w-5 text-emerald-200" />
-                  <h2 className="text-2xl sm:text-3xl font-black text-white">المنتخبات العربية في المونديال</h2>
+                  <Flag className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-emerald-200" />
+                  <h2 className="text-lg sm:text-2xl lg:text-3xl font-black leading-tight text-white">المنتخبات العربية في المونديال</h2>
                 </div>
                 <p className="max-w-3xl text-sm font-medium text-white/85">
                   نتائج ومواعيد المنتخبات العربية المتبقية في البطولة، مع وضع المجموعة في بطاقة واحدة.
@@ -323,10 +405,12 @@ export function ArabTeamsSpotlight({ fixtures, groups, onOpenMatch }: ArabTeamsS
             </div>
 
             <TeamRail teams={arabTeams} selectedId={selected.team.id} onSelect={setSelectedId} />
-            <TeamPanel digest={selected} onOpenMatch={onOpenMatch} />
+            <TeamPanel digest={selected} fixtures={fixtures} onOpenMatch={onOpenMatch} onOpenPlayer={setOpenPlayerId} />
           </div>
         </motion.div>
       </div>
+
+      <PlayerCardDialog playerId={openPlayerId} onClose={() => setOpenPlayerId(null)} />
     </section>
   );
 }

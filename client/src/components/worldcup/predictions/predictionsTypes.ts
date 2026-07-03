@@ -57,3 +57,44 @@ export type LeaderRow = {
   correctCount: number;
   playedCount: number;
 };
+
+// ── توقّعات البطولة طويلة المدى (البطل + الهدّاف) ──
+// eliminated: خرج من البطولة (المنتخب نفسه، أو منتخب الهدّاف) — يبقى ظاهرًا في
+// القائمة لكن معطَّلًا (لا يُحذف)، لأنه لم يعد بإمكانه رفع الكأس أو تسجيل أهداف.
+export type WcLongTeam = { id: number; name: string; logo: string; eliminated: boolean };
+export type WcLongScorer = {
+  id: number;
+  name: string;
+  photo: string;
+  team: { name: string; logo: string };
+  goals: number;
+  eliminated: boolean;
+};
+export type WcLongMine = {
+  kind: "champion" | "top_scorer" | string;
+  teamId: number | null;
+  teamName: string | null;
+  teamLogo: string | null;
+  playerId: number | null;
+  playerName: string | null;
+  playerPhoto: string | null;
+  weight: number;
+  status: "pending" | "correct" | "incorrect" | string;
+  pointsAwarded: number;
+};
+export type WcLongData = {
+  pools: { champion: number; top_scorer: number };
+  teams: WcLongTeam[];
+  scorers: WcLongScorer[];
+  champion: {
+    open: boolean;
+    weight: number | null; // 100 | 60 | 30 | null(مغلق)
+    stage: "r32" | "r16" | "qf" | "closed" | string;
+    votes: { teamId: number | null; n: number; w: number }[];
+  };
+  topScorer: {
+    open: boolean;
+    votes: { playerId: number | null; n: number }[];
+  };
+  mine: WcLongMine[];
+};

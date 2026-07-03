@@ -13,7 +13,7 @@ import SwiftUI
 //     تحديثات النتيجة حتى لو كان التطبيق مغلقًا (مرحلة تالية على الخادم).
 //
 // متاح من iOS 16.2+ (هدف التطبيق 17.0)، وبشرط تفعيل المستخدم لـLive Activities
-// (إعدادات > سبق الرياضي > Live Activities) — `areActivitiesEnabled`.
+// (إعدادات > VARA الرياضي > Live Activities) — `areActivitiesEnabled`.
 
 @MainActor
 @Observable
@@ -86,7 +86,17 @@ final class SpLiveActivityManager {
     func update(with fixture: SpFixture, lastEvent: String? = nil) {
         guard let activity = activities[fixture.id] else { return }
         var state = makeState(from: fixture)
-        if let lastEvent { state.lastEvent = lastEvent }
+        // حافظ على آخر حدث معروض إن لم يحمل المستدعي أحدث — التحديث المحلي من
+        // «مبارياتي» بلا أحداث، ومسحه كان يُخفي شريحة الهدف/البطاقة المدفوعة.
+        state.lastEvent = lastEvent ?? activity.content.state.lastEvent
+        // ثبات مرساة الساعة: لا نُزحزح مرساةً جاريةً لفرقٍ طفيف (اختلاف لحظة
+        // انقلاب الدقيقة بين مصدرنا ودفعات الخادم كان يجعل العدّاد يسبق ثم
+        // يرتدّ). إعادة الإرساء فقط عند فارق كبير = شوط جديد/تصحيح حقيقي.
+        if let current = activity.content.state.clockStartEpoch,
+           let candidate = state.clockStartEpoch,
+           abs(current - candidate) < 75 {
+            state.clockStartEpoch = current
+        }
         Task {
             await activity.update(.init(state: state, staleDate: staleDate(for: fixture)))
             // أنهِ النشاط تلقائيًّا بعد نهاية المباراة بفترة قصيرة.
@@ -173,12 +183,14 @@ final class SpLiveActivityManager {
     }
 
     /// مرساة الساعة الذاتية: تُحسب فقط حين تكون الساعة **جاريةً فعليًّا** (لا استراحة).
-    /// القيمة = الآن − (الدقائق المنقضية + بدل الضائع) بالثواني، فيبدأ الويدجت العدّ
-    /// منها تلقائيًّا. تُعاد nil وقت التوقّف ليُجمَّد العرض على الدقيقة المدفوعة.
+    /// «الدقيقة m» عند المزوّد = اللعب جارٍ داخلها (ساعة البث تعرض m-1:xx)، فالإرساء
+    /// الصحيح = الآن − (m-1)×60 كي يطابق العدّاد ساعة البث لا يسبقها بدقيقة.
+    /// تُعاد nil وقت التوقّف ليُجمَّد العرض على الدقيقة المدفوعة.
     static func clockStartEpoch(for s: SpStatus) -> Double? {
         guard s.live, !s.finished, let m = s.elapsed, m > 0, isClockRunning(code: s.code) else { return nil }
-        let totalSeconds = Double(m + (s.extra ?? 0)) * 60.0
-        return Date().timeIntervalSince1970 - totalSeconds
+        let playedMinutes = m + (s.extra ?? 0)
+        guard playedMinutes >= 1 else { return nil }
+        return Date().timeIntervalSince1970 - Double(playedMinutes - 1) * 60.0
     }
 
     /// أكواد توقّف الساعة (استراحة/فاصل الإضافي/ركلات الترجيح/إيقاف) — تُجمّد العدّاد.

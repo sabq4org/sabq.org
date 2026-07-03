@@ -15,7 +15,7 @@ import { getFixtureIdentity, type WcFixtureIdentity } from "./worldCupService";
 import { translateCommentaries, type SmCommentary } from "./worldCupCommentaryTranslator";
 
 const SM_BASE = "https://api.sportmonks.com/v3/football";
-const WC_LEAGUE_ID = 732; // World Cup عند SportMonks
+export const WC_LEAGUE_ID = 732; // World Cup عند SportMonks
 
 // إيقاعات الكاش — الحيّ يتجدد بالثواني، والمنتهي ثابت
 const SM_LIVE_TTL = 20 * 1000;
@@ -42,19 +42,22 @@ export function isSportmonksConfigured(): boolean {
   return Boolean((process.env.SPORTMONKS_API_TOKEN || "").trim());
 }
 
-async function smGet(path: string, params: Record<string, string> = {}): Promise<any> {
+async function smFetch(url: URL): Promise<any> {
   const token = (process.env.SPORTMONKS_API_TOKEN || "").trim();
   if (!token) throw new Error("SPORTMONKS_API_TOKEN is not set");
-
-  const url = new URL(`${SM_BASE}/${path}`);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set("api_token", token);
 
   const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) {
-    throw new Error(`[SportMonks] HTTP ${response.status} for ${path}`);
+    throw new Error(`[SportMonks] HTTP ${response.status} for ${url.pathname}`);
   }
   return response.json();
+}
+
+async function smGet(path: string, params: Record<string, string> = {}): Promise<any> {
+  const url = new URL(`${SM_BASE}/${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  return smFetch(url);
 }
 
 // ---------- أخبار SportMonks التحريرية (معاينات + تقارير) ----------
@@ -103,6 +106,8 @@ export interface SmNewsItem {
 const NEWS_INCLUDE = "lines;fixture;league";
 const NEWS_TTL = 5 * 60 * 1000;
 const NEWS_SWR = 2 * 60 * 1000;
+const NEWS_PER_PAGE = "50"; // أقصى حجم صفحة يقبله المزوّد
+const NEWS_MAX_PAGES = 12; // حارس ضد سلسلة مؤشّر لا تنتهي (600 عنصر تغطي بطولة كاملة)
 
 function normalizeNewsItem(raw: any): SmNewsItem | null {
   if (!raw || typeof raw.id !== "number") return null;
@@ -146,13 +151,56 @@ function normalizeNewsItem(raw: any): SmNewsItem | null {
   };
 }
 
+/**
+ * يتحقق من رابط next_cursor قبل اتباعه حرفيًا (نفس أصل المزوّد فقط).
+ * لا نعيد تركيب باراميتراته: المزوّد يرفض (400) إرسال per_page مع cursor.
+ */
+function sanitizeNextCursorUrl(nextCursorUrl: unknown): URL | null {
+  if (typeof nextCursorUrl !== "string" || !nextCursorUrl) return null;
+  try {
+    const url = new URL(nextCursorUrl);
+    return url.origin === new URL(SM_BASE).origin ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchNews(path: string, cacheKey: string): Promise<SmNewsItem[]> {
   if (!isSportmonksConfigured()) return [];
   try {
-    const data = await withSWR(cacheKey, NEWS_TTL, NEWS_SWR, () =>
-      smGet(path, { include: NEWS_INCLUDE })
-    );
-    const rows = Array.isArray(data?.data) ? data.data : [];
+    // المزوّد يرجّع الأقدم أولًا بصفحات؛ لا بد من تتبّع المؤشّر حتى النهاية
+    // وإلا سقطت أحدث التقارير خارج الصفحة الأولى بعد تجاوز عدد المباريات حجمها
+    const data = await withSWR(cacheKey, NEWS_TTL, NEWS_SWR, async () => {
+      const all: any[] = [];
+      let next: URL | null = null;
+      for (let page = 1; page <= NEWS_MAX_PAGES; page++) {
+        let res: any;
+        try {
+          res = next
+            ? await smFetch(next)
+            : await smGet(path, { include: NEWS_INCLUDE, per_page: NEWS_PER_PAGE });
+        } catch (error) {
+          if (!all.length) throw error;
+          console.warn(`[SportMonks] news pagination توقّف عند صفحة ${page} (${path}):`, error);
+          break;
+        }
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        all.push(...rows);
+        const pagination = res?.pagination;
+        if (!pagination?.has_more) break;
+        next = sanitizeNextCursorUrl(pagination.next_cursor);
+        if (!next) {
+          console.warn(`[SportMonks] news pagination: has_more بلا مؤشّر صالح (${path})`);
+          break;
+        }
+        if (page === NEWS_MAX_PAGES) {
+          console.warn(`[SportMonks] news pagination: بلغنا سقف ${NEWS_MAX_PAGES} صفحة (${path}) — الأحدث قد لم يُجلب`);
+          break;
+        }
+      }
+      return all;
+    });
+    const rows = Array.isArray(data) ? data : [];
     return rows.map(normalizeNewsItem).filter((x: SmNewsItem | null): x is SmNewsItem => x !== null);
   } catch (error) {
     console.warn(`[SportMonks] news fetch failed (${path}):`, error);
@@ -166,10 +214,8 @@ export function fetchPrematchNews(): Promise<SmNewsItem[]> {
 }
 
 /**
- * تقارير ما بعد المباراة (post-match) — المباريات المنتهية المتاحة.
- * تنبيه: المزود يرجّع الصفحة الأولى (50 عنصرًا، الأقدم أولًا). كافٍ في دور
- * المجموعات (< 50 مباراة)، لكن بعد تجاوز 50 مباراة (الأدوار الإقصائية) ستسقط
- * أحدث المباريات خارج الصفحة الأولى — يلزم حينها ترقيم بالمؤشّر (next_cursor).
+ * تقارير ما بعد المباراة (post-match) — كل المباريات المنتهية المتاحة،
+ * بتتبّع ترقيم المؤشّر (next_cursor) حتى النهاية.
  */
 export function fetchPostmatchNews(): Promise<SmNewsItem[]> {
   return fetchNews("news/post-match", "sm:news:postmatch");
@@ -639,10 +685,298 @@ export async function getForecast(
 ): Promise<WcForecast> {
   const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
   if (!r) return EMPTY_FORECAST;
-  // التوقعات مستقرّة نسبيًا — كاش متوسط بغضّ النظر عن حالة المباراة
-  return withSWR(`wc:forecast:${r.smId}`, CACHE_TTL.MEDIUM, CACHE_TTL.LONG, () =>
-    buildForecast(r.smId)
+  // قبل المباراة كاش متوسط؛ أثناءها قصير كي تتحدّث الاحتمالات مع المجريات
+  const live = r.ttl === SM_LIVE_TTL;
+  return withSWR(
+    `wc:forecast:${r.smId}`,
+    live ? SM_LIVE_TTL : CACHE_TTL.MEDIUM,
+    live ? SM_LIVE_TTL * 3 : CACHE_TTL.LONG,
+    () => buildForecast(r.smId)
   );
+}
+
+// ---------- التشكيلة المتوقعة قبل المباراة (expectedLineups) ----------
+
+export interface WcExpectedPlayer {
+  name: string;
+  jersey: number | null;
+  /** خانة اللاعب داخل الخطة (1 = الحارس) — للأساسيين فقط */
+  slot: number | null;
+  /** موقع اللاعب على الملعب "صف:عمود" (نفس صيغة grid في التشكيلة الرسمية) */
+  grid: string | null;
+  /** صف الخطة (مشتق من grid) — لاشتقاق شكل الخطة */
+  row: number | null;
+}
+
+export interface WcExpectedSide {
+  formation: string | null;
+  starters: WcExpectedPlayer[];
+  bench: WcExpectedPlayer[];
+}
+
+export interface WcExpectedLineups {
+  available: boolean;
+  home: WcExpectedSide | null;
+  away: WcExpectedSide | null;
+}
+
+const EMPTY_EXPECTED_LINEUPS: WcExpectedLineups = { available: false, home: null, away: null };
+
+// متحقَّق حيًّا (2026-07-03): 77614 = أساسي (11 صفًّا لكل فريق)، 77615 = بديل
+const SM_EXPECTED_STARTER_TYPE = 77614;
+
+function mapExpectedPlayer(raw: any): WcExpectedPlayer {
+  const field = typeof raw.formation_field === "string" ? raw.formation_field : "";
+  const grid = /^\d+:\d+$/.test(field) ? field : null;
+  return {
+    name: String(raw.player_name || "").trim(),
+    jersey: Number.isFinite(Number(raw.jersey_number)) ? Number(raw.jersey_number) : null,
+    slot: Number.isFinite(Number(raw.formation_position)) ? Number(raw.formation_position) : null,
+    grid,
+    row: grid ? Number(grid.split(":")[0]) : null,
+  };
+}
+
+/** يشتقّ شكل الخطة ("4-2-3-1") من صفوف الأساسيين عند غياب `formations` الرسمية */
+function deriveFormation(starters: WcExpectedPlayer[]): string | null {
+  const counts = new Map<number, number>();
+  for (const p of starters) {
+    if (p.row && p.row > 1) counts.set(p.row, (counts.get(p.row) || 0) + 1);
+  }
+  if (!counts.size) return null;
+  return Array.from(counts.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, n]) => n)
+    .join("-");
+}
+
+async function buildExpectedLineups(smId: number): Promise<WcExpectedLineups> {
+  const data = await smGet(`fixtures/${smId}`, {
+    include: "expectedLineups;formations;participants",
+  });
+  const fx = data?.data;
+  const rows: any[] = Array.isArray(fx?.expectedlineups) ? fx.expectedlineups : [];
+  if (!rows.length) return EMPTY_EXPECTED_LINEUPS;
+
+  const sideByTeam = new Map<number, "home" | "away">();
+  for (const p of Array.isArray(fx?.participants) ? fx.participants : []) {
+    const loc = p?.meta?.location;
+    if (loc === "home" || loc === "away") sideByTeam.set(Number(p.id), loc);
+  }
+  const formationBySide = new Map<string, string>();
+  for (const f of Array.isArray(fx?.formations) ? fx.formations : []) {
+    if (f?.location && typeof f.formation === "string") {
+      formationBySide.set(f.location, f.formation);
+    }
+  }
+
+  const sides = {
+    home: { starters: [] as WcExpectedPlayer[], bench: [] as WcExpectedPlayer[] },
+    away: { starters: [] as WcExpectedPlayer[], bench: [] as WcExpectedPlayer[] },
+  };
+  for (const raw of rows) {
+    const side = sideByTeam.get(Number(raw?.team_id));
+    if (!side || !raw?.player_name) continue;
+    const player = mapExpectedPlayer(raw);
+    if (Number(raw.type_id) === SM_EXPECTED_STARTER_TYPE) sides[side].starters.push(player);
+    else sides[side].bench.push(player);
+  }
+  if (!sides.home.starters.length && !sides.away.starters.length) return EMPTY_EXPECTED_LINEUPS;
+
+  const buildSide = (side: "home" | "away"): WcExpectedSide => {
+    const starters = sides[side].starters.sort((a, b) => (a.slot ?? 99) - (b.slot ?? 99));
+    return {
+      formation: formationBySide.get(side) ?? deriveFormation(starters),
+      starters,
+      bench: sides[side].bench,
+    };
+  };
+  return { available: true, home: buildSide("home"), away: buildSide("away") };
+}
+
+/**
+ * التشكيلة المتوقعة قبل المباراة (Expected Lineups — ينشرها المزوّد قبل يومين تقريبًا).
+ * تُعرض حتى صدور التشكيلة الرسمية؛ أفضل جهد: أي غياب → { available:false }.
+ */
+export async function getExpectedLineups(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcExpectedLineups> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_EXPECTED_LINEUPS;
+  return withSWR(`wc:explineup:${r.smId}`, CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, () =>
+    buildExpectedLineups(r.smId)
+  );
+}
+
+// ---------- حكم المباراة (بطاقة صرامة الحكم) ----------
+
+export interface WcRefereeStats {
+  /** مباريات الموسم/البطولة التي تخصها الأرقام */
+  matches: number;
+  yellowAvg: number | null;
+  /** حمراء مباشرة + صفراء ثانية (إجمالي لا معدل — الأوضح للقارئ) */
+  redCount: number;
+  penaltiesAvg: number | null;
+  foulsAvg: number | null;
+  varMoments: number | null;
+}
+
+export interface WcMatchReferee {
+  available: boolean;
+  name: string;
+  photo: string | null;
+  countryName: string | null;
+  countryFlag: string | null;
+  stats: WcRefereeStats | null;
+}
+
+const EMPTY_REFEREE: WcMatchReferee = {
+  available: false,
+  name: "",
+  photo: null,
+  countryName: null,
+  countryFlag: null,
+  stats: null,
+};
+
+// متحقَّق حيًّا (2026-07-03): type_id 6 = الحكم الرئيسي (7/8 مساعدان، 9 رابع)
+const SM_MAIN_REFEREE_TYPE = 6;
+
+function refereeStatValue(details: any[], dev: string): any {
+  return details.find((d: any) => d?.type?.developer_name === dev)?.value ?? null;
+}
+
+async function buildMatchReferee(smId: number): Promise<WcMatchReferee> {
+  const fx = (await smGet(`fixtures/${smId}`, { include: "referees" }))?.data;
+  const main = (Array.isArray(fx?.referees) ? fx.referees : []).find(
+    (r: any) => Number(r?.type_id) === SM_MAIN_REFEREE_TYPE
+  );
+  const refereeId = Number(main?.referee_id);
+  if (!refereeId) return EMPTY_REFEREE;
+
+  // إحصاءات موسم المباراة نفسه (بطولة جارية = صرامته في هذه البطولة تحديدًا)
+  const params: Record<string, string> = { include: "country;statistics.details.type" };
+  const seasonId = Number(fx?.season_id);
+  if (seasonId) params.filters = `refereeStatisticSeasons:${seasonId}`;
+  const ref = (await smGet(`referees/${refereeId}`, params))?.data;
+  const name = String(ref?.display_name || ref?.name || "").trim();
+  if (!name) return EMPTY_REFEREE;
+
+  const details: any[] = Array.isArray(ref?.statistics?.[0]?.details)
+    ? ref.statistics[0].details
+    : [];
+  const matches = Number(refereeStatValue(details, "MATCHES")?.count) || 0;
+  const yellow = refereeStatValue(details, "YELLOWCARDS");
+  const red = refereeStatValue(details, "REDCARDS");
+  const yellowRed = refereeStatValue(details, "YELLOWRED_CARDS");
+  const pens = refereeStatValue(details, "PENALTIES");
+  const fouls = refereeStatValue(details, "FOULS");
+  const varMoments = refereeStatValue(details, "VAR_MOMENTS");
+
+  return {
+    available: true,
+    name,
+    photo: ref?.image_path ?? null,
+    countryName: ref?.country?.name ?? null,
+    countryFlag: ref?.country?.image_path ?? null,
+    stats:
+      matches > 0
+        ? {
+            matches,
+            yellowAvg: typeof yellow?.all?.average === "number" ? yellow.all.average : null,
+            redCount: (Number(red?.all?.count) || 0) + (Number(yellowRed?.all?.count) || 0),
+            penaltiesAvg: typeof pens?.all?.average === "number" ? pens.all.average : null,
+            foulsAvg: typeof fouls?.average === "number" ? fouls.average : null,
+            varMoments: typeof varMoments?.count === "number" ? varMoments.count : null,
+          }
+        : null,
+  };
+}
+
+/**
+ * حكم المباراة الرئيسي + صرامته بالأرقام في موسم/بطولة المباراة نفسها.
+ * أفضل جهد: لا حكم معلن بعد → { available:false } (يُعلن عادة قبل يوم).
+ */
+export async function getMatchReferee(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcMatchReferee> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_REFEREE;
+  return withSWR(`wc:referee:${r.smId}`, CACHE_TTL.LONG, CACHE_TTL.VERY_LONG, () =>
+    buildMatchReferee(r.smId)
+  );
+}
+
+// ---------- تشكيلة الجولة (Team of the Week) ----------
+
+export interface WcTotwPlayer {
+  name: string;
+  photo: string | null;
+  teamName: string;
+  teamLogo: string | null;
+  rating: number;
+  /** خانة اللاعب 1..11 (1 = الحارس) */
+  slot: number;
+  /** صف الخطة (1 = الحارس) — يُشتق من الخانة وشكل الخطة */
+  row: number;
+}
+
+export interface WcTeamOfTheWeek {
+  available: boolean;
+  formation: string | null;
+  players: WcTotwPlayer[];
+}
+
+const EMPTY_TOTW: WcTeamOfTheWeek = { available: false, formation: null, players: [] };
+
+/** يوزّع الخانات 1..11 على صفوف الخطة ("4-2-3-1" → حارس ثم 4 صفوف) */
+function totwRowOfSlot(slot: number, formation: string | null): number {
+  if (slot <= 1) return 1;
+  const parts = (formation || "")
+    .split("-")
+    .map((n) => parseInt(n, 10))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  let start = 2;
+  for (let i = 0; i < parts.length; i++) {
+    if (slot < start + parts[i]) return i + 2;
+    start += parts[i];
+  }
+  return parts.length + 1;
+}
+
+/**
+ * تشكيلة الجولة لبطولة (الأعلى تقييمًا في آخر جولة مكتملة).
+ * تتجدد مرة لكل جولة — كاش طويل. أفضل جهد: أي غياب → { available:false }.
+ */
+export async function getTeamOfTheWeek(leagueId: number): Promise<WcTeamOfTheWeek> {
+  if (!isSportmonksConfigured()) return EMPTY_TOTW;
+  return withSWR(`sm:totw:${leagueId}`, CACHE_TTL.VERY_LONG, CACHE_TTL.VERY_LONG * 6, async () => {
+    const data = await smGet(`team-of-the-week/leagues/${leagueId}/latest`, {
+      include: "player;team",
+    });
+    const rows: any[] = Array.isArray(data?.data) ? data.data : [];
+    if (!rows.length) return EMPTY_TOTW;
+    const formation = typeof rows[0]?.formation === "string" ? rows[0].formation : null;
+    const players: WcTotwPlayer[] = rows
+      .map((r: any) => {
+        const slot = Number(r?.formation_position) || 0;
+        return {
+          name: String(r?.player?.display_name || r?.player?.name || "").trim(),
+          photo: r?.player?.image_path ?? null,
+          teamName: String(r?.team?.name || "").trim(),
+          teamLogo: r?.team?.image_path ?? null,
+          rating: Math.round(Number(r?.rating || 0) * 100) / 100,
+          slot,
+          row: totwRowOfSlot(slot, formation),
+        };
+      })
+      .filter((p: WcTotwPlayer) => p.name && p.slot > 0)
+      .sort((a: WcTotwPlayer, b: WcTotwPlayer) => a.slot - b.slot);
+    if (!players.length) return EMPTY_TOTW;
+    return { available: true, formation, players };
+  });
 }
 
 // ---------- معطيات المباراة: إحصائيات + طقس + غيابات (Match Facts) ----------

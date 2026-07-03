@@ -1,9 +1,55 @@
 import { createRoot } from "react-dom/client";
+import * as Sentry from "@sentry/react";
 import App from "./App";
 import "./index.css";
 import "./mobile.css";
 import { installDeployRecovery } from "./lib/deployRecovery";
 import { startBuildVersionPolling } from "./lib/buildVersion";
+
+// Sentry — أخطاء فقط (بلا tracing/replay/logs: تستهلك الحصة وتضخّم الحزمة).
+// PROD فقط حتى لا يضج التطوير. الـDSN عام بطبيعته (يظهر في حزمة المتصفح مهما
+// فعلنا) فالافتراضي المدمج يُغني عن ضبط بيئة على Pages، وVITE_SENTRY_DSN
+// يتيح التبديل. denyUrls يطابق فلسفة كاتم أخطاء الطرف الثالث أدناه —
+// سكربتات الإعلانات وإضافات المتصفح ليست أخطاءنا. أخطاء الـchunks المفقودة
+// تمرّ عمدًا: هي إنذار «الشاشة البيضاء بعد النشر».
+if (import.meta.env.PROD) {
+  Sentry.init({
+    dsn:
+      import.meta.env.VITE_SENTRY_DSN ||
+      "https://1b0d0e5e036519383e22c0e20f9eddc0@o4511664870391808.ingest.us.sentry.io/4511665077420032",
+    environment: "production",
+    // أول 90 دقيقة تشغيل أثبتت أن denyUrls وحدها لا تكفي: الضجيج الأكبر جاء من
+    // إطارات مجهولة (<anonymous>) وسكربتات لا يغطيها النمط (beacon.min.js حقن
+    // كلاودفلير، player.ima إعلانات فيديو، «moment-by-moment» يمشّط الـDOM).
+    // allowUrls يقلب المنطق: لا يُقبل إلا خطأ إطارُ رميه من حزمتنا نحن
+    // (sabq.org/assets أو معاينات Pages) — وأخطاء chunks «الشاشة البيضاء» منها،
+    // فتمرّ. ملاحظة: أحداث بلا إطارات (captureMessage/رفض غير-Error) لا يسقطها
+    // allowUrls — لذلك تبقى ignoreErrors لنصوصها المعروفة.
+    allowUrls: [/sabq\.org\/assets\//, /\.pages\.dev\/assets\//],
+    denyUrls: [
+      /googletagmanager|googlesyndication|doubleclick|adservice|novatiq|permutive/i,
+      /^chrome-extension:\/\//,
+      /^moz-extension:\/\//,
+      /^safari(-web)?-extension:\/\//,
+    ],
+    ignoreErrors: [
+      "ResizeObserver loop limit exceeded",
+      "ResizeObserver loop completed with undelivered notifications.",
+      // تتبّع خارجي محجوب بمانع إعلانات — السلسلة ليست في كودنا أصلًا
+      "Failed to track Pageview",
+      // سكربت إعلانات محقون (GTM/DMS) يمشّط DOM الصفحة بحثًا عن البطاقة
+      // الرابعة ليحقن إعلانًا داخل الشبكة — في الصفحات التي تعرض أقل من 4
+      // بطاقات يرمي TypeError. ليس في مستودعنا إطلاقًا (السيلكتور لا يظهر
+      // إلا كـtestid في NewsArticleCard)، لكنه أكبر مصدر ضجيج في Sentry
+      // (3,400+ حدث/أسبوع) وقد يصل بلا إطارات فلا يسقطه allowUrls.
+      /card-article-grid/,
+      /reading 'parentNode'/,
+      // GPT غير محمّل (مانع إعلانات) وسكربت خارجي يستدعيه بلا حارس —
+      // كودنا (DmsAdSlot) يفحص window.googletag.pubads قبل أي استدعاء
+      /googletag\.pubads is not a function/,
+    ],
+  });
+}
 
 // Recover from "white page after deploy": if a lazily-loaded chunk 404s
 // because the edge-cached shell points at a rotated build, hard-reload once

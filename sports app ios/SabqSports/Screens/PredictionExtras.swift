@@ -172,8 +172,8 @@ private struct SpLeaderRow: View {
 
     @ViewBuilder private var rankBadge: some View {
         let medal: Color? = leader.rank == 1 ? SpTheme.gold
-            : leader.rank == 2 ? Color(red: 0.74, green: 0.76, blue: 0.80)
-            : leader.rank == 3 ? Color(red: 0.80, green: 0.55, blue: 0.35) : nil
+            : leader.rank == 2 ? SpTheme.medalSilver
+            : leader.rank == 3 ? SpTheme.medalBronze : nil
         ZStack {
             Circle().fill((medal ?? SpTheme.chipFill).opacity(medal == nil ? 1 : 0.9))
                 .frame(width: 30, height: 30)
@@ -505,6 +505,8 @@ struct SpWinCelebration: View {
     let row: SpMyPredictionRow
     var onClose: () -> Void
 
+    @State private var shareImage: UIImage?
+
     var body: some View {
         ZStack {
             SpConfettiView().allowsHitTesting(false)
@@ -532,10 +534,84 @@ struct SpWinCelebration: View {
                             .fill(SpTheme.green))
                 }
                 .buttonStyle(.plain).padding(.horizontal, 24)
+
+                // مشاركة الإنجاز كصورة جاهزة (تُصيَّر من بطاقة SpPredictionShareCard).
+                if let ui = shareImage {
+                    ShareLink(item: Image(uiImage: ui),
+                              preview: SharePreview("توقّعي في VARA", image: Image(uiImage: ui))) {
+                        HStack(spacing: 7) {
+                            Image(systemName: "square.and.arrow.up").font(.system(size: 14, weight: .semibold))
+                            Text("شارك إنجازك").font(SportsFonts.app(size: 14, weight: .bold))
+                        }
+                        .foregroundStyle(SpTheme.green)
+                        .frame(maxWidth: .infinity).frame(height: 44)
+                        .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous)
+                            .stroke(SpTheme.green, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain).padding(.horizontal, 24)
+                }
             }
             .padding(28)
         }
         .background(SpTheme.card.ignoresSafeArea())
+        .task { shareImage = renderShareImage() }
+    }
+
+    @MainActor private func renderShareImage() -> UIImage? {
+        let renderer = ImageRenderer(content: SpPredictionShareCard(row: row)
+            .environment(\.layoutDirection, .rightToLeft))
+        renderer.scale = 3
+        return renderer.uiImage
+    }
+}
+
+// بطاقة الصورة المشارَكة — أبيض نظيف + أخضر لمسة، بهوية VARA (تُصيَّر بلا شعارات
+// شبكية: ImageRenderer لا ينتظر تحميل الصور غير المتزامن).
+struct SpPredictionShareCard: View {
+    let row: SpMyPredictionRow
+
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles").font(.system(size: 15, weight: .bold))
+                Text("VARA").font(.system(size: 17, weight: .heavy))
+            }
+            .foregroundStyle(SpTheme.green)
+
+            Text(row.exactHit ? "أصبت النتيجة بدقّة 🎯" : "توقّع موفّق! 🎉")
+                .font(SportsFonts.headline(size: 21)).foregroundStyle(SpTheme.onDark)
+
+            Text("\(row.homeTeamName) ضد \(row.awayTeamName)")
+                .font(SportsFonts.app(size: 14, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+                .multilineTextAlignment(.center)
+
+            // توقّعي (ضيف - مضيف مع LTR — عرف التطبيق).
+            Text(verbatim: "\(row.predAway) - \(row.predHome)")
+                .font(SportsFonts.app(size: 44, weight: .heavy)).foregroundStyle(SpTheme.onDark)
+                .monospacedDigit().environment(\.layoutDirection, .leftToRight)
+
+            if let fh = row.finalHome, let fa = row.finalAway {
+                Text("النتيجة النهائية ") .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
+                + Text(verbatim: "\u{2066}\(fa) - \(fh)\u{2069}")
+                    .font(SportsFonts.app(size: 13, weight: .heavy)).foregroundStyle(SpTheme.onDark)
+            }
+
+            Text("+\(row.pointsAwarded) نقطة · \(row.tier.labelAr)")
+                .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(.white)
+                .padding(.horizontal, 14).padding(.vertical, 7)
+                .background(Capsule().fill(SpTheme.green))
+
+            Text("توقّع معي في تطبيق VARA الرياضي")
+                .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
+        }
+        .padding(30)
+        .frame(width: 380)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Color.white)
+                .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(SpTheme.green.opacity(0.35), lineWidth: 2))
+        )
+        .padding(14)
+        .background(Color(red: 0.95, green: 0.97, blue: 0.96))
     }
 }
 

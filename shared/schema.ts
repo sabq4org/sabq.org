@@ -1913,6 +1913,124 @@ export const wcPredictionMatches = pgTable("wc_prediction_matches", {
 export type WcPrediction = typeof wcPredictions.$inferSelect;
 export type WcPredictionMatch = typeof wcPredictionMatches.$inferSelect;
 
+// Long-term tournament predictions (champion / top scorer) for World Cup 2026.
+// One row per (userId, kind). WHY the extra `weight`/`lockedStage` vs the Gulf
+// Cup equivalent: the champion pool (10,000) is split WEIGHTED by each correct
+// voter's early-bird weight — the earlier you lock in, the bigger your share.
+// Weight is set at submit time from the live knockout stage: R32/earlier = 100,
+// R16 = 60, QF = 30, then the champion pick CLOSES at semi-final kickoff. The
+// top-scorer pool (3,000) is split EQUALLY (weight always 100) and closes at
+// quarter-final kickoff (end of round of 16). Settled once from the Final result
+// (champion) and the top-scorers board (top scorer) — same per-row settledAt
+// idempotency guard as wc_predictions.
+export const wcLongPredictions = pgTable("wc_long_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  kind: text("kind").notNull(), // 'champion' | 'top_scorer'
+  teamId: integer("team_id"),         // champion pick (API-Football team id)
+  teamName: text("team_name"),
+  teamLogo: text("team_logo"),
+  playerId: integer("player_id"),     // top-scorer pick (API-Football player id)
+  playerName: text("player_name"),
+  playerPhoto: text("player_photo"),
+  // Early-bird share weight as an integer percent (100 | 60 | 30). Champion
+  // only; top_scorer is always 100 (equal split).
+  weight: integer("weight").notNull().default(100),
+  // Knockout stage active when the pick was locked: 'r32' | 'r16' | 'qf'.
+  lockedStage: text("locked_stage").notNull().default("r32"),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_wc_long_user_kind").on(table.userId, table.kind),
+  index("idx_wc_long_kind").on(table.kind),
+]);
+
+export type WcLongPrediction = typeof wcLongPredictions.$inferSelect;
+
+// ============================================================================
+// Roshn Saudi League — predictions (the World-Cup engine applied to the
+// domestic league). Fixtures are NOT stored (fetched live from API-Football
+// via saudiLeagueService, league 307). Same 3-table shape and idempotency
+// guards as wc_predictions / wc_prediction_matches / wc_long_predictions.
+// ============================================================================
+
+// One row per (fixtureId, userId): the user's exact-scoreline guess.
+export const rslPredictions = pgTable("rsl_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_rsl_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_rsl_pred_user").on(table.userId),
+  index("idx_rsl_pred_fixture").on(table.fixtureId),
+]);
+
+// Per-fixture settlement snapshot — same three purposes as wc_prediction_matches
+// (idempotency anchor / history display without live API / leaderboard joins).
+export const rslPredictionMatches = pgTable("rsl_prediction_matches", {
+  fixtureId: varchar("fixture_id").primaryKey(),
+  kickoffAt: timestamp("kickoff_at").notNull(),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  finalHome: integer("final_home"),
+  finalAway: integer("final_away"),
+  status: text("status").notNull().default("open"), // open | locked | settled
+  winnersCount: integer("winners_count").notNull().default(0),
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  pointsPool: integer("points_pool").notNull().default(500),
+  pointsPerWinner: integer("points_per_winner").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  index("idx_rsl_pred_match_status").on(table.status),
+]);
+
+export type RslPrediction = typeof rslPredictions.$inferSelect;
+export type RslPredictionMatch = typeof rslPredictionMatches.$inferSelect;
+
+// Season-long predictions (champion / top scorer). The champion pool (10,000)
+// splits WEIGHTED by early-bird weight measured in ROUND tiers instead of the
+// World Cup's knockout stages: rounds 1–11 = 100, 12–22 = 60, 23–29 = 30,
+// closed once round 30 kicks off. Top-scorer pool (3,000) splits equally and
+// closes once round 25 kicks off. Settled once when the season completes
+// (standings leader = champion, official scorers leader = top scorer).
+export const rslLongPredictions = pgTable("rsl_long_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  kind: text("kind").notNull(), // 'champion' | 'top_scorer'
+  teamId: integer("team_id"),
+  teamName: text("team_name"),
+  teamLogo: text("team_logo"),
+  playerId: integer("player_id"),
+  playerName: text("player_name"),
+  playerPhoto: text("player_photo"),
+  weight: integer("weight").notNull().default(100), // 100 | 60 | 30 (champion)
+  lockedStage: text("locked_stage").notNull().default("early"), // early | mid | late
+  status: text("status").notNull().default("pending"),
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_rsl_long_user_kind").on(table.userId, table.kind),
+  index("idx_rsl_long_kind").on(table.kind),
+]);
+
+export type RslLongPrediction = typeof rslLongPredictions.$inferSelect;
+
 // ============================================================================
 // Asian Cup 2027 — Smart Predictions Game
 // Fixtures are NOT stored (fetched live from API-Football via asianCupService).
@@ -2829,6 +2947,70 @@ export const sportsPredictions = pgTable("sports_predictions", {
 export type SportsPrediction = typeof sportsPredictions.$inferSelect;
 export type InsertSportsPrediction = typeof sportsPredictions.$inferInsert;
 
+// سجلّ البطولات الموحّد (Sabq Sports 2.0) — مصدر الحقيقة لظهور البطولات في هَب
+// الرياضة (/sports22) والتطبيقات معًا. يُدار من الداشبورد (بدون deploy):
+// kind: 'anchor' (روشن — يظهر دائمًا أولًا) | 'seasonal' (تظهر وتختفي حسب حالتها).
+// status: 'hidden' | 'upcoming' | 'active' | 'finished'.
+// theme: لمسة هوية اختيارية للبطولة (ألوان فوق هوية سبق الأساسية).
+// features: الميزات المفعّلة في قالب البطولة (predictions/bracket/scorers/standings/teams/news).
+// entryPath داخل features يوجّه بطولات «الجزر» القائمة (آسيا/خليجي/مونديال) لصفحاتها
+// الحالية حتى اكتمال ترحيلها للقالب الموحّد.
+export const sportsTournaments = pgTable("sports_tournaments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: text("slug").notNull().unique(),
+  apiFootballLeagueId: integer("api_football_league_id"),
+  name: text("name").notNull(),
+  shortName: text("short_name"),
+  logo: text("logo"),
+  kind: text("kind").default("seasonal").notNull(),
+  status: text("status").default("hidden").notNull(),
+  visibleWeb: boolean("visible_web").default(false).notNull(),
+  visibleApp: boolean("visible_app").default(false).notNull(),
+  featured: boolean("featured").default(false).notNull(),
+  sortOrder: integer("sort_order").default(100).notNull(),
+  season: integer("season"),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  theme: jsonb("theme").$type<{
+    primary?: string;
+    accent?: string;
+    dark?: string;
+  }>(),
+  features: jsonb("features").$type<{
+    predictions?: boolean;
+    bracket?: boolean;
+    scorers?: boolean;
+    standings?: boolean;
+    teams?: boolean;
+    news?: boolean;
+    /** مسار صفحة خارجية قائمة (جزيرة لم تُرحَّل بعد) بدل القالب الموحّد */
+    entryPath?: string;
+  }>(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sports_tournaments_order").on(table.sortOrder),
+  index("idx_sports_tournaments_status").on(table.status),
+]);
+
+export type SportsTournament = typeof sportsTournaments.$inferSelect;
+export type InsertSportsTournament = typeof sportsTournaments.$inferInsert;
+
+// سجل تغييرات إعدادات البطولات — من غيّر ماذا ومتى (يُعرض في صفحة الإدارة).
+export const sportsTournamentAudit = pgTable("sports_tournament_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tournamentId: varchar("tournament_id").references(() => sportsTournaments.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  action: text("action").notNull(),
+  changes: jsonb("changes").$type<Record<string, { from: unknown; to: unknown }>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sports_tournament_audit_t").on(table.tournamentId, table.createdAt.desc()),
+]);
+
+export type SportsTournamentAudit = typeof sportsTournamentAudit.$inferSelect;
+
 // Story notifications (notification log)
 export const storyNotifications = pgTable("story_notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -2935,7 +3117,14 @@ export const insertCategorySchema = createInsertSchema(categories).omit({
   updatedAt: true 
 }).extend({
   type: z.enum(["core", "dynamic", "smart", "seasonal"]).default("core"),
-  status: z.enum(["active", "inactive"]).default("active"),
+  // "visible" is the value every public-facing read path (homepage, /categories,
+  // mobile API, edge SEO meta — see server/routes/edgeMeta.ts "category status
+  // trap" comment) checks to decide whether a category is shown publicly.
+  // "active" is NOT public-visible despite the name; it only existed here as the
+  // schema default. Omitting "visible" from this enum used to make the dashboard
+  // form/API reject it, which is what silently downgraded "visible" categories to
+  // "active" (and made them disappear) on every edit.
+  status: z.enum(["visible", "active", "inactive"]).default("active"),
   seasonalRules: seasonalRulesSchema,
   features: categoryFeaturesSchema,
   aiConfig: aiConfigSchema,
@@ -13063,3 +13252,173 @@ export const wcPlayerNames = pgTable("wc_player_names", {
 });
 
 export type WcPlayerName = typeof wcPlayerNames.$inferSelect;
+
+// ============================================
+// SABQ AI HUB — central gateway for all AI usage
+// ============================================
+// Single entry point (server/ai/gateway/) routes every AI call through
+// DB-driven model configs with automatic failover + circuit breaker.
+// See docs: issue #589.
+
+export const aiHubProviders = ["openai", "anthropic", "gemini", "elevenlabs"] as const;
+export type AiHubProviderName = (typeof aiHubProviders)[number];
+
+export const aiHubCapabilities = ["complete", "embed", "image", "tts"] as const;
+export const aiHubPricingUnits = ["tokens", "chars", "image"] as const;
+export const aiHubUsageStatuses = ["success", "fallback", "failed"] as const;
+export const aiHubHealthStatuses = ["healthy", "degraded", "quota_exceeded", "down"] as const;
+
+// Model catalog: providers' models with pricing. Pricing is editable from the
+// dashboard; cost math depends on pricingUnit (tokens → per-1M in/out tokens,
+// chars → per-1M input chars, image → costPerUnit per generated image).
+export const aiModels = pgTable("ai_models", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  displayName: varchar("display_name", { length: 128 }).notNull(),
+  capabilities: jsonb("capabilities").$type<string[]>().default([]).notNull(),
+  pricingUnit: varchar("pricing_unit", { length: 16 }).default("tokens").notNull(),
+  costPer1MInput: real("cost_per_1m_input").default(0).notNull(),
+  costPer1MOutput: real("cost_per_1m_output").default(0).notNull(),
+  costPerUnit: real("cost_per_unit").default(0).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  priority: integer("priority").default(100).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_models_provider_model").on(table.provider, table.modelId),
+]);
+
+// Per-feature routing config. fallbackChain holds ai_models.id values in
+// failover order. allowFailover=false pins the feature to its primary model
+// (embeddings MUST stay pinned — vectors are incompatible across models).
+export const aiFeatureConfigs = pgTable("ai_feature_configs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  featureKey: varchar("feature_key", { length: 64 }).notNull().unique(),
+  displayName: varchar("display_name", { length: 128 }).notNull(),
+  category: varchar("category", { length: 32 }).default("general").notNull(),
+  primaryModelId: varchar("primary_model_id").references(() => aiModels.id),
+  fallbackChain: jsonb("fallback_chain").$type<string[]>().default([]).notNull(),
+  maxTokens: integer("max_tokens"),
+  temperature: real("temperature"),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  allowFailover: boolean("allow_failover").default(true).notNull(),
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Raw per-call log. Grows fast: rolled up nightly into ai_usage_daily and
+// pruned after 90 days by server/jobs/aiUsageRollup.ts.
+export const aiUsageLogs = pgTable("ai_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  featureKey: varchar("feature_key", { length: 64 }).notNull(),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  operation: varchar("operation", { length: 16 }).default("complete").notNull(),
+  inputTokens: integer("input_tokens").default(0).notNull(),
+  outputTokens: integer("output_tokens").default(0).notNull(),
+  unitCount: integer("unit_count").default(0).notNull(),
+  estimatedCostUsd: real("estimated_cost_usd").default(0).notNull(),
+  latencyMs: integer("latency_ms").default(0).notNull(),
+  status: varchar("status", { length: 16 }).notNull(),
+  errorCode: varchar("error_code", { length: 32 }),
+  errorMessage: text("error_message"),
+  userId: varchar("user_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ai_usage_logs_created").on(table.createdAt),
+  index("idx_ai_usage_logs_feature").on(table.featureKey, table.createdAt),
+  index("idx_ai_usage_logs_provider").on(table.provider, table.createdAt),
+  index("idx_ai_usage_logs_status").on(table.status, table.createdAt),
+]);
+
+// Daily rollup — dashboard charts read from here, never from raw logs.
+export const aiUsageDaily = pgTable("ai_usage_daily", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: date("date").notNull(),
+  featureKey: varchar("feature_key", { length: 64 }).notNull(),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  operation: varchar("operation", { length: 16 }).default("complete").notNull(),
+  requests: integer("requests").default(0).notNull(),
+  successCount: integer("success_count").default(0).notNull(),
+  fallbackCount: integer("fallback_count").default(0).notNull(),
+  failedCount: integer("failed_count").default(0).notNull(),
+  inputTokens: bigint("input_tokens", { mode: "number" }).default(0).notNull(),
+  outputTokens: bigint("output_tokens", { mode: "number" }).default(0).notNull(),
+  unitCount: integer("unit_count").default(0).notNull(),
+  estimatedCostUsd: real("estimated_cost_usd").default(0).notNull(),
+  avgLatencyMs: real("avg_latency_ms").default(0).notNull(),
+  p50LatencyMs: real("p50_latency_ms").default(0).notNull(),
+  p95LatencyMs: real("p95_latency_ms").default(0).notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_usage_daily_unique").on(
+    table.date, table.featureKey, table.provider, table.modelId, table.operation,
+  ),
+  index("idx_ai_usage_daily_date").on(table.date),
+]);
+
+// Circuit-breaker state, persisted so it survives restarts and is shared
+// across instances; the dashboard's live provider strip reads from here.
+export const aiProviderHealth = pgTable("ai_provider_health", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: varchar("provider", { length: 32 }).notNull(),
+  modelId: varchar("model_id", { length: 128 }).notNull(),
+  status: varchar("status", { length: 24 }).default("healthy").notNull(),
+  failCount: integer("fail_count").default(0).notNull(),
+  lastError: text("last_error"),
+  lastErrorCode: varchar("last_error_code", { length: 32 }),
+  cooldownUntil: timestamp("cooldown_until"),
+  lastCheckedAt: timestamp("last_checked_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_provider_health_unique").on(table.provider, table.modelId),
+]);
+
+// Audit trail for config changes made from the dashboard (who switched which
+// model, when) — multiple admins manage the hub, accountability is required.
+export const aiConfigAudit = pgTable("ai_config_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  entityType: varchar("entity_type", { length: 32 }).notNull(),
+  entityKey: varchar("entity_key", { length: 128 }).notNull(),
+  action: varchar("action", { length: 32 }).notNull(),
+  changes: jsonb("changes").$type<Record<string, { from: unknown; to: unknown }>>(),
+  userId: varchar("user_id"),
+  userName: varchar("user_name", { length: 128 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ai_config_audit_created").on(table.createdAt),
+  index("idx_ai_config_audit_entity").on(table.entityType, table.entityKey),
+]);
+
+// Monthly budget limits (global / per provider / per feature) with 80%/100%
+// alert thresholds. lastAlertMonth+lastAlertLevel throttle repeat alerts.
+export const aiBudgets = pgTable("ai_budgets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  scope: varchar("scope", { length: 16 }).notNull(),
+  scopeKey: varchar("scope_key", { length: 64 }).default("").notNull(),
+  monthlyLimitUsd: real("monthly_limit_usd").notNull(),
+  alertAt80: boolean("alert_at_80").default(true).notNull(),
+  alertAt100: boolean("alert_at_100").default(true).notNull(),
+  lastAlertMonth: varchar("last_alert_month", { length: 7 }),
+  lastAlertLevel: integer("last_alert_level").default(0).notNull(),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_ai_budgets_scope").on(table.scope, table.scopeKey),
+]);
+
+export type AiModel = typeof aiModels.$inferSelect;
+export type InsertAiModel = typeof aiModels.$inferInsert;
+export type AiFeatureConfig = typeof aiFeatureConfigs.$inferSelect;
+export type InsertAiFeatureConfig = typeof aiFeatureConfigs.$inferInsert;
+export type AiUsageLog = typeof aiUsageLogs.$inferSelect;
+export type InsertAiUsageLog = typeof aiUsageLogs.$inferInsert;
+export type AiUsageDailyRow = typeof aiUsageDaily.$inferSelect;
+export type AiProviderHealthRow = typeof aiProviderHealth.$inferSelect;
+export type AiConfigAuditRow = typeof aiConfigAudit.$inferSelect;
+export type AiBudget = typeof aiBudgets.$inferSelect;

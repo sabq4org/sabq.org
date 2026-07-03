@@ -6,6 +6,8 @@ import SwiftUI
 // مستقل باسم «عالمية» (تبويب «المباريات» الجديد يغطّي جدول المونديال بالتواريخ).
 // (اسم البنية `LiveView` محفوظ لتفادي مساس pbxproj — دلالته الآن «عالمية».)
 struct LiveView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(SpLiveStream.self) private var liveStream
     @State private var world: [SpWorldLiveItem] = []
     @State private var catBySlug: [String: String] = [:]
     @State private var loading = true
@@ -30,6 +32,14 @@ struct LiveView: View {
         .task { await load() }
         .task { await pollLive() }
         .refreshable { await load(force: true) }
+        // عودة التطبيق للمقدّمة = تحديث فوري (لا انتظار دورة الاستطلاع التالية).
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await load(force: true) } }
+        }
+        // البث الحيّ (SSE): أي تغيّر في مباريات العالم الجارية = تحديث فوري.
+        .onChange(of: liveStream.sportsVersion) { _, _ in
+            Task { await load(force: true) }
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -309,146 +319,13 @@ struct LiveView: View {
         self.loading = false
     }
 
-    // تحديث صامت أثناء العرض — يتسارع (15ث) عند وجود مباراة جارية، ويتباطأ (40ث) عداها.
+    // تحديث صامت أثناء العرض — السياسة الموحّدة: حيّ = 10ث، ويتباطأ (30ث) حين لا مباريات.
     private func pollLive() async {
         while !Task.isCancelled {
-            let delay: UInt64 = world.isEmpty ? 40_000_000_000 : 15_000_000_000
+            let delay: UInt64 = world.isEmpty ? 30_000_000_000 : 10_000_000_000
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
             await load(force: true)
         }
-    }
-}
-
-private struct SpWorldMatchRow: View {
-    let item: SpWorldLiveItem
-
-    @Environment(SpMatchFollows.self) private var matchFollows
-
-    private var fixture: SpFixture { item.fixture }
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            NavigationLink {
-                SpMatchCenter(fixtureId: fixture.id, preview: fixture)
-            } label: {
-                cardBody
-            }
-            .buttonStyle(SpPressStyle())
-
-            followButton
-                .padding(.top, 12)
-                .padding(.leading, 12)
-        }
-    }
-
-    private var cardBody: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Color.clear.frame(width: 26, height: 26)
-                Text(topLabel)
-                    .font(SportsFonts.app(size: 10.5, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDarkDim)
-                    .lineLimit(1)
-                Spacer(minLength: 6)
-                livePill
-            }
-
-            HStack(spacing: 8) {
-                teamSide(fixture.home, leading: true)
-                scoreBox
-                teamSide(fixture.away, leading: false)
-            }
-        }
-        .padding(13)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(SpTheme.cardGradient)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(SpTheme.cardStroke, lineWidth: 1)
-        )
-        .shadow(color: SpTheme.cardShadow.opacity(0.75), radius: 8, x: 0, y: 5)
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
-    private var topLabel: String {
-        let country = item.countryAr.isEmpty ? item.country : item.countryAr
-        if !fixture.round.isEmpty, !country.isEmpty { return "\(country) · \(fixture.round)" }
-        if !country.isEmpty { return country }
-        return fixture.round
-    }
-
-    private var livePill: some View {
-        HStack(spacing: 5) {
-            Circle().fill(SpTheme.green).frame(width: 6, height: 6)
-            Text(liveText)
-                .font(SportsFonts.app(size: 11, weight: .bold))
-                .foregroundStyle(SpTheme.green)
-                .monospacedDigit()
-        }
-        .padding(.horizontal, 8).padding(.vertical, 4)
-        .background(Capsule().fill(SpTheme.green.opacity(0.11)))
-    }
-
-    private var liveText: String {
-        if fixture.status.code == "HT" { return "استراحة" }
-        if let e = fixture.status.elapsed {
-            if let x = fixture.status.extra, x > 0 { return "\(e)+\(x)′" }
-            return "\(e)′"
-        }
-        return fixture.status.label.isEmpty ? "مباشر" : fixture.status.label
-    }
-
-    private func teamSide(_ team: SpTeam, leading: Bool) -> some View {
-        HStack(spacing: 8) {
-            if leading {
-                teamName(team, align: .leading)
-                SpTeamLogo(logo: team.logo, size: 28)
-            } else {
-                SpTeamLogo(logo: team.logo, size: 28)
-                teamName(team, align: .trailing)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
-    }
-
-    private func teamName(_ team: SpTeam, align: TextAlignment) -> some View {
-        Text(team.name)
-            .font(SportsFonts.app(size: 14, weight: .bold))
-            .foregroundStyle(SpTheme.onDark)
-            .lineLimit(1)
-            .minimumScaleFactor(0.85)
-            .multilineTextAlignment(align)
-    }
-
-
-    private var scoreBox: some View {
-        HStack(spacing: 5) {
-            Text("\(fixture.goals.away ?? 0)")
-            Text("-").foregroundStyle(SpTheme.onDarkFaint)
-            Text("\(fixture.goals.home ?? 0)")
-        }
-        .font(SportsFonts.app(size: 21, weight: .heavy))
-        .foregroundStyle(SpTheme.onDark)
-        .monospacedDigit()
-        .environment(\.layoutDirection, .leftToRight)
-        .frame(minWidth: 58)
-    }
-
-    private var followButton: some View {
-        let following = matchFollows.isFollowing(fixture.id)
-        return Button {
-            matchFollows.toggle(fixture)
-        } label: {
-            Image(systemName: following ? "star.fill" : "star")
-                .font(.system(size: 12.5, weight: .bold))
-                .foregroundStyle(following ? SpTheme.gold : SpTheme.onDarkFaint)
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(following ? SpTheme.gold.opacity(0.12) : SpTheme.chipFill))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
     }
 }

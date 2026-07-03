@@ -1,5 +1,10 @@
 package com.sabq.smart.feature.worldcup
 
+import android.content.Context
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,8 +13,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -23,9 +30,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -36,16 +46,28 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import kotlin.random.Random
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -89,7 +111,22 @@ fun WorldCupPredictionsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
+    // احتفال الفوز — يُعرض مرّة واحدة لكل مباراة فائزة، ونتتبّع المعروضة محليًّا.
+    val context = LocalContext.current
+    var celebration by remember { mutableStateOf<WcPredictionHistoryItem?>(null) }
+    LaunchedEffect(state.mine, state.isLoggedIn) {
+        if (!state.isLoggedIn || celebration != null) return@LaunchedEffect
+        val seen = wcSeenWins(context)
+        state.mine.firstOrNull { it.won && it.fixtureId !in seen }?.let { celebration = it }
+    }
+
     ProvideTextStyle(LocalTextStyle.current.copy(fontFamily = IbmPlexSansArabic)) {
+        celebration?.let { row ->
+            WcWinCelebration(row) {
+                wcMarkWinSeen(context, row.fixtureId)
+                celebration = null
+            }
+        }
         Box(modifier = Modifier.fillMaxSize().background(WcColors.sectionBackground)) {
                 Column(modifier = Modifier.fillMaxSize()) {
                     Row(
@@ -417,43 +454,254 @@ private fun SummaryTile(value: String, label: String, accent: Color?, modifier: 
     }
 }
 
+// بطاقة توقّع احترافية مطابقة لتصميم الويب (MyPredictionsList) و iOS: شريط علوي
+// (اليوم + حالة)، ثم الشعارات (المضيف يمينًا) وكتلتا «توقّعي/النتيجة»، وتذييل
+// للترجيح إن وُجد. توحيد بصري كامل بين المنصّات الثلاث.
 @Composable
 private fun MineRow(item: WcPredictionHistoryItem) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(WcColors.card).padding(horizontal = 12.dp, vertical = 10.dp),
+    val settled = item.matchStatus == "settled" && item.finalHome != null && item.finalAway != null
+    val isWin = settled && item.status == "correct"
+    val borderColor = if (isWin) WcColors.emeraldDeep.copy(alpha = 0.5f) else WcColors.cardStroke.copy(alpha = 0.5f)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(WcColors.card)
+            .border(if (isWin) 1.dp else 0.5.dp, borderColor, RoundedCornerShape(18.dp)),
     ) {
-        MineLogo(item.homeTeamLogo)
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(64.dp)) {
-            LtrText("${item.predAway} - ${item.predHome}", WcColors.onDark, 14, FontWeight.Black)
-            if (item.finalHome != null && item.finalAway != null) {
-                LtrText("النتيجة ${item.finalAway}-${item.finalHome}", WcColors.onDarkDim, 10, FontWeight.Normal)
+        // شريط علوي: اليوم + شارة الحالة
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (isWin) WcColors.emeraldDeep.copy(alpha = 0.10f) else WcColors.chipFill.copy(alpha = 0.6f))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Text(WcFormat.dayFromIso(item.kickoffAt), color = WcColors.onDarkDim, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            MineStatusPill(settled, isWin, item.pointsAwarded)
+        }
+
+        // الشعارات + توقّعي/النتيجة
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 12.dp),
+        ) {
+            MineCrest(item.homeTeamName, item.homeTeamLogo)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+                modifier = Modifier.weight(1f),
+            ) {
+                ScoreBlockMine("توقّعي", item.predAway, item.predHome, if (isWin) WcColors.emeraldDeep else WcColors.onDark)
+                if (settled && item.finalHome != null && item.finalAway != null) {
+                    Box(Modifier.width(1.dp).height(34.dp).background(WcColors.cardStroke))
+                    ScoreBlockMine("النتيجة", item.finalAway, item.finalHome, WcColors.onDarkDim)
+                }
+            }
+            MineCrest(item.awayTeamName, item.awayTeamLogo)
+        }
+
+        // تذييل: الفائز بركلات الترجيح
+        val ph = item.finalPenHome
+        val pa = item.finalPenAway
+        if (ph != null && pa != null && ph != pa) {
+            val winner = if (ph > pa) item.homeTeamName else item.awayTeamName
+            Box(Modifier.fillMaxWidth().height(1.dp).background(WcColors.cardStroke.copy(alpha = 0.6f)))
+            Text(
+                "فاز ${winner ?: ""} بالترجيح (${maxOf(ph, pa)}-${minOf(ph, pa)})",
+                color = WcColors.emeraldDeep, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 8.dp),
+            )
+        }
+    }
+}
+
+// شعار + اسم منتخب — عمود متمركز بعرض ثابت (المضيف يمينًا في RTL)
+@Composable
+private fun MineCrest(name: String?, logo: String?) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.width(62.dp),
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.size(44.dp).clip(CircleShape).background(Color.White).border(1.dp, WcColors.cardStroke, CircleShape),
+        ) {
+            if (!logo.isNullOrEmpty()) {
+                AsyncImage(model = logo, contentDescription = null, modifier = Modifier.size(30.dp))
             }
         }
-        MineLogo(item.awayTeamLogo)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.weight(1f)) {
-            Text("${item.homeTeamName ?: ""} × ${item.awayTeamName ?: ""}", color = WcColors.onDark, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-            // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من تأهّل بالترجيح.
-            val ph = item.finalPenHome
-            val pa = item.finalPenAway
-            if (ph != null && pa != null && ph != pa) {
-                val winner = if (ph > pa) item.homeTeamName else item.awayTeamName
-                Text(
-                    "فاز ${winner ?: ""} بالترجيح (${maxOf(ph, pa)}-${minOf(ph, pa)})",
-                    color = WcColors.emeraldDeep, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-                )
+        Text(name ?: "—", color = WcColors.onDark, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 2, textAlign = TextAlign.Center)
+    }
+}
+
+// كتلة نتيجة (توقّعي/النتيجة): عنوان صغير + رقم كبير موحّد الاتجاه (LTR: الضيف يسارًا)
+@Composable
+private fun ScoreBlockMine(label: String, away: Int, home: Int, tint: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, color = WcColors.onDarkDim, fontSize = 10.sp)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("$away", color = tint, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text("-", color = WcColors.onDarkDim, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                Text("$home", color = tint, fontSize = 22.sp, fontWeight = FontWeight.Black)
             }
-            StatusBadge(item.status, item.pointsAwarded)
         }
     }
 }
 
 @Composable
-private fun MineLogo(url: String?) {
-    if (!url.isNullOrEmpty()) {
-        AsyncImage(model = url, contentDescription = null, modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.White))
-    } else {
-        Box(Modifier.size(28.dp).clip(CircleShape).background(WcColors.chipFill))
+private fun MineStatusPill(settled: Boolean, isWin: Boolean, points: Int) {
+    when {
+        settled && isWin -> Pill(WcColors.emeraldDeep) {
+            Icon(Icons.Filled.EmojiEvents, null, tint = Color.White, modifier = Modifier.size(12.dp))
+            Text("+$points نقطة", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black)
+        }
+        settled -> Pill(WcColors.chipFill) {
+            Icon(Icons.Filled.Close, null, tint = WcColors.onDarkDim, modifier = Modifier.size(11.dp))
+            Text("لم تُصب", color = WcColors.onDarkDim, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+        else -> Pill(WcColors.gold.copy(alpha = 0.15f)) {
+            Icon(Icons.Filled.Schedule, null, tint = WcColors.gold, modifier = Modifier.size(11.dp))
+            Text("قيد الانتظار", color = WcColors.gold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun Pill(bg: Color, content: @Composable RowScope.() -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 10.dp, vertical = 3.dp),
+        content = content,
+    )
+}
+
+// ---------- احتفال الفوز (Dialog + confetti + تفاصيل التوقّع) ----------
+//
+// يظهر مرّة واحدة لكل مباراة فائزة عند فتح الشاشة — مطابقًا لفكرة iOS
+// WCWinCelebration وSpWinCelebration في تطبيق الرياضة والويب.
+
+private const val WC_PREFS = "wc_predictions"
+private const val WC_SEEN_KEY = "seen_wins"
+
+private fun wcSeenWins(context: Context): Set<String> =
+    context.getSharedPreferences(WC_PREFS, Context.MODE_PRIVATE)
+        .getStringSet(WC_SEEN_KEY, emptySet()) ?: emptySet()
+
+private fun wcMarkWinSeen(context: Context, fixtureId: String) {
+    val prefs = context.getSharedPreferences(WC_PREFS, Context.MODE_PRIVATE)
+    val seen = (prefs.getStringSet(WC_SEEN_KEY, emptySet()) ?: emptySet()).toMutableSet()
+    seen.add(fixtureId)
+    prefs.edit().putStringSet(WC_SEEN_KEY, seen).apply()
+}
+
+@Composable
+private fun WcWinCelebration(item: WcPredictionHistoryItem, onClose: () -> Unit) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            WcConfetti(Modifier.fillMaxSize())
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(WcColors.card).padding(28.dp),
+            ) {
+                Text("🎯", fontSize = 56.sp)
+                Text("توقّع موفّق! 🎉", color = WcColors.onDark, fontSize = 24.sp, fontWeight = FontWeight.Black)
+                Text(
+                    "${item.homeTeamName ?: ""} ضد ${item.awayTeamName ?: ""}",
+                    color = WcColors.onDarkDim, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                )
+
+                // تفاصيل التوقّع: الشعارات + توقّعي/النتيجة
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WcColors.chipFill)
+                        .border(1.dp, WcColors.cardStroke, RoundedCornerShape(16.dp)).padding(horizontal = 14.dp, vertical = 12.dp),
+                ) {
+                    MineCrest(item.homeTeamName, item.homeTeamLogo)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        ScoreBlockMine("توقّعي", item.predAway, item.predHome, WcColors.emeraldDeep)
+                        if (item.finalHome != null && item.finalAway != null) {
+                            Box(Modifier.width(1.dp).height(32.dp).background(WcColors.cardStroke))
+                            ScoreBlockMine("النتيجة", item.finalAway, item.finalHome, WcColors.onDark)
+                        }
+                    }
+                    MineCrest(item.awayTeamName, item.awayTeamLogo)
+                }
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        Text("+${item.pointsAwarded}", color = WcColors.emeraldDeep, fontSize = 42.sp, fontWeight = FontWeight.Black)
+                    }
+                    Text("نقطة من إصابة النتيجة الدقيقة", color = WcColors.onDarkDim, fontSize = 12.sp)
+                }
+
+                Text(
+                    "رائع!", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WcColors.emeraldDeep)
+                        .clickable { onClose() }.padding(vertical = 14.dp),
+                )
+            }
+        }
+    }
+}
+
+private data class WcConfPiece(
+    val x: Float, val delay: Float, val duration: Float,
+    val colorIdx: Int, val size: Float, val spin: Float, val drift: Float,
+)
+
+@Composable
+private fun WcConfetti(modifier: Modifier = Modifier) {
+    val palette = listOf(WcColors.emeraldDeep, WcColors.gold, WcColors.leaf, WcColors.emerald)
+    val pieces = remember {
+        List(80) {
+            WcConfPiece(
+                x = Random.nextFloat(),
+                delay = Random.nextFloat() * 0.8f,
+                duration = 2.2f + Random.nextFloat() * 1.4f,
+                colorIdx = Random.nextInt(4),
+                size = 6f + Random.nextFloat() * 5f,
+                spin = -4f + Random.nextFloat() * 8f,
+                drift = -40f + Random.nextFloat() * 80f,
+            )
+        }
+    }
+    val clock = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        clock.animateTo(4f, animationSpec = tween(durationMillis = 4000, easing = LinearEasing))
+    }
+    Canvas(modifier = modifier) {
+        val time = clock.value
+        pieces.forEach { p ->
+            val local = time - p.delay
+            if (local <= 0f) return@forEach
+            val progress = (local / p.duration).coerceAtMost(1f)
+            val y = -20f + (size.height + 40f) * progress
+            val x = p.x * size.width + p.drift * progress
+            val opacity = if (progress < 0.85f) 1f else ((1f - progress) / 0.15f).coerceIn(0f, 1f)
+            rotate(degrees = Math.toDegrees((p.spin * local).toDouble()).toFloat(), pivot = Offset(x, y)) {
+                drawRect(
+                    color = palette[p.colorIdx].copy(alpha = opacity),
+                    topLeft = Offset(x - p.size / 2f, y - p.size * 0.3f),
+                    size = Size(p.size, p.size * 0.6f),
+                )
+            }
+        }
     }
 }
 

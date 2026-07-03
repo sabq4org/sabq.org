@@ -551,6 +551,17 @@ export const navConfig: NavItem[] = [
     ],
   },
 
+  // ===== مركز التحكم بالذكاء الاصطناعي / AI Hub (admin) =====
+  {
+    id: "ai_hub",
+    labelKey: "nav.ai_hub",
+    labelAr: "مركز التحكم بالذكاء الاصطناعي",
+    path: "/dashboard/ai-hub",
+    icon: Brain,
+    roles: ["admin", "system_admin"],
+    permissions: ["ai_hub.view"],
+  },
+
   // ===== الأدوات الذكية / Smart Tools =====
   {
     id: "smart_tools",
@@ -988,6 +999,15 @@ export const navConfig: NavItem[] = [
         labelAr: "إعدادات النظام",
         path: "/dashboard/system-settings",
         icon: Settings,
+        roles: ["admin"],
+        permissions: ["system.manage_settings"],
+      },
+      {
+        id: "sports_tournaments",
+        labelKey: "nav.sports_tournaments",
+        labelAr: "البطولات الرياضية",
+        path: "/dashboard/sports-tournaments",
+        icon: Trophy,
         roles: ["admin"],
         permissions: ["system.manage_settings"],
       },

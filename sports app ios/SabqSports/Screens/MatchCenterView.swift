@@ -19,9 +19,11 @@ struct SpMatchCenter: View {
     var preview: SpFixture?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(SpAuthStore.self) private var auth
     @Environment(SpMatchFollows.self) private var matchFollows
     @Environment(SpLiveActivityManager.self) private var liveActivity
+    @Environment(SpLiveStream.self) private var liveStream
     @State private var detail: SpMatchDetail?
     @State private var loading = true
     @State private var loadError: String?
@@ -120,7 +122,7 @@ struct SpMatchCenter: View {
         )
     }
 
-    /// عنوان المشاركة الاجتماعية — الفريقان + النتيجة/الموعد + البطولة عبر سبق الرياضي.
+    /// عنوان المشاركة الاجتماعية — الفريقان + النتيجة/الموعد + البطولة عبر VARA.
     private var shareTitle: String {
         guard let f = fixture else { return "مباراة عبر VARA" }
         let middle: String
@@ -167,6 +169,7 @@ struct SpMatchCenter: View {
                 preMatchCard
                 matchInfoCard
                 varaModelCard
+                varaVerdictCard
 
                 if loading && detail == nil {
                     SpLoading()
@@ -222,6 +225,16 @@ struct SpMatchCenter: View {
         // تحديث لحظي تلقائي أثناء اللعب — الأهداف/الكروت/الدقيقة/النتيجة تتجدّد
         // ذاتيًّا كما في الويب دون سحب-لتحديث يدوي. يتوقّف عند الانتهاء/البُعد.
         .task(id: detail?.fixture.id) { await pollLive() }
+        // عودة التطبيق للمقدّمة أثناء مباراة جارية = تحديث فوري.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, (detail?.fixture ?? preview)?.status.live == true {
+                Task { await refreshLive() }
+            }
+        }
+        // البث الحيّ (SSE): تغيّر ختم مباراتنا في الموجز = جلب التفاصيل فورًا (~2ث).
+        .onChange(of: liveStream.stamps["s:\(fixtureId)"]) { _, _ in
+            Task { await refreshLive() }
+        }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
     }
@@ -435,6 +448,19 @@ struct SpMatchCenter: View {
                     .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
             )
             .padding(.horizontal, 16)
+        }
+    }
+
+    // حكم ما بعد النهاية: لقطة VARA المؤرشفة قبل الانطلاق + توقّع العضو ضد النتيجة.
+    @ViewBuilder private var varaVerdictCard: some View {
+        if let f = fixture, f.status.finished, let gh = f.goals.home, let ga = f.goals.away {
+            let snap = VaraPickArchive.load(fixtureId: f.id)
+            let mine = myPrediction.map { (predHome: $0.predHome, predAway: $0.predAway) }
+            if snap != nil || mine != nil {
+                VaraVerdictCard(homeName: f.home.name, awayName: f.away.name,
+                                finalHome: gh, finalAway: ga, vara: snap, mine: mine)
+                    .padding(.horizontal, 16)
+            }
         }
     }
 
@@ -683,7 +709,7 @@ struct SpMatchCenter: View {
                     HStack(spacing: 5) {
                         Text("\(d.fixture.away.name) · أسفل")
                             .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
-                        Circle().fill(SpTheme.gold).frame(width: 7, height: 7)
+                        Circle().fill(SpTheme.onDarkDim).frame(width: 7, height: 7)
                     }
                 }
             }
@@ -723,7 +749,7 @@ struct SpMatchCenter: View {
                 .background(Circle().fill(.white))
                 .overlay(Circle().stroke(SpTheme.green.opacity(0.6), lineWidth: 1.5))
         case "yellow-card":
-            RoundedRectangle(cornerRadius: 2).fill(Color(red: 0.95, green: 0.76, blue: 0.22)).frame(width: 9, height: 13)
+            RoundedRectangle(cornerRadius: 2).fill(SpTheme.yellowCard).frame(width: 9, height: 13)
         case "red-card":
             RoundedRectangle(cornerRadius: 2).fill(SpTheme.crimson).frame(width: 9, height: 13)
         default:
@@ -842,7 +868,7 @@ struct SpMatchCenter: View {
             .fixedSize()
     }
 
-    // فاصل «نتيجة الشوط الأول H - A» يغطّي المحور في موضع الدقيقة 45.
+    // فاصل «نتيجة الشوط الأول» (النص: ضيف - مضيف مع فرض LTR كبقية النتائج) يغطّي المحور في موضع الدقيقة 45.
     private func halftimeMarker(home: Int, away: Int) -> some View {
         HStack(spacing: 7) {
             Text("نتيجة الشوط الأول")
@@ -872,7 +898,7 @@ struct SpMatchCenter: View {
             case "var":
                 Image(systemName: "play.tv.fill").foregroundStyle(varPurple)
             case "yellow-card":
-                cardChip(Color(red: 0.95, green: 0.76, blue: 0.22))
+                cardChip(SpTheme.yellowCard)
             case "red-card":
                 cardChip(SpTheme.crimson)
             case "substitution":
@@ -1050,7 +1076,7 @@ struct SpMatchCenter: View {
             Image(systemName: "soccerball").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
         case "yellow":
             RoundedRectangle(cornerRadius: 2.5, style: .continuous)
-                .fill(Color(red: 0.95, green: 0.76, blue: 0.22)).frame(width: 12, height: 16)
+                .fill(SpTheme.yellowCard).frame(width: 12, height: 16)
         case "red":
             RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                 .fill(SpTheme.crimson).frame(width: 12, height: 16)
@@ -1655,8 +1681,12 @@ struct SpMatchCenter: View {
             if f == nil || f?.status.finished == true { return }
             let live = f?.status.live == true
             let secsToKickoff = f?.kickoff.timeIntervalSinceNow ?? .greatestFiniteMagnitude
-            // قادمة وبعيدة (> نصف ساعة) → لا داعي للاستطلاع الآن.
-            if !live && secsToKickoff > 1800 { return }
+            if !live && secsToKickoff > 1800 {
+                // بعيدة: نَم حتى ما قبل النافذة (بدل الانسحاب — الشاشة قد تبقى مفتوحة).
+                let wait = min(secsToKickoff - 1700, 3600)
+                try? await Task.sleep(nanoseconds: UInt64(max(wait, 30)) * 1_000_000_000)
+                continue
+            }
             let seconds: UInt64 = live ? 10 : 25
             try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             if Task.isCancelled { return }
@@ -1671,9 +1701,10 @@ struct SpMatchCenter: View {
         self.detail = fresh
         // حدّث نشاط شاشة القفل بأحدث نتيجة/حدث (no-op إن لم يكن قائمًا).
         liveActivity.update(with: liveActivityFixture(fresh.fixture), lastEvent: lastEventText(fresh.events))
-        // التعليق اللحظي المُعرَّب — أفضل جهد، لا يعطّل الباقي.
-        if hasCommentary {
-            self.commentary = try? await APIClient.shared.fetchCommentary(matchId: fixtureId)
+        // التعليق اللحظي المُعرَّب — أفضل جهد دائمًا (لا نشترط وجوده سابقًا:
+        // التعليق قد يبدأ بعد فتح الشاشة فيظهر تبويبه حال توفّره).
+        if let c = try? await APIClient.shared.fetchCommentary(matchId: fixtureId, ignoreCache: true) {
+            self.commentary = c
         }
     }
 
@@ -1729,13 +1760,19 @@ struct SpMatchCenter: View {
                 if !m.isEmpty { self.strength = m }
             }
         }
-        // توقّعي (إن كانت المباراة قادمة وأنا عضو) — لملء الستيبر.
-        if auth.isLoggedIn, let f = preview ?? detail?.fixture, !f.started {
-            if let p = try? await APIClient.shared.fetchMyPrediction(matchId: fixtureId) {
-                myPrediction = p
+        // توقّعي (عضو): قبل الانطلاق لملء الستيبر، وبعد النهاية لبطاقة «نتيجة التوقّعات».
+        if auth.isLoggedIn,
+           let p = try? await APIClient.shared.fetchMyPrediction(matchId: fixtureId) {
+            myPrediction = p
+            if let f = preview ?? detail?.fixture, !f.started {
                 predHome = p.predHome
                 predAway = p.predAway
             }
+        }
+        // أرشفة لقطة توقّع VARA قبل الانطلاق — المقارنة بعد النهاية تعتمدها
+        // (إعادة الحساب بجداول ما بعد المباراة متحيّزة لأنها تتضمّن نتيجتها).
+        if let f = detail?.fixture ?? preview, !f.started {
+            VaraPickArchive.save(fixtureId: f.id, pick: varaPick(f))
         }
         self.loading = false
     }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// بطاقة توقّع مباراة — عدّادات النتيجة + احتمالات «سبق الذكي» + نبض الجمهور +
+// بطاقة توقّع مباراة — عدّادات النتيجة + «توقّع VARA» + نبض الجمهور +
 // معاينة البركة (50/30/20) + زرّ الإرسال. تتكيّف مع الحالة: قابلة للتوقّع /
 // مُقفلة (بانتظار النتيجة) / مُسوّاة (تعرض النتيجة وطبقتي ونصيبي).
 struct SpPredictionMatchCard: View {
@@ -144,6 +144,7 @@ struct SpPredictionMatchCard: View {
                 .frame(width: 34, height: 34).background(Circle().fill(SpTheme.green.opacity(0.12)))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(icon == "plus" ? "زيادة الأهداف" : "إنقاص الأهداف")
     }
 
     private var submitButton: some View {
@@ -172,9 +173,10 @@ struct SpPredictionMatchCard: View {
         HStack(spacing: 8) {
             Image(systemName: "lock.fill").font(.system(size: 12)).foregroundStyle(SpTheme.onDarkDim)
             if let mine = match.myPrediction {
+                // عزل الأرقام LRI…PDI كي تُعرض «ضيف - مضيف» بثبات في سياق RTL (نفس عرف scoreBlock).
                 Text("توقّعك: ")
                     .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
-                + Text(verbatim: "\(mine.predAway) - \(mine.predHome)")
+                + Text(verbatim: "\u{2066}\(mine.predAway) - \(mine.predHome)\u{2069}")
                     .font(SportsFonts.app(size: 13, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                 Text("· بانتظار النتيجة").font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkFaint)
             } else {
@@ -191,7 +193,7 @@ struct SpPredictionMatchCard: View {
             let win = mine.pointsAwarded > 0
             HStack(spacing: 8) {
                 Text("\(mine.tier.emoji)")
-                Text(verbatim: "توقّعك \(mine.predAway)-\(mine.predHome)")
+                Text(verbatim: "توقّعك \u{2066}\(mine.predAway)-\(mine.predHome)\u{2069}")
                     .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
                 Text(win ? "+\(mine.pointsAwarded) نقطة" : "لم تُصب")

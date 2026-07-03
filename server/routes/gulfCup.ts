@@ -9,8 +9,17 @@ import {
   getGcTeams,
   getGcFixtures,
   getGcStandings,
+  getGcTeamProfile,
+  getGcMatchDetail,
+  getGcScorers,
+  getGcHistory,
   isGulfCupConfigured,
 } from "../services/gulfCupService";
+import {
+  getTournamentBlockSettings,
+  isBlockHidden,
+} from "../services/tournamentBlockSettings";
+import { detectCupChampion, manualCupChampion } from "../services/cupChampion";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -29,8 +38,21 @@ export function registerGulfCupRoutes(app: Express) {
   app.get("/api/gulf-cup/overview", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=600");
-      res.json(await getGcOverview());
+      // إعدادات بلوك الرئيسية من اللوحة: blockHidden يخفي بلوك الواجهة فقط —
+      // لا نفرّغ الحمولة لأن صفحة /gulf-cup نفسها تستهلك overview هذا.
+      // champion يُكشف تلقائيًا من النهائي، واليدوي من اللوحة يتقدّم عليه.
+      const [ov, fixtures, settings] = await Promise.all([
+        getGcOverview(),
+        getGcFixtures().catch(() => []),
+        getTournamentBlockSettings("gulf-cup"),
+      ]);
+      let champion = detectCupChampion(fixtures);
+      if (settings.manualChampionTeamId && champion?.team.id !== settings.manualChampionTeamId) {
+        champion = manualCupChampion(fixtures, settings.manualChampionTeamId) ?? champion;
+      }
+      // كاش أقصر من السابق (كان 60/120) كي يصل تبديل المفتاح خلال ≤دقيقة
+      res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
+      res.json({ ...ov, blockHidden: isBlockHidden(settings), champion });
     } catch (error) {
       console.error("[GulfCup] overview failed:", error);
       res.status(502).json({ message: "تعذر جلب نظرة خليجي 27 حاليًا" });
@@ -67,6 +89,72 @@ export function registerGulfCupRoutes(app: Express) {
     } catch (error) {
       console.error("[GulfCup] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });
+    }
+  });
+
+  app.get("/api/gulf-cup/scorers", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=1800");
+      res.json(await getGcScorers());
+    } catch (error) {
+      console.error("[GulfCup] scorers failed:", error);
+      res.status(502).json({ message: "تعذر جلب قائمة الهدّافين حاليًا" });
+    }
+  });
+
+  app.get("/api/gulf-cup/history", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      // سجلّ ثابت محلّي — كاش طويل
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400");
+      res.json(getGcHistory());
+    } catch (error) {
+      console.error("[GulfCup] history failed:", error);
+      res.status(502).json({ message: "تعذر جلب سجلّ البطولة حاليًا" });
+    }
+  });
+
+  app.get("/api/gulf-cup/team/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const teamId = Number(req.params.id);
+    if (!Number.isInteger(teamId) || teamId <= 0) {
+      res.status(400).json({ message: "معرّف منتخب غير صالح" });
+      return;
+    }
+    try {
+      const profile = await getGcTeamProfile(teamId);
+      if (!profile) {
+        res.status(404).json({ message: "المنتخب غير موجود" });
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json(profile);
+    } catch (error) {
+      console.error(`[GulfCup] team ${teamId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب بيانات المنتخب حاليًا" });
+    }
+  });
+
+  app.get("/api/gulf-cup/match/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    try {
+      const detail = await getGcMatchDetail(fixtureId);
+      if (!detail) {
+        res.status(404).json({ message: "المباراة غير موجودة" });
+        return;
+      }
+      const ttl = detail.fixture.status.live ? 15 : detail.fixture.status.finished ? 600 : 60;
+      res.set("Cache-Control", `public, max-age=${ttl}, s-maxage=${ttl * 2}, stale-while-revalidate=${ttl * 4}`);
+      res.json(detail);
+    } catch (error) {
+      console.error(`[GulfCup] match ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });
     }
   });
 }

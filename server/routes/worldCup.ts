@@ -5,6 +5,10 @@
  */
 import type { Express } from "express";
 import {
+  getTournamentBlockSettings,
+  isBlockHidden,
+} from "../services/tournamentBlockSettings";
+import {
   getFixtures,
   getLiveFixtures,
   getMatchDetail,
@@ -27,6 +31,7 @@ import {
   getTopAssists,
   getTopCards,
   getTopScorers,
+  getManualChampion,
   isWorldCupConfigured,
   type WcFixture,
   type WcMatchDetail,
@@ -42,9 +47,13 @@ import {
   getForecast,
   getMatchFacts,
   getXg,
+  getExpectedLineups,
+  getMatchReferee,
+  getTeamOfTheWeek,
   getLiveScore,
   getPlayerForm,
   isSportmonksConfigured,
+  WC_LEAGUE_ID as SM_WC_LEAGUE_ID,
 } from "../services/sportmonksService";
 import {
   getTheSportsFastScore,
@@ -254,7 +263,37 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/overview", async (_req, res) => {
     if (!guard(res)) return;
     try {
+      // إعدادات البلوك من لوحة التحكم — الإخفاء (بالمفتاح أو خارج نافذة
+      // التوقيت) يعمل على الويب والتطبيقات المثبّتة معًا لأن الجميع يقرأ من
+      // overview: نُرجع حمولة صالحة فارغة فتختفي الواجهات دون تحديث متجر.
+      const settings = await getTournamentBlockSettings("world-cup");
+      if (isBlockHidden(settings)) {
+        // s-maxage=30: إعادة تفعيل المفتاح من اللوحة تصل الواجهات خلال ≤30ث
+        res.set("Cache-Control", "public, max-age=0, s-maxage=30, stale-while-revalidate=60");
+        return res.json({
+          hidden: true,
+          live: [],
+          today: [],
+          matchOfTheDay: null,
+          matchOfDayPeers: [],
+          predictions: {},
+          saudi: { next: null, fixtures: [], group: null },
+          champion: null,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
       const ov = await getOverview();
+
+      // البطل اليدوي من اللوحة يتقدّم على المكتشف تلقائيًا — إلا إذا تطابقا
+      // فنُبقي التلقائي لأنه أغنى (نتيجة النهائي + الوصيف + الترجيح)
+      let champion = ov.champion;
+      if (settings.manualChampionTeamId) {
+        if (champion?.team.id !== settings.manualChampionTeamId) {
+          champion = (await getManualChampion(settings.manualChampionTeamId)) ?? champion;
+        }
+      }
+      ov.champion = champion;
       // تركيب النتيجة اللحظية على كل المباريات الحيّة في النظرة العامة
       const [live, today, saudiFixtures] = await Promise.all([
         overlayLiveList(ov.live),
@@ -664,6 +703,85 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[WorldCup] xg ${fixtureId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب xG حاليًا", available: false });
+    }
+  });
+
+  // تشكيلة الجولة (SportMonks Team of the Week) — الأعلى تقييمًا في آخر جولة.
+  app.get("/api/world-cup/totw", async (_req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({ configured: false, available: false });
+    }
+    try {
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getTeamOfTheWeek(SM_WC_LEAGUE_ID));
+      if (data.available) {
+        const tr = await resolveNames(
+          data.players.flatMap((p) => [p.name, p.teamName])
+        );
+        for (const p of data.players) {
+          p.name = tr(p.name);
+          p.teamName = tr(p.teamName);
+        }
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error("[WorldCup] totw failed:", error);
+      res.status(502).json({ message: "تعذر جلب تشكيلة الجولة حاليًا", available: false });
+    }
+  });
+
+  // حكم المباراة + صرامته بالأرقام في البطولة (SportMonks referees).
+  app.get("/api/world-cup/match/:id/referee", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({ configured: false, available: false });
+    }
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    try {
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getMatchReferee(fixtureId));
+      if (data.available) {
+        const tr = await resolveNames([data.name, data.countryName]);
+        data.name = tr(data.name);
+        if (data.countryName) data.countryName = tr(data.countryName);
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] referee ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب بيانات الحكم حاليًا", available: false });
+    }
+  });
+
+  // التشكيلة المتوقعة قبل المباراة (SportMonks expectedLineups) — تُعرض حتى
+  // صدور التشكيلة الرسمية. الأسماء تُعرَّب بنفس مسار تعريب أسماء المونديال.
+  app.get("/api/world-cup/match/:id/expected-lineup", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({ configured: false, available: false });
+    }
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    try {
+      const raw = await getExpectedLineups(fixtureId);
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(raw);
+      if (data.available) {
+        const players = [data.home, data.away]
+          .filter(Boolean)
+          .flatMap((side) => [...side!.starters, ...side!.bench]);
+        const tr = await resolveNames(players.map((p) => p.name));
+        for (const p of players) p.name = tr(p.name);
+      }
+      res.set("Cache-Control", "public, max-age=60, s-maxage=180, stale-while-revalidate=600");
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] expected-lineup ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب التشكيلة المتوقعة حاليًا", available: false });
     }
   });
 

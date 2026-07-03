@@ -18,13 +18,14 @@ final class SabqHTMLEditorController: ObservableObject {
     fileprivate nonisolated(unsafe) weak var webView: WKWebView?
 
     /// Run a `document.execCommand` (bold, italic, insertUnorderedList, …).
+    /// القيمة تُهرَّب عبر JSON (نفس مسار setHTML) — التهريب اليدوي السابق
+    /// كان يفوّت الأسطر الجديدة و"</script>" داخل القيمة.
     func exec(_ command: String, value: String? = nil) {
         let js: String
         if let value {
-            let escaped = value
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "'", with: "\\'")
-            js = "document.execCommand('\(command)', false, '\(escaped)');"
+            let json = (try? JSONSerialization.data(withJSONObject: [value]))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "[\"\"]"
+            js = "document.execCommand('\(command)', false, (\(json))[0]);"
         } else {
             js = "document.execCommand('\(command)', false, null);"
         }
@@ -69,7 +70,9 @@ struct SabqHTMLEditor: UIViewRepresentable {
     let controller: SabqHTMLEditorController
     var onChange: (String) -> Void = { _ in }
 
-    func makeCoordinator() -> Coordinator { Coordinator(onChange: onChange) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onChange: onChange, initialHTML: initialHTML, controller: controller)
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -79,8 +82,14 @@ struct SabqHTMLEditor: UIViewRepresentable {
         webView.backgroundColor = .clear
         webView.scrollView.backgroundColor = .clear
         webView.scrollView.keyboardDismissMode = .interactive
+        webView.navigationDelegate = context.coordinator
         controller.webView = webView
-        webView.loadHTMLString(Self.document(body: initialHTML), baseURL: nil)
+        // المستند يُحمَّل فارغًا والجسم يُحقن بعد التحميل عبر setHTML
+        // (innerHTML بمسار JSON-escaping): إدراج innerHTML لا يشغّل وسوم
+        // <script> بخلاف الحقن في القالب وقت التحليل — يقطع XSS المخزَّن
+        // المباشر من محتوى مقال دُسّ فيه سكربت (يبقى خطر onerror/onload
+        // في السمات؛ التعقيم الكامل مسؤولية الخادم).
+        webView.loadHTMLString(Self.document(), baseURL: nil)
         return webView
     }
 
@@ -90,9 +99,22 @@ struct SabqHTMLEditor: UIViewRepresentable {
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "htmlChanged")
     }
 
-    final class Coordinator: NSObject, WKScriptMessageHandler {
+    final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let onChange: (String) -> Void
-        init(onChange: @escaping (String) -> Void) { self.onChange = onChange }
+        let initialHTML: String
+        weak var controller: SabqHTMLEditorController?
+
+        init(onChange: @escaping (String) -> Void,
+             initialHTML: String,
+             controller: SabqHTMLEditorController) {
+            self.onChange = onChange
+            self.initialHTML = initialHTML
+            self.controller = controller
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            controller?.setHTML(initialHTML)
+        }
 
         func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
             if message.name == "htmlChanged", let html = message.body as? String {
@@ -102,7 +124,8 @@ struct SabqHTMLEditor: UIViewRepresentable {
     }
 
     /// The editable HTML document — RTL, Arabic system font, light/dark aware.
-    private static func document(body: String) -> String {
+    /// يُبنى فارغًا دائمًا؛ الجسم يصل لاحقًا عبر setHTML (انظر makeUIView).
+    private static func document() -> String {
         """
         <!doctype html>
         <html dir="rtl" lang="ar">
@@ -136,7 +159,7 @@ struct SabqHTMLEditor: UIViewRepresentable {
         </style>
         </head>
         <body>
-        <div id="sabq-editor" contenteditable="true">\(body)</div>
+        <div id="sabq-editor" contenteditable="true"></div>
         <script>
           var ed = document.getElementById('sabq-editor');
           function notify() {

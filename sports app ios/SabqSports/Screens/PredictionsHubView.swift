@@ -35,11 +35,13 @@ struct PredictionsHubView: View {
     @State private var mine: [SpMyPredictionRow] = []
     @State private var loadingMine = false
     @State private var mineLoaded = false
+    @State private var mineError: String?
 
     // المتصدّرون
     @State private var leaders: [SpPoolLeader] = []
     @State private var loadingLeaders = false
     @State private var leadersLoaded = false
+    @State private var leadersError: String?
 
     // الميزة معطّلة في الخادم؟
     @State private var featureOff = false
@@ -117,6 +119,7 @@ struct PredictionsHubView: View {
                     divider
                     heroStat(me.rank != nil ? "#\(me.rank!)" : "—", "ترتيبك")
                 }
+                streakMeter(me)
             } else if !auth.isLoggedIn {
                 Text("سجّل الدخول من «حسابي» للمنافسة وجمع النقاط.")
                     .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
@@ -136,6 +139,30 @@ struct PredictionsHubView: View {
 
     private var divider: some View {
         Rectangle().fill(SpTheme.outline).frame(width: 1, height: 30)
+    }
+
+    // عدّاد السلسلة المرئي — تقدّم نحو المعلم التالي: ٣ (شارة 🔥 «سلسلة ملتهبة») ثم ٥ ثم ١٠.
+    @ViewBuilder private func streakMeter(_ me: SpMeStats) -> some View {
+        if me.currentStreak < 10 {
+            let target = me.currentStreak < 3 ? 3 : (me.currentStreak < 5 ? 5 : 10)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    Text("🔥").font(.system(size: 11))
+                    Text(me.currentStreak >= 3
+                         ? "سلسلة ملتهبة! واصل نحو \(target) متتالية"
+                         : "سلسلتك \(me.currentStreak)/\(target) نحو شارة «سلسلة ملتهبة»")
+                        .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 4) {
+                    ForEach(0..<target, id: \.self) { i in
+                        Capsule()
+                            .fill(i < me.currentStreak ? SpTheme.green : SpTheme.chipFill)
+                            .frame(height: 6)
+                    }
+                }
+            }
+        }
     }
 
     private func heroStat(_ value: String, _ label: String) -> some View {
@@ -226,6 +253,8 @@ struct PredictionsHubView: View {
             loginPrompt
         } else if loadingMine {
             SpLoading()
+        } else if let mineError {
+            SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: mineError)
         } else if mine.isEmpty {
             SpEmptyState(icon: "soccerball", title: "لم تتوقّع بعد",
                          subtitle: "ابدأ من تبويب «المباريات» وستظهر توقّعاتك هنا")
@@ -237,6 +266,8 @@ struct PredictionsHubView: View {
     @ViewBuilder private var leadersTab: some View {
         if loadingLeaders {
             SpLoading()
+        } else if let leadersError {
+            SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: leadersError)
         } else if leaders.isEmpty {
             SpEmptyState(icon: "trophy", title: "لا متصدّرين بعد",
                          subtitle: "كن أول من يتصدّر بتوقّعاتك")
@@ -384,9 +415,11 @@ struct PredictionsHubView: View {
             mine = r.predictions
             if let m = r.me { me = m }
             mineLoaded = true
+            mineError = nil
             detectWin()
         } catch {
-            // اترك القائمة فارغة بهدوء
+            // لا نتظاهر بقائمة فارغة — نعرض حالة خطأ (السحب للأسفل يعيد المحاولة).
+            mineError = (error as? APIError)?.errorDescription ?? "تعذّر التحميل"
         }
         loadingMine = false
     }
@@ -396,8 +429,10 @@ struct PredictionsHubView: View {
         do {
             leaders = try await APIClient.shared.fetchPoolLeaderboard(ignoreCache: true)
             leadersLoaded = true
+            leadersError = nil
         } catch {
-            // بهدوء
+            // لا نتظاهر بقائمة فارغة — نعرض حالة خطأ (السحب للأسفل يعيد المحاولة).
+            leadersError = (error as? APIError)?.errorDescription ?? "تعذّر التحميل"
         }
         loadingLeaders = false
     }

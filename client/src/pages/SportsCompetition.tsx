@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { TeamOfTheWeekSection } from "@/components/worldcup/TeamOfTheWeekSection";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import {
@@ -78,6 +79,35 @@ function seasonLabel(season: number | null | undefined): string {
   // مواسم الدوريات تمتد عبر سنتين (مثل 2025/2026).
   return `${season}/${season + 1}`;
 }
+
+function seasonLabelFromStart(season: number | null | undefined, timestamp?: number | null, iso?: string | null): string {
+  const anchor = timestamp
+    ? new Date(timestamp * 1000)
+    : iso
+      ? new Date(iso)
+      : null;
+  if (anchor && Number.isFinite(anchor.getTime())) {
+    const year = anchor.getFullYear();
+    const month = anchor.getMonth() + 1;
+    const startYear = month >= 7 ? year : year - 1;
+    return `${startYear}/${startYear + 1}`;
+  }
+  return seasonLabel(season);
+}
+
+const timeOnlyFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: true,
+});
+
+const COMP_EDITORIAL_NOTES: Record<string, string[]> = {
+  "kings-cup": [
+    "أغلى الكؤوس محليًا، وتُلعب بنظام خروج المغلوب من مباراة واحدة.",
+    "تبدأ من دور الـ32، ثم تنتقل عبر الأدوار الإقصائية حتى النهائي.",
+    "تعرف جماهيريًا باسم كأس الملك، وتجمع أندية دوري روشن ويَلو حسب نظام النسخة.",
+  ],
+};
 
 type TabKey = "standings" | "scorers" | "assists" | "cards" | "matches";
 
@@ -144,6 +174,123 @@ function PreviousEdition({ history }: { history: CompHistory }) {
   );
 }
 
+function CompetitionBrief({
+  comp,
+  history,
+  nextMatch,
+  matchCount,
+  onOpenMatch,
+}: {
+  comp: SpCompetition;
+  history: CompHistory | null;
+  nextMatch: SpLiveItem | null;
+  matchCount: number;
+  onOpenMatch: (id: number) => void;
+}) {
+  const notes = COMP_EDITORIAL_NOTES[comp.slug] ?? [
+    comp.type === "cup"
+      ? "بطولة خروج مغلوب؛ تتغير مراحلها حسب جدول كل نسخة."
+      : "بطولة دوري؛ يتحدد المسار عبر الجولات وجدول الترتيب.",
+  ];
+  const startDays = daysUntil(comp.start);
+  const info = [
+    {
+      label: "النظام",
+      value: comp.type === "cup" ? "خروج مغلوب" : "دوري",
+    },
+    {
+      label: "الموسم",
+      value: seasonLabelFromStart(comp.season, nextMatch?.timestamp ?? null, comp.start) || "قيد التحديث",
+    },
+    {
+      label: "الحالة",
+      value: comp.status ? COMP_STATUS_LABELS[comp.status] : "قيد التحديث",
+    },
+    {
+      label: "المباريات المتاحة",
+      value: matchCount > 0 ? `${matchCount}` : "تظهر مع اعتماد الجدول",
+    },
+  ];
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="border-b border-border bg-gradient-to-l from-primary/10 to-transparent px-4 py-3">
+        <div className="text-[11px] font-black uppercase tracking-wide text-primary">ملف البطولة</div>
+        <h2 className="mt-1 text-lg font-black text-foreground">{comp.name}</h2>
+      </div>
+      <div className="grid gap-4 p-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {info.map((item) => (
+              <div key={item.label} className="rounded-xl bg-muted/60 px-3 py-3">
+                <div className="text-[11px] font-bold text-muted-foreground">{item.label}</div>
+                <div className="mt-1 text-sm font-black text-foreground">{item.value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-2 text-sm leading-7 text-muted-foreground">
+            {notes.map((note) => (
+              <div key={note} className="flex gap-2">
+                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                <span>{note}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {nextMatch ? (
+            <button
+              type="button"
+              className="w-full rounded-xl border border-border bg-background px-3 py-3 text-right transition-colors hover:border-primary/40"
+              onClick={() => onOpenMatch(nextMatch.id)}
+            >
+              <div className="mb-2 text-[11px] font-bold text-primary">المباراة القادمة</div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 flex-1 truncate text-sm font-black text-foreground">{nextMatch.home.name}</span>
+                <span className="shrink-0 text-xs font-bold text-muted-foreground">×</span>
+                <span className="min-w-0 flex-1 truncate text-left text-sm font-black text-foreground">{nextMatch.away.name}</span>
+              </div>
+              <div className="mt-2 text-xs font-bold text-muted-foreground">
+                {fmtDate(nextMatch.date)} · {timeOnlyFmt.format(new Date(nextMatch.timestamp * 1000))}
+                {nextMatch.round ? ` · ${nextMatch.round}` : ""}
+              </div>
+            </button>
+          ) : startDays != null && startDays > 0 ? (
+            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-3">
+              <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">موعد الانطلاق</div>
+              <div className="mt-1 text-sm font-black text-foreground">
+                بعد {startDays} {startDays === 1 ? "يوم" : "يومًا"}
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">{fmtDate(comp.start)}</div>
+            </div>
+          ) : null}
+
+          {(history?.champion || history?.topScorer) && (
+            <div className="rounded-xl border border-border bg-background px-3 py-3">
+              <div className="mb-2 text-[11px] font-bold text-muted-foreground">من السجل الأخير</div>
+              {history.champion && (
+                <div className="flex items-center gap-2 text-sm">
+                  {history.champion.logo && <img src={history.champion.logo} alt="" className="h-6 w-6 object-contain" loading="lazy" />}
+                  <span className="font-bold text-foreground">حامل اللقب: {history.champion.name}</span>
+                </div>
+              )}
+              {history.topScorer && (
+                <div className="mt-2 flex items-center gap-2 text-sm">
+                  {history.topScorer.photo && <img src={history.topScorer.photo} alt="" className="h-6 w-6 rounded-full object-cover" loading="lazy" />}
+                  <span className="font-bold text-foreground">
+                    الهدّاف السابق: {history.topScorer.name} ({history.topScorer.goals})
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ---------- جدول الترتيب (نفس مكوّن البوابة الرياضية) ----------
 
 function StandingsPane({ slug }: { slug: string }) {
@@ -178,11 +325,18 @@ function ScorersPane({ slug }: { slug: string }) {
   if (isLoading) return <TabLoader />;
   if (rows.length === 0) return <TabEmpty text="لا تتوفّر قائمة هدّافين لهذه البطولة." />;
   return (
-    <PodiumCard
-      entries={rows.map((s) => ({ rank: s.rank, id: s.id, name: s.name, photo: s.photo, team: s.team, primary: s.goals, secondary: s.assists }))}
-      primaryLabel="عدد الأهداف"
-      secondaryLabel="الصناعة"
-    />
+    <>
+      <PodiumCard
+        entries={rows.map((s) => ({ rank: s.rank, id: s.id, name: s.name, photo: s.photo, team: s.team, primary: s.goals, secondary: s.assists }))}
+        primaryLabel="عدد الأهداف"
+        secondaryLabel="الصناعة"
+      />
+      {/* تشكيلة الجولة (SportMonks) — تظهر فقط للبطولات المغطاة وعند توفر جولة */}
+      <TeamOfTheWeekSection
+        endpoint={`/api/sports/${slug}/totw`}
+        subtitle="الأعلى تقييمًا في آخر جولة"
+      />
+    </>
   );
 }
 
@@ -307,6 +461,36 @@ export default function SportsCompetition() {
   });
   const history = historyData?.history ?? null;
 
+  const { data: matchesSummaryData } = useQuery<{
+    live: SpLiveItem[];
+    today: SpLiveItem[];
+    upcoming: SpLiveItem[];
+    results: SpLiveItem[];
+  }>({
+    queryKey: [`/api/sports/${slug}/matches`],
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
+  const summaryMatches = useMemo(() => {
+    const live = Array.isArray(matchesSummaryData?.live) ? matchesSummaryData!.live : [];
+    const today = Array.isArray(matchesSummaryData?.today) ? matchesSummaryData!.today : [];
+    const upcoming = Array.isArray(matchesSummaryData?.upcoming) ? matchesSummaryData!.upcoming : [];
+    const results = Array.isArray(matchesSummaryData?.results) ? matchesSummaryData!.results : [];
+    return { live, today, upcoming, results };
+  }, [matchesSummaryData]);
+  const nextMatch = useMemo(() => {
+    const now = Date.now() / 1000;
+    return [...summaryMatches.today, ...summaryMatches.upcoming]
+      .filter((f) => !f.status.finished && !f.status.live && f.timestamp > now)
+      .sort((a, b) => a.timestamp - b.timestamp)[0] ?? null;
+  }, [summaryMatches]);
+  const summaryMatchCount =
+    summaryMatches.live.length +
+    summaryMatches.today.length +
+    summaryMatches.upcoming.length +
+    summaryMatches.results.length;
+
   const tabs = useMemo<TabKey[]>(() => {
     const t: TabKey[] = [];
     if (!comp || comp.hasStandings) t.push("standings");
@@ -364,7 +548,7 @@ export default function SportsCompetition() {
                   )}
                   {comp?.season != null && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-bold text-primary">
-                      <CalendarDays className="h-3.5 w-3.5" /> موسم {seasonLabel(comp.season)}
+                      <CalendarDays className="h-3.5 w-3.5" /> موسم {seasonLabelFromStart(comp.season, nextMatch?.timestamp ?? null, comp.start)}
                     </span>
                   )}
                   {statusLabel && (
@@ -397,11 +581,21 @@ export default function SportsCompetition() {
         </div>
 
         <div className="mx-auto max-w-5xl space-y-5 px-3 py-5 sm:px-4 sm:py-6">
+          {comp && (
+            <CompetitionBrief
+              comp={comp}
+              history={history}
+              nextMatch={nextMatch}
+              matchCount={summaryMatchCount}
+              onOpenMatch={setOpenMatch}
+            />
+          )}
+
           {/* لمحة النسخة السابقة */}
           {history && <PreviousEdition history={history} />}
 
           {/* التبويبات */}
-          <div className="sticky top-16 z-20 -mx-3 border-b border-border bg-background/90 px-3 backdrop-blur-md sm:mx-0 sm:rounded-xl sm:border sm:px-2 sm:py-1.5">
+          <div id="competition-tabs" className="sticky top-16 z-20 -mx-3 scroll-mt-20 border-b border-border bg-background/90 px-3 backdrop-blur-md sm:mx-0 sm:rounded-xl sm:border sm:px-2 sm:py-1.5">
             <div className="flex items-center gap-1 overflow-x-auto py-2 scrollbar-hide sm:py-0">
               {tabs.map((key) => {
                 const Icon = TAB_META[key].icon;

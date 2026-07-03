@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import { Trophy, Target, Sparkles } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -12,24 +13,24 @@ import { formatNumber } from "@/lib/format";
 import { PredictionMatchCard } from "@/components/worldcup/predictions/PredictionMatchCard";
 import { PredictionsLeaderboard } from "@/components/worldcup/predictions/PredictionsLeaderboard";
 import { MyPredictionsList } from "@/components/worldcup/predictions/MyPredictionsList";
+import { WcLongPredictions } from "@/components/worldcup/predictions/WcLongPredictions";
 import type {
   PredictableMatch,
   LeaderRow,
   MyPredictionRow,
+  WcLongData,
 } from "@/components/worldcup/predictions/predictionsTypes";
 
-type Tab = "today" | "mine" | "leaders";
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: "today", label: "المباريات" },
-  { key: "mine", label: "توقّعاتي" },
-  { key: "leaders", label: "المتصدّرون" },
-];
+type Tab = "today" | "mine" | "leaders" | "tournament";
+const TAB_VALUES: Tab[] = ["today", "mine", "leaders", "tournament"];
 
 export default function WorldCupPredictions() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("today");
+  // يتيح الربط المباشر من الصفحة الرئيسية بتبويب محدّد، مثل ?tab=tournament
+  const search = useSearch();
+  const tabParam = new URLSearchParams(search).get("tab") as Tab | null;
+  const [tab, setTab] = useState<Tab>(tabParam && TAB_VALUES.includes(tabParam) ? tabParam : "today");
 
   useEffect(() => {
     document.title = "توقّعات المونديال — توقّع واربح نقاط الولاء | سبق";
@@ -58,6 +59,22 @@ export default function WorldCupPredictions() {
     queryKey: ["/api/world-cup/predictions/leaderboard"],
     staleTime: 60_000,
   });
+
+  // توقّعات البطولة طويلة المدى — التبويب يظهر فقط متى فعّل الخادم الميزة (يُرجع 503
+  // ⇒ query في حالة خطأ ⇒ longData غير موجود ⇒ نُخفي التبويب).
+  const { data: longData } = useQuery<WcLongData>({
+    queryKey: ["/api/world-cup/predictions/long"],
+    retry: false,
+    staleTime: 60_000,
+  });
+  const longAvailable = !!longData;
+
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "today", label: "المباريات" },
+    ...(longAvailable ? ([{ key: "tournament", label: "توقّع البطل" }] as const) : []),
+    { key: "mine", label: "توقّعاتي" },
+    { key: "leaders", label: "المتصدّرون" },
+  ];
 
   const matches = Array.isArray(todayData?.matches) ? todayData.matches : [];
   const myPredictions = Array.isArray(mineData?.predictions) ? mineData.predictions : [];
@@ -145,7 +162,7 @@ export default function WorldCupPredictions() {
         <div className="mx-auto max-w-4xl px-4 py-6">
           {/* التبويبات */}
           <div className="mb-5 inline-flex w-full gap-1 rounded-full bg-muted p-1 sm:w-auto">
-            {TABS.map((t) => (
+            {tabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
@@ -179,6 +196,10 @@ export default function WorldCupPredictions() {
             ) : (
               <SignInPrompt onLogin={goLogin} />
             ))}
+
+          {tab === "tournament" && (
+            <WcLongPredictions isAuthenticated={isAuthenticated} onRequireLogin={goLogin} />
+          )}
 
           {tab === "leaders" && (
             <PredictionsLeaderboard leaders={leaders} currentUserId={user?.id} isLoading={leaderLoading} />

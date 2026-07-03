@@ -43,9 +43,17 @@ function getGoogleAudiences(): string[] {
 }
 
 function getAppleAudiences(): string[] {
+  const extraBundles = (process.env.APPLE_MOBILE_BUNDLE_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   return [
     process.env.APPLE_CLIENT_ID,
     process.env.APPLE_IOS_BUNDLE_ID,
+    process.env.APPLE_SPORTS_BUNDLE_ID,
+    process.env.APPLE_GULFCUP_BUNDLE_ID,
+    process.env.APPLE_ASIANCUP_BUNDLE_ID,
+    ...extraBundles,
   ].filter((v): v is string => Boolean(v && v.trim()));
 }
 

@@ -3,7 +3,9 @@ import { motion } from "framer-motion";
 import { CalendarDays, MapPin, Radio, Sparkles, Trophy, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import asianCupEmblem from "@assets/asian-cup-2027-emblem.png";
+// الشعار الرسمي (نسخة «الخلفيات الفاتحة» — نصّه أخضر داكن) لذا يُعرض
+// دائمًا فوق لوح فاتح لا فوق خلفية الهيرو الداكنة مباشرة.
+import asianCupLogo from "@assets/asian-cup-2027-logo.png";
 import { countdownFromIso, formatDateRange, type AcOverview } from "./acTypes";
 
 interface AcHeroProps {
@@ -83,25 +85,30 @@ export function AcHero({ overview, onJump }: AcHeroProps) {
           transition={{ duration: 0.5 }}
           className="flex flex-col items-center text-center gap-5"
         >
-          {/* الشعار مع هالة متوهّجة */}
+          {/* الشعار الرسمي على لوح فاتح مع هالة متوهّجة — المقاس مضبوط على
+              مرجع هيرو المونديال (h-20 على لوح صغير) */}
           <div className="relative">
             <motion.div
-              className="absolute inset-0 -m-6 rounded-full bg-emerald-400/20 blur-2xl"
-              animate={{ scale: [1, 1.12, 1], opacity: [0.5, 0.8, 0.5] }}
+              className="absolute inset-0 -m-5 rounded-3xl bg-emerald-400/20 blur-2xl"
+              animate={{ scale: [1, 1.1, 1], opacity: [0.45, 0.75, 0.45] }}
               transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
             />
-            <motion.img
-              src={asianCupEmblem}
-              alt="شعار كأس آسيا 2027 — السعودية"
-              className="relative h-36 w-auto object-contain drop-shadow-2xl sm:h-44"
-              width={236}
-              height={420}
-              loading="eager"
-              decoding="async"
-              initial={{ scale: 0.85, rotate: -3 }}
+            <motion.div
+              className="relative rounded-2xl bg-gradient-to-b from-white to-emerald-50/90 px-4 py-3 shadow-2xl ring-1 ring-emerald-300/40"
+              initial={{ scale: 0.88, rotate: -2 }}
               animate={{ scale: 1, rotate: 0 }}
               transition={{ type: "spring", stiffness: 120, damping: 12 }}
-            />
+            >
+              <img
+                src={asianCupLogo}
+                alt="شعار كأس آسيا AFC 2027 — السعودية"
+                className="h-20 w-auto object-contain sm:h-24"
+                width={359}
+                height={640}
+                loading="eager"
+                decoding="async"
+              />
+            </motion.div>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2">

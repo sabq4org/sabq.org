@@ -31,7 +31,10 @@ struct ArticleContentView: View {
         // between paragraphs and the iOS reader was reading cramped at
         // 18. 24pt gives paragraphs room without feeling disconnected
         // (user request 2026-05-14).
-        VStack(alignment: .leading, spacing: 24) {
+        // Lazy: off-screen blocks aren't built until scrolled near. Matters
+        // for tweet embeds — each is a WKWebView, and eager VStack built
+        // every one at open, a visible hitch on long multi-tweet articles.
+        LazyVStack(alignment: .leading, spacing: 24) {
             ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                 renderBlock(block)
             }

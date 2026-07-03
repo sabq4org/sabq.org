@@ -42,9 +42,8 @@ final class ArticlesStore {
     /// يتغيّر عند تغيّر قائمة الكاروسيل — يُجبر TabView على إعادة البناء.
     private(set) var featuredCarouselRevision: UInt = 0
 
-    init() {
-        Task { await loadArticles() }
-    }
+    // لا آثار جانبية في init (انظر التعليق المقابل في AuthStore):
+    // ContentView.task يستدعي loadArticles مرة واحدة لكل هوية واجهة.
 
     private func applyFeaturedCarousel(_ featured: [Article]) {
         let changed = featured.map(\.id) != featuredArticles.map(\.id)
@@ -70,8 +69,17 @@ final class ArticlesStore {
         // أبطأ الأقسام الثانوية (الترند/المباشر/الرأي). isContentReady
         // يصبح true هنا فيختفي الـskeleton مبكّراً — وهذا أهم مكسب
         // لسرعة الإقلاع لأن الرئيسية هي أول شاشة بعد التشغيل.
-        let result = await homepageTask
+        let homepageResult = await homepageTask
         guard generation == loadGeneration else { return }
+        guard let result = homepageResult else {
+            // فشل كلا المسارين (شبكة/خادم): أظهر خطأً قابلاً لإعادة المحاولة
+            // بدل skeleton أبدي — دون مسح محتوى معروض من جلبة سابقة ناجحة.
+            if allArticles.isEmpty && featuredArticles.isEmpty {
+                errorMessage = "تعذر تحميل الأخبار. تحقق من اتصالك بالإنترنت ثم أعد المحاولة"
+            }
+            isLoading = false
+            return
+        }
 
         // سحب التحديث: حدّث الكاروسيل/العاجل/القصص حتى لو لم تتغيّر قائمة
         // «آخر الأخبار» — كان الفحص الصامت يحدّث latest فقط.
@@ -146,7 +154,7 @@ final class ArticlesStore {
         isCheckingForNew = true
         defer { isCheckingForNew = false }
 
-        let result = await NewsService.fetchHomepage(ignoreCache: true)
+        guard let result = await NewsService.fetchHomepage(ignoreCache: true) else { return }
         guard !result.latest.isEmpty || !result.featured.isEmpty else { return }
 
         // الكاروسيل (hero) والعاجل — يتحدّثان فوراً عند اكتشاف تغيّر، لا ينتظر

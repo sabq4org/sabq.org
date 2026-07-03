@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { storage } from "../storage";
 import { requireAuth, requirePermission } from "../rbac";
+import { TOURNAMENT_BLOCK_KEYS } from "../services/tournamentBlockSettings";
 
 const router: Router = Router();
 
@@ -91,5 +92,54 @@ router.post("/api/system/ifox-block-visibility", requireAuth, requirePermission(
     res.status(500).json({ message: "Failed to update iFox block visibility" });
   }
 });
+
+// Tournament home-block settings (world-cup / gulf-cup / asian-cup) —
+// GET public (web + apps read it), POST admin-only. Partial merge so the
+// visibility toggle, the schedule window, and the manual-champion select
+// can each save independently. See services/tournamentBlockSettings.ts.
+for (const [slug, settingKey] of Object.entries(TOURNAMENT_BLOCK_KEYS)) {
+  router.get(`/api/system/${slug}-block`, async (req, res) => {
+    try {
+      const setting = await storage.getSystemSetting(settingKey);
+      res.json({
+        visible: setting?.visible ?? true,
+        manualChampionTeamId: setting?.manualChampionTeamId ?? null,
+        startAt: setting?.startAt ?? null,
+        endAt: setting?.endAt ?? null,
+      });
+    } catch (error) {
+      console.error(`Error fetching ${slug} block settings:`, error);
+      res.json({ visible: true, manualChampionTeamId: null, startAt: null, endAt: null });
+    }
+  });
+
+  router.post(`/api/system/${slug}-block`, requireAuth, requirePermission("system.manage_settings"), async (req: any, res) => {
+    try {
+      const { visible, manualChampionTeamId, startAt, endAt } = req.body;
+      const current = (await storage.getSystemSetting(settingKey)) ?? {};
+
+      // نافذة التوقيت: null = مسح الحدّ، نص ISO صالح = تعيينه، غير مرسل = إبقاؤه
+      const isoOrNull = (v: any) =>
+        typeof v === "string" && Number.isFinite(Date.parse(v)) ? v : null;
+
+      const next = {
+        visible: visible !== undefined ? !!visible : (current.visible ?? true),
+        manualChampionTeamId:
+          manualChampionTeamId !== undefined
+            ? (manualChampionTeamId == null ? null : Number(manualChampionTeamId) || null)
+            : (current.manualChampionTeamId ?? null),
+        startAt: startAt !== undefined ? isoOrNull(startAt) : (current.startAt ?? null),
+        endAt: endAt !== undefined ? isoOrNull(endAt) : (current.endAt ?? null),
+      };
+
+      await storage.upsertSystemSetting(settingKey, next, "system", true);
+
+      res.json({ success: true, ...next });
+    } catch (error) {
+      console.error(`Error updating ${slug} block settings:`, error);
+      res.status(500).json({ message: `Failed to update ${slug} block settings` });
+    }
+  });
+}
 
 export default router;

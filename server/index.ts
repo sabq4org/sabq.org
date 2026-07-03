@@ -1,6 +1,24 @@
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local", override: true });
 dotenv.config();
+import * as Sentry from "@sentry/node";
+// Sentry error monitoring — enabled only when SENTRY_DSN is set. Errors-only:
+// tracing/profiling/logs deliberately off (quota + overhead on a site this
+// size). exitEvenIfOtherHandlersAreRegistered=false preserves the
+// long-standing "log but don't exit" uncaughtException behavior below.
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV || "development",
+    release: process.env.RAILWAY_GIT_COMMIT_SHA || undefined,
+    integrations: [
+      Sentry.onUncaughtExceptionIntegration({ exitEvenIfOtherHandlersAreRegistered: false }),
+    ],
+  });
+  console.log("[Server] ✅ Sentry error monitoring enabled");
+} else {
+  console.warn("[Server] ⚠️ SENTRY_DSN not set — Sentry error monitoring disabled");
+}
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import rateLimit from "express-rate-limit";
@@ -44,10 +62,24 @@ app.get("/health", async (_req, res) => {
     const { getTheSportsStatus } = await import("./services/theSportsService");
     theSports = getTheSportsStatus();
   } catch {}
+  // حالة القيادة — leader=false على كل الـpods يعني أعمال الدفع (Live Activity/
+  // التنبيهات) ميتة رغم أن الـAPI يعمل (فخ قفل الانتخاب بعد النشر). للتشخيص السريع.
+  let leader = false;
+  let podId: string | null = null;
+  let leaderMode: string | null = null;
+  try {
+    const le = await import("./leaderElection");
+    leader = le.isLeader();
+    podId = le.getPodId();
+    leaderMode = le.getLeaderMode();
+  } catch {}
   res.status(200).json({
     status: "ok",
     timestamp: new Date().toISOString(),
     database: dbReady ? "connected" : "warming-up",
+    leader,
+    leaderMode,
+    podId,
     theSports,
   });
 });
@@ -736,6 +768,10 @@ app.use("/api", generalApiLimiter);
 app.use("/api", writeLimiter);
 // Anti-scraping read throttle scoped to the public World Cup feed (see above).
 app.use("/api/world-cup", worldCupReadLimiter);
+// Same anti-scraping throttle for the public King's Cup feed (also re-exposes
+// the paid API-Football feed verbatim). Reuses the same generous per-minute
+// limiter — genuine visitors are served from the CDN and never reach origin.
+app.use("/api/kings-cup", worldCupReadLimiter);
 
 // ============================================
 // APM (Application Performance Monitoring) Middleware
@@ -1092,6 +1128,12 @@ if (!(globalThis as any).__sabqServer) {
       console.log("[Server] ✅ SEO injector middleware registered (dynamic meta tags)");
     } else {
       console.log("[Server] 🛰  Headless mode — crawler/SEO middleware skipped (SERVE_SPA=false). SEO is handled by the frontend deployment + Cloudflare edge worker.");
+    }
+
+    // Sentry must see errors before the final handler consumes them — the SDK
+    // middleware captures 5xx (its default filter) then forwards via next(err).
+    if (process.env.SENTRY_DSN) {
+      Sentry.setupExpressErrorHandler(app);
     }
 
     app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
@@ -1693,7 +1735,19 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting cleanup jobs:", error);
           }
         }, BACKGROUND_JOB_DELAY + 50000);
-        
+
+        // AI Hub — إعادة فحص النماذج الموقوفة بالقاطع + التجميع اليومي للاستهلاك
+        setTimeout(async () => {
+          try {
+            const { startAiProviderHealthCheckJob } = await import("./jobs/aiProviderHealthCheck");
+            startAiProviderHealthCheckJob();
+            const { startAiUsageRollupJob } = await import("./jobs/aiUsageRollup");
+            startAiUsageRollupJob();
+          } catch (error) {
+            console.error("[Server] Error starting AI Hub jobs:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 55000);
+
         // iFox Content Generator — مستهلك للتوكن (مقالات كاملة + صور)، خلف flag مستقل
         if (enableIfoxGenerator) {
           setTimeout(async () => {
@@ -1834,6 +1888,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // أخبار كأس خادم الحرمين الشريفين: نفس نمط التسجيل الدائم وفحص القيادة
+      // داخل الدورة (kingsCupNewsJob). خلف KC_NEWS_ENABLED.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startKingsCupNewsJob } = await import("./jobs/kingsCupNewsJob");
+            startKingsCupNewsJob();
+          } catch (error) {
+            console.error("[Server] Error starting kings cup news job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // مسودّات أخبار SportMonks: نفس نمط التسجيل الدائم وفحص القيادة داخل
       // الدورة (sportmonksNewsJob). خلف WC_NEWS_ENABLED + توكن SportMonks.
       if (enableBackgroundWorkers) {
@@ -1869,6 +1936,19 @@ if (!(globalThis as any).__sabqServer) {
             startAcPredictionsJob();
           } catch (error) {
             console.error("[Server] Error starting asian cup predictions job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // تسوية توقّعات دوري روشن (محرّك المونديال على الدوري المحلي): تسجيل دائم
+      // وفحص القيادة داخل الدورة — يمنح الفائزين نقاطهم فور صافرة النهاية.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startRslPredictionsJob } = await import("./jobs/rslPredictionsJob");
+            startRslPredictionsJob();
+          } catch (error) {
+            console.error("[Server] Error starting roshn league predictions job:", error);
           }
         }, BACKGROUND_JOB_DELAY);
       }

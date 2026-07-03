@@ -1958,6 +1958,123 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       };
     },
   },
+  // King's Cup — predictions (أعلى من الهب حتى تُطابق أولًا)
+  {
+    pattern: /^\/kings-cup\/predictions\/?$/,
+    handle: async () => {
+      const description =
+        "توقّع نتائج مباريات كأس خادم الحرمين الشريفين والبطل والهدّاف، اجمع النقاط ونافس على لوحة المتصدّرين في صحيفة سبق.";
+      const image = `${SITE_URL}/branding/kings-cup-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>توقّعات كأس خادم الحرمين الشريفين</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "توقّعات كأس خادم الحرمين الشريفين | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/kings-cup/predictions`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "توقّعات كأس خادم الحرمين الشريفين",
+              description,
+              url: `${SITE_URL}/kings-cup/predictions`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                { "@type": "ListItem", position: 2, name: "كأس خادم الحرمين الشريفين", item: `${SITE_URL}/kings-cup` },
+                {
+                  "@type": "ListItem",
+                  position: 3,
+                  name: "التوقّعات",
+                  item: `${SITE_URL}/kings-cup/predictions`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
+  // King's Cup — hub landing
+  {
+    pattern: /^\/kings-cup\/?$/,
+    handle: async () => {
+      const description =
+        "كأس خادم الحرمين الشريفين — البطولة الإقصائية للأندية السعودية: نتائج مباشرة، جدول المباريات بتوقيت الرياض، الأدوار الإقصائية، الهدافون، والأندية المشاركة على صحيفة سبق.";
+      const image = `${SITE_URL}/branding/kings-cup-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>كأس خادم الحرمين الشريفين — تغطية حية من سبق</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "كأس خادم الحرمين الشريفين — تغطية حية | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/kings-cup`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "كأس خادم الحرمين الشريفين — تغطية حية",
+              description,
+              url: `${SITE_URL}/kings-cup`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "كأس خادم الحرمين الشريفين",
+                  item: `${SITE_URL}/kings-cup`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
 ];
 
 /**

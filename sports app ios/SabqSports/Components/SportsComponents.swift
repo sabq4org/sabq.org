@@ -1,7 +1,7 @@
 import SwiftUI
 import SafariServices
 
-// مكوّنات UI أساسية لتطبيق سبق الرياضي — مبنية على نمط WorldCupComponents/
+// مكوّنات UI أساسية لتطبيق VARA الرياضي — مبنية على نمط WorldCupComponents/
 // AsianCupComponents لكن بألوان SpTheme. تُستعمل عبر الشاشات.
 
 // صورة دائرية بكاش @State — تبقى ثابتة عبر إعادة رسم الأب المتكرر (بخلاف
@@ -413,87 +413,6 @@ struct SpScoreRow: View {
     }
 }
 
-// MARK: - بطاقة مباراة واحدة (الجدول/اليوم/المباشر)
-//
-// حاوية بيضاء حول `SpScoreRow` الموحّد: سطر سياقيّ (البطولة/الدور/التاريخ) +
-// نجمة المتابعة، ثم صفّ النتيجة المطابق لشاشة «المباريات» بالضبط.
-struct SpMatchCard: View {
-    let fixture: SpFixture
-    /// إظهار اسم البطولة أعلى البطاقة (للوحات متعدّدة البطولات: اليوم/المباشر).
-    var showsCompetition: Bool = false
-
-    @Environment(SpMatchFollows.self) private var matchFollows
-
-    var body: some View {
-        ZStack(alignment: .topLeading) {
-            NavigationLink {
-                SpMatchCenter(fixtureId: fixture.id, preview: fixture)
-            } label: { cardBody }
-                .buttonStyle(SpPressStyle())
-
-            followButton
-                .padding(.top, 14)
-                .padding(.leading, 14)
-        }
-    }
-
-    private var cardBody: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 6) {
-                Color.clear.frame(width: 28, height: 28)   // فراغ محجوز لنجمة المتابعة (overlay)
-                Text(topLabel)
-                    .font(SportsFonts.app(size: 11))
-                    .foregroundStyle(SpTheme.onDarkDim)
-                    .lineLimit(1)
-                Spacer(minLength: 6)
-            }
-            SpScoreRow(fixture: fixture)
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
-                .fill(SpTheme.cardGradient)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
-                .stroke(SpTheme.cardStroke, lineWidth: 1)
-        )
-        .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
-        .contentShape(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous))
-    }
-
-    // نجمة المتابعة — متابعة/إلغاء متابعة المباراة. زرّ مستقلّ داخل البطاقة (يلتقط
-    // نقرته قبل رابط البطاقة) — يعمل بلا تسجيل دخول، ويُضيف المباراة لـ«مبارياتي».
-    private var followButton: some View {
-        let following = matchFollows.isFollowing(fixture.id)
-        return Button {
-            matchFollows.toggle(fixture)
-        } label: {
-            Image(systemName: following ? "star.fill" : "star")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(following ? SpTheme.gold : SpTheme.onDarkFaint)
-                .frame(width: 28, height: 28)
-                .background(Circle().fill(following ? SpTheme.gold.opacity(0.12) : SpTheme.chipFill))
-                .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var topLabel: String {
-        if showsCompetition, let c = fixture.competition, !c.isEmpty { return c }
-        if fixture.status.finished {
-            let dm = SpFormat.dayMonth(fixture.date)
-            return dm.isEmpty ? fixture.round : "\(fixture.round) · \(dm)"
-        }
-        return fixture.round
-    }
-}
-
-// MARK: - بطاقة «مبارياتي» (المباريات المتابَعة + عدّاد تنازلي حيّ)
-//
-// تتصدّر الرئيسية حين يتابع المستخدم مباراةً أو أكثر. كل صفّ: الفريقان + مركز
-// يتغيّر بالحالة — عدّاد تنازليّ للانطلاق (يُحدَّث كل ثانية عبر TimelineView)،
-// نتيجة + «مباشر» للجارية، أو نتيجة + «انتهت» للمنتهية. نجمة ذهبية لإلغاء المتابعة.
 // MARK: - صفّ مباراة مسطّح بلا بطاقة (لقوائم البطولات المجمّعة: «عالمية»…)
 //
 // نفس تنسيق شاشة «المباريات» تمامًا: `SpScoreRow` بلا إطار/بطاقة، يُفصَل بخطوط
@@ -637,7 +556,7 @@ struct SpMyMatchesCard: View {
         .buttonStyle(.plain)
     }
 
-    // ترتيب موحّد مطابق للشاشة الرئيسية للمباريات (SpWcMatchRow/SpMatchCard):
+    // ترتيب موحّد مطابق للشاشة الرئيسية للمباريات (SpWcMatchRow):
     // الشعار ملاصق للنتيجة في المنتصف، والاسم يمتدّ نحو الطرف الخارجي.
     // (RTL: المضيف يمينًا — اسمه في أقصى اليمين وشعاره للداخل؛ الضيف يسارًا بالعكس.)
     private func teamMini(_ t: SpTeam, leading: Bool) -> some View {

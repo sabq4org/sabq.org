@@ -26,10 +26,15 @@ enum ArticleHtmlParser {
             scanner.skipWhitespace()
             if scanner.isAtEnd { break }
 
+            let before = scanner.index
             if let block = parseNextBlock(scanner: &scanner) {
                 if case .paragraph(let runs) = block, runsAreEmpty(runs) { continue }
                 blocks.append(block)
-            } else {
+            } else if scanner.index == before {
+                // التقدّم القسري فقط عندما لا يتحرك الماسح (وقاية من حلقة
+                // لا نهائية على مدخل مشوّه). كان يتقدّم بعد كل nil حتى لو
+                // استُهلك الوسم كاملًا (فقرة فارغة/<br>) فيأكل '<' الوسم
+                // التالي ويحوّل "p>نص" إلى فقرة نصية مشوّهة.
                 scanner.advance(1)
             }
         }
@@ -200,10 +205,21 @@ enum ArticleHtmlParser {
         if let url = extractTweetURL(from: inner) {
             return .twitterEmbed(tweetURL: url)
         }
-        if let raw = tag.attr("data-embed-url") ?? tag.attr("href"), let url = URL(string: raw) {
+        // المسار الاحتياطي يجب أن يتحقق من المضيف مثل regex المسار الأساسي:
+        // بدونه data-embed-url مدسوس في جسم مقال يُصيَّر «كتغريدة» تفتح
+        // موقع تصيّد من داخل WKWebView.
+        if let raw = tag.attr("data-embed-url") ?? tag.attr("href"),
+           let url = URL(string: raw), isTrustedTweetHost(url) {
             return .twitterEmbed(tweetURL: url)
         }
         return .divider
+    }
+
+    private static func isTrustedTweetHost(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let host = url.host?.lowercased() else { return false }
+        return host == "twitter.com" || host.hasSuffix(".twitter.com")
+            || host == "x.com" || host.hasSuffix(".x.com")
     }
 
     private static func parseTwitterEmbedFromBlockquote(scanner: inout HTMLScanner) -> ArticleBlock {

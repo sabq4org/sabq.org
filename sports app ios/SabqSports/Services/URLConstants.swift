@@ -1,6 +1,6 @@
 import Foundation
 
-// جذور الـ API — تطبيق سبق الرياضي يستهلك نفس خادم سبق (الـ backend جاهز فعلاً
+// جذور الـ API — تطبيق VARA الرياضي يستهلك نفس خادم سبق (الـ backend جاهز فعلاً
 // تحت /api/sports/*). نقاط البوابة الرياضية عامة (بلا مصادقة) = publicAPI.
 nonisolated enum URLConstants {
     static let webOrigin = "https://sabq.org"

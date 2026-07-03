@@ -3,21 +3,22 @@ import SwiftUI
 // MARK: - World Cup — مكونات مشتركة
 
 /// صورة بعيدة (شعار منتخب / صورة لاعب) مع بديل أثناء التحميل.
-/// شعارات api-sports صغيرة ويكفيها كاش URLSession الافتراضي.
+/// تستخدم `CachedAsyncImage` (كاش ذاكرة NSCache + قرص 256MB + جلسة تحميل
+/// موازية + تصغير عند فك الترميز) بدل `AsyncImage` العادي — فالشعارات وصور
+/// اللاعبين صغيرة، ومع الكاش تظهر فورًا عند إعادة الظهور بدل التحميل المتأخّر.
 struct WCRemoteImage: View {
     let url: String
     var contentMode: ContentMode = .fit
+    /// الصور هنا صغيرة (شعار ≤50pt، صورة لاعب 46pt) فيكفي سقف 300px.
+    var maxPixelSize: CGFloat = 300
 
     var body: some View {
-        AsyncImage(url: URL(string: url)) { phase in
-            switch phase {
-            case .success(let image):
-                image.resizable().aspectRatio(contentMode: contentMode)
-            case .failure:
-                Color.clear
-            default:
-                Color.clear
-            }
+        CachedAsyncImage(
+            url: URL(string: url),
+            contentMode: contentMode,
+            maxPixelSize: maxPixelSize
+        ) {
+            Color.clear
         }
     }
 }
@@ -249,10 +250,11 @@ struct WCEmptyState: View {
     }
 }
 
-/// مؤشر تحميل بلون العلامة.
+/// مؤشر تحميل بلون العلامة. الأخضر العميق لا الأبيض: يُعرض غالبًا على
+/// sectionBackground شبه الأبيض في النمط الفاتح، وكان الأبيض غير مرئي عمليًا.
 struct WCLoading: View {
     var body: some View {
-        HStack { Spacer(); ProgressView().tint(.white); Spacer() }
+        HStack { Spacer(); ProgressView().tint(WCTheme.emeraldDeep); Spacer() }
             .padding(.vertical, 32)
     }
 }

@@ -1,0 +1,29 @@
+name: Gulf Cup iOS build
+
+on:
+  pull_request:
+    paths:
+      - 'gulf-cup app ios/**'
+  push:
+    branches: [main]
+    paths:
+      - 'gulf-cup app ios/**'
+
+jobs:
+  xcodebuild:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer
+
+      - name: Ensure iOS platform (actool / asset catalog)
+        run: xcodebuild -downloadPlatform iOS || true
+
+      - name: Build GulfCup (device)
+        working-directory: gulf-cup app ios
+        run: |
+          chmod +x scripts/build.sh
+          # generic iOS — لا يحتاج runtime محاكي مُثبَّت على GitHub macos-15
+          DEST="generic/platform=iOS" ./scripts/build.sh

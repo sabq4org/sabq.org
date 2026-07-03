@@ -14,7 +14,9 @@ struct EditorialNotificationsView: View {
 
     @State private var items: [APIEditorialNotification] = []
     @State private var loadState: LoadState = .loading
-    @State private var unreadCount: Int = 0
+    /// عدّاد غير المقروء له مصدر واحد: NotificationsStore.shared.unreadCount —
+    /// النسخة المحلية السابقة كانت تنحرف عن نقطة الجرس عند أي تعديل ناقص.
+    private var notificationsStore: NotificationsStore { NotificationsStore.shared }
     /// When the user taps a row we present a full-screen detail sheet
     /// instead of trying to push onto a fragile nested NavigationStack.
     /// The sheet works the same regardless of how we got to this screen
@@ -89,7 +91,7 @@ struct EditorialNotificationsView: View {
                 // strip List's default chrome to keep the same visual rhythm
                 // (no separators, no inset background, custom row padding).
                 List {
-                    if unreadCount > 0 {
+                    if notificationsStore.unreadCount > 0 {
                         markAllReadButton
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -171,8 +173,7 @@ struct EditorialNotificationsView: View {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         let removed = items.remove(at: index)
         if removed.readAt == nil {
-            unreadCount = max(0, unreadCount - 1)
-            NotificationsStore.shared.unreadCount = max(0, NotificationsStore.shared.unreadCount - 1)
+            notificationsStore.unreadCount = max(0, notificationsStore.unreadCount - 1)
         }
         Task {
             do {
@@ -180,7 +181,7 @@ struct EditorialNotificationsView: View {
             } catch {
                 await MainActor.run {
                     items.insert(removed, at: index)
-                    if removed.readAt == nil { unreadCount += 1 }
+                    if removed.readAt == nil { notificationsStore.unreadCount += 1 }
                 }
             }
         }
@@ -189,15 +190,14 @@ struct EditorialNotificationsView: View {
     @MainActor
     private func clearAll() async {
         let snapshot = items
-        let snapshotUnread = unreadCount
+        let snapshotUnread = notificationsStore.unreadCount
         items = []
-        unreadCount = 0
-        NotificationsStore.shared.unreadCount = 0
+        notificationsStore.unreadCount = 0
         do {
             try await APIClient.shared.deleteAllEditorialNotifications()
         } catch {
             items = snapshot
-            unreadCount = snapshotUnread
+            notificationsStore.unreadCount = snapshotUnread
         }
     }
 
@@ -374,8 +374,7 @@ struct EditorialNotificationsView: View {
         do {
             let page = try await APIClient.shared.fetchEditorialNotifications()
             items = page.items
-            unreadCount = page.unread
-            NotificationsStore.shared.unreadCount = page.unread
+            notificationsStore.unreadCount = page.unread
             loadState = .loaded
         } catch {
             loadState = .failed("تعذر جلب الإشعارات")

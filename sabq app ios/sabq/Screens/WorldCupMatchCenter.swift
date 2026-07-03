@@ -72,10 +72,20 @@ struct WorldCupMatchCenter: View {
             .task { await load() }
             // تحديث لحظي للنتيجة/الدقيقة أثناء اللعب (الخادم يركّب نتيجة SportMonks الحيّة)
             .task(id: detail?.fixture.id) {
+                var tick = 0
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 8_000_000_000)
                     if Task.isCancelled { return }
-                    if detail?.fixture.status.live == true { await load(force: true) }
+                    tick += 1
+                    guard let f = detail?.fixture else { continue }
+                    if f.status.live {
+                        await load(force: true)
+                    } else if !f.status.finished, tick % 2 == 0 {
+                        // قبل الصافرة: من فتح المركز مبكرًا كان يبقى على «لم تبدأ»
+                        // طوال الشوط الأول ما لم يسحب يدويًا — حدّث كل ~16ث حول الانطلاق.
+                        let dt = Double(f.timestamp) - Date().timeIntervalSince1970
+                        if dt <= 600 && dt >= -900 { await load(force: true) }
+                    }
                 }
             }
             .refreshable { await load(force: true) }
@@ -1197,7 +1207,10 @@ struct WCCommentaryView: View {
                 ForEach(items) { item in row(item) }
             }
         }
-        .task(id: fixtureId) { await loop() }
+        // الهوية تشمل live: من فتح المركز قبل الصافرة كانت الحلقة تخرج نهائيًا
+        // بعد أول جلبة (غير حيّة) ولا يبدأ التعليق أبدًا؛ الآن انقلاب live من
+        // الأب (الذي يستطلع حول الانطلاق) يعيد تشغيل الحلقة.
+        .task(id: "\(fixtureId)-\(live)") { await loop() }
     }
 
     private func row(_ item: WCCommentaryItem) -> some View {

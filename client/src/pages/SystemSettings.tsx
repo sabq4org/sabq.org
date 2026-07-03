@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,16 +23,19 @@ import {
   Calendar, 
   Clock, 
   BarChart3, 
-  Eye, 
-  EyeOff, 
-  Sparkles, 
+  Eye,
+  EyeOff,
   PartyPopper,
   Megaphone,
   Bell,
   ToggleRight,
+  Trophy,
   Loader2
 } from "lucide-react";
-import { useIFoxBlockVisibility } from "@/hooks/useIFoxBlockVisibility";
+import {
+  useTournamentBlockSettings,
+  type TournamentBlockSlug,
+} from "@/hooks/useTournamentBlockSettings";
 
 interface CelebrationModeState {
   enabled: boolean;
@@ -122,9 +126,162 @@ function FeatureToggleCard({
   );
 }
 
+/** ISO → قيمة حقل datetime-local بتوقيت المتصفح (فارغ إن لم يُضبط) */
+function isoToLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+interface TournamentBlockCardProps {
+  slug: TournamentBlockSlug;
+  title: string;
+  description: string;
+  championLabel: string;
+  teamsEndpoint: string;
+  iconColor: string;
+  iconBg: string;
+  bgColor: string;
+}
+
+/**
+ * بطاقة تحكم بلوك بطولة في الواجهة: مفتاح الإظهار + نافذة التوقيت
+ * (بدء/انتهاء العرض، فارغ = بلا حدّ) + تعيين البطل يدويًا (احتياط).
+ */
+function TournamentBlockCard({
+  slug,
+  title,
+  description,
+  championLabel,
+  teamsEndpoint,
+  iconColor,
+  iconBg,
+  bgColor,
+}: TournamentBlockCardProps) {
+  const block = useTournamentBlockSettings(slug);
+
+  // قائمة منتخبات البطولة لخيار «تعيين البطل يدويًا» — كاش طويل، القائمة ثابتة
+  const { data: teamsData } = useQuery<{ teams: { id: number; name: string }[] }>({
+    queryKey: [teamsEndpoint],
+    staleTime: 10 * 60 * 1000,
+  });
+  const teams = Array.isArray(teamsData?.teams) ? teamsData.teams : [];
+
+  // نافذة التوقيت تُحرَّر محليًا وتُحفظ بزر — لا حفظ عند كل ضغطة مفتاح
+  const [startLocal, setStartLocal] = useState("");
+  const [endLocal, setEndLocal] = useState("");
+  const [windowTouched, setWindowTouched] = useState(false);
+  useEffect(() => {
+    if (!windowTouched) {
+      setStartLocal(isoToLocalInput(block.startAt));
+      setEndLocal(isoToLocalInput(block.endAt));
+    }
+  }, [block.startAt, block.endAt, windowTouched]);
+
+  const saveWindow = () => {
+    block.save({
+      startAt: startLocal ? new Date(startLocal).toISOString() : null,
+      endAt: endLocal ? new Date(endLocal).toISOString() : null,
+    });
+    setWindowTouched(false);
+  };
+
+  return (
+    <Card className={`hover-elevate active-elevate-2 transition-all ${bgColor}`}>
+      <CardContent className="pt-6">
+        <div className="flex flex-col gap-4">
+          {/* الرأس + مفتاح الإظهار */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-xl ${iconBg}`}>
+                <Trophy className={`h-6 w-6 ${iconColor}`} />
+              </div>
+              <div className="space-y-1">
+                <p className="font-semibold text-foreground">{title}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed max-w-md">
+                  {description}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {block.isSaving && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              <Switch
+                checked={block.visible}
+                onCheckedChange={(v) => block.save({ visible: v })}
+                disabled={block.isSaving}
+                data-testid={`switch-${slug}-visibility`}
+              />
+            </div>
+          </div>
+
+          {/* نافذة التوقيت */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground">يظهر من (فارغ = فورًا)</p>
+              <Input
+                type="datetime-local"
+                dir="ltr"
+                value={startLocal}
+                onChange={(e) => {
+                  setStartLocal(e.target.value);
+                  setWindowTouched(true);
+                }}
+                data-testid={`input-${slug}-start`}
+              />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-muted-foreground">يختفي بعد (فارغ = بلا حدّ)</p>
+              <Input
+                type="datetime-local"
+                dir="ltr"
+                value={endLocal}
+                onChange={(e) => {
+                  setEndLocal(e.target.value);
+                  setWindowTouched(true);
+                }}
+                data-testid={`input-${slug}-end`}
+              />
+            </div>
+          </div>
+          {windowTouched && (
+            <Button size="sm" onClick={saveWindow} disabled={block.isSaving} data-testid={`save-${slug}-window`}>
+              حفظ التوقيت
+            </Button>
+          )}
+
+          {/* البطل */}
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-muted-foreground">{championLabel}</p>
+            <Select
+              value={block.manualChampionTeamId ? String(block.manualChampionTeamId) : "auto"}
+              onValueChange={(v) =>
+                block.save({ manualChampionTeamId: v === "auto" ? null : Number(v) })
+              }
+            >
+              <SelectTrigger data-testid={`select-${slug}-champion`}>
+                <SelectValue placeholder="تلقائي (من نتيجة النهائي)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">تلقائي (من نتيجة النهائي)</SelectItem>
+                {teams.map((t) => (
+                  <SelectItem key={t.id} value={String(t.id)}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SystemSettings() {
   const { toast } = useToast();
-  const { showIFoxBlock, setShowIFoxBlock } = useIFoxBlockVisibility();
+  const wcBlock = useTournamentBlockSettings("world-cup");
 
   const { data: announcement, isLoading } = useQuery<AnnouncementData>({
     queryKey: ["/api/system/announcement"],
@@ -299,7 +456,7 @@ export default function SystemSettings() {
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="gap-1.5">
                   <ToggleRight className="h-3.5 w-3.5" />
-                  {(celebrationMode?.enabled ? 1 : 0) + (showIFoxBlock ? 1 : 0)} مميزات نشطة
+                  {(celebrationMode?.enabled ? 1 : 0) + (wcBlock.visible ? 1 : 0)} مميزات نشطة
                 </Badge>
               </div>
             </div>
@@ -309,16 +466,59 @@ export default function SystemSettings() {
         {/* Section: Display Settings */}
         <div className="space-y-4">
           <SectionHeader title="إعدادات العرض" color="bg-blue-500" icon={Eye} />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <FeatureToggleCard
-              title="إظهار بلوك آي فوكس"
-              description="بوابة الذكاء الاصطناعي في الصفحة الرئيسية للجميع"
-              enabled={showIFoxBlock}
-              onToggle={setShowIFoxBlock}
-              icon={Sparkles}
-              iconColorEnabled="text-violet-500"
-              testId="switch-ifox-visibility"
+          {/* بلوكات البطولات: مفتاح إظهار + نافذة توقيت + بطل يدوي لكل بطولة.
+              المونديال يصل التطبيقات المثبّتة أيضًا (عبر overview الفارغ)؛
+              الخليج وآسيا ويب فقط حاليًا (علم blockHidden). */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            <TournamentBlockCard
+              slug="world-cup"
+              title="بلوك كأس العالم"
+              description="شريط المونديال في واجهة الويب وبانر تطبيقَي iOS وأندرويد — الإطفاء يخفيه عند الجميع فورًا دون رفع تحديث للمتاجر"
+              championLabel="بطل المونديال (تلقائي من النهائي أو يدوي)"
+              teamsEndpoint="/api/world-cup/teams"
+              iconColor="text-emerald-500"
+              iconBg="bg-emerald-500/10"
+              bgColor="bg-emerald-50 dark:bg-card"
+            />
+            <TournamentBlockCard
+              slug="gulf-cup"
+              title="بلوك خليجي 27"
+              description="شريط كأس الخليج (جدة، 23 سبتمبر – 6 أكتوبر 2026) في واجهة الويب — اضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
+              championLabel="بطل خليجي 27 (تلقائي من النهائي أو يدوي)"
+              teamsEndpoint="/api/gulf-cup/teams"
+              iconColor="text-violet-500"
+              iconBg="bg-violet-500/10"
               bgColor="bg-violet-50 dark:bg-card"
+            />
+            <TournamentBlockCard
+              slug="asian-cup"
+              title="بلوك كأس آسيا 2027"
+              description="شريط كأس آسيا (السعودية، يناير 2027) في واجهة الويب — اضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
+              championLabel="بطل كأس آسيا (تلقائي من النهائي أو يدوي)"
+              teamsEndpoint="/api/asian-cup/teams"
+              iconColor="text-sky-500"
+              iconBg="bg-sky-500/10"
+              bgColor="bg-sky-50 dark:bg-card"
+            />
+            <TournamentBlockCard
+              slug="kings-cup"
+              title="بلوك كأس خادم الحرمين الشريفين"
+              description="شريط كأس الملك (بطولة الأندية السعودية الإقصائية) في واجهة الويب — الإطفاء يخفيه فورًا، واضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
+              championLabel="بطل كأس الملك (تلقائي من النهائي أو يدوي)"
+              teamsEndpoint="/api/kings-cup/teams"
+              iconColor="text-amber-500"
+              iconBg="bg-amber-500/10"
+              bgColor="bg-amber-50 dark:bg-card"
+            />
+            <TournamentBlockCard
+              slug="pro-league"
+              title="بلوك دوري روشن السعودي"
+              description="شريط دوري روشن في الرئيسية (عدّاد ما قبل الموسم / الجولة / المباراة / البطل) — الإطفاء يخفيه فورًا، واضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
+              championLabel="بطل دوري روشن (تلقائي من ختام الموسم أو يدوي)"
+              teamsEndpoint="/api/rsl/teams"
+              iconColor="text-teal-500"
+              iconBg="bg-teal-500/10"
+              bgColor="bg-teal-50 dark:bg-card"
             />
           </div>
         </div>

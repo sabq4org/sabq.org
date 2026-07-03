@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import WorldCupHomeStrip from "./WorldCupHomeStrip";
 import WorldCupNewsBlock, { type WcNewsItem } from "./WorldCupNewsBlock";
+import WorldCupStoriesRow from "./WorldCupStoriesRow";
 import type { WcOverview } from "./wcTypes";
 
 /**
@@ -32,13 +33,23 @@ export default function WorldCupHomeSection() {
     staleTime: 2 * 60 * 1000,
   });
 
+  // المفتاح في لوحة التحكم مُطفأ → القسم كله يختفي (شامل الأخبار والستوريز)
+  if (overview?.hidden) return null;
+
   const hasMatch = Boolean(overview?.matchOfTheDay?.fixture);
+  const hasChampion = Boolean(overview?.champion);
   const hasNews = Array.isArray(newsData?.news) && newsData.news.length > 0;
-  if (!hasMatch && !hasNews) return null;
+  if (!hasMatch && !hasChampion && !hasNews) return null;
+
+  // مطابق لصيغة الحيّ في WorldCupHomeStrip/refetchInterval أعلاه — نقطة النبض
+  // الحمراء على أيقونة «مباراة اليوم» في صفّ الستوريز.
+  const isLive =
+    (overview?.live?.length ?? 0) > 0 || Boolean(overview?.matchOfTheDay?.fixture?.status.live);
 
   return (
     <div className="bg-emerald-50 dark:bg-emerald-950/25 border-y border-emerald-600/10 dark:border-emerald-400/10 py-8">
       <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        <WorldCupStoriesRow isLive={isLive} />
         <WorldCupHomeStrip />
         <WorldCupNewsBlock />
       </div>

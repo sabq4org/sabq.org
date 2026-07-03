@@ -68,6 +68,9 @@ import {
   getCommentary,
   getMatchFacts,
   getForecast,
+  getExpectedLineups,
+  getMatchReferee,
+  getTeamOfTheWeek,
   resolveSmIdByNames,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
@@ -840,6 +843,104 @@ export function registerSportsRoutes(app: Express) {
     }
   });
 
+  // تشكيلة الجولة (SportMonks TOTW) للبطولات المغطاة باشتراكنا — الأعلى تقييمًا
+  // في آخر جولة مكتملة. معرّفات SportMonks متحقَّقة من /v3/football/leagues.
+  const SM_TOTW_LEAGUES: Record<string, number> = {
+    "pro-league": 944,
+    "kings-cup": 950,
+    "afc-champions-league": 1085,
+    "premier-league": 8,
+    "la-liga": 564,
+    "bundesliga": 82,
+    "ligue-1": 301,
+  };
+  app.get("/api/sports/:comp/totw", async (req, res) => {
+    const empty = { available: false, formation: null, players: [] };
+    const leagueId = SM_TOTW_LEAGUES[String(req.params.comp)];
+    if (!leagueId || !isSportmonksConfigured()) {
+      res.json(empty);
+      return;
+    }
+    try {
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getTeamOfTheWeek(leagueId));
+      if (data.available) {
+        const tr = await resolveNames(
+          data.players.flatMap((p) => [p.name, p.teamName])
+        ).catch(() => null);
+        if (tr) {
+          for (const p of data.players) {
+            p.name = tr(p.name) || p.name;
+            p.teamName = tr(p.teamName) || p.teamName;
+          }
+        }
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error("[Sports] totw failed:", error);
+      res.status(502).json(empty);
+    }
+  });
+
+  // حكم المباراة + صرامته بالأرقام في البطولة (SportMonks referees).
+  app.get("/api/sports/match/:id/referee", async (req, res) => {
+    const empty = { available: false, name: "", photo: null, countryName: null, countryFlag: null, stats: null };
+    if (!isSportmonksConfigured()) {
+      res.json(empty);
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) return res.json(empty);
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getMatchReferee(id, { directSmId: smId }));
+      if (data.available) {
+        const tr = await resolveNames([data.name, data.countryName]).catch(() => null);
+        if (tr) {
+          data.name = tr(data.name) || data.name;
+          if (data.countryName) data.countryName = tr(data.countryName) || data.countryName;
+        }
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error("[Sports] referee failed:", error);
+      res.status(502).json(empty);
+    }
+  });
+
+  // التشكيلة المتوقعة قبل المباراة (SportMonks) — تُعرض حتى صدور الرسمية.
+  app.get("/api/sports/match/:id/expected-lineup", async (req, res) => {
+    const empty = { available: false, home: null, away: null };
+    if (!isSportmonksConfigured()) {
+      res.json(empty);
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) return res.json(empty);
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getExpectedLineups(id, { directSmId: smId }));
+      if (data.available) {
+        const players = [data.home, data.away]
+          .filter(Boolean)
+          .flatMap((side) => [...side!.starters, ...side!.bench]);
+        const tr = await resolveNames(players.map((p) => p.name)).catch(() => null);
+        if (tr) for (const p of players) p.name = tr(p.name) || p.name;
+      }
+      res.set("Cache-Control", "public, max-age=60, s-maxage=180, stale-while-revalidate=600");
+      res.json(data);
+    } catch (error) {
+      console.error("[Sports] expected-lineup failed:", error);
+      res.status(502).json(empty);
+    }
+  });
+
   // توقّعات احتمالية متقدّمة (SportMonks) — فرصة مزدوجة/BTTS/أكثر-أقل/أرجح النتائج.
   app.get("/api/sports/match/:id/forecast", async (req, res) => {
     const empty = { available: false, fulltime: null, btts: null, doubleChance: null, goals: [], correctScores: [] };
@@ -1534,6 +1635,55 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] leaderboard failed:", error);
       res.status(502).json({ message: "تعذر جلب لوحة المتصدّرين حاليًا" });
+    }
+  });
+
+  // ============================================================
+  // توقّعات طويلة المدى (البطل + الهدّاف) — نظير الويب لنقاط الموبايل
+  // (sportsPoolPredictionsService). ?comp=<slug> — البطل 5000 والهدّاف 5000،
+  // تُقفل عند بدء ربع النهائي. GET عام، POST يتطلّب جلسة ويب.
+  // ============================================================
+  app.get("/api/sports/predictions/long", async (req: any, res) => {
+    const comp = typeof req.query.comp === "string" ? req.query.comp.trim() : "";
+    if (!comp) {
+      res.status(400).json({ message: "البطولة مطلوبة" });
+      return;
+    }
+    try {
+      const svc = await import("../services/sportsPoolPredictionsService");
+      const data = await svc.getLongPredictions(comp, req.user?.id);
+      res.set("Cache-Control", req.user ? "private, no-store" : "public, max-age=60, s-maxage=120");
+      res.json(data);
+    } catch (error) {
+      console.error("[Sports] long predictions failed:", error);
+      res.status(502).json({ message: "تعذر جلب التوقّعات طويلة المدى حاليًا" });
+    }
+  });
+
+  app.post("/api/sports/predictions/long", requireAuth, async (req: any, res) => {
+    const { competitionSlug, kind, teamId, playerName } = req.body ?? {};
+    if (!competitionSlug || (kind !== "champion" && kind !== "top_scorer")) {
+      res.status(400).json({ message: "بيانات غير صحيحة" });
+      return;
+    }
+    try {
+      const svc = await import("../services/sportsPoolPredictionsService");
+      const result = await svc.submitLongPrediction(req.user.id, String(competitionSlug), kind, {
+        teamId: Number.isFinite(Number(teamId)) ? Number(teamId) : undefined,
+        playerName: playerName != null ? String(playerName) : undefined,
+      });
+      res.set("Cache-Control", "private, no-store");
+      if (!result.ok) {
+        const status = result.reason === "LOCKED" ? 409 : 400;
+        const message =
+          result.reason === "LOCKED" ? "أُقفلت التوقّعات — انطلقت البطولة" : "بيانات غير صحيحة";
+        res.status(status).json({ reason: result.reason, message });
+        return;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[Sports] submit long prediction failed:", error);
+      res.status(502).json({ message: "تعذر حفظ توقّعك حاليًا" });
     }
   });
 }

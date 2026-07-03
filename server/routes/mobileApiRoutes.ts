@@ -71,6 +71,22 @@ import {
   getUpcomingPredictableMatches,
   getMatchPredictionsSummary,
 } from "../services/wcPredictionsService";
+import {
+  getWcLongPredictions,
+  submitWcLongPrediction,
+  type WcLongKind,
+} from "../services/wcLongPredictionsService";
+import {
+  isGcPredictionsEnabled,
+  submitPrediction as submitGcPrediction,
+  getMyPredictions as getGcMyPredictions,
+  getLeaderboard as getGcLeaderboard,
+  getUpcomingPredictableMatches as getGcUpcomingPredictableMatches,
+  getMatchPredictionsSummary as getGcMatchPredictionsSummary,
+  getLongPredictions as getGcLongPredictions,
+  submitLongPrediction as submitGcLongPrediction,
+  type GcLongKind,
+} from "../services/gcPredictionsService";
 
 const router = Router();
 
@@ -8382,6 +8398,17 @@ function wcPredGuard(res: Response): boolean {
   return true;
 }
 
+// توقّعات البطولة طويلة المدى (البطل/الهدّاف) — خلف نفس علم الويب المستقل
+// WC_LONG_PREDICTIONS_ENABLED (إطلاق ويب-أولًا متدرّج، انظر wcPredictions.ts).
+function wcLongGuard(res: Response): boolean {
+  if (!wcPredGuard(res)) return false;
+  if (process.env.WC_LONG_PREDICTIONS_ENABLED !== "true") {
+    res.status(503).json({ enabled: false, message: "توقّعات البطولة قيد الإطلاق" });
+    return false;
+  }
+  return true;
+}
+
 router.get("/world-cup/predictions/today", async (req: Request, res: Response) => {
   if (!wcPredGuard(res)) return;
   try {
@@ -8438,11 +8465,18 @@ router.get("/world-cup/predictions/mine", async (req: Request, res: Response) =>
   }
 });
 
-router.get("/world-cup/predictions/leaderboard", async (_req: Request, res: Response) => {
+router.get("/world-cup/predictions/leaderboard", async (req: Request, res: Response) => {
   if (!wcPredGuard(res)) return;
   try {
-    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
-    res.json({ leaders: await getLeaderboard() });
+    // مسؤولو النظام مخفيّون عن بقية الزوار (انظر wcPredictionsService.getLeaderboard) —
+    // نحدّد صاحب الجلسة (إن وُجدت) ليبقى ظاهرًا لنفسه فقط، ولا نُخزّن الرد في
+    // الكاش العام حين يكون مخصّصًا لمستخدم مسجَّل.
+    const session = await verifyMemberSession(req);
+    res.set(
+      "Cache-Control",
+      session ? "private, no-store" : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+    );
+    res.json({ leaders: await getLeaderboard(100, session?.userId) });
   } catch (error) {
     console.error("[Mobile WC Predictions] leaderboard error:", error);
     res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });
@@ -8461,6 +8495,186 @@ router.get("/world-cup/predictions/match/:fixtureId", async (req: Request, res: 
   } catch (error) {
     console.error("[Mobile WC Predictions] match summary error:", error);
     res.status(502).json({ message: "تعذر جلب ملخص المباراة حاليًا" });
+  }
+});
+
+// ── توقّعات البطولة طويلة المدى (البطل + الهدّاف) ─────────────────────────
+// نظيرة /api/world-cup/predictions/long على الويب — نفس wcLongPredictionsService.
+
+router.get("/world-cup/predictions/long", async (req: Request, res: Response) => {
+  if (!wcLongGuard(res)) return;
+  try {
+    const session = await verifyMemberSession(req);
+    res.set(
+      "Cache-Control",
+      session ? "private, no-store" : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+    );
+    res.json(await getWcLongPredictions(session?.userId));
+  } catch (error) {
+    console.error("[Mobile WC Predictions] long error:", error);
+    res.status(502).json({ message: "تعذر جلب توقّعات البطولة حاليًا" });
+  }
+});
+
+router.post("/world-cup/predictions/long", async (req: Request, res: Response) => {
+  if (!wcLongGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const kind = String(req.body?.kind) as WcLongKind;
+    const teamId = req.body?.teamId != null ? Number(req.body.teamId) : undefined;
+    const playerId = req.body?.playerId != null ? Number(req.body.playerId) : undefined;
+    const result = await submitWcLongPrediction(session.userId, kind, { teamId, playerId });
+    if (!result.ok) {
+      const map = {
+        LOCKED: { code: 409, message: "أُغلق هذا التوقّع — تجاوزنا موعده في البطولة" },
+        INVALID: { code: 400, message: "اختيار غير صالح" },
+      } as const;
+      const m = map[result.reason];
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[Mobile WC Predictions] long submit error:", error);
+    res.status(500).json({ message: "تعذر حفظ التوقّع" });
+  }
+});
+
+// ==========================================
+// مسابقة توقّعات «خليجي 27» — نسخة الموبايل (Bearer)
+// ==========================================
+// نظيرة /api/gulf-cup/predictions/* لكن بـ verifyMemberSession بدل Passport.
+
+const GC_PRED_NOT_CONFIGURED = {
+  configured: false,
+  message: "مسابقة توقّعات خليجي 27 غير مفعّلة حاليًا",
+};
+
+function gcPredGuard(res: Response): boolean {
+  if (!isGcPredictionsEnabled()) {
+    res.status(503).json(GC_PRED_NOT_CONFIGURED);
+    return false;
+  }
+  return true;
+}
+
+router.get("/gulf-cup/predictions/today", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  try {
+    const session = await verifyMemberSession(req);
+    const payload = await getGcUpcomingPredictableMatches(session?.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json(payload);
+  } catch (error) {
+    console.error("[Mobile GC Predictions] today error:", error);
+    res.status(502).json({ message: "تعذر جلب مباريات اليوم حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/predictions", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const fixtureId = Number(req.body?.fixtureId);
+    const predHome = Number(req.body?.predHome);
+    const predAway = Number(req.body?.predAway);
+    if (!Number.isFinite(fixtureId)) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    const result = await submitGcPrediction(session.userId, fixtureId, predHome, predAway);
+    if (!result.ok) {
+      const map = {
+        NOT_FOUND: { code: 404, message: "المباراة غير متاحة للتوقّع" },
+        LOCKED: { code: 409, message: "أُغلق التوقّع — انطلقت المباراة" },
+        INVALID: { code: 400, message: "نتيجة غير صالحة" },
+      } as const;
+      const m = map[result.reason];
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ prediction: result.prediction });
+  } catch (error) {
+    console.error("[Mobile GC Predictions] submit error:", error);
+    res.status(500).json({ message: "تعذر حفظ التوقّع" });
+  }
+});
+
+router.get("/gulf-cup/predictions/mine", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json({ predictions: await getGcMyPredictions(session.userId) });
+  } catch (error) {
+    console.error("[Mobile GC Predictions] mine error:", error);
+    res.status(502).json({ message: "تعذر جلب توقّعاتك حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/predictions/leaderboard", async (_req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  try {
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json({ leaders: await getGcLeaderboard() });
+  } catch (error) {
+    console.error("[Mobile GC Predictions] leaderboard error:", error);
+    res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/predictions/match/:fixtureId", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isFinite(fixtureId)) {
+    return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+  }
+  try {
+    res.set("Cache-Control", "public, max-age=10, s-maxage=15, stale-while-revalidate=30");
+    res.json(await getGcMatchPredictionsSummary(fixtureId));
+  } catch (error) {
+    console.error("[Mobile GC Predictions] match summary error:", error);
+    res.status(502).json({ message: "تعذر جلب ملخص المباراة حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/predictions/long", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  try {
+    const session = await verifyMemberSession(req);
+    if (session) res.set("Cache-Control", "private, no-store");
+    else res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+    res.json(await getGcLongPredictions(session?.userId));
+  } catch (error) {
+    console.error("[Mobile GC Predictions] long error:", error);
+    res.status(502).json({ message: "تعذر جلب التوقّعات طويلة المدى حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/predictions/long", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const kind = String(req.body?.kind) as GcLongKind;
+    const teamId = req.body?.teamId != null ? Number(req.body.teamId) : undefined;
+    const playerName = req.body?.playerName != null ? String(req.body.playerName) : undefined;
+    const result = await submitGcLongPrediction(session.userId, kind, { teamId, playerName });
+    if (!result.ok) {
+      const map = {
+        LOCKED: { code: 409, message: "أُغلقت التوقّعات طويلة المدى — انطلقت البطولة" },
+        INVALID: { code: 400, message: "اختيار غير صالح" },
+      } as const;
+      const m = map[result.reason];
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error("[Mobile GC Predictions] long submit error:", error);
+    res.status(500).json({ message: "تعذر حفظ التوقّع" });
   }
 });
 

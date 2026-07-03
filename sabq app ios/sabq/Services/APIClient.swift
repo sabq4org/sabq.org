@@ -149,6 +149,7 @@ actor APIClient {
 
     func markLoggedOut() {
         authToken = nil
+        csrfToken = nil
         KeychainHelper.delete(forKey: "sabq_auth_token")
         // Also drop the legacy boolean in case an older build wrote it.
         UserDefaults.standard.removeObject(forKey: "sabq_is_authenticated")
@@ -346,40 +347,42 @@ actor APIClient {
         // v1 returns `{"error":"NOT_FOUND"}` for short-hash slugs like
         // `8myc61P`, and even when v1 succeeds its payload omits the rich
         // HTML body. Public-first, v1 fallback only when public misses.
-        if let publicArticle = try? await get(
-            APIArticle.self,
-            path: "/articles/\(slug)",
-            apiRoot: publicAPIBaseURL
-        ) {
-            return publicArticle
+        do {
+            return try await get(
+                APIArticle.self,
+                path: "/articles/\(slug)",
+                apiRoot: publicAPIBaseURL
+            )
+        } catch where Self.isFallbackWorthy(error) {
+            // Fallback: v1 wrapped shape. Used for content that's not on the
+            // public surface (rare).
+            return try await get(WrappedObject<APIArticle>.self, path: "/articles/\(slug)").item
         }
-        // Fallback: v1 wrapped shape. Used for content that's not on the
-        // public surface (rare).
-        let v1 = try await get(WrappedObject<APIArticle>.self, path: "/articles/\(slug)").item
-        return v1
     }
 
     func fetchRelated(slug: String) async throws -> [APIArticle] {
         // Public API returns a bare JSON array; v1 doesn't have this
         // endpoint (404). Mirror fetchArticle: public-first, v1 fallback.
-        if let bare = try? await get(
-            [APIArticle].self,
-            path: "/articles/\(slug)/related",
-            apiRoot: publicAPIBaseURL
-        ) {
-            return bare
+        do {
+            return try await get(
+                [APIArticle].self,
+                path: "/articles/\(slug)/related",
+                apiRoot: publicAPIBaseURL
+            )
+        } catch where Self.isFallbackWorthy(error) {
+            do {
+                return try await get(
+                    WrappedArray<APIArticle>.self,
+                    path: "/articles/\(slug)/related",
+                    apiRoot: publicAPIBaseURL
+                ).items
+            } catch where Self.isFallbackWorthy(error) {
+                return try await get(
+                    WrappedArray<APIArticle>.self,
+                    path: "/articles/\(slug)/related"
+                ).items
+            }
         }
-        if let wrapped = try? await get(
-            WrappedArray<APIArticle>.self,
-            path: "/articles/\(slug)/related",
-            apiRoot: publicAPIBaseURL
-        ) {
-            return wrapped.items
-        }
-        return try await get(
-            WrappedArray<APIArticle>.self,
-            path: "/articles/\(slug)/related"
-        ).items
     }
 
     /// Content Passport (digital fingerprint). Lives at /api/articles/:slug/passport,
@@ -400,9 +403,9 @@ actor APIClient {
         ).items
     }
 
-    func fetchAudioSummary(slug: String) async throws -> APIAudioSummary {
-        try await get(WrappedObject<APIAudioSummary>.self, path: "/articles/\(slug)/summary-audio").item
-    }
+    // ملاحظة: /articles/:slug/summary-audio يعيد بايتات MP3 خامًا لا JSON —
+    // fetchAudioSummary القديمة كانت تفشل فكًّا دائمًا وتشغّل توليدًا صوتيًا
+    // عبثًا مع كل فتح مقال، فحُذفت. التشغيل يتم بتمرير الرابط لـ AVPlayer مباشرة.
 
     func fetchAIInsights(slug: String) async throws -> [String: String] {
         try await get([String: String].self, path: "/articles/\(slug)/ai-insights")
@@ -547,7 +550,7 @@ actor APIClient {
                 query: query,
                 apiRoot: publicAPIBaseURL
             ).items
-        } catch {
+        } catch where Self.isFallbackWorthy(error) {
             return try await get(
                 WrappedArray<APIOpinion>.self,
                 path: "/opinion",
@@ -559,7 +562,7 @@ actor APIClient {
     func fetchOpinion(slug: String) async throws -> APIOpinion {
         do {
             return try await get(WrappedObject<APIOpinion>.self, path: "/opinion/\(slug)", apiRoot: publicAPIBaseURL).item
-        } catch {
+        } catch where Self.isFallbackWorthy(error) {
             return try await get(WrappedObject<APIOpinion>.self, path: "/opinion/\(slug)").item
         }
     }
@@ -592,17 +595,16 @@ actor APIClient {
     }
 
     func fetchArticlesByKeyword(_ keyword: String) async throws -> [APIArticle] {
-        let allowed = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
-        let encodedKeyword = keyword.addingPercentEncoding(withAllowedCharacters: allowed) ?? keyword
-
+        // لا ترميز مسبق هنا: buildURL يرمّز كل مقطع بنفسه، والترميز المزدوج
+        // يجعل الخادم يبحث عن "%D8%B1..." حرفيًا فتعود كل كلمة عربية فارغة
         do {
             return try await get(
                 WrappedArray<APIArticle>.self,
-                path: "/keyword/\(encodedKeyword)",
+                path: "/keyword/\(keyword)",
                 apiRoot: publicAPIBaseURL
             ).items
-        } catch {
-            return try await get(WrappedArray<APIArticle>.self, path: "/keyword/\(encodedKeyword)").items
+        } catch where Self.isFallbackWorthy(error) {
+            return try await get(WrappedArray<APIArticle>.self, path: "/keyword/\(keyword)").items
         }
     }
 
@@ -754,8 +756,9 @@ actor APIClient {
         // version always failed with "الصورة مطلوبة (base64)" because
         // `req.body.image` was undefined.
         let base64 = imageData.base64EncodedString()
+        let mime = Self.detectImageMimeType(imageData) ?? "image/png"
         struct Body: Encodable { let image: String }
-        let body = Body(image: "data:image/png;base64,\(base64)")
+        let body = Body(image: "data:\(mime);base64,\(base64)")
         return try await post(APIAvatarUploadResponse.self, path: "/members/profile/image", body: body).user
     }
 
@@ -934,8 +937,9 @@ actor APIClient {
     }
 
     func fetchNotificationPreferences() async throws -> EditorialNotificationPreferences {
-        struct Response: Decodable { let preferences: EditorialNotificationPreferences }
-        return try await get(Response.self, path: "/notifications/preferences").preferences
+        // غياب مفتاح preferences = الافتراضي (الكل مفعّل) بدل إفشال الشاشة.
+        struct Response: Decodable { let preferences: EditorialNotificationPreferences? }
+        return try await get(Response.self, path: "/notifications/preferences").preferences ?? .allOn
     }
 
     func updateNotificationPreferences(_ prefs: EditorialNotificationPreferences) async throws {
@@ -1228,7 +1232,7 @@ actor APIClient {
         } catch APIError.apiMessage(let message)
             where message.localizedCaseInsensitiveContains("لا يوجد رابط قصير") {
             return nil
-        } catch {
+        } catch where Self.isFallbackWorthy(error) {
             let fallback = try await get(APIShortlink.self, path: "/shortlinks/article/\(articleId)")
             return fallback.resolvedURLString
         }
@@ -1527,6 +1531,18 @@ actor APIClient {
         }
     }
 
+    /// الاحتياطي (v1 بعد public أو شكل بديل) يليق فقط بـ«غير موجود هنا»
+    /// (404) أو «شكل استجابة مختلف» (فشل فك). أخطاء الشبكة و5xx تُرمى
+    /// مباشرة — كان try? يبتلعها فيطلق طلبًا ثانيًا يضاعف الحمل على خادم
+    /// متعثر أصلًا ويحوّل «خطأ خادم» إلى «المحتوى غير موجود» أمام المستخدم.
+    nonisolated static func isFallbackWorthy(_ error: Error) -> Bool {
+        guard let api = error as? APIError else { return false }
+        switch api {
+        case .notFound, .decodingError: return true
+        default: return false
+        }
+    }
+
     private func perform<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
         try await decode(type, from: session, request: request)
     }
@@ -1538,7 +1554,17 @@ actor APIClient {
         }
         switch http.statusCode {
         case 200...299:
-            return try decoder.decode(type, from: data)
+            do {
+                return try decoder.decode(type, from: data)
+            } catch {
+                // DecodingError الخام كان يتسرّب للمستخدم برسالة إنجليزية
+                // تقنية ("The data couldn't be read…") عبر localizedDescription
+                // في واجهة عربية. التفاصيل للتشخيص في الكونسول فقط.
+                #if DEBUG
+                print("[API] decode failure for \(T.self):", error)
+                #endif
+                throw APIError.decodingError
+            }
         default:
             if let apiErr = try? decoder.decode(APIErrorResponse.self, from: data) {
                 // Surface the pending-activation contract as a structured

@@ -40,14 +40,10 @@ struct HomeFeedView: View {
     /// in-app preferences screen; both write to the same UserDefaults key.
     @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
     @State private var isFirstLoad = true
-    /// Drives the slowly-pulsing "live" ring around the new live-coverage
-    /// entry point in the header. Animated on appear; idle otherwise.
-    @State private var livePulse = false
     @State private var todayInsights: [String: String] = [:]
     /// Rich personal-journey insights (member-session only). Drives the
     /// inline metric tiles + interest chips in personalJourneyBlock.
     @State private var richInsights: APITodayInsights?
-    @State private var latestOmq: APIDeepAnalysis?
     @State private var calendarToday: [APICalendarEvent] = []
     @State private var latestNewsletter: APIAudioNewsletter?
     /// Dashboard-managed breaking strip (شريط الأخبار العاجلة). `nil` until the
@@ -243,7 +239,21 @@ struct HomeFeedView: View {
                             .frame(height: 0)
                             .id(Self.scrollTopID)
 
-                        HomeFeedSkeleton()
+                        // فشل التحميل الكامل (أوفلاين/عطل خادم): حالة خطأ
+                        // بزر إعادة محاولة بدل skeleton يومض للأبد بصمت.
+                        if articlesStore.errorMessage != nil {
+                            EmptyStateView(
+                                icon: "wifi.exclamationmark",
+                                tint: SabqTheme.coral,
+                                title: "تعذر تحميل الأخبار",
+                                subtitle: articlesStore.errorMessage ?? "تحقق من اتصالك بالإنترنت ثم أعد المحاولة",
+                                action: { Task { await articlesStore.loadArticles(ignoreCache: true) } },
+                                actionTitle: "إعادة المحاولة"
+                            )
+                            .padding(.top, 80)
+                        } else {
+                            HomeFeedSkeleton()
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 18)
@@ -305,7 +315,6 @@ struct HomeFeedView: View {
             // Phase-4 + Phase-5 background fetches. All best-effort: silent
             // on failure so the home screen still renders.
             async let insights: [String: String]? = try? await APIClient.shared.fetchTodayInsights()
-            async let omqList: APIOmqListResponse? = try? await APIClient.shared.fetchOmqList(page: 1, limit: 1, status: "published")
             async let upcoming: [APICalendarEvent]? = try? await APIClient.shared.fetchUpcomingCalendarEvents(days: 14)
             async let newsletters: [APIAudioNewsletter]? = try? await APIClient.shared.fetchAudioNewsletters()
             async let breaking = (try? await APIClient.shared.fetchBreakingTicker()) ?? nil
@@ -316,7 +325,6 @@ struct HomeFeedView: View {
                 : nil
 
             if let v = await insights { todayInsights = v }
-            latestOmq = (await omqList)?.analyses.first
             calendarToday = (await upcoming) ?? []
             latestNewsletter = (await newsletters)?.first
             breakingTicker = await breaking
@@ -326,9 +334,7 @@ struct HomeFeedView: View {
             // red dot reflects reality on first home-screen render after
             // launch (and on every pull-to-refresh).
             if authStore.isLoggedIn {
-                if let page = try? await APIClient.shared.fetchEditorialNotifications() {
-                    notificationsStore.unreadCount = page.unread
-                }
+                await notificationsStore.refreshUnreadCount()
                 // Loyalty summary for the journey-metric "نقاط الولاء"
                 // cell. Best-effort: nil → cell shows 0.
                 loyaltySummary = try? await APIClient.shared.fetchLoyaltySummary()
@@ -484,6 +490,7 @@ struct HomeFeedView: View {
                     headerIcon("magnifyingglass")
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("البحث")
 
                 // Editorial notifications bell — fast access to the user's
                 // own notifications (article scheduled/published/rejected/
@@ -523,6 +530,9 @@ struct HomeFeedView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(notificationsStore.unreadCount > 0
+                        ? "الإشعارات — لديك إشعارات غير مقروءة"
+                        : "الإشعارات")
                 }
 
                 // "لحظة بلحظة" entry point. The red pulsing dot was removed
@@ -547,6 +557,7 @@ struct HomeFeedView: View {
                     }
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("لحظة بلحظة — التغطية المباشرة")
 
                 // Appearance cycle — taps walk system → light → dark →
                 // system. The full 3-state picker lives in Settings; this
@@ -563,11 +574,7 @@ struct HomeFeedView: View {
                     headerIcon(mode.iconName)
                 }
                 .buttonStyle(.plain)
-            }
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false)) {
-                livePulse = true
+                .accessibilityLabel("تبديل المظهر — الحالي: \((AppAppearance(rawValue: appearanceRaw) ?? .system).arabicLabel)")
             }
         }
     }
@@ -1384,117 +1391,6 @@ struct HomeFeedView: View {
         "اختر اهتماماتك مرة، ودع سبق ترتّب الأخبار لك",
     ]
 
-    // MARK: - OMQ Preview (Phase 2)
-
-    /// Deep analyses preview card. Now backed by /api/omq real data — falls
-    /// back to a "coming soon" placeholder when no published analyses exist.
-    private var omqPreviewSection: some View {
-        let sky = SabqTheme.sky
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                sectionHeading(
-                    title: "تحليل عميق",
-                    icon: "sparkles.rectangle.stack.fill",
-                    tint: sky
-                )
-                if latestOmq != nil {
-                    NavigationLink(value: OmqRoute()) {
-                        Text("الكل")
-                            .font(SabqFonts.app(size: 11, weight: .heavy))
-                            .foregroundStyle(sky)
-                    }
-                }
-            }
-
-            if let omq = latestOmq {
-                NavigationLink(value: OmqDetailRoute(id: omq.id, title: omq.title)) {
-                    HStack(alignment: .top, spacing: 14) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(sky.opacity(0.14))
-                            Image(systemName: "brain.head.profile")
-                                .font(SabqFonts.app(size: 22, weight: .light))
-                                .foregroundStyle(sky)
-                                .symbolRenderingMode(.hierarchical)
-                        }
-                        .frame(width: 50, height: 50)
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(omq.title)
-                                .font(SabqFonts.app(size: 14, weight: .heavy))
-                                .foregroundStyle(SabqTheme.ink)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
-                            if let topic = omq.topic, !topic.isEmpty, topic != omq.title {
-                                Text(topic)
-                                    .font(SabqFonts.app(size: 11))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                    .lineLimit(2)
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                            .fill(LinearGradient(
-                                colors: [sky.opacity(0.08), sky.opacity(0.02)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                            .stroke(sky.opacity(0.18), lineWidth: 0.5)
-                    )
-                }
-                .buttonStyle(.plain)
-            } else {
-                NavigationLink(value: OmqRoute()) {
-                    omqPlaceholder(sky: sky)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func omqPlaceholder(sky: Color) -> some View {
-        HStack(alignment: .center, spacing: 14) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(sky.opacity(0.14))
-                Image(systemName: "brain.head.profile")
-                    .font(SabqFonts.app(size: 28, weight: .light))
-                    .foregroundStyle(sky)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .frame(width: 64, height: 64)
-            VStack(alignment: .leading, spacing: 5) {
-                Text("تحليلات الذكاء الاصطناعي")
-                    .font(SabqFonts.app(size: 15, weight: .bold))
-                    .foregroundStyle(SabqTheme.ink)
-                Text("اعرض كل التحليلات المعمّقة المتاحة بمنهجية سبق التحريرية.")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(LinearGradient(
-                    colors: [sky.opacity(0.06), sky.opacity(0.02)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(sky.opacity(0.18), lineWidth: 0.5)
-        )
-    }
-
     // MARK: - Calendar today card
 
     private var calendarTodayCard: some View {
@@ -1717,126 +1613,6 @@ struct StoryBubble: View {
     }
 }
 
-// MARK: - Notifications Sheet
-
-struct NotificationsSheet: View {
-    @Environment(AuthStore.self) private var authStore
-    @State private var notifications: [APINotification] = []
-    @State private var isLoading = true
-    @State private var isMarkingAllRead = false
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            Group {
-                if isLoading {
-                    VStack {
-                        Spacer()
-                        ProgressView()
-                            .tint(SabqTheme.primaryEnd)
-                        Spacer()
-                    }
-                } else if notifications.isEmpty {
-                    EmptyStateView(
-                        icon: "bell.slash",
-                        tint: SabqTheme.secondaryInk,
-                        title: "لا توجد إشعارات",
-                        subtitle: "ستظهر هنا الإشعارات الجديدة"
-                    )
-                } else {
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            ForEach(notifications) { notif in
-                                notificationRow(notif)
-                                Divider().foregroundStyle(SabqTheme.outline)
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                    }
-                }
-            }
-            .background(SabqTheme.background)
-            .sabqRTL()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(SabqFonts.app(size: 22))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
-                    }
-                }
-                ToolbarItem(placement: .principal) {
-                    Text("الإشعارات")
-                        .font(SabqFonts.app(size: 17, weight: .bold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task {
-                            guard !isMarkingAllRead else { return }
-                            isMarkingAllRead = true
-                            do {
-                                try await APIClient.shared.markAllNotificationsRead()
-                                for i in notifications.indices {
-                                    notifications[i].isRead = true
-                                }
-                                await MainActor.run {
-                                    authStore.markAllNotificationsReadLocally()
-                                }
-                            } catch {
-                            }
-                            isMarkingAllRead = false
-                        }
-                    } label: {
-                        if isMarkingAllRead {
-                            ProgressView()
-                                .tint(SabqTheme.primaryEnd)
-                        } else {
-                            Text("قراءة الكل")
-                                .font(SabqFonts.app(size: 13, weight: .semibold))
-                                .foregroundStyle(SabqTheme.primaryEnd)
-                        }
-                    }
-                    .disabled(isMarkingAllRead || !notifications.contains(where: { !$0.isRead }))
-                }
-            }
-            .task {
-                notifications = await NewsService.fetchNotifications()
-                isLoading = false
-            }
-        }
-    }
-
-    private func notificationRow(_ notif: APINotification) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            Circle()
-                .fill(notif.isRead ? SabqTheme.outline : SabqTheme.primaryEnd)
-                .frame(width: 8, height: 8)
-                .padding(.top, 6)
-
-            VStack(alignment: .leading, spacing: 4) {
-                if let title = notif.title {
-                    Text(title)
-                        .font(SabqFonts.app(size: 15, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                }
-                if let body = notif.body {
-                    Text(body)
-                        .font(SabqFonts.app(size: 14, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .lineLimit(2)
-                }
-                if let date = notif.createdAt {
-                    Text(date)
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.vertical, 14)
-    }
-}
 
 extension Notification.Name {
     /// Posted when the user re-taps the Home tab while already on the feed.

@@ -1,7 +1,7 @@
 import SwiftUI
 
 // ════════════════════════════════════════════════════════════════════════
-//  HomeView — تطبيق سبق الرياضي · واجهة «دوري روشن» (إعادة تصميم)
+//  HomeView — تطبيق VARA الرياضي · واجهة «دوري روشن» (إعادة تصميم)
 //
 //  بديل مباشر لـ Screens/HomeView.swift. يستخدم نفس المكوّنات (SpTheme،
 //  SportsFonts، SpTeamLogo، SpMatchCenter…) ونفس نقاط الـAPI القائمة
@@ -14,6 +14,8 @@ import SwiftUI
 // ════════════════════════════════════════════════════════════════════════
 
 struct HomeView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(SpLiveStream.self) private var liveStream
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpMatchFollows.self) private var matchFollows
     @Environment(SpAuthStore.self) private var auth
@@ -32,6 +34,7 @@ struct HomeView: View {
     @State private var featuredMomentum: SpMomentum?
     @State private var featuredPressure: SpPressure?
     @State private var featuredFacts: SpMatchFacts?
+    @State private var featuredCommentary: SpCommentary?
 
     @State private var scorerMode: ScorerMode = .goals
     @State private var selectedMatch: SpFixture?
@@ -39,6 +42,8 @@ struct HomeView: View {
     @State private var selectedPlayer: IDBox?
     @State private var showAllStandings = false
     @State private var showAllScorers = false
+    @State private var showSearch = false
+    @State private var showForYou = false
     @State private var loading = true
     @State private var loadError: String?
 
@@ -112,9 +117,55 @@ struct HomeView: View {
             .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
             .navigationDestination(isPresented: $showAllStandings) { fullStandingsPage }
             .navigationDestination(isPresented: $showAllScorers) { fullScorersPage }
+            .navigationDestination(isPresented: $showSearch) { SpSearchView() }
+            .navigationDestination(isPresented: $showForYou) { SpForYouView() }
         }
         .task { await loadAll() }
+        .task { await pollHero() }
+        // عودة التطبيق للمقدّمة أثناء مباراة جارية = تحديث فوري للهيرو.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active, featured?.status.live == true {
+                Task { await refreshHero() }
+            }
+        }
+        // البث الحيّ (SSE): تغيّر ختم مباراة الهيرو = تحديث فوري للنتيجة والمجريات.
+        .onChange(of: featured.flatMap { liveStream.stamps["s:\($0.id)"] }) { _, _ in
+            Task { await refreshHero() }
+        }
         .refreshable { await loadAll(force: true) }
+    }
+
+    // MARK: - الاستطلاع الحيّ للهيرو
+    //
+    // الرئيسية كانت بلا أي استطلاع — نتيجة الهيرو الحية تتجمّد حتى السحب اليدوي.
+    // السياسة الموحّدة: حيّ = 10ث (خفيف: المباريات + تفاصيل/تعليق الهيرو)،
+    // وقبل الانطلاق ≤ 30 دقيقة = 30ث لالتقاط البداية، وإلا فحص خامل كل 60ث بلا شبكة.
+    private func pollHero() async {
+        while !Task.isCancelled {
+            let f = featured
+            let live = f?.status.live == true
+            let secsToKickoff = f.map { $0.kickoff.timeIntervalSinceNow } ?? .greatestFiniteMagnitude
+            let near = !live && secsToKickoff > 0 && secsToKickoff <= 1800
+            let delay: UInt64 = live ? 10_000_000_000 : (near ? 30_000_000_000 : 60_000_000_000)
+            try? await Task.sleep(nanoseconds: delay)
+            if Task.isCancelled { break }
+            if live || near { await refreshHero() }
+        }
+    }
+
+    /// تحديث حيّ خفيف: قائمة المباريات (تُحرّك النتيجة/الحالة في الهيرو وبقية اللوحة)
+    /// + تفاصيل وتعليق مباراة الهيرو الجارية. التحليل الأثقل (xG/زخم/ضغط) يبقى
+    /// على loadAll (السحب اليدوي) — الأرقام الحيوية هنا هي النتيجة والأحداث.
+    private func refreshHero() async {
+        if let m = try? await APIClient.shared.fetchMatches(comp: SportsConstants.defaultComp, ignoreCache: true) {
+            matches = m
+        }
+        if let f = featured, f.started {
+            async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: true)
+            async let commentaryOpt = try? APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: true)
+            self.featuredDetail = await detailOpt
+            self.featuredCommentary = f.status.live ? await commentaryOpt : nil
+        }
     }
 
     // MARK: - الهيرو
@@ -140,20 +191,22 @@ struct HomeView: View {
         .animation(.easeInOut(duration: 0.25), value: loading)
     }
 
-    // شعار التطبيق (VARA) أعلى الصفحة الرئيسية — علامة الهوية.
+    // شعار التطبيق (VARA) أعلى الصفحة الرئيسية — علامة الهوية:
+    // الأيقونة + VA(R ذهبية)A + «دقّة الرياضة» (دليل الهوية).
     private var brandBar: some View {
-        HStack(spacing: 9) {
+        HStack(spacing: 10) {
             Image("VaraLogo")
                 .resizable()
                 .scaledToFill()
                 .frame(width: 32, height: 32)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(SpTheme.cardStroke, lineWidth: 1))
-            Text("VARA")
-                .font(SportsFonts.app(size: 19, weight: .heavy))
-                .foregroundStyle(SpTheme.onDark)
-                .tracking(1)
-                .environment(\.layoutDirection, .leftToRight)
+            VStack(alignment: .leading, spacing: 0) {
+                SpWordmark(size: 18)
+                Text("دقّة الرياضة")
+                    .font(SportsFonts.app(size: 9.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 6)
@@ -181,19 +234,24 @@ struct HomeView: View {
             }
             Spacer(minLength: 0)
             HStack(spacing: 8) {
-                circleIcon("magnifyingglass")
-                circleIcon("bell")
+                headerButton("magnifyingglass", label: "بحث") { showSearch = true }
+                headerButton("bell", label: "لك") { showForYou = true }
             }
         }
     }
 
-    private func circleIcon(_ name: String) -> some View {
-        Image(systemName: name)
-            .font(.system(size: 16, weight: .semibold))
-            .foregroundStyle(SpTheme.onDark)
-            .frame(width: 38, height: 38)
-            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(SpTheme.surface))
-            .shadow(color: SpTheme.cardShadow, radius: 4, x: 0, y: 2)
+    private func headerButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(SpTheme.onDark)
+                .frame(width: 38, height: 38)
+                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(SpTheme.surface)
+                    .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1)))
+                .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        }
+        .buttonStyle(SpPressStyle())
+        .accessibilityLabel(label)
     }
 
     private var metaText: String {
@@ -254,6 +312,21 @@ struct HomeView: View {
                             heroInsightChip(icon: item.0, title: item.1, value: item.2)
                         }
                     }
+                }
+
+                // آخر مجريات المباراة الحيّة — سطر واحد من التعليق العربي.
+                if f.status.live, let line = latestCommentLine {
+                    HStack(spacing: 7) {
+                        Image(systemName: "bolt.horizontal.circle.fill")
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.green)
+                        Text(line)
+                            .font(SportsFonts.app(size: 11, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkDim)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(SpTheme.chipFill))
                 }
 
                 HStack(spacing: 6) {
@@ -372,6 +445,16 @@ struct HomeView: View {
             out.append(("scope", "الأخطر", player.name))
         }
         return Array(out.prefix(3))
+    }
+
+    /// آخر مجرى بارز من التعليق الحي: أحدث حدث مهم/هدف ضمن آخر العناصر، وإلا الأحدث مطلقًا.
+    private var latestCommentLine: String? {
+        guard let items = featuredCommentary?.items, !items.isEmpty else { return nil }
+        let sorted = items.sorted { ($0.order, $0.minute) > ($1.order, $1.minute) }
+        let pick = sorted.prefix(6).first(where: { $0.important || $0.goal }) ?? sorted.first
+        guard let c = pick, !c.textAr.isEmpty else { return nil }
+        let minute = c.extraMinute.flatMap { $0 > 0 ? "\(c.minute)+\($0)′" : nil } ?? "\(c.minute)′"
+        return "\(minute) · \(c.textAr)"
     }
 
     private func pressureSideName(_ side: String, fixture: SpFixture) -> String {
@@ -1083,25 +1166,39 @@ struct HomeView: View {
         // تحديث حالة/نتيجة المباريات المتابَعة (بطاقة «مبارياتي») من الخادم.
         await matchFollows.refresh()
 
-        // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + زخم/ضغط/طقس.
+        // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + زخم/ضغط/طقس + آخر مجريات.
         if let f = featured, f.started {
             async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: force)
             async let xgOpt = try? APIClient.shared.fetchXg(matchId: f.id, ignoreCache: force)
             async let momentumOpt = try? APIClient.shared.fetchMomentum(matchId: f.id, ignoreCache: force)
             async let pressureOpt = try? APIClient.shared.fetchPressure(matchId: f.id, ignoreCache: force)
             async let factsOpt = try? APIClient.shared.fetchMatchFacts(matchId: f.id, ignoreCache: force)
+            async let commentaryOpt = try? APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: force)
             self.featuredDetail = await detailOpt
             self.featuredXg = await xgOpt
             self.featuredMomentum = await momentumOpt
             self.featuredPressure = await pressureOpt
             self.featuredFacts = await factsOpt
+            self.featuredCommentary = f.status.live ? await commentaryOpt : nil
+        } else if let f = featured {
+            // قبل المباراة: الوقائع وحدها (الطقس + الغيابات) تُغني شرائح الهيرو.
+            self.featuredFacts = try? await APIClient.shared.fetchMatchFacts(matchId: f.id, ignoreCache: force)
+            self.featuredDetail = nil
+            self.featuredXg = nil
+            self.featuredMomentum = nil
+            self.featuredPressure = nil
+            self.featuredCommentary = nil
         } else {
             self.featuredDetail = nil
             self.featuredXg = nil
             self.featuredMomentum = nil
             self.featuredPressure = nil
             self.featuredFacts = nil
+            self.featuredCommentary = nil
         }
+
+        // مزامنة ودجت الشاشة الرئيسية «المباراة القادمة» (أفضل جهد — يكيّش الشعارين).
+        await SpWidgetBridge.sync(matches: matchesRes, favoriteId: favorites.team?.id)
     }
 }
 

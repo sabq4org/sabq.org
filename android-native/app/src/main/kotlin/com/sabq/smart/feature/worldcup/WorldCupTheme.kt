@@ -123,6 +123,10 @@ object WcFormat {
     fun time(f: WcFixture): String = instant(f.date)?.let { timeFmt.format(it) } ?: ""
     fun day(f: WcFixture): String = instant(f.date)?.let { dayFmt.format(it) } ?: ""
 
+    /** يوم انطلاق المباراة من سلسلة ISO (kickoffAt) — لسجلّ التوقّعات. */
+    fun dayFromIso(iso: String?): String =
+        iso?.let { instant(it)?.let { i -> dayFmt.format(i) } } ?: "كأس العالم 2026"
+
     /** مفتاح اليوم بتوقيت الرياض من سلسلة ISO (تصل بإزاحة +03:00 فالقصّ مباشر) */
     fun dayKey(iso: String): String = iso.take(10)
 

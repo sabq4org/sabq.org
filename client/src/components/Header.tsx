@@ -29,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/ThemeProvider";
 import logoImage from "@assets/sabq-logo.png";
 import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
+import kingsCupEmblem from "@assets/kings-cup-logo.png";
 import type { Category } from "@shared/schema";
 import { SearchDialog } from "./SearchDialog";
 import { hasPermission } from "@/hooks/useAuth";
@@ -58,6 +59,13 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
   const { data: categoriesRaw } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
   });
+
+  // إظهار رابط كأس الملك في الهيدر فقط عند تفعيل البلوك من لوحة التحكم
+  const { data: kingsCupOverview } = useQuery<{ blockHidden?: boolean }>({
+    queryKey: ["/api/kings-cup/overview"],
+    staleTime: 5 * 60_000,
+  });
+  const showKingsCupLink = Boolean(kingsCupOverview) && kingsCupOverview?.blockHidden !== true;
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
 
   const handleLogout = async () => {
@@ -135,6 +143,25 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 </span>
               </span>
             </Link>
+            {showKingsCupLink && (
+              <Link href="/kings-cup">
+                <span
+                  className="flex items-center hover-elevate active-elevate-2 rounded-md px-2 py-1.5 cursor-pointer border-s border-border/60 ps-3"
+                  data-testid="link-kings-cup-header"
+                  aria-label="تغطية كأس خادم الحرمين الشريفين"
+                >
+                  <span className="rounded-md p-0.5 bg-white">
+                    <img
+                      src={kingsCupEmblem}
+                      alt="كأس خادم الحرمين الشريفين"
+                      className="h-9 w-auto object-contain"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </span>
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Mobile Logo */}
@@ -176,6 +203,25 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 </span>
               </span>
             </Link>
+            {showKingsCupLink && (
+              <Link href="/kings-cup">
+                <span
+                  className="flex items-center hover-elevate active-elevate-2 rounded-md px-1.5 py-1 cursor-pointer border-s border-border/60 ps-2.5"
+                  data-testid="link-kings-cup-header-mobile"
+                  aria-label="تغطية كأس خادم الحرمين الشريفين"
+                >
+                  <span className="rounded-md p-0.5 bg-white">
+                    <img
+                      src={kingsCupEmblem}
+                      alt="كأس خادم الحرمين الشريفين"
+                      className="h-8 w-auto object-contain"
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  </span>
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Main Navigation - Center (Desktop only) */}

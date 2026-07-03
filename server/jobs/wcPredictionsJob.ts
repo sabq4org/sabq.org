@@ -13,6 +13,7 @@ import cron from "node-cron";
 import { isLeader } from "../leaderElection";
 import { isWorldCupConfigured } from "../services/worldCupService";
 import { settleFinishedMatches } from "../services/wcPredictionsService";
+import { settleWcLong } from "../services/wcLongPredictionsService";
 
 let isRunning = false;
 
@@ -29,6 +30,16 @@ async function tick(trigger: string): Promise<void> {
       console.log(
         `[WC Predictions Job] (${trigger}) settled=${summary.settled} awarded=${summary.awarded} errors=${summary.errors}`,
       );
+    }
+    // توقّعات البطولة طويلة المدى — تُسوّى مرّة عند انتهاء النهائي (آمنة لإعادة
+    // التشغيل عبر settledAt + dedup الولاء). خلف نفس علم الميزة.
+    if (process.env.WC_LONG_PREDICTIONS_ENABLED === "true") {
+      const long = await settleWcLong();
+      if (long.championSettled || long.scorerSettled) {
+        console.log(
+          `[WC Predictions Job] (${trigger}) long: champion=${long.championWinners} scorer=${long.scorerWinners}`,
+        );
+      }
     }
   } catch (error) {
     console.error("[WC Predictions Job] cycle failed:", error);

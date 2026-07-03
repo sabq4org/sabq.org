@@ -44,13 +44,18 @@ struct AccountView: View {
 
                     if auth.isLoggedIn { signOutButton }
 
-                    Text("VARA · تطبيقك الرياضي")
-                        .font(SportsFonts.app(size: 11, weight: .semibold))
-                        .foregroundStyle(SpTheme.onDarkFaint)
-                        .padding(.top, 2)
+                    HStack(spacing: 7) {
+                        SpWordmark(size: 11, color: SpTheme.onDarkFaint)
+                        Text("· دقّة الرياضة")
+                            .font(SportsFonts.app(size: 11, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkFaint)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 2)
                 }
                 .padding(16)
             }
+            .refreshable { await auth.loadUserData() }
             .autoHideTabBar()
             .background(SpAmbientBackground())
             .navigationTitle("حسابي")
@@ -333,6 +338,7 @@ struct AccountView: View {
                         .foregroundStyle(SpTheme.onDarkFaint)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("إزالة الفريق المفضّل")
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
@@ -611,16 +617,10 @@ struct AccountView: View {
     }
 
     @ViewBuilder private var avatarView: some View {
-        if let a = auth.member?.avatar, !a.isEmpty, let url = URL(string: a) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image): image.resizable().aspectRatio(contentMode: .fill)
-                default: SpTheme.chipFill
-                }
-            }
-            .frame(width: 60, height: 60)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(SpTheme.green.opacity(0.45), lineWidth: 2))
+        if let a = auth.member?.avatar, !a.isEmpty {
+            // SpAvatarImage (كاش @State) بدل AsyncImage — يمنع وميض الصورة عند إعادة الرسم.
+            SpAvatarImage(url: a, size: 60, ring: SpTheme.green.opacity(0.45),
+                          placeholderFg: SpTheme.onDarkFaint, placeholderBg: SpTheme.chipFill)
         } else {
             Image(systemName: "person.crop.circle.fill")
                 .font(.system(size: 56))

@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { aiHubRouter } from "./aiHub";
 import systemSettingsRouter from "./systemSettings";
 import adminActivityLogsRouter from "./adminActivityLogs";
 import keywordFollowingRouter from "./keywordFollowing";
@@ -34,7 +35,10 @@ import { registerWalletRoutes } from "./wallet";
 import { registerWorldCupRoutes } from "./worldCup";
 import { registerAsianCupRoutes } from "./asianCup";
 import { registerGulfCupRoutes } from "./gulfCup";
+import { registerKingsCupRoutes } from "./kingsCup";
 import { registerSportsRoutes } from "./sports";
+import sportsTournamentsRouter from "./sportsTournaments";
+import { registerSportsLiveStreamRoutes } from "./sportsLiveStream";
 import { registerRadarRoutes } from "./radar";
 import { registerSpaNewsRoutes } from "./spaNews";
 import { registerSportmonksNewsRoutes } from "./sportmonksNews";
@@ -43,6 +47,7 @@ import topicCommentsRouter from "./topicComments";
 import wcPredictionsRouter from "./wcPredictions";
 import acPredictionsRouter from "./acPredictions";
 import gcPredictionsRouter from "./gcPredictions";
+import rslPredictionsRouter from "./rslPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
@@ -55,6 +60,7 @@ import keywordRouter from "./keywordRoutes";
  */
 export function registerSplitRoutes(app: Express) {
   app.use(systemSettingsRouter);
+  app.use(aiHubRouter);
   app.use(adminActivityLogsRouter);
   app.use(keywordFollowingRouter);
   app.use(interestsRouter);
@@ -89,7 +95,10 @@ export function registerSplitRoutes(app: Express) {
   registerWorldCupRoutes(app);
   registerAsianCupRoutes(app);
   registerGulfCupRoutes(app);
+  registerKingsCupRoutes(app);
   registerSportsRoutes(app);
+  app.use(sportsTournamentsRouter);
+  registerSportsLiveStreamRoutes(app);
   registerRadarRoutes(app);
   registerSpaNewsRoutes(app);
   registerSportmonksNewsRoutes(app);
@@ -98,6 +107,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(wcPredictionsRouter);
   app.use(acPredictionsRouter);
   app.use(gcPredictionsRouter);
+  app.use(rslPredictionsRouter);
   app.use(mediaLibraryRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);

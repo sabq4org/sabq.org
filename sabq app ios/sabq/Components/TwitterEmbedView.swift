@@ -167,7 +167,12 @@ private struct TwitterWebView: UIViewRepresentable {
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             if navigationAction.navigationType == .linkActivated,
                let url = navigationAction.request.url {
-                UIApplication.shared.open(url)
+                // http/https حصرًا: بدون هذا القيد يستطيع HTML مخزَّن في جسم
+                // مقال فتح tel:/facetime:/schemes مخصّصة بنقرة داخل «التغريدة».
+                if let scheme = url.scheme?.lowercased(),
+                   scheme == "http" || scheme == "https" {
+                    UIApplication.shared.open(url)
+                }
                 decisionHandler(.cancel)
                 return
             }

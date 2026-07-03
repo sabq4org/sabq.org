@@ -26,7 +26,6 @@ import {
   getTsVenue,
   getTsCompetitionExtra,
   getTsCompetitionMatchPairs,
-  getTsLiveStandings,
   getTsFifaRanking,
   getTsTeamInjuries,
   getTsMatchTv,
@@ -604,6 +603,39 @@ export async function getTopScorers(): Promise<WcScorer[]> {
   });
   const events = await aggregateRacesFromEvents();
   return freshestBoard(provider.board, provider.total, events.scorers, events.totals.goals);
+}
+
+/**
+ * لوحة الهدّافين **الرسمية** كما يرتّبها المزوّد (players/topscorers) — بلا دمج
+ * مع تجميع الأحداث، وبطول قابل للضبط (افتراضيًّا 20) لتضمّ النجوم لا أعلى 10 فقط.
+ * تُستخدم لمنتقي توقّع هدّاف البطولة (يحتاج القائمة الرسمية الصافية مرتّبةً بالأهداف)،
+ * بينما يبقى getTopScorers للودجت الحيّ (الذي يفضّل الأحدث متى تأخّر المزوّد).
+ */
+export async function getOfficialTopScorers(limit = 20): Promise<WcScorer[]> {
+  const board = await withSWR(`wc:scorers:official:${limit}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 2, async () => {
+    const rows = await apiGet("players/topscorers", { league: LEAGUE_ID, season: SEASON });
+    const top = rows.slice(0, limit);
+    const tr = await resolveNames(top.map((row: any) => row.player?.name));
+    return top.map((row: any, index: number): WcScorer => {
+      const stats = row.statistics?.[0] ?? {};
+      return {
+        rank: index + 1,
+        id: row.player?.id ?? 0,
+        name: tr(row.player?.name),
+        photo: row.player?.photo ?? "",
+        team: localizeTeam(stats.team),
+        goals: stats.goals?.total ?? 0,
+        assists: stats.goals?.assists ?? 0,
+        penalties: stats.penalty?.scored ?? 0,
+        minutes: stats.games?.minutes ?? 0,
+        matches: stats.games?.appearences ?? 0,
+      };
+    });
+  });
+  // المزود يتأخّر أحيانًا ساعات عن آخر هدف حقيقي (نفس علّة getTopScorers أعلاه) —
+  // نصحّح goals فرديًّا من تجميعنا الحيّ دون استبدال اللوحة أو اقتطاعها لأعلى 10.
+  const events = await aggregateRacesFromEvents();
+  return patchStaleGoals(board, events.scorerGoalsById);
 }
 
 export interface WcPrediction {
@@ -2165,6 +2197,30 @@ function freshestBoard<T extends { id: number; photo: string; minutes: number; m
   });
 }
 
+/**
+ * تصحيح أفراديّ لـ goals/assists/penalties في لوحة مزوّد باستخدام تجميع الأحداث
+ * اللحظي متى كان أعلى — يبقي ترتيب/عضوية لوحة المزود كما هي (خلافًا لـ
+ * freshestBoard التي تستبدل اللوحة كاملةً بأعلى 10 من الأحداث، فلا تصلح للوحة
+ * المرشّحين الطويلة). يُعاد الفرز والترقيم بعد التصحيح كي لا يظهر هدّاف صُحِّحت
+ * أهدافه لأعلى وهو مرتّب تحت من فوقه رقمًا لا أهدافًا فعليًّا.
+ */
+function patchStaleGoals(
+  board: WcScorer[],
+  byId: Record<number, { goals: number; assists: number; penalties: number }>
+): WcScorer[] {
+  const patched = board.map((row) => {
+    const fresh = row.id ? byId[row.id] : undefined;
+    if (!fresh || fresh.goals <= row.goals) return row;
+    return {
+      ...row,
+      goals: fresh.goals,
+      assists: Math.max(row.assists, fresh.assists),
+      penalties: Math.max(row.penalties, fresh.penalties),
+    };
+  });
+  return patched.sort((a, b) => b.goals - a.goals).map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
 interface WcRaceTally {
   playerId: number | null;
   name: string;
@@ -2186,6 +2242,10 @@ interface WcRacesFromEvents {
   cards: WcLeader[];
   // مجاميع كاملة (كل اللاعبين لا العشرة الأوائل) لمقارنة الحداثة مع لوحة المزود
   totals: { goals: number; assists: number; cards: number };
+  // كل من سجّل هدفًا من الأحداث اللحظية (لا أعلى 10 فقط) — id ← أهداف/صناعة/جزاءات.
+  // لتصحيح goals لأي هدّاف في لوحة المزود الرسمية (حتى خارج أعلى 10) عبر
+  // patchStaleGoals، دون استبدال اللوحة كاملةً كما تفعل freshestBoard.
+  scorerGoalsById: Record<number, { goals: number; assists: number; penalties: number }>;
 }
 
 async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
@@ -2272,6 +2332,14 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
     }
 
     const all = [...tallies.values()];
+    // تصحيح أفراديّ لأي هدّاف رصدناه (لا لوحة كاملة) — يحافظ على ترتيب/عضوية لوحة
+    // المزود الرسمية كما هي؛ الاستبدال الكامل (freshestBoard) يبقى خاصًّا بودجت
+    // أعلى 10 الحيّ فقط.
+    const scorerGoalsById: Record<number, { goals: number; assists: number; penalties: number }> = {};
+    for (const t of all) {
+      if (!t.playerId || t.goals <= 0) continue;
+      scorerGoalsById[t.playerId] = { goals: t.goals, assists: t.assists, penalties: t.penalties };
+    }
     const toLeader = (t: WcRaceTally, index: number): WcLeader => ({
       rank: index + 1,
       id: t.playerId ?? 0,
@@ -2321,6 +2389,7 @@ async function aggregateRacesFromEvents(): Promise<WcRacesFromEvents> {
         assists: all.reduce((sum, t) => sum + t.assists, 0),
         cards: all.reduce((sum, t) => sum + t.yellow + t.red, 0),
       },
+      scorerGoalsById,
     };
   });
 }
@@ -2730,6 +2799,88 @@ const STAR_WEIGHT: Record<number, number> = {
 const starWeight = (fixture: WcFixture): number =>
   (STAR_WEIGHT[fixture.home.id] ?? 1) + (STAR_WEIGHT[fixture.away.id] ?? 1);
 
+/** بطل البطولة — يظهر في بلوك الواجهة بدل مربع المباراة بعد حسم النهائي */
+export interface WcChampion {
+  team: WcTeam;
+  runnerUp: WcTeam | null;
+  /** نتيجة النهائي بترتيب «الفائز أولًا» (W-L) — نفس اتفاقية الترجيح الموحّدة */
+  score: string | null;
+  /** نتيجة ركلات الترجيح بترتيب «الفائز أولًا» — null إن حُسم النهائي دونها */
+  penalties: string | null;
+  decidedAt: string | null;
+  source: "auto" | "manual";
+}
+
+/**
+ * كشف بطل المونديال من مباراة النهائي المنتهية. الفائز يُحسم بعلم المزوّد
+ * (team.winner) أولًا، ثم بالترجيح، ثم بالأهداف — المزوّد قد يترك winner
+ * فارغًا في مباريات الترجيح. «3rd Place Final» لا تبدأ بـFinal فلا تُلتقط خطأً.
+ */
+export function detectChampion(fixtures: WcFixture[]): WcChampion | null {
+  const final = fixtures.find(
+    (f) => (f.roundEn ?? "").trim().startsWith("Final") && f.status.finished
+  );
+  if (!final) return null;
+
+  const pen = final.penalties;
+  let winnerSide: "home" | "away" | null = null;
+  if (final.home.winner === true) winnerSide = "home";
+  else if (final.away.winner === true) winnerSide = "away";
+  else if (pen && pen.home != null && pen.away != null && pen.home !== pen.away)
+    winnerSide = pen.home > pen.away ? "home" : "away";
+  else if (
+    final.goals.home != null &&
+    final.goals.away != null &&
+    final.goals.home !== final.goals.away
+  )
+    winnerSide = final.goals.home > final.goals.away ? "home" : "away";
+  if (!winnerSide) return null;
+
+  const winner = winnerSide === "home" ? final.home : final.away;
+  const loser = winnerSide === "home" ? final.away : final.home;
+  const winnerGoals = winnerSide === "home" ? final.goals.home : final.goals.away;
+  const loserGoals = winnerSide === "home" ? final.goals.away : final.goals.home;
+  const score =
+    winnerGoals != null && loserGoals != null ? `${winnerGoals}-${loserGoals}` : null;
+  const penalties =
+    pen && pen.home != null && pen.away != null
+      ? winnerSide === "home"
+        ? `${pen.home}-${pen.away}`
+        : `${pen.away}-${pen.home}`
+      : null;
+
+  return {
+    team: winner,
+    runnerUp: loser,
+    score,
+    penalties,
+    decidedAt: final.date ?? null,
+    source: "auto",
+  };
+}
+
+/**
+ * بطل مُعيَّن يدويًا من لوحة التحكم (احتياط تأخّر/خطأ المزوّد) — يُبنى من
+ * بيانات المنتخب (الاسم المعرّب + الشعار) في أي مباراة خاضها بالبطولة.
+ */
+export async function getManualChampion(teamId: number): Promise<WcChampion | null> {
+  const fixtures = await getFixtures().catch(() => [] as WcFixture[]);
+  for (const f of fixtures) {
+    const team = f.home.id === teamId ? f.home : f.away.id === teamId ? f.away : null;
+    if (team) {
+      return {
+        team,
+        runnerUp: null,
+        score: null,
+        penalties: null,
+        decidedAt: null,
+        source: "manual",
+      };
+    }
+  }
+  return null;
+}
+
 export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
@@ -2745,6 +2896,8 @@ export interface WcOverview {
     fixtures: WcFixture[];
     group: WcGroup | null;
   };
+  /** بطل البطولة بعد حسم النهائي — الواجهات تعرضه بدل مربع المباراة */
+  champion: WcChampion | null;
   updatedAt: string;
 }
 
@@ -2823,6 +2976,7 @@ export async function getOverview(): Promise<WcOverview> {
     matchOfDayPeers: motdPeers,
     predictions,
     saudi: { next: saudiNext, fixtures: saudiFixtures, group: saudiGroup },
+    champion: detectChampion(fixtures),
     updatedAt: new Date().toISOString(),
   };
 }

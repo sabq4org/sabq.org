@@ -865,7 +865,7 @@ function RoshnSpotlight({ competitions }: { competitions: SpCompetition[] }) {
               <div>
                 <Badge className="mb-4 border-amber-300/20 bg-amber-300/15 text-amber-100 hover:bg-amber-300/20"><Star className="ml-1 h-3.5 w-3.5 fill-amber-200 text-amber-200" /> البطولة الأبرز</Badge>
                 <h3 className="text-4xl font-black tracking-tight sm:text-6xl">دوري روشن</h3>
-                <p className="mt-4 max-w-xl text-sm leading-7 text-white/70 sm:text-base">مركز مخصّص للنتائج، الجولات، الترتيب، الهدّافين، والانتقالات — بتقديم بصري قريب من جمهور سبق الرياضي.</p>
+                <p className="mt-4 max-w-xl text-sm leading-7 text-white/70 sm:text-base">مركز مخصّص للنتائج، الجولات، الترتيب، والهدّافين — بتقديم بصري قريب من جمهور سبق الرياضي.</p>
               </div>
               {roshn?.logo && <img src={roshn.logo} alt="" className="h-20 w-20 shrink-0 rounded-2xl bg-white object-contain p-2" loading="lazy" />}
             </div>
@@ -1184,7 +1184,6 @@ export default function Sports10() {
     </div>
   );
 }
-
 
 
 
