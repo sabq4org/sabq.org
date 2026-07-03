@@ -20,6 +20,7 @@ import {
   getCompetitionHistory,
   getFixtures,
   getSeasonOutlook,
+  getStandings,
   isSaudiLeagueConfigured,
 } from "../services/saudiLeagueService";
 import {
@@ -68,6 +69,36 @@ function predictionsGuard(res: any): boolean {
 
 const noStore = (res: any) => res.set("Cache-Control", "private, no-store");
 
+// ── أندية الدوري ─────────────────────────────────────────────────────────────
+// قائمة {teams} موحّدة الشكل مع بقية البطولات — تغذّي خيار «تعيين البطل يدويًا»
+// في لوحة النظام. من الجدول إن نُشر، وإلا من ترتيب الموسم الأحدث.
+router.get("/api/rsl/teams", async (_req, res) => {
+  if (!guard(res)) return;
+  try {
+    const comp = rslComp();
+    const byId = new Map<number, { id: number; name: string; logo: string }>();
+    const fixtures = await getFixtures(comp).catch(() => []);
+    for (const f of fixtures) {
+      for (const t of [f.home, f.away]) {
+        if (t.id > 0 && !byId.has(t.id)) byId.set(t.id, { id: t.id, name: t.name, logo: t.logo });
+      }
+    }
+    if (byId.size === 0) {
+      const standings = await getStandings(comp).catch(() => []);
+      for (const r of standings) {
+        if (r.team.id > 0 && !byId.has(r.team.id)) {
+          byId.set(r.team.id, { id: r.team.id, name: r.team.name, logo: r.team.logo });
+        }
+      }
+    }
+    res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
+    res.json({ teams: [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "ar")) });
+  } catch (error) {
+    console.error("[RSL] teams failed:", error);
+    res.status(502).json({ message: "تعذر جلب قائمة الأندية حاليًا" });
+  }
+});
+
 // ── تركيبة الهيرو/البانر ─────────────────────────────────────────────────────
 // طلب واحد مكاش يخدم هيرو /roshn وبانر الرئيسية: حالة الموسم (outlook) +
 // مباريات اليوم/الحية + ملخّص «يوم الجولة» + إرث الموسم الماضي + مفتاح الإخفاء.
@@ -115,6 +146,21 @@ router.get("/api/rsl/hero", async (_req, res) => {
           }
         : null;
 
+    // البطل اليدوي من لوحة النظام يتقدّم على المكتشف تلقائيًا (احتياط تأخّر المزوّد)
+    let outlookOut = outlook;
+    if (settings.manualChampionTeamId && outlook.champion?.id !== settings.manualChampionTeamId) {
+      const pool = new Map<number, { id: number; name: string; logo: string }>();
+      for (const f of fixtures) {
+        for (const t of [f.home, f.away]) if (t.id > 0) pool.set(t.id, { id: t.id, name: t.name, logo: t.logo });
+      }
+      if (!pool.has(settings.manualChampionTeamId)) {
+        const standings = await getStandings(comp).catch(() => []);
+        for (const r of standings) if (r.team.id > 0) pool.set(r.team.id, { id: r.team.id, name: r.team.name, logo: r.team.logo });
+      }
+      const manual = pool.get(settings.manualChampionTeamId);
+      if (manual) outlookOut = { ...outlook, champion: manual };
+    }
+
     res.set(
       "Cache-Control",
       live.length > 0
@@ -122,7 +168,7 @@ router.get("/api/rsl/hero", async (_req, res) => {
         : "public, max-age=30, s-maxage=60, stale-while-revalidate=300",
     );
     res.json({
-      outlook,
+      outlook: outlookOut,
       live,
       today,
       nextMatch,
