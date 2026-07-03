@@ -223,7 +223,6 @@ struct CompetitionDetailView: View {
             VStack(alignment: .leading, spacing: 18) {
                 if let champ = outlook?.champion { championBanner(champ) }
                 quickFacts
-                VaraTrendsSection(slug: comp.slug)   // «قصص الموسم» — أنماط وشذوذات ذكاء VARA (تختفي إن فارغة).
                 if !standings.isEmpty { standingsPreview }
                 topPerformers
                 recentResults
