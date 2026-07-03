@@ -1439,7 +1439,9 @@ export interface AcCompetitionFacts {
   host: string | null;
 }
 
-const AC_HOST_AR: Record<string, string> = { "Saudi Arabia": "السعودية" };
+// حقل host لدى المزوّد قديم/خاطئ (تحقّق إنتاجي 2026-07-03: يرجع "China"
+// لنسخة 2027 السعودية) — المضيف ثابت معلوم، والهب يعرضه في AcHostShowcase.
+const AC_HOST_2027 = "السعودية";
 
 export async function getAcFacts(): Promise<AcCompetitionFacts> {
   const empty: AcCompetitionFacts = {
@@ -1459,12 +1461,11 @@ export async function getAcFacts(): Promise<AcCompetitionFacts> {
   const mostNames = extra.mostTitlesTeamIds
     .map((id) => nameOf(id))
     .filter((n): n is string => !!n);
-  const host = extra.host ? (AC_HOST_AR[extra.host] ?? extra.host) : null;
 
   return {
-    available: Boolean(holderName || mostNames.length || host),
+    available: Boolean(holderName || mostNames.length),
     titleHolder: holderName ? { name: holderName, titles: extra.titleHolderCount } : null,
     mostTitles: mostNames.length ? { names: mostNames, titles: extra.mostTitlesCount } : null,
-    host,
+    host: AC_HOST_2027,
   };
 }
