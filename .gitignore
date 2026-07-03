@@ -58,7 +58,7 @@ backup_unused_assets
 # Native iOS app asset catalog images must be committed — Xcode Cloud builds from the repo
 !sabq app ios/sabq/Assets.xcassets/**/*.png
 !gulf-cup app ios/GulfCup/Assets.xcassets/**/*.png
-!sports app ios/SabqSports/Assets.xcassets/**/*.png
+!sports app ios/**/*.png
 !asian-cup app ios/AsianCup/Assets.xcassets/**/*.png
 sabq app ios/sabq/Assets.xcassets/.appicon-backup*/
 # Internal security audit — kept local; contains attack-surface details

@@ -35,6 +35,15 @@ const SABQ_AI_AUTHOR_ID = "bkIhDx7BM8quPu2W1tB6Z"; // "سبق AI" — نفس ك�
 const SLUG_PREFIX = "smwc26";
 const WC_LEAGUE_ID = 732; // World Cup عند SportMonks
 
+// البطولات المسموح توليد أخبارها آليًا (معرّفات SportMonks) — افتراضيًا المونديال.
+// للتوسعة (موسم روشن/كأس الملك/النخبة): SPORTMONKS_NEWS_LEAGUES="732,944,950,1085"
+const NEWS_LEAGUE_IDS = new Set(
+  (process.env.SPORTMONKS_NEWS_LEAGUES || String(WC_LEAGUE_ID))
+    .split(",")
+    .map((s) => parseInt(s.trim(), 10))
+    .filter((n) => Number.isFinite(n) && n > 0)
+);
+
 export type SmNewsKind = "prematch" | "postmatch";
 
 // نوافذ الحداثة لتقارير ما بعد المباراة: عرض الـ4 أيام الأخيرة في اللوحة (ليختار
@@ -44,8 +53,10 @@ const POSTMATCH_CRON_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_GENERATIONS_PER_CRON = Number(process.env.SPORTMONKS_NEWS_MAX_PER_RUN || 3);
 
 const kindToSlugKind = (kind: SmNewsKind) => (kind === "postmatch" ? "report" : "preview");
-const slugFor = (kind: SmNewsKind, fixtureId: number) =>
-  `${SLUG_PREFIX}-${kindToSlugKind(kind)}-${fixtureId}`;
+// معرّف المباراة فريد عالميًّا عند SportMonks؛ المونديال يحتفظ بسابقته التاريخية
+// (استمرارية منع التكرار) وبقية البطولات على سابقة عامة
+const slugFor = (kind: SmNewsKind, fixtureId: number, leagueId?: number) =>
+  `${leagueId == null || leagueId === WC_LEAGUE_ID ? SLUG_PREFIX : "smfx"}-${kindToSlugKind(kind)}-${fixtureId}`;
 
 // ---------- تعريب أسماء المنتخبات (إرشاد للنموذج + عرض اللوحة) ----------
 // أسماء المنتخبات تصل من SportMonks بالإنجليزية فقط (لا معرّف API-Football)،
@@ -370,7 +381,7 @@ async function generateAndStoreDraft(
   item: SmNewsItem,
   opts: { authorId: string; categoryId: string }
 ): Promise<{ id: string; slug: string } | null> {
-  const slug = slugFor(item.type, item.fixture_id);
+  const slug = slugFor(item.type, item.fixture_id, item.league_id);
   if (await articleExists(slug)) return null;
 
   const prompt = item.type === "prematch" ? buildPrematchPrompt(item) : buildPostmatchPrompt(item);
@@ -487,7 +498,7 @@ function toListItem(item: SmNewsItem, imported: Set<string>): SmNewsListItem {
     resultInfo: item.fixture?.result_info ?? null,
     isArab: involvesArab(item),
     isSaudi: involvesSaudi(item),
-    alreadyImported: imported.has(slugFor(item.type, item.fixture_id)),
+    alreadyImported: imported.has(slugFor(item.type, item.fixture_id, item.league_id)),
   };
 }
 
@@ -495,7 +506,7 @@ function toListItem(item: SmNewsItem, imported: Set<string>): SmNewsListItem {
 export async function listSportmonksNews(kind: SmNewsKind): Promise<SmNewsListItem[]> {
   const raw = kind === "prematch" ? await fetchPrematchNews() : await fetchPostmatchNews();
   const items = raw.filter(withinDashboardWindow);
-  const imported = await existingSlugs(items.map((i) => slugFor(i.type, i.fixture_id)));
+  const imported = await existingSlugs(items.map((i) => slugFor(i.type, i.fixture_id, i.league_id)));
   const list = items.map((i) => toListItem(i, imported));
   return list.sort((a, b) => {
     // مباريات السعودية ثم بقية العرب أولًا، ثم الأحدث انطلاقًا
@@ -609,10 +620,10 @@ export async function runSportmonksNewsCycle(): Promise<SmNewsRunSummary> {
   const [pre, post] = await Promise.all([fetchPrematchNews(), fetchPostmatchNews()]);
   const now = Date.now();
   const candidates = [
-    ...pre.filter((i) => i.league_id === WC_LEAGUE_ID),
+    ...pre.filter((i) => NEWS_LEAGUE_IDS.has(i.league_id)),
     ...post.filter(
       (i) =>
-        i.league_id === WC_LEAGUE_ID &&
+        NEWS_LEAGUE_IDS.has(i.league_id) &&
         (i.fixture?.starting_at_timestamp
           ? now - i.fixture.starting_at_timestamp * 1000 <= POSTMATCH_CRON_WINDOW_MS
           : false)
@@ -636,7 +647,7 @@ export async function runSportmonksNewsCycle(): Promise<SmNewsRunSummary> {
 
   for (const item of candidates) {
     if (summary.generated >= MAX_GENERATIONS_PER_CRON) break;
-    const slug = slugFor(item.type, item.fixture_id);
+    const slug = slugFor(item.type, item.fixture_id, item.league_id);
     try {
       if (await articleExists(slug)) {
         summary.skipped++;

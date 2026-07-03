@@ -15,6 +15,7 @@ import {
   getAcQualificationJourney,
   getAcPlayerCard,
   getAcMatchDetail,
+  getAcFacts,
   isAsianCupConfigured,
 } from "../services/asianCupService";
 import {
@@ -69,6 +70,18 @@ export function registerAsianCupRoutes(app: Express) {
     } catch (error) {
       console.error("[AsianCup] teams failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة المنتخبات حاليًا" });
+    }
+  });
+
+  // حقائق البطولة (TheSports) — حامل اللقب/الأكثر تتويجًا/المضيف. مستقلة عن
+  // مفتاح API-Football (أفضل جهد: تغيب بهدوء عند تعذّر TheSports).
+  app.get("/api/asian-cup/facts", async (_req, res) => {
+    try {
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
+      res.json(await getAcFacts());
+    } catch (error) {
+      console.error("[AsianCup] facts failed:", error);
+      res.status(502).json({ available: false });
     }
   });
 

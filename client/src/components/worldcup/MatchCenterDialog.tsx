@@ -46,6 +46,10 @@ import {
   type WcXg,
   type WcFixture,
   type WcLineup,
+  type WcLineupPlayer,
+  type WcExpectedLineups,
+  type WcExpectedLineupSide,
+  type WcExpectedLineupPlayer,
   type WcMatchDetail,
   type WcMatchEvent,
   type WcStatistic,
@@ -334,26 +338,98 @@ function TacticalPitch({
   );
 }
 
+/** يحوّل جهة التشكيلة المتوقعة (SportMonks) إلى شكل WcLineup ليُرسم بنفس الملعب */
+function expectedSideToLineup(
+  side: WcExpectedLineupSide,
+  team: { id: number; name: string }
+): WcLineup {
+  const toPlayer = (p: WcExpectedLineupPlayer, grid: string | null): WcLineupPlayer => ({
+    id: 0, // لا معرّف API-Football هنا — بطاقة اللاعب غير قابلة للنقر
+    name: p.name,
+    number: p.jersey,
+    position: null,
+    grid,
+  });
+  return {
+    teamId: team.id,
+    teamName: team.name,
+    formation: side.formation,
+    coach: "",
+    startXI: side.starters.map((p) => toPlayer(p, p.grid ?? "2:1")),
+    substitutes: side.bench.map((p) => toPlayer(p, null)),
+  };
+}
+
 function LineupsTab({
-  lineups,
+  detail,
   onOpenPlayer,
 }: {
-  lineups: WcLineup[];
+  detail: WcMatchDetail;
   onOpenPlayer: (playerId: number) => void;
 }) {
-  if (lineups.length === 0) {
+  const { lineups, fixture } = detail;
+  // «رسمية قابلة للعرض» = فيها أساسيون. المزوّد قد يرسل تشكيلة جزئية قبل
+  // المباراة (قوائم بدلاء بلا أساسيين) — عندها نُفضّل المتوقعة الكاملة.
+  const hasOfficialXI = lineups.some((l) => l.startXI.length > 0);
+  // التشكيلة المتوقعة (SportMonks) — تُجلب فقط قبل صدور الرسمية ولغير المنتهية
+  const { data: expected } = useQuery<WcExpectedLineups>({
+    queryKey: [`/api/world-cup/match/${fixture.id}/expected-lineup`],
+    enabled: !hasOfficialXI && !fixture.status.finished,
+    staleTime: 60_000,
+  });
+
+  if (hasOfficialXI) {
     return (
-      <p className="text-center text-sm text-muted-foreground py-8">
-        التشكيلات تُعلن قبل انطلاق المباراة بنحو 20–40 دقيقة
-      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {lineups.map((lineup) => (
+          <TacticalPitch key={lineup.teamId} lineup={lineup} onOpenPlayer={onOpenPlayer} />
+        ))}
+      </div>
     );
   }
+
+  if (expected?.available && (expected.home || expected.away)) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
+          <Badge className="bg-amber-500 text-white border-transparent shrink-0">تشكيلة متوقعة</Badge>
+          <p className="text-[11px] text-muted-foreground">
+            ترشيح المزوّد قبل الإعلان الرسمي — قد تتغيّر
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {expected.home && (
+            <TacticalPitch
+              lineup={expectedSideToLineup(expected.home, fixture.home)}
+              onOpenPlayer={onOpenPlayer}
+            />
+          )}
+          {expected.away && (
+            <TacticalPitch
+              lineup={expectedSideToLineup(expected.away, fixture.away)}
+              onOpenPlayer={onOpenPlayer}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // رسمية جزئية (بدلاء فقط) بلا متوقعة متاحة — نعرض ما لدينا
+  if (lineups.length > 0) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {lineups.map((lineup) => (
+          <TacticalPitch key={lineup.teamId} lineup={lineup} onOpenPlayer={onOpenPlayer} />
+        ))}
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {lineups.map((lineup) => (
-        <TacticalPitch key={lineup.teamId} lineup={lineup} onOpenPlayer={onOpenPlayer} />
-      ))}
-    </div>
+    <p className="text-center text-sm text-muted-foreground py-8">
+      التشكيلات تُعلن قبل انطلاق المباراة بنحو 20–40 دقيقة
+    </p>
   );
 }
 
@@ -670,6 +746,7 @@ function OverUnderRow({ ou }: { ou: WcOverUnderLine }) {
 function ForecastBlocks({ detail }: { detail: WcMatchDetail }) {
   const { data, isLoading } = useQuery<WcForecast>({
     queryKey: [`/api/world-cup/forecast/${detail.fixture.id}`],
+    refetchInterval: detail.fixture.status.live ? 30_000 : false,
   });
   if (isLoading) {
     return (
@@ -754,8 +831,10 @@ function ForecastBlocks({ detail }: { detail: WcMatchDetail }) {
 
 function PredictionTab({ detail }: { detail: WcMatchDetail }) {
   // مصدر نتيجة المباراة: API-Football إن توفّر، وإلا احتمالات SportMonks
+  // أثناء اللعب تتحدّث الاحتمالات مع المجريات (الخادم يقصّر الكاش بالتوازي)
   const { data: forecast } = useQuery<WcForecast>({
     queryKey: [`/api/world-cup/forecast/${detail.fixture.id}`],
+    refetchInterval: detail.fixture.status.live ? 30_000 : false,
   });
   const apiPred = detail.prediction;
   const ft = apiPred
@@ -1360,6 +1439,74 @@ function MatchTvSection({ fixtureId }: { fixtureId: number }) {
   );
 }
 
+// بطاقة حكم المباراة — صرامته بالأرقام في البطولة (SportMonks). تختفي كليًّا
+// قبل إعلان الحكم (يُعلن عادة قبل المباراة بيوم).
+interface WcMatchReferee {
+  available: boolean;
+  name: string;
+  photo: string | null;
+  countryName: string | null;
+  countryFlag: string | null;
+  stats: {
+    matches: number;
+    yellowAvg: number | null;
+    redCount: number;
+    penaltiesAvg: number | null;
+    foulsAvg: number | null;
+    varMoments: number | null;
+  } | null;
+}
+
+function MatchRefereeSection({ fixtureId }: { fixtureId: number }) {
+  const { data } = useQuery<WcMatchReferee>({
+    queryKey: [`/api/world-cup/match/${fixtureId}/referee`],
+    staleTime: 5 * 60 * 1000,
+  });
+  if (!data?.available) return null;
+  const s = data.stats;
+  const chips: string[] = [];
+  if (s) {
+    if (s.yellowAvg != null) chips.push(`🟨 ${s.yellowAvg.toFixed(1)}/مباراة`);
+    chips.push(`🟥 ${s.redCount}`);
+    if (s.penaltiesAvg != null) chips.push(`⚽ جزاء ${s.penaltiesAvg.toFixed(2)}/مباراة`);
+    if (s.varMoments != null) chips.push(`فار ×${s.varMoments}`);
+  }
+  return (
+    <div className="rounded-xl bg-muted/30 ring-1 ring-border/60 px-3.5 py-2.5 space-y-2">
+      <div className="flex items-center gap-2">
+        {data.photo ? (
+          <img src={data.photo} alt="" className="h-8 w-8 rounded-full object-cover bg-background ring-1 ring-border/60" loading="lazy" />
+        ) : (
+          <Flag className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        )}
+        <div className="min-w-0">
+          <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300">حكم المباراة</h4>
+          <p className="text-sm font-semibold flex items-center gap-1.5">
+            {data.name}
+            {data.countryFlag && (
+              <img src={data.countryFlag} alt={data.countryName ?? ""} className="h-3 w-4 object-cover rounded-[2px]" loading="lazy" />
+            )}
+          </p>
+        </div>
+        {s && (
+          <span className="ms-auto text-[10px] text-muted-foreground shrink-0">
+            {s.matches} {s.matches === 1 ? "مباراة" : "مباريات"} بالبطولة
+          </span>
+        )}
+      </div>
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {chips.map((c) => (
+            <span key={c} className="rounded-lg bg-background ring-1 ring-border/60 px-2 py-1 text-[11px] font-semibold tabular-nums">
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- الحوار ----------
 
 export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCenterDialogProps) {
@@ -1450,6 +1597,7 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
         </DialogHeader>
 
         {fixture && !fixture.status.finished && <MatchTvSection fixtureId={fixture.id} />}
+        {fixture && <MatchRefereeSection fixtureId={fixture.id} />}
 
         {detail && (
           <Tabs
@@ -1523,7 +1671,7 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
                 </TabsContent>
               )}
               <TabsContent value="lineups" className="mt-0">
-                <LineupsTab lineups={detail.lineups} onOpenPlayer={onOpenPlayer} />
+                <LineupsTab detail={detail} onOpenPlayer={onOpenPlayer} />
               </TabsContent>
               <TabsContent value="stats" className="mt-0">
                 <StatsTab detail={detail} />

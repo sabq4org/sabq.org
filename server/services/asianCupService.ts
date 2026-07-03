@@ -24,6 +24,12 @@ import {
 import { localizeAcTeam, localizeAcVenue } from "./asianCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
 import { computeMatchProbabilities, toWholePercents } from "./asianCupRatings";
+import {
+  TS_COMPETITION_IDS,
+  TS_I18N_TYPE,
+  getTsCompetitionExtra,
+  resolveTsNames,
+} from "./theSportsService";
 
 const API_BASE = "https://v3.football.api-sports.io";
 const LEAGUE_ID = 7; // AFC Asian Cup
@@ -1420,4 +1426,46 @@ export async function getAcMatchDetail(fixtureId: number): Promise<AcMatchDetail
     detail.fixture.status.finished && detail.ratings.length > 0 ? detail.ratings[0] : null;
 
   return { ...detail, prediction, headToHead, manOfTheMatch };
+}
+
+// ---------- حقائق البطولة (TheSports competition/additional) ----------
+// نظير حقائق المونديال: حامل اللقب + الأكثر تتويجًا + المضيف. أسماء المنتخبات
+// تُحل عربيًا عبر i18n المزوّد (name_aa). أفضل جهد: أي غياب → available:false.
+
+export interface AcCompetitionFacts {
+  available: boolean;
+  titleHolder: { name: string; titles: number | null } | null;
+  mostTitles: { names: string[]; titles: number | null } | null;
+  host: string | null;
+}
+
+// حقل host لدى المزوّد قديم/خاطئ (تحقّق إنتاجي 2026-07-03: يرجع "China"
+// لنسخة 2027 السعودية) — المضيف ثابت معلوم، والهب يعرضه في AcHostShowcase.
+const AC_HOST_2027 = "السعودية";
+
+export async function getAcFacts(): Promise<AcCompetitionFacts> {
+  const empty: AcCompetitionFacts = {
+    available: false,
+    titleHolder: null,
+    mostTitles: null,
+    host: null,
+  };
+  const extra = await getTsCompetitionExtra(TS_COMPETITION_IDS["asian-cup"]).catch(() => null);
+  if (!extra) return empty;
+
+  const nameOf = await resolveTsNames(TS_I18N_TYPE.team, [
+    extra.titleHolderTeamId,
+    ...extra.mostTitlesTeamIds,
+  ]);
+  const holderName = nameOf(extra.titleHolderTeamId);
+  const mostNames = extra.mostTitlesTeamIds
+    .map((id) => nameOf(id))
+    .filter((n): n is string => !!n);
+
+  return {
+    available: Boolean(holderName || mostNames.length),
+    titleHolder: holderName ? { name: holderName, titles: extra.titleHolderCount } : null,
+    mostTitles: mostNames.length ? { names: mostNames, titles: extra.mostTitlesCount } : null,
+    host: AC_HOST_2027,
+  };
 }

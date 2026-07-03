@@ -112,6 +112,13 @@ interface SpLineup {
   formation: string | null; coach: string | null;
   startXI: SpLineupPlayer[]; substitutes: SpLineupPlayer[];
 }
+// التشكيلة المتوقعة قبل المباراة (SportMonks expectedLineups)
+interface SpExpectedPlayer { name: string; jersey: number | null; slot: number | null; grid: string | null; row: number | null; }
+interface SpExpectedSide { formation: string | null; starters: SpExpectedPlayer[]; bench: SpExpectedPlayer[]; }
+interface SpExpectedLineups { available: boolean; home: SpExpectedSide | null; away: SpExpectedSide | null; }
+// حكم المباراة (SportMonks referees)
+interface SpRefereeStats { matches: number; yellowAvg: number | null; redCount: number; penaltiesAvg: number | null; foulsAvg: number | null; varMoments: number | null; }
+interface SpMatchReferee { available: boolean; name: string; photo: string | null; countryName: string | null; countryFlag: string | null; stats: SpRefereeStats | null; }
 interface SpMatchDetail {
   fixture: SpFixture; events: SpMatchEvent[];
   statistics: { home: { id: number; name: string }; away: { id: number; name: string }; rows: SpStatRow[] } | null;
@@ -2041,11 +2048,28 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     enabled: id != null && !!data?.fixture && !fixtureFinished,
     staleTime: 30 * 60_000,
   });
+  // حكم المباراة + صرامته بالأرقام (SportMonks) — يظهر فور إعلان الحكم.
+  const { data: refereeData } = useQuery<SpMatchReferee>({
+    queryKey: [`/api/sports/match/${id}/referee`],
+    enabled: id != null && !!data?.fixture,
+    staleTime: 5 * 60_000,
+  });
   // التوقّعات الاحتمالية المتقدّمة (SportMonks) — قبل المباراة (قادمة/جارية).
+  // أثناء اللعب تتحدّث الاحتمالات مع المجريات (الخادم يقصّر الكاش بالتوازي).
   const { data: forecast } = useQuery<SpForecast>({
     queryKey: [`/api/sports/match/${id}/forecast`],
     enabled: id != null && !!data?.fixture && !fixtureFinished,
     staleTime: 15 * 60_000,
+    refetchInterval: data?.fixture?.status.live ? 30_000 : false,
+  });
+  // التشكيلة المتوقعة (SportMonks) — تُجلب فقط قبل صدور الرسمية ولغير المنتهية.
+  // «الرسمية» تُعد صادرة فقط إذا فيها أساسيون — المزوّد قد يرسل قوائم بدلاء
+  // جزئية قبل المباراة فلا تحجب المتوقعة الكاملة.
+  const officialXiReady = (data?.lineups ?? []).some((l) => l.startXI.length > 0);
+  const { data: expectedData } = useQuery<SpExpectedLineups>({
+    queryKey: [`/api/sports/match/${id}/expected-lineup`],
+    enabled: id != null && !!data?.fixture && !fixtureFinished && !officialXiReady,
+    staleTime: 60_000,
   });
 
   if (id == null) return null;
@@ -2053,6 +2077,22 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
   const events = Array.isArray(data?.events) ? data!.events : [];
   const lineups = Array.isArray(data?.lineups) ? data!.lineups : [];
   const started = !!fx && (fx.status.finished || fx.status.live);
+  // تحويل التشكيلة المتوقعة لشكل SpLineup لتُعرض بنفس مكوّنات الملعب.
+  // معرّف اللاعب 0 = بلا رابط لصفحة اللاعب (لا معرّف API-Football في المتوقعة).
+  const expSide = (side: SpExpectedSide, team: SpLineup["team"]): SpLineup => ({
+    team,
+    formation: side.formation,
+    coach: null,
+    startXI: side.starters.map((p) => ({ id: 0, number: p.jersey, name: p.name, pos: "", grid: p.grid ?? "2:1" })),
+    substitutes: side.bench.map((p) => ({ id: 0, number: p.jersey, name: p.name, pos: "", grid: null })),
+  });
+  const expectedLineups: SpLineup[] =
+    !officialXiReady && !fixtureFinished && expectedData?.available && fx
+      ? ([
+          expectedData.home && expSide(expectedData.home, { id: fx.home.id, name: fx.home.name, logo: fx.home.logo }),
+          expectedData.away && expSide(expectedData.away, { id: fx.away.id, name: fx.away.name, logo: fx.away.logo }),
+        ].filter(Boolean) as SpLineup[])
+      : [];
   // إحصاءات بديلة من SportMonks (facts.statistics) حين تغيب إحصاءات API-Football،
   // فيظهر تبويب «نبض الأرقام» لمباريات أكثر بدل أن يُهدَر مصدر جاهز.
   const factStatRows: SpStatRow[] = (facts?.statistics ?? []).map((s) => ({ type: s.key, label: s.label, home: s.home, away: s.away }));
@@ -2068,7 +2108,7 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     hasStatsTab ? { key: "stats", label: "الإحصائيات" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
     started ? { key: "momentum", label: "الزخم" } : null,
-    lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
+    lineups.length > 0 || expectedLineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
     h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
   ].filter(Boolean) as { key: string; label: string }[];
@@ -2135,6 +2175,43 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
                 </span>
               ))}
             </div>
+          </div>
+        )}
+        {refereeData?.available && (
+          <div className="shrink-0 border-b border-border bg-card px-4 py-3">
+            <div className="flex items-center gap-2">
+              {refereeData.photo && (
+                <img src={refereeData.photo} alt="" className="w-8 h-8 rounded-full object-cover bg-muted" loading="lazy" />
+              )}
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold text-muted-foreground">حكم المباراة</div>
+                <div className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  {refereeData.name}
+                  {refereeData.countryFlag && (
+                    <img src={refereeData.countryFlag} alt={refereeData.countryName ?? ""} className="h-3 w-4 object-cover rounded-[2px]" loading="lazy" />
+                  )}
+                </div>
+              </div>
+              {refereeData.stats && (
+                <span className="ms-auto text-[10px] text-muted-foreground shrink-0">
+                  {refereeData.stats.matches} {refereeData.stats.matches === 1 ? "مباراة" : "مباريات"} بالبطولة
+                </span>
+              )}
+            </div>
+            {refereeData.stats && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {refereeData.stats.yellowAvg != null && (
+                  <span className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums">🟨 {refereeData.stats.yellowAvg.toFixed(1)}/مباراة</span>
+                )}
+                <span className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums">🟥 {refereeData.stats.redCount}</span>
+                {refereeData.stats.penaltiesAvg != null && (
+                  <span className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums">⚽ جزاء {refereeData.stats.penaltiesAvg.toFixed(2)}/مباراة</span>
+                )}
+                {refereeData.stats.varMoments != null && (
+                  <span className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums">فار ×{refereeData.stats.varMoments}</span>
+                )}
+              </div>
+            )}
           </div>
         )}
         {prediction && fx && <PredictionBar prediction={prediction} homeName={fx.home.name} awayName={fx.away.name} />}
@@ -2321,8 +2398,18 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
             <SpCommentaryView data={commentary} live={live} />
           )}
           {!isLoading && activeKey === "lineups" && (
-            <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
-              {lineups.map((l) => <LineupTeam key={l.team.id} lineup={l} />)}
+            <div className="space-y-3">
+              {expectedLineups.length > 0 && (
+                <div className="flex items-center justify-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
+                  <span className="shrink-0 rounded-full bg-amber-500 text-white text-[10px] font-black px-2 py-0.5">تشكيلة متوقعة</span>
+                  <p className="text-[11px] text-muted-foreground">ترشيح المزوّد قبل الإعلان الرسمي — قد تتغيّر</p>
+                </div>
+              )}
+              <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
+                {(expectedLineups.length > 0 ? expectedLineups : lineups).map((l) => (
+                  <LineupTeam key={l.team.id} lineup={l} />
+                ))}
+              </div>
             </div>
           )}
           {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}

@@ -228,6 +228,44 @@ export interface WcLineup {
   substitutes: WcLineupPlayer[];
 }
 
+// التشكيلة المتوقعة قبل المباراة (SportMonks expectedLineups)
+export interface WcExpectedLineupPlayer {
+  name: string;
+  jersey: number | null;
+  slot: number | null;
+  grid: string | null;
+  row: number | null;
+}
+
+export interface WcExpectedLineupSide {
+  formation: string | null;
+  starters: WcExpectedLineupPlayer[];
+  bench: WcExpectedLineupPlayer[];
+}
+
+export interface WcExpectedLineups {
+  available: boolean;
+  home: WcExpectedLineupSide | null;
+  away: WcExpectedLineupSide | null;
+}
+
+// تشكيلة الجولة (SportMonks Team of the Week)
+export interface WcTotwPlayer {
+  name: string;
+  photo: string | null;
+  teamName: string;
+  teamLogo: string | null;
+  rating: number;
+  slot: number;
+  row: number;
+}
+
+export interface WcTeamOfTheWeek {
+  available: boolean;
+  formation: string | null;
+  players: WcTotwPlayer[];
+}
+
 export interface WcStatistic {
   key: string;
   label: string;
