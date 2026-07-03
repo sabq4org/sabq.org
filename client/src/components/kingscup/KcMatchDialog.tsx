@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Goal, Square, RefreshCw } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { PenaltyResult } from "../worldcup/PenaltyResult";
 import {
   elapsedLabel,
   formatKickoffDay,
@@ -71,17 +72,18 @@ export function KcMatchDialog({
               </div>
               <div className="flex flex-col items-center shrink-0">
                 {fx.status.live || fx.status.finished ? (
-                  <span className="text-3xl font-black tabular-nums" dir="ltr">
-                    {fx.goals.home ?? 0} - {fx.goals.away ?? 0}
+                  // رقما النتيجة منفصلان بلا dir="ltr": في RTL يقع رقم المضيف يمينًا
+                  // (تحت شعاره) — dir="ltr" مع المضيف أولًا كان يقلب النتيجة تحت الشعارات
+                  <span className="flex items-center gap-2 text-3xl font-black tabular-nums">
+                    <span>{fx.goals.home ?? 0}</span>
+                    <span className="text-xl text-muted-foreground">-</span>
+                    <span>{fx.goals.away ?? 0}</span>
                   </span>
                 ) : (
                   <span className="text-xl font-black">{formatKickoffTime(fx.date)}</span>
                 )}
-                {fx.penalties && fx.penalties.home != null && fx.penalties.away != null && (
-                  <span className="text-[11px] text-muted-foreground" dir="ltr">
-                    ركلات ترجيح {fx.penalties.home} - {fx.penalties.away}
-                  </span>
-                )}
+                {/* الترجيح بصيغة «فاز {الفائز} (W-L)» الموحّدة — لا تنقلب بحسب الاتجاه */}
+                <PenaltyResult fixture={fx} className="text-[11px] text-muted-foreground" />
                 <Badge variant={fx.status.live ? "destructive" : "outline"} className="mt-1 text-[10px]">
                   {fx.status.live ? elapsedLabel(fx.status) : fx.status.label}
                 </Badge>

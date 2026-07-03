@@ -1,0 +1,288 @@
+/**
+ * سباقات دوري روشن — نفس قسم سباقات المونديال/كأس الملك: منصّة تتويج لأفضل
+ * ثلاثة هدّافين + قوائم صفوف، وتبويبات (الهدّافون / صنّاع الأهداف / البطاقات)
+ * من نقاط /api/sports/pro-league/*. قبل انطلاق الموسم تُعرض لوحات الموسم
+ * الماضي موسومة (نفس أرشفة جدول الترتيب).
+ */
+import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
+import { Award, Goal, Handshake, Square } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { RSL_SLUG, type RslLeader, type RslScorer } from "./rslTypes";
+
+const PODIUM_RING = [
+  "ring-amber-400",
+  "ring-zinc-300",
+  "ring-orange-700/70",
+];
+
+interface RslScorersProps {
+  inSeason: boolean;
+  previousSeason: number | null;
+}
+
+/** لاحقة الأرشيف لنقاط السباقات — الموسم الماضي قبل انطلاق الجديد. */
+function seasonSuffix(useArchive: boolean, previousSeason: number | null): string {
+  return useArchive && previousSeason != null ? `?season=${previousSeason}` : "";
+}
+
+function PodiumCard({ scorer }: { scorer: RslScorer & { place: number } }) {
+  const isFirst = scorer.place === 0;
+  return (
+    <div className={`flex flex-col items-center gap-2 rounded-xl p-2 ${isFirst ? "" : "mt-8"}`} data-testid={`rsl-podium-${scorer.id}`}>
+      <div className="relative">
+        <div className={`${isFirst ? "h-24 w-24" : "h-[72px] w-[72px]"} rounded-full overflow-hidden ring-4 ${PODIUM_RING[scorer.place]} bg-muted`}>
+          {scorer.photo ? (
+            <img src={scorer.photo} alt={scorer.name} className="h-full w-full object-cover" loading="lazy" />
+          ) : (
+            <div className="h-full w-full flex items-center justify-center text-muted-foreground font-black text-xl">
+              {scorer.name.slice(0, 2)}
+            </div>
+          )}
+        </div>
+        <span className={`absolute -bottom-1.5 right-1/2 translate-x-1/2 rounded-full px-2 py-0.5 text-[10px] font-black text-white ${
+          scorer.place === 0 ? "bg-amber-500" : scorer.place === 1 ? "bg-zinc-400" : "bg-orange-700"
+        }`}>
+          {scorer.place + 1}
+        </span>
+      </div>
+      <div className="text-center">
+        <p className={`font-extrabold ${isFirst ? "text-base" : "text-sm"}`}>{scorer.name}</p>
+        <p className="text-xs text-muted-foreground flex items-center justify-center gap-1">
+          <img src={scorer.team.logo} alt={scorer.team.name} className="h-3.5 w-3.5 object-contain" loading="lazy" />
+          {scorer.team.name}
+        </p>
+      </div>
+      <div className={`flex items-baseline gap-1 ${isFirst ? "text-amber-500" : "text-foreground"}`}>
+        <span className={`font-black tabular-nums ${isFirst ? "text-3xl" : "text-2xl"}`}>{scorer.goals}</span>
+        <span className="text-xs text-muted-foreground">{scorer.goals === 1 ? "هدف" : "أهداف"}</span>
+      </div>
+    </div>
+  );
+}
+
+function LeaderRow({
+  rank,
+  name,
+  photo,
+  team,
+  end,
+}: {
+  rank: number;
+  name: string;
+  photo: string;
+  team: { name: string; logo: string };
+  end: React.ReactNode;
+}) {
+  return (
+    <div className="w-full flex items-center justify-between gap-3 rounded-xl bg-card px-3.5 py-2.5 dark:border dark:border-card-border">
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="w-5 text-center text-sm text-muted-foreground tabular-nums">{rank}</span>
+        <div className="h-9 w-9 rounded-full overflow-hidden bg-muted shrink-0">
+          {photo && <img src={photo} alt={name} className="h-full w-full object-cover" loading="lazy" />}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-bold truncate">{name}</p>
+          <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+            <img src={team.logo} alt={team.name} className="h-3 w-3 object-contain" loading="lazy" />
+            {team.name}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">{end}</div>
+    </div>
+  );
+}
+
+function EmptyRace({ message }: { message: string }) {
+  return (
+    <Card className="border-0 dark:border dark:border-card-border max-w-xl mx-auto">
+      <CardContent className="py-10 flex flex-col items-center gap-2 text-center">
+        <Goal className="h-8 w-8 text-amber-500" />
+        <p className="font-bold">{message}</p>
+        <p className="text-sm text-muted-foreground">تابع هنا الترتيب أولًا بأول طوال الموسم</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <div className="max-w-2xl mx-auto space-y-1.5">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <Skeleton key={i} className="h-14 rounded-xl" />
+      ))}
+    </div>
+  );
+}
+
+export function RslScorers({ inSeason, previousSeason }: RslScorersProps) {
+  const suffix = seasonSuffix(!inSeason, previousSeason);
+  const archiveLabel = !inSeason && previousSeason != null;
+
+  const { data: scorersData, isLoading: scorersLoading } = useQuery<{ scorers: RslScorer[] }>({
+    queryKey: [`/api/sports/${RSL_SLUG}/scorers${suffix}`],
+    staleTime: 10 * 60_000,
+  });
+  const { data: assistsData, isLoading: assistsLoading } = useQuery<{ assists: RslLeader[] }>({
+    queryKey: [`/api/sports/${RSL_SLUG}/assists${suffix}`],
+    staleTime: 10 * 60_000,
+  });
+  const { data: cardsData, isLoading: cardsLoading } = useQuery<{ yellow: RslLeader[]; red: RslLeader[] }>({
+    queryKey: [`/api/sports/${RSL_SLUG}/cards${suffix}`],
+    staleTime: 10 * 60_000,
+  });
+
+  const scorers = Array.isArray(scorersData?.scorers) ? scorersData.scorers : [];
+  const assists = Array.isArray(assistsData?.assists) ? assistsData.assists : [];
+  const cards = Array.isArray(cardsData?.yellow) ? cardsData.yellow : [];
+
+  const showPodium = scorers.length >= 3;
+  const podium = showPodium ? scorers.slice(0, 3) : [];
+  const rest = showPodium ? scorers.slice(3) : scorers;
+
+  return (
+    <section dir="rtl" className="py-10" id="scorers">
+      <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 rounded-lg bg-amber-500/10">
+            <Award className="h-6 w-6 text-amber-500" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold">سباقات الموسم</h2>
+            <p className="text-sm text-muted-foreground">
+              {archiveLabel
+                ? `لوحات موسم ${previousSeason}-${((previousSeason ?? 0) + 1) % 100} الماضي — تتصفّر مع أول جولة`
+                : "الهدّافون، صنّاع الأهداف، والبطاقات"}
+            </p>
+          </div>
+        </div>
+
+        <Tabs defaultValue="goals" dir="rtl">
+          <TabsList className="mb-5">
+            <TabsTrigger value="goals" className="gap-1.5">
+              <Goal className="h-3.5 w-3.5" />
+              الهدافون
+            </TabsTrigger>
+            <TabsTrigger value="assists" className="gap-1.5">
+              <Handshake className="h-3.5 w-3.5" />
+              صنّاع الأهداف
+            </TabsTrigger>
+            <TabsTrigger value="cards" className="gap-1.5">
+              <Square className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
+              البطاقات
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="goals">
+            {scorersLoading && (
+              <div className="grid grid-cols-3 gap-4 max-w-xl mx-auto">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-44 rounded-xl" />
+                ))}
+              </div>
+            )}
+            {!scorersLoading && scorers.length === 0 && (
+              <EmptyRace message="سباق هدّاف الدوري ينطلق مع أول صافرة" />
+            )}
+            {!scorersLoading && scorers.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4 }}
+              >
+                {showPodium && (
+                  <div className="grid grid-cols-3 items-start gap-3 max-w-xl mx-auto mb-8">
+                    <PodiumCard scorer={{ ...podium[1], place: 1 }} />
+                    <PodiumCard scorer={{ ...podium[0], place: 0 }} />
+                    <PodiumCard scorer={{ ...podium[2], place: 2 }} />
+                  </div>
+                )}
+                {rest.length > 0 && (
+                  <div className="max-w-2xl mx-auto space-y-1.5">
+                    {rest.map((scorer) => (
+                      <LeaderRow
+                        key={`${scorer.rank}-${scorer.name}`}
+                        rank={scorer.rank}
+                        name={scorer.name}
+                        photo={scorer.photo}
+                        team={scorer.team}
+                        end={
+                          <>
+                            <span className="hidden sm:inline">{scorer.assists} صناعة</span>
+                            <span className="text-lg font-black text-foreground tabular-nums">{scorer.goals}</span>
+                          </>
+                        }
+                      />
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="assists">
+            {assistsLoading ? (
+              <ListSkeleton />
+            ) : assists.length === 0 ? (
+              <EmptyRace message="سباق صنّاع الأهداف ينطلق مع أول صافرة" />
+            ) : (
+              <div className="max-w-2xl mx-auto space-y-1.5">
+                {assists.map((leader) => (
+                  <LeaderRow
+                    key={`${leader.rank}-${leader.name}`}
+                    rank={leader.rank}
+                    name={leader.name}
+                    photo={leader.photo}
+                    team={leader.team}
+                    end={
+                      <>
+                        <span className="hidden sm:inline">{leader.goals ?? 0} أهداف</span>
+                        <span className="text-lg font-black text-foreground tabular-nums">{leader.assists ?? 0}</span>
+                      </>
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="cards">
+            {cardsLoading ? (
+              <ListSkeleton />
+            ) : cards.length === 0 ? (
+              <EmptyRace message="لا بطاقات بعد — وعسى ألا تكثر" />
+            ) : (
+              <div className="max-w-2xl mx-auto space-y-1.5">
+                {cards.map((leader) => (
+                  <LeaderRow
+                    key={`${leader.rank}-${leader.name}`}
+                    rank={leader.rank}
+                    name={leader.name}
+                    photo={leader.photo}
+                    team={leader.team}
+                    end={
+                      <span className="flex items-center gap-2">
+                        <span className="flex items-center gap-1 font-black tabular-nums">
+                          <Square className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                          {leader.yellow ?? 0}
+                        </span>
+                        <span className="flex items-center gap-1 font-black tabular-nums">
+                          <Square className="h-3 w-3 fill-red-500 text-red-500" />
+                          {leader.red ?? 0}
+                        </span>
+                      </span>
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
+    </section>
+  );
+}

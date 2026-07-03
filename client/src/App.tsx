@@ -387,6 +387,7 @@ const Sports22 = lazy(() => retryImport(() => import("@/pages/Sports22")));
 const Sports22Competition = lazy(() => retryImport(() => import("@/pages/Sports22Competition")));
 // هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
 const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
+const RoshnPredictions = lazy(() => retryImport(() => import("@/pages/RoshnPredictions")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
 
 function PageLoader() {
@@ -899,8 +900,11 @@ function Router() {
         <Route path="/kings-cup/predictions">{() => <LazyRoute component={KingsCupPredictions} />}</Route>
         <Route path="/kings-cup/team/:teamId">{() => <LazyRoute component={KingsCupTeam} />}</Route>
         <Route path="/kings-cup">{() => <LazyRoute component={KingsCup} />}</Route>
-        {/* هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية */}
+        {/* مركز دوري روشن السعودي بنظام تصميم المونديال — /rsl يحوّل إليه */}
+        <Route path="/roshn/predictions">{() => <LazyRoute component={RoshnPredictions} />}</Route>
         <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
+        <Route path="/rsl/predictions">{() => <Redirect to="/roshn/predictions" />}</Route>
+        <Route path="/rsl">{() => <Redirect to="/roshn" />}</Route>
         {/* بوابة رياضية متخصصة مطلوبة على /sports10 — قبل /sports/:id الأرشيفي */}
         <Route path="/sports10">{() => <LazyRoute component={Sports10} />}</Route>
         <Route path="/sports22/competition/:slug">{() => <LazyRoute component={Sports22Competition} />}</Route>

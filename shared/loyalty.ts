@@ -56,6 +56,21 @@ export const LOYALTY_ACTIONS = {
    *  `gc-long:<kind>`. `points` overridden with the pari-mutuel share of the
    *  long-term pool. Settled once at tournament end. */
   GC_LONG_PREDICTION_WIN: "GC_LONG_PREDICTION_WIN",
+  /** Roshn Saudi League match-prediction win — the World-Cup engine applied to
+   *  the domestic league. Source = the API-Football fixtureId, and `points` is
+   *  ALWAYS overridden with the per-match split (floor(500 / winners)). No
+   *  daily cap; the lifetime dedup window keeps (userId, action, fixtureId) at
+   *  most once so the per-minute settlement cron re-runs safely. Awarded by
+   *  `settleFinishedMatches` in server/services/rslPredictionsService.ts. */
+  RSL_PREDICTION_WIN: "RSL_PREDICTION_WIN",
+  /** Roshn Saudi League season-long prediction win (champion / top scorer).
+   *  Source = `rsl-long:<kind>`. `points` is ALWAYS overridden — the champion
+   *  pool (10,000) is split WEIGHTED by each winner's early-bird weight (round
+   *  tiers), the top-scorer pool (3,000) split equally. Settled once when the
+   *  season completes; lifetime dedup keyed on source keeps the settlement cron
+   *  safe to re-run. Awarded by `settleRslLong` in
+   *  server/services/rslLongPredictionsService.ts. */
+  RSL_LONG_PREDICTION_WIN: "RSL_LONG_PREDICTION_WIN",
   /** Generalized Sabq Sports pool-prediction win (any competition: Roshn,
    *  world leagues, cups, …). Source = the API-Football fixtureId, and `points`
    *  is ALWAYS overridden with the user's pari-mutuel share of that match's
@@ -99,6 +114,12 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   GC_PREDICTION_WIN: 100,
   // Nominal default only — overridden with the long-term pool share.
   GC_LONG_PREDICTION_WIN: 500,
+  // Nominal default only — the settlement engine ALWAYS overrides this with
+  // floor(500 / winners) when calling awardPoints.
+  RSL_PREDICTION_WIN: 500,
+  // Nominal default only — overridden with the weighted (champion) / equal
+  // (top scorer) season-long pool share.
+  RSL_LONG_PREDICTION_WIN: 10000,
   // Nominal default only — overridden with the user's pari-mutuel share of the
   // match's tiered 1000-point pool.
   SPORTS_PREDICTION_WIN: 100,
@@ -133,6 +154,10 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   GC_PREDICTION_WIN: null,
   // Settled once at tournament end; lifetime dedup keyed on source.
   GC_LONG_PREDICTION_WIN: null,
+  // One settleable match per fixture; lifetime dedup below is the real guard.
+  RSL_PREDICTION_WIN: null,
+  // Settled once at season end; lifetime dedup keyed on source.
+  RSL_LONG_PREDICTION_WIN: null,
   // One settleable match per fixture; lifetime dedup below is the real guard.
   SPORTS_PREDICTION_WIN: null,
   // Settled once per competition; lifetime dedup keyed on source.
@@ -172,6 +197,10 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   GC_PREDICTION_WIN: 100000,
   // Lifetime, source=gc-long:<kind> dedup.
   GC_LONG_PREDICTION_WIN: 100000,
+  // Lifetime window keyed on source=fixtureId — same guarantee as the World Cup.
+  RSL_PREDICTION_WIN: 100000,
+  // Lifetime, source=rsl-long:<kind> dedup — settled once at season end.
+  RSL_LONG_PREDICTION_WIN: 100000,
   // Lifetime, source=fixtureId dedup — a match pays a user at most once.
   SPORTS_PREDICTION_WIN: 100000,
   // Lifetime, source=sp-long:<competitionSlug>:<kind> dedup.

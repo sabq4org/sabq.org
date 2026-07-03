@@ -1951,6 +1951,87 @@ export const wcLongPredictions = pgTable("wc_long_predictions", {
 export type WcLongPrediction = typeof wcLongPredictions.$inferSelect;
 
 // ============================================================================
+// Roshn Saudi League — predictions (the World-Cup engine applied to the
+// domestic league). Fixtures are NOT stored (fetched live from API-Football
+// via saudiLeagueService, league 307). Same 3-table shape and idempotency
+// guards as wc_predictions / wc_prediction_matches / wc_long_predictions.
+// ============================================================================
+
+// One row per (fixtureId, userId): the user's exact-scoreline guess.
+export const rslPredictions = pgTable("rsl_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_rsl_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_rsl_pred_user").on(table.userId),
+  index("idx_rsl_pred_fixture").on(table.fixtureId),
+]);
+
+// Per-fixture settlement snapshot — same three purposes as wc_prediction_matches
+// (idempotency anchor / history display without live API / leaderboard joins).
+export const rslPredictionMatches = pgTable("rsl_prediction_matches", {
+  fixtureId: varchar("fixture_id").primaryKey(),
+  kickoffAt: timestamp("kickoff_at").notNull(),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  finalHome: integer("final_home"),
+  finalAway: integer("final_away"),
+  status: text("status").notNull().default("open"), // open | locked | settled
+  winnersCount: integer("winners_count").notNull().default(0),
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  pointsPool: integer("points_pool").notNull().default(500),
+  pointsPerWinner: integer("points_per_winner").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  index("idx_rsl_pred_match_status").on(table.status),
+]);
+
+export type RslPrediction = typeof rslPredictions.$inferSelect;
+export type RslPredictionMatch = typeof rslPredictionMatches.$inferSelect;
+
+// Season-long predictions (champion / top scorer). The champion pool (10,000)
+// splits WEIGHTED by early-bird weight measured in ROUND tiers instead of the
+// World Cup's knockout stages: rounds 1–11 = 100, 12–22 = 60, 23–29 = 30,
+// closed once round 30 kicks off. Top-scorer pool (3,000) splits equally and
+// closes once round 25 kicks off. Settled once when the season completes
+// (standings leader = champion, official scorers leader = top scorer).
+export const rslLongPredictions = pgTable("rsl_long_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  kind: text("kind").notNull(), // 'champion' | 'top_scorer'
+  teamId: integer("team_id"),
+  teamName: text("team_name"),
+  teamLogo: text("team_logo"),
+  playerId: integer("player_id"),
+  playerName: text("player_name"),
+  playerPhoto: text("player_photo"),
+  weight: integer("weight").notNull().default(100), // 100 | 60 | 30 (champion)
+  lockedStage: text("locked_stage").notNull().default("early"), // early | mid | late
+  status: text("status").notNull().default("pending"),
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_rsl_long_user_kind").on(table.userId, table.kind),
+  index("idx_rsl_long_kind").on(table.kind),
+]);
+
+export type RslLongPrediction = typeof rslLongPredictions.$inferSelect;
+
+// ============================================================================
 // Asian Cup 2027 — Smart Predictions Game
 // Fixtures are NOT stored (fetched live from API-Football via asianCupService).
 // Unlike the World Cup pool-split, scoring here is SKILL-BASED and per-user:
