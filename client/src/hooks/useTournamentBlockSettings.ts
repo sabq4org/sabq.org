@@ -2,7 +2,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 
 /** بطولات بلوكات الواجهة المدارة من لوحة التحكم */
-export type TournamentBlockSlug = "world-cup" | "gulf-cup" | "asian-cup" | "kings-cup";
+export type TournamentBlockSlug = "world-cup" | "gulf-cup" | "asian-cup" | "kings-cup" | "pro-league";
 
 export interface TournamentBlockSettings {
   /** إظهار البلوك في واجهة الويب (والتطبيقات حيث يعتمد البلوك على overview) */
@@ -21,6 +21,7 @@ const OVERVIEW_KEY: Record<TournamentBlockSlug, string> = {
   "gulf-cup": "/api/gulf-cup/overview",
   "asian-cup": "/api/asian-cup/overview",
   "kings-cup": "/api/kings-cup/overview",
+  "pro-league": "/api/rsl/hero",
 };
 
 export function useTournamentBlockSettings(slug: TournamentBlockSlug) {

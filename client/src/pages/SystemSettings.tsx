@@ -510,6 +510,16 @@ export default function SystemSettings() {
               iconBg="bg-amber-500/10"
               bgColor="bg-amber-50 dark:bg-card"
             />
+            <TournamentBlockCard
+              slug="pro-league"
+              title="بلوك دوري روشن السعودي"
+              description="شريط دوري روشن في الرئيسية (عدّاد ما قبل الموسم / الجولة / المباراة / البطل) — الإطفاء يخفيه فورًا، واضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
+              championLabel="بطل دوري روشن (تلقائي من ختام الموسم أو يدوي)"
+              teamsEndpoint="/api/rsl/teams"
+              iconColor="text-teal-500"
+              iconBg="bg-teal-500/10"
+              bgColor="bg-teal-50 dark:bg-card"
+            />
           </div>
         </div>
 
