@@ -60,6 +60,9 @@ import {
   type SpSummary,
   type SpShort,
 } from "./SportsHub";
+import { SportsSceneShelf } from "@/components/sportsIntel/SportsSceneShelf";
+import { SportsDigestCard } from "@/components/sportsIntel/SportsDigestCard";
+import { SportsCopilot } from "@/components/sportsIntel/SportsCopilot";
 
 const imgOf = (a: ArticleWithDetails) => getCacheBustedImageUrl(a.imageUrl || a.thumbnailUrl, a.updatedAt);
 // زمن الخبر للترتيب — نعتمد النشر ثم الإنشاء حتى لا يتصدّر خبر قديم مثبّت يدويًا (displayOrder).
@@ -1013,6 +1016,9 @@ export default function SportsDashboard() {
         {/* ===== نبض المباشر — يظهر فقط حين توجد مباريات جارية (مرتّبة بالأهمية) ===== */}
         <LivePulse items={rankedLive} onOpen={setOpenMatch} />
 
+        {/* ===== المشهد الآن — لقطات الذكاء الرياضي (تختفي إن لا محرّك/لقطات) ===== */}
+        <SportsSceneShelf onOpenMatch={setOpenMatch} />
+
         {/* ===== ٠١ موجز البطولات: فلاتر فئة + شبكة بطاقات موحّدة ===== */}
         {presentSummaryCats.length > 0 && (
           <section id="tournaments" className="mx-auto max-w-[1200px] scroll-mt-16 px-4 pt-8 sm:px-6 sm:pt-10">
@@ -1053,6 +1059,9 @@ export default function SportsDashboard() {
 
         {/* ===== ٠٢ الأخبار: الغلاف الذكي، خبر بارز + لوحة نتائج، ثم شبكة الأحدث ===== */}
         <section id="news" className="mx-auto max-w-[1200px] scroll-mt-16 px-4 pt-8 sm:px-6 sm:pt-10">
+          {/* الموجز الرياضي المخصّص — للمسجّلين مع متابعات (يختفي لغيرهم) */}
+          <SportsDigestCard enabled={!!user} />
+
           <FollowsStrip todayMatches={todayMatches} onOpen={setOpenMatch} />
 
           {/* الغلاف الذكي — يتصدّر فقط بمباراة كبرى (سعودي/عالمي/أوروبي كبير/خليجي) */}
@@ -1229,6 +1238,9 @@ export default function SportsDashboard() {
             </section>
           )}
         </div>
+
+        {/* ===== مساعد سبق الرياضي (RAG) — يجيب من بياناتنا الحيّة ===== */}
+        <SportsCopilot />
       </main>
 
       <MatchDialog id={openMatch} onClose={() => setOpenMatch(null)} />

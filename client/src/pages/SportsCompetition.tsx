@@ -55,6 +55,7 @@ import {
   type SpStandingRow,
 } from "./SportsHub";
 import { MatchRow } from "./SportsMatchesBoard";
+import { CompetitionTrends } from "@/components/sportsIntel/CompetitionTrends";
 
 // ---------- لمحة النسخة السابقة (مطابقة لـ SplCompetitionHistory) ----------
 
@@ -669,6 +670,9 @@ export default function SportsCompetition() {
 
           {/* لمحة النسخة السابقة */}
           {history && <PreviousEdition history={history} />}
+
+          {/* قصص الموسم — أنماط/أرقام يولّدها محرّك الذكاء الرياضي (تختفي إن لا قصص) */}
+          <CompetitionTrends slug={slug} />
 
           {/* التبويبات */}
           <div id="competition-tabs" className="sticky top-16 z-20 -mx-3 scroll-mt-20 border-b border-border bg-background/90 px-3 backdrop-blur-md sm:mx-0 sm:rounded-xl sm:border sm:px-2 sm:py-1.5">
