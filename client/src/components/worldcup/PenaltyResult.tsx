@@ -1,4 +1,4 @@
-import { penaltyOutcome, type WcFixture } from "./wcTypes";
+import { penaltyOutcome, type PenaltyFixtureLike } from "./wcTypes";
 
 /**
  * سطر نتيجة ركلات الترجيح موضِّحًا الفائز صراحةً:
@@ -6,7 +6,7 @@ import { penaltyOutcome, type WcFixture } from "./wcTypes";
  * النتيجة مرتّبة بالفائز أولًا والأرقام داخل dir="ltr" حتى لا تنقلب في سياق RTL.
  * يُخفى تلقائيًّا إن لم تُحسم المباراة بالترجيح.
  */
-export function PenaltyResult({ fixture, className }: { fixture: WcFixture; className?: string }) {
+export function PenaltyResult({ fixture, className }: { fixture: PenaltyFixtureLike; className?: string }) {
   const po = penaltyOutcome(fixture);
   if (!po) return null;
   return (

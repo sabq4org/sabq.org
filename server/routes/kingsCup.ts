@@ -63,13 +63,39 @@ export function registerKingsCupRoutes(app: Express) {
         champion = manualKcChampion(fixtures, settings.manualChampionTeamId) ?? champion;
       }
       const hasLive = (ov.live?.length ?? 0) > 0;
+      // «يوم الجولة»: أدوار الكأس المبكرة تُلعب دفعة واحدة (حتى 16 مباراة في يوم)،
+      // فتحتاج الواجهات ملخّصًا (عدد/دور/عدّاد مشترك) بدل إبراز مباراة اعتباطية.
+      // يُحسب هنا لأن الجدول مجلوب أصلًا — بلا طلب إضافي من بانر الرئيسية.
+      const anchorFx = ov.matchOfTheDay?.fixture ?? ov.nextMatch ?? null;
+      const dayKey = anchorFx ? String(anchorFx.date ?? "").slice(0, 10) : null;
+      const dayMatches = dayKey
+        ? fixtures.filter((f) => String(f.date ?? "").slice(0, 10) === dayKey)
+        : [];
+      const dayUpcoming = dayMatches.filter((f) => !f.status?.live && !f.status?.finished);
+      const matchday =
+        anchorFx && dayMatches.length > 0
+          ? {
+              count: dayMatches.length,
+              round: dayMatches.every((f) => f.round === dayMatches[0].round)
+                ? dayMatches[0].round
+                : null,
+              date: anchorFx.date,
+              nextKickoffTs:
+                dayUpcoming.length > 0 ? Math.min(...dayUpcoming.map((f) => f.timestamp)) : null,
+              sameKickoff:
+                dayUpcoming.length > 1 &&
+                dayUpcoming.every((f) => f.timestamp === dayUpcoming[0].timestamp),
+              liveCount: dayMatches.filter((f) => f.status?.live).length,
+              finishedCount: dayMatches.filter((f) => f.status?.finished).length,
+            }
+          : null;
       res.set(
         "Cache-Control",
         hasLive
           ? "public, max-age=0, s-maxage=10, stale-while-revalidate=30"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=300",
       );
-      res.json({ ...ov, blockHidden: isBlockHidden(settings), champion });
+      res.json({ ...ov, blockHidden: isBlockHidden(settings), champion, matchday });
     } catch (error) {
       console.error("[KingsCup] overview failed:", error);
       res.status(502).json({ message: "تعذر جلب نظرة كأس الملك حاليًا" });

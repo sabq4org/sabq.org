@@ -597,7 +597,14 @@ export interface WcPenaltyOutcome {
   loserScore: number;
 }
 
-export function penaltyOutcome(fixture: WcFixture): WcPenaltyOutcome | null {
+/** الحد الأدنى البنيوي لحساب الترجيح — يقبل مباريات المونديال وكأس الملك معًا */
+export interface PenaltyFixtureLike {
+  penalties?: { home: number | null; away: number | null } | null;
+  home: { name: string };
+  away: { name: string };
+}
+
+export function penaltyOutcome(fixture: PenaltyFixtureLike): WcPenaltyOutcome | null {
   const pen = fixture.penalties;
   if (!pen || pen.home == null || pen.away == null || pen.home === pen.away) return null;
   const homeWon = pen.home > pen.away;
