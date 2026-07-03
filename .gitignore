@@ -55,6 +55,7 @@ backup_unused_assets
 !server/lib/passkit/**/*.png
 # Native iOS app asset catalog images must be committed — Xcode Cloud builds from the repo
 !sabq app ios/sabq/Assets.xcassets/**/*.png
+!sports app ios/**/*.png
 sabq app ios/sabq/Assets.xcassets/.appicon-backup*/
 # Internal security audit — kept local; contains attack-surface details
 AUDIT_REPORT.md
