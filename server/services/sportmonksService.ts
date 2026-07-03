@@ -809,6 +809,106 @@ export async function getExpectedLineups(
   );
 }
 
+// ---------- حكم المباراة (بطاقة صرامة الحكم) ----------
+
+export interface WcRefereeStats {
+  /** مباريات الموسم/البطولة التي تخصها الأرقام */
+  matches: number;
+  yellowAvg: number | null;
+  /** حمراء مباشرة + صفراء ثانية (إجمالي لا معدل — الأوضح للقارئ) */
+  redCount: number;
+  penaltiesAvg: number | null;
+  foulsAvg: number | null;
+  varMoments: number | null;
+}
+
+export interface WcMatchReferee {
+  available: boolean;
+  name: string;
+  photo: string | null;
+  countryName: string | null;
+  countryFlag: string | null;
+  stats: WcRefereeStats | null;
+}
+
+const EMPTY_REFEREE: WcMatchReferee = {
+  available: false,
+  name: "",
+  photo: null,
+  countryName: null,
+  countryFlag: null,
+  stats: null,
+};
+
+// متحقَّق حيًّا (2026-07-03): type_id 6 = الحكم الرئيسي (7/8 مساعدان، 9 رابع)
+const SM_MAIN_REFEREE_TYPE = 6;
+
+function refereeStatValue(details: any[], dev: string): any {
+  return details.find((d: any) => d?.type?.developer_name === dev)?.value ?? null;
+}
+
+async function buildMatchReferee(smId: number): Promise<WcMatchReferee> {
+  const fx = (await smGet(`fixtures/${smId}`, { include: "referees" }))?.data;
+  const main = (Array.isArray(fx?.referees) ? fx.referees : []).find(
+    (r: any) => Number(r?.type_id) === SM_MAIN_REFEREE_TYPE
+  );
+  const refereeId = Number(main?.referee_id);
+  if (!refereeId) return EMPTY_REFEREE;
+
+  // إحصاءات موسم المباراة نفسه (بطولة جارية = صرامته في هذه البطولة تحديدًا)
+  const params: Record<string, string> = { include: "country;statistics.details.type" };
+  const seasonId = Number(fx?.season_id);
+  if (seasonId) params.filters = `refereeStatisticSeasons:${seasonId}`;
+  const ref = (await smGet(`referees/${refereeId}`, params))?.data;
+  const name = String(ref?.display_name || ref?.name || "").trim();
+  if (!name) return EMPTY_REFEREE;
+
+  const details: any[] = Array.isArray(ref?.statistics?.[0]?.details)
+    ? ref.statistics[0].details
+    : [];
+  const matches = Number(refereeStatValue(details, "MATCHES")?.count) || 0;
+  const yellow = refereeStatValue(details, "YELLOWCARDS");
+  const red = refereeStatValue(details, "REDCARDS");
+  const yellowRed = refereeStatValue(details, "YELLOWRED_CARDS");
+  const pens = refereeStatValue(details, "PENALTIES");
+  const fouls = refereeStatValue(details, "FOULS");
+  const varMoments = refereeStatValue(details, "VAR_MOMENTS");
+
+  return {
+    available: true,
+    name,
+    photo: ref?.image_path ?? null,
+    countryName: ref?.country?.name ?? null,
+    countryFlag: ref?.country?.image_path ?? null,
+    stats:
+      matches > 0
+        ? {
+            matches,
+            yellowAvg: typeof yellow?.all?.average === "number" ? yellow.all.average : null,
+            redCount: (Number(red?.all?.count) || 0) + (Number(yellowRed?.all?.count) || 0),
+            penaltiesAvg: typeof pens?.all?.average === "number" ? pens.all.average : null,
+            foulsAvg: typeof fouls?.average === "number" ? fouls.average : null,
+            varMoments: typeof varMoments?.count === "number" ? varMoments.count : null,
+          }
+        : null,
+  };
+}
+
+/**
+ * حكم المباراة الرئيسي + صرامته بالأرقام في موسم/بطولة المباراة نفسها.
+ * أفضل جهد: لا حكم معلن بعد → { available:false } (يُعلن عادة قبل يوم).
+ */
+export async function getMatchReferee(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcMatchReferee> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_REFEREE;
+  return withSWR(`wc:referee:${r.smId}`, CACHE_TTL.LONG, CACHE_TTL.VERY_LONG, () =>
+    buildMatchReferee(r.smId)
+  );
+}
+
 // ---------- تشكيلة الجولة (Team of the Week) ----------
 
 export interface WcTotwPlayer {

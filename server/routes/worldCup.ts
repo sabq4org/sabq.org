@@ -48,6 +48,7 @@ import {
   getMatchFacts,
   getXg,
   getExpectedLineups,
+  getMatchReferee,
   getTeamOfTheWeek,
   getLiveScore,
   getPlayerForm,
@@ -727,6 +728,31 @@ export function registerWorldCupRoutes(app: Express) {
     } catch (error) {
       console.error("[WorldCup] totw failed:", error);
       res.status(502).json({ message: "تعذر جلب تشكيلة الجولة حاليًا", available: false });
+    }
+  });
+
+  // حكم المباراة + صرامته بالأرقام في البطولة (SportMonks referees).
+  app.get("/api/world-cup/match/:id/referee", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      return res.status(503).json({ configured: false, available: false });
+    }
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    try {
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getMatchReferee(fixtureId));
+      if (data.available) {
+        const tr = await resolveNames([data.name, data.countryName]);
+        data.name = tr(data.name);
+        if (data.countryName) data.countryName = tr(data.countryName);
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error(`[WorldCup] referee ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب بيانات الحكم حاليًا", available: false });
     }
   });
 

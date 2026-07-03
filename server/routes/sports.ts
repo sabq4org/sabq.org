@@ -69,6 +69,7 @@ import {
   getMatchFacts,
   getForecast,
   getExpectedLineups,
+  getMatchReferee,
   getTeamOfTheWeek,
   resolveSmIdByNames,
   isSportmonksConfigured,
@@ -878,6 +879,35 @@ export function registerSportsRoutes(app: Express) {
       res.json(data);
     } catch (error) {
       console.error("[Sports] totw failed:", error);
+      res.status(502).json(empty);
+    }
+  });
+
+  // حكم المباراة + صرامته بالأرقام في البطولة (SportMonks referees).
+  app.get("/api/sports/match/:id/referee", async (req, res) => {
+    const empty = { available: false, name: "", photo: null, countryName: null, countryFlag: null, stats: null };
+    if (!isSportmonksConfigured()) {
+      res.json(empty);
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) return res.json(empty);
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getMatchReferee(id, { directSmId: smId }));
+      if (data.available) {
+        const tr = await resolveNames([data.name, data.countryName]).catch(() => null);
+        if (tr) {
+          data.name = tr(data.name) || data.name;
+          if (data.countryName) data.countryName = tr(data.countryName) || data.countryName;
+        }
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error("[Sports] referee failed:", error);
       res.status(502).json(empty);
     }
   });
