@@ -1940,6 +1940,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // تسوية توقّعات دوري روشن (محرّك المونديال على الدوري المحلي): تسجيل دائم
+      // وفحص القيادة داخل الدورة — يمنح الفائزين نقاطهم فور صافرة النهاية.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startRslPredictionsJob } = await import("./jobs/rslPredictionsJob");
+            startRslPredictionsJob();
+          } catch (error) {
+            console.error("[Server] Error starting roshn league predictions job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // تسوية توقّعات خليجي 27 (بركة متدرّجة + جائزة متراكمة + شارات + إشعار):
       // نفس نمط كأس آسيا — تسجيل دائم وفحص القيادة داخل الدورة.
       if (enableBackgroundWorkers) {

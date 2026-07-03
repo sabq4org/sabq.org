@@ -55,6 +55,18 @@ export interface CupMatchday {
   finishedCount: number;
 }
 
+/** وضع «ما قبل الموسم/البطولة» — عدّاد انطلاق + مباراة الافتتاح (للدوريات خاصة) */
+export interface CupPreSeason {
+  /** عنوان الانطلاقة، مثل «موسم 2026-27 ينطلق» */
+  label: string;
+  /** توقيت أول مباراة (ثوانٍ يونكس) — null إن لم يُنشر الجدول بعد */
+  kickoffTs: number | null;
+  /** وسم تاريخ الانطلاق للعرض، مثل «الجمعة 28 أغسطس» */
+  dateLabel?: string | null;
+  /** مباراة الافتتاح (اختياري) */
+  opener?: CupFixture | null;
+}
+
 /** ثيم ألوان الشريط — Tailwind classes جاهزة (لا قيم ديناميكية كي لا تسقط من الـpurge) */
 export interface CupStripTheme {
   /** خلفية الحزام كامل العرض */
@@ -85,6 +97,11 @@ interface CupHomeStripProps {
    * بدل إبراز مباراة اعتباطية (أدوار الكؤوس المبكرة تُلعب دفعة واحدة).
    */
   matchday?: CupMatchday | null;
+  /**
+   * وضع ما قبل الموسم — عدّاد انطلاق الموسم + مباراة الافتتاح. يتقدّم على
+   * matchday/fixture (ولا يظهر مع البطل).
+   */
+  preSeason?: CupPreSeason | null;
   /** شعار البطولة الرسمي — يُعرض على رقعة بيضاء بدل أيقونة الكأس العامة */
   emblemSrc?: string;
   emblemAlt?: string;
@@ -193,6 +210,35 @@ function MatchdayBlock({ matchday, theme }: { matchday: CupMatchday; theme: CupS
       ) : matchday.nextKickoffTs != null ? (
         <CountdownChipsRow timestamp={matchday.nextKickoffTs} soft={theme.soft} />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * كتلة «ما قبل الموسم» — عدّاد انطلاق الموسم بشرائح + سطر مباراة الافتتاح.
+ * تُستخدم لدوري روشن (وأي بطولة موسمية قادمة) قبل أول جولة.
+ */
+function PreSeasonBlock({ preSeason, theme }: { preSeason: CupPreSeason; theme: CupStripTheme }) {
+  const opener = preSeason.opener ?? null;
+  return (
+    <div className="flex flex-col items-center gap-1.5 min-w-0 text-center" data-testid="cup-preseason-block">
+      <p className="text-lg font-black text-white leading-tight">{preSeason.label}</p>
+      {preSeason.dateLabel && <p className={`text-[11px] ${theme.soft}`}>{preSeason.dateLabel}</p>}
+      {preSeason.kickoffTs != null ? (
+        <CountdownChipsRow timestamp={preSeason.kickoffTs} soft={theme.soft} />
+      ) : (
+        <p className={`text-[11px] font-bold ${theme.soft}`}>جدول الموسم يُعلن قريبًا</p>
+      )}
+      {opener && (
+        <p className={`flex items-center gap-1.5 text-[11px] ${theme.soft}`}>
+          الافتتاح:
+          <img src={opener.home.logo} alt={opener.home.name} className="h-4 w-4 rounded-full bg-white p-px object-contain" loading="lazy" />
+          <b className="text-white">{opener.home.name}</b>
+          ×
+          <b className="text-white">{opener.away.name}</b>
+          <img src={opener.away.logo} alt={opener.away.name} className="h-4 w-4 rounded-full bg-white p-px object-contain" loading="lazy" />
+        </p>
+      )}
     </div>
   );
 }
@@ -309,12 +355,14 @@ export default function CupHomeStrip({
   fixture,
   champion,
   matchday,
+  preSeason,
   emblemSrc,
   emblemAlt,
 }: CupHomeStripProps) {
-  if (!fixture && !champion) return null;
+  if (!fixture && !champion && !preSeason) return null;
   // 3 مباريات فأكثر في اليوم = إبراز مباراة واحدة اعتباطي — نعرض عدّاد الجولة
-  const matchdayMode = !champion && !!matchday && matchday.count >= 3;
+  const preSeasonMode = !champion && !!preSeason;
+  const matchdayMode = !champion && !preSeasonMode && !!matchday && matchday.count >= 3;
 
   return (
     <div className={`border-y py-8 ${theme.band}`}>
@@ -371,10 +419,12 @@ export default function CupHomeStrip({
 
             <div className="hidden md:block h-12 w-px bg-white/10 shrink-0" />
 
-            {/* البطل بعد حسم النهائي — وإلا عدّاد الجولة (أيام الدفعة الواحدة) — وإلا المباراة القادمة/الحية */}
+            {/* البطل — وإلا عدّاد ما قبل الموسم — وإلا عدّاد الجولة — وإلا المباراة القادمة/الحية */}
             <div className="flex-1 flex flex-wrap items-center justify-center gap-3 sm:gap-6 min-w-0">
               {champion ? (
                 <ChampionBlock champion={champion} championLabel={championLabel} theme={theme} />
+              ) : preSeasonMode ? (
+                <PreSeasonBlock preSeason={preSeason!} theme={theme} />
               ) : matchdayMode ? (
                 <MatchdayBlock matchday={matchday!} theme={theme} />
               ) : (

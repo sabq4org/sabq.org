@@ -42,6 +42,7 @@ const GulfLiveBlock = lazyDefault(() => import("@/components/GulfLiveBlock"));
 const WorldCupHomeSection = lazyDefault(() => import("@/components/worldcup/WorldCupHomeSection"));
 const GulfCupHomeSection = lazyDefault(() => import("@/components/gulfcup/GulfCupHomeSection"));
 const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/KingsCupHomeSection"));
+const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
@@ -460,6 +461,14 @@ export default function Home() {
         <ErrorBoundary fallback={null}>
           <Suspense fallback={null}>
             <KingsCupHomeSection />
+          </Suspense>
+        </ErrorBoundary>
+
+        {/* Roshn Saudi League strip — pre-season countdown / matchday /
+            next match / champion; hides via dashboard toggle or no data */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <RoshnHomeSection />
           </Suspense>
         </ErrorBoundary>
 

@@ -47,6 +47,7 @@ import topicCommentsRouter from "./topicComments";
 import wcPredictionsRouter from "./wcPredictions";
 import acPredictionsRouter from "./acPredictions";
 import gcPredictionsRouter from "./gcPredictions";
+import rslPredictionsRouter from "./rslPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
@@ -106,6 +107,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(wcPredictionsRouter);
   app.use(acPredictionsRouter);
   app.use(gcPredictionsRouter);
+  app.use(rslPredictionsRouter);
   app.use(mediaLibraryRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);
