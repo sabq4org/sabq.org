@@ -272,12 +272,9 @@ private fun LoadedFeed(
         }
 
         // شريط كأس العالم 2026 — يختفي كليًا عند غياب البيانات.
+        // (خليجي 27 غير معروض في الرئيسية مطابقةً لتطبيق iOS.)
         item {
             com.sabq.smart.feature.worldcup.WorldCupHomeStrip(onClick = onWorldCupClick)
-        }
-
-        item {
-            com.sabq.smart.feature.gulfcup.GulfCupHomeStrip(onClick = onGulfCupClick)
         }
 
         // Stories rail — circular bubbles. Each bubble opens the

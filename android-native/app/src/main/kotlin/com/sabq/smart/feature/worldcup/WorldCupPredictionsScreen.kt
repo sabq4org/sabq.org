@@ -8,6 +8,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -141,24 +143,29 @@ fun WorldCupPredictionsScreen(
                         Spacer(Modifier.weight(1f))
                         Spacer(Modifier.size(40.dp))
                     }
-                    // شريط التبويبات
+                    // شريط التبويبات — قابل للتمرير أفقيًّا (أربع تبويبات) مطابق iOS
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth().background(WcColors.stadiumTop).padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier.fillMaxWidth().background(WcColors.stadiumTop)
+                            .horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
                     ) {
-                        TabChip("مباريات اليوم", state.tab == WorldCupPredictionsViewModel.Tab.TODAY, Modifier.weight(1f)) {
+                        TabChip("مباريات اليوم", state.tab == WorldCupPredictionsViewModel.Tab.TODAY) {
                             viewModel.selectTab(WorldCupPredictionsViewModel.Tab.TODAY)
                         }
-                        TabChip("توقّعاتي", state.tab == WorldCupPredictionsViewModel.Tab.MINE, Modifier.weight(1f)) {
+                        TabChip("توقّع البطل", state.tab == WorldCupPredictionsViewModel.Tab.TOURNAMENT) {
+                            viewModel.selectTab(WorldCupPredictionsViewModel.Tab.TOURNAMENT)
+                        }
+                        TabChip("توقّعاتي", state.tab == WorldCupPredictionsViewModel.Tab.MINE) {
                             viewModel.selectTab(WorldCupPredictionsViewModel.Tab.MINE)
                         }
-                        TabChip("المتصدّرون", state.tab == WorldCupPredictionsViewModel.Tab.BOARD, Modifier.weight(1f)) {
+                        TabChip("المتصدّرون", state.tab == WorldCupPredictionsViewModel.Tab.BOARD) {
                             viewModel.selectTab(WorldCupPredictionsViewModel.Tab.BOARD)
                         }
                     }
 
                     when (state.tab) {
                         WorldCupPredictionsViewModel.Tab.TODAY -> TodayTab(state, viewModel, onRequireLogin)
+                        WorldCupPredictionsViewModel.Tab.TOURNAMENT -> TournamentTab(state, viewModel, onRequireLogin)
                         WorldCupPredictionsViewModel.Tab.MINE -> MineTab(state, onRequireLogin)
                         WorldCupPredictionsViewModel.Tab.BOARD -> LeaderboardTab(state)
                     }
@@ -171,9 +178,9 @@ fun WorldCupPredictionsScreen(
 private fun TabChip(label: String, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Text(
         label, color = if (active) Color.White else WcColors.onDarkDim, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-        textAlign = TextAlign.Center,
+        textAlign = TextAlign.Center, maxLines = 1,
         modifier = modifier.clip(RoundedCornerShape(50)).background(if (active) WcColors.emeraldDeep else WcColors.chipFill)
-            .clickable { onClick() }.padding(vertical = 9.dp),
+            .clickable { onClick() }.padding(horizontal = 18.dp, vertical = 9.dp),
     )
 }
 

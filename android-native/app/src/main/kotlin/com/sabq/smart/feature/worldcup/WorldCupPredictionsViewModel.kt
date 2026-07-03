@@ -22,7 +22,7 @@ class WorldCupPredictionsViewModel @Inject constructor(
     private val tokenStore: AuthTokenStore,
 ) : ViewModel() {
 
-    enum class Tab { TODAY, MINE, BOARD }
+    enum class Tab { TODAY, TOURNAMENT, MINE, BOARD }
 
     data class ScoreInput(val home: Int = 0, val away: Int = 0)
 
@@ -35,6 +35,13 @@ class WorldCupPredictionsViewModel @Inject constructor(
         val inputs: Map<Int, ScoreInput> = emptyMap(),
         val submitting: Set<Int> = emptySet(),
         val toast: String? = null,
+        // توقّع البطل (البطولة)
+        val long: WcLongData? = null,
+        val longLoading: Boolean = true,
+        val champPick: Int? = null,
+        val scorerPick: Int? = null,
+        val submittingChamp: Boolean = false,
+        val submittingScorer: Boolean = false,
         // توقّعاتي
         val mine: List<WcPredictionHistoryItem> = emptyList(),
         val mineLoading: Boolean = true,
@@ -59,7 +66,54 @@ class WorldCupPredictionsViewModel @Inject constructor(
 
     fun selectTab(tab: Tab) {
         _state.update { it.copy(tab = tab) }
-        if (tab == Tab.MINE && _state.value.isLoggedIn) loadMine()
+        // نُحدّث بيانات التبويب عند اختياره كي لا تظهر توقّعات قديمة (مطابق iOS).
+        when (tab) {
+            Tab.TODAY -> loadToday()
+            Tab.MINE -> if (_state.value.isLoggedIn) loadMine()
+            Tab.TOURNAMENT -> loadLong()
+            Tab.BOARD -> loadLeaderboard()
+        }
+    }
+
+    fun loadLong() {
+        _state.update { it.copy(longLoading = true) }
+        viewModelScope.launch {
+            val r = runCatching { repo.longPredictions() }.getOrNull()
+            _state.update { it.copy(long = r, longLoading = false) }
+        }
+    }
+
+    fun setChampPick(teamId: Int) { _state.update { it.copy(champPick = teamId) } }
+    fun setScorerPick(playerId: Int) { _state.update { it.copy(scorerPick = playerId) } }
+
+    fun submitChampion() {
+        val pick = _state.value.champPick ?: return
+        _state.update { it.copy(submittingChamp = true) }
+        viewModelScope.launch {
+            val ok = runCatching { repo.submitLong(kind = "champion", teamId = pick) }.getOrDefault(false)
+            _state.update {
+                it.copy(
+                    submittingChamp = false,
+                    toast = if (ok) "تم حفظ توقّع البطل 👑" else "تعذّر حفظ التوقّع — قد يكون أُغلق",
+                )
+            }
+            if (ok) loadLong()
+        }
+    }
+
+    fun submitScorer() {
+        val pick = _state.value.scorerPick ?: return
+        _state.update { it.copy(submittingScorer = true) }
+        viewModelScope.launch {
+            val ok = runCatching { repo.submitLong(kind = "top_scorer", playerId = pick) }.getOrDefault(false)
+            _state.update {
+                it.copy(
+                    submittingScorer = false,
+                    toast = if (ok) "تم حفظ توقّع الهدّاف ⚽" else "تعذّر حفظ التوقّع — قد يكون أُغلق",
+                )
+            }
+            if (ok) loadLong()
+        }
     }
 
     fun loadToday() {
