@@ -1439,6 +1439,74 @@ function MatchTvSection({ fixtureId }: { fixtureId: number }) {
   );
 }
 
+// بطاقة حكم المباراة — صرامته بالأرقام في البطولة (SportMonks). تختفي كليًّا
+// قبل إعلان الحكم (يُعلن عادة قبل المباراة بيوم).
+interface WcMatchReferee {
+  available: boolean;
+  name: string;
+  photo: string | null;
+  countryName: string | null;
+  countryFlag: string | null;
+  stats: {
+    matches: number;
+    yellowAvg: number | null;
+    redCount: number;
+    penaltiesAvg: number | null;
+    foulsAvg: number | null;
+    varMoments: number | null;
+  } | null;
+}
+
+function MatchRefereeSection({ fixtureId }: { fixtureId: number }) {
+  const { data } = useQuery<WcMatchReferee>({
+    queryKey: [`/api/world-cup/match/${fixtureId}/referee`],
+    staleTime: 5 * 60 * 1000,
+  });
+  if (!data?.available) return null;
+  const s = data.stats;
+  const chips: string[] = [];
+  if (s) {
+    if (s.yellowAvg != null) chips.push(`🟨 ${s.yellowAvg.toFixed(1)}/مباراة`);
+    chips.push(`🟥 ${s.redCount}`);
+    if (s.penaltiesAvg != null) chips.push(`⚽ جزاء ${s.penaltiesAvg.toFixed(2)}/مباراة`);
+    if (s.varMoments != null) chips.push(`فار ×${s.varMoments}`);
+  }
+  return (
+    <div className="rounded-xl bg-muted/30 ring-1 ring-border/60 px-3.5 py-2.5 space-y-2">
+      <div className="flex items-center gap-2">
+        {data.photo ? (
+          <img src={data.photo} alt="" className="h-8 w-8 rounded-full object-cover bg-background ring-1 ring-border/60" loading="lazy" />
+        ) : (
+          <Flag className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        )}
+        <div className="min-w-0">
+          <h4 className="text-xs font-bold text-emerald-700 dark:text-emerald-300">حكم المباراة</h4>
+          <p className="text-sm font-semibold flex items-center gap-1.5">
+            {data.name}
+            {data.countryFlag && (
+              <img src={data.countryFlag} alt={data.countryName ?? ""} className="h-3 w-4 object-cover rounded-[2px]" loading="lazy" />
+            )}
+          </p>
+        </div>
+        {s && (
+          <span className="ms-auto text-[10px] text-muted-foreground shrink-0">
+            {s.matches} {s.matches === 1 ? "مباراة" : "مباريات"} بالبطولة
+          </span>
+        )}
+      </div>
+      {chips.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {chips.map((c) => (
+            <span key={c} className="rounded-lg bg-background ring-1 ring-border/60 px-2 py-1 text-[11px] font-semibold tabular-nums">
+              {c}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- الحوار ----------
 
 export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCenterDialogProps) {
@@ -1529,6 +1597,7 @@ export function MatchCenterDialog({ fixtureId, onClose, onOpenPlayer }: MatchCen
         </DialogHeader>
 
         {fixture && !fixture.status.finished && <MatchTvSection fixtureId={fixture.id} />}
+        {fixture && <MatchRefereeSection fixtureId={fixture.id} />}
 
         {detail && (
           <Tabs

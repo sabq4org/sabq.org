@@ -112,6 +112,9 @@ interface SpLineup {
 interface SpExpectedPlayer { name: string; jersey: number | null; slot: number | null; grid: string | null; row: number | null; }
 interface SpExpectedSide { formation: string | null; starters: SpExpectedPlayer[]; bench: SpExpectedPlayer[]; }
 interface SpExpectedLineups { available: boolean; home: SpExpectedSide | null; away: SpExpectedSide | null; }
+// حكم المباراة (SportMonks referees)
+interface SpRefereeStats { matches: number; yellowAvg: number | null; redCount: number; penaltiesAvg: number | null; foulsAvg: number | null; varMoments: number | null; }
+interface SpMatchReferee { available: boolean; name: string; photo: string | null; countryName: string | null; countryFlag: string | null; stats: SpRefereeStats | null; }
 interface SpMatchDetail {
   fixture: SpFixture; events: SpMatchEvent[];
   statistics: { home: { id: number; name: string }; away: { id: number; name: string }; rows: SpStatRow[] } | null;
@@ -1933,6 +1936,12 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     enabled: id != null && !!data?.fixture && !fixtureFinished,
     staleTime: 30 * 60_000,
   });
+  // حكم المباراة + صرامته بالأرقام (SportMonks) — يظهر فور إعلان الحكم.
+  const { data: refereeData } = useQuery<SpMatchReferee>({
+    queryKey: [`/api/sports/match/${id}/referee`],
+    enabled: id != null && !!data?.fixture,
+    staleTime: 5 * 60_000,
+  });
   // التوقّعات الاحتمالية المتقدّمة (SportMonks) — قبل المباراة (قادمة/جارية).
   // أثناء اللعب تتحدّث الاحتمالات مع المجريات (الخادم يقصّر الكاش بالتوازي).
   const { data: forecast } = useQuery<SpForecast>({
@@ -2038,6 +2047,43 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
                 </span>
               ))}
             </div>
+          </div>
+        )}
+        {refereeData?.available && (
+          <div className="shrink-0 border-b border-border bg-card px-4 py-3">
+            <div className="flex items-center gap-2">
+              {refereeData.photo && (
+                <img src={refereeData.photo} alt="" className="w-8 h-8 rounded-full object-cover bg-muted" loading="lazy" />
+              )}
+              <div className="min-w-0">
+                <div className="text-[11px] font-bold text-muted-foreground">حكم المباراة</div>
+                <div className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  {refereeData.name}
+                  {refereeData.countryFlag && (
+                    <img src={refereeData.countryFlag} alt={refereeData.countryName ?? ""} className="h-3 w-4 object-cover rounded-[2px]" loading="lazy" />
+                  )}
+                </div>
+              </div>
+              {refereeData.stats && (
+                <span className="ms-auto text-[10px] text-muted-foreground shrink-0">
+                  {refereeData.stats.matches} {refereeData.stats.matches === 1 ? "مباراة" : "مباريات"} بالبطولة
+                </span>
+              )}
+            </div>
+            {refereeData.stats && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {refereeData.stats.yellowAvg != null && (
+                  <span className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums">🟨 {refereeData.stats.yellowAvg.toFixed(1)}/مباراة</span>
+                )}
+                <span className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums">🟥 {refereeData.stats.redCount}</span>
+                {refereeData.stats.penaltiesAvg != null && (
+                  <span className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums">⚽ جزاء {refereeData.stats.penaltiesAvg.toFixed(2)}/مباراة</span>
+                )}
+                {refereeData.stats.varMoments != null && (
+                  <span className="rounded-full border border-border bg-muted/40 px-2.5 py-1 text-[11px] font-semibold tabular-nums">فار ×{refereeData.stats.varMoments}</span>
+                )}
+              </div>
+            )}
           </div>
         )}
         {prediction && fx && <PredictionBar prediction={prediction} homeName={fx.home.name} awayName={fx.away.name} />}
