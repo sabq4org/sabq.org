@@ -507,6 +507,7 @@ struct HomeView: View {
 
     @ViewBuilder private var dashboardContent: some View {
         VStack(spacing: 22) {
+            VaraSceneShelf()   // «المشهد الآن» — رؤى ذكاء VARA عبر البطولات (تختفي إن فارغة).
             if let fav = favorites.team, !heroIsFavorite {
                 favoriteCard(fav).padding(.horizontal, 16)
             }

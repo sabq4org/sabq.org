@@ -16,6 +16,7 @@
 		5B000007 /* SportsRTL.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000007 /* SportsRTL.swift */; };
 		5B000008 /* SportsComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000008 /* SportsComponents.swift */; };
 		5B000009 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000009 /* RootTabView.swift */; };
+		5B0000B0 /* SportsPortalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000B0 /* SportsPortalView.swift */; };
 		5B00000A /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000A /* HomeView.swift */; };
 		5B00000B /* CompetitionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000B /* CompetitionsView.swift */; };
 		5B00000C /* CompetitionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C00000C /* CompetitionDetailView.swift */; };
@@ -37,6 +38,8 @@
 		5B000024 /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000024 /* IBMPlexSansArabic-Bold.woff2 */; };
 		5B0000A1 /* VaraPrediction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A1 /* VaraPrediction.swift */; };
 		5B0000A2 /* VaraInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A2 /* VaraInsights.swift */; };
+		5B0000F1 /* VaraIntel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000F1 /* VaraIntel.swift */; };
+		5B0000F2 /* VaraIntelViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000F2 /* VaraIntelViews.swift */; };
 		5B0000A3 /* LegalPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A3 /* LegalPages.swift */; };
 		5B0000A4 /* SpWidgetBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A4 /* SpWidgetBridge.swift */; };
 		5B0000A5 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A5 /* SearchView.swift */; };
@@ -85,6 +88,7 @@
 		5C000007 /* SportsRTL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsRTL.swift; sourceTree = "<group>"; };
 		5C000008 /* SportsComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsComponents.swift; sourceTree = "<group>"; };
 		5C000009 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		5C0000B0 /* SportsPortalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsPortalView.swift; sourceTree = "<group>"; };
 		5C00000A /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		5C00000B /* CompetitionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompetitionsView.swift; sourceTree = "<group>"; };
 		5C00000C /* CompetitionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompetitionDetailView.swift; sourceTree = "<group>"; };
@@ -109,6 +113,8 @@
 		5C000040 /* SabqSports.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SabqSports.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5C0000A1 /* VaraPrediction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaraPrediction.swift; sourceTree = "<group>"; };
 		5C0000A2 /* VaraInsights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaraInsights.swift; sourceTree = "<group>"; };
+		5C0000F1 /* VaraIntel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaraIntel.swift; sourceTree = "<group>"; };
+		5C0000F2 /* VaraIntelViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaraIntelViews.swift; sourceTree = "<group>"; };
 		5C0000A3 /* LegalPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalPages.swift; sourceTree = "<group>"; };
 		5C0000A4 /* SpWidgetBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpWidgetBridge.swift; sourceTree = "<group>"; };
 		5C0000A5 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
@@ -164,6 +170,7 @@
 			isa = PBXGroup;
 			children = (
 				5C000009 /* RootTabView.swift */,
+				5C0000B0 /* SportsPortalView.swift */,
 				5C00000A /* HomeView.swift */,
 				5C000014 /* MatchesView.swift */,
 				5C00000B /* CompetitionsView.swift */,
@@ -188,6 +195,7 @@
 			children = (
 				5C000007 /* SportsRTL.swift */,
 				5C000008 /* SportsComponents.swift */,
+				5C0000F2 /* VaraIntelViews.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -206,6 +214,7 @@
 				5C000103 /* SpLiveActivityManager.swift */,
 				5C0000A1 /* VaraPrediction.swift */,
 				5C0000A2 /* VaraInsights.swift */,
+				5C0000F1 /* VaraIntel.swift */,
 				5C0000A4 /* SpWidgetBridge.swift */,
 				5C0000A7 /* SpLiveStream.swift */,
 			);
@@ -369,6 +378,7 @@
 				5B000007 /* SportsRTL.swift in Sources */,
 				5B000008 /* SportsComponents.swift in Sources */,
 				5B000009 /* RootTabView.swift in Sources */,
+				5B0000B0 /* SportsPortalView.swift in Sources */,
 				5B00000A /* HomeView.swift in Sources */,
 				5B000014 /* MatchesView.swift in Sources */,
 				5B00000B /* CompetitionsView.swift in Sources */,
@@ -381,6 +391,8 @@
 				5B000012 /* AuthStore.swift in Sources */,
 				5B0000A1 /* VaraPrediction.swift in Sources */,
 				5B0000A2 /* VaraInsights.swift in Sources */,
+				5B0000F1 /* VaraIntel.swift in Sources */,
+				5B0000F2 /* VaraIntelViews.swift in Sources */,
 				5B0000A3 /* LegalPages.swift in Sources */,
 				5B000015 /* SportsPredictionModels.swift in Sources */,
 				5B000016 /* PredictionsHubView.swift in Sources */,
