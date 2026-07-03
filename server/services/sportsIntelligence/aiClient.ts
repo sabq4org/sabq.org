@@ -8,13 +8,12 @@ import { aiManager, AI_MODELS, type AIModelConfig } from "../../ai-manager";
 
 export type ModelTier = "cheap" | "strong";
 
-function pickModel(tier: ModelTier): AIModelConfig {
-  if (tier === "cheap") {
-    // نموذج سريع/رخيص للتصنيف واللقطات القصيرة؛ يسقط لـGPT-5.1 إن لم يُهيّأ Gemini.
-    if (aiManager.isProviderConfigured("gemini")) return { ...AI_MODELS.GEMINI_FLASH };
-    return { ...AI_MODELS.GPT_5_1 };
-  }
-  // السرد الطويل: OpenAI الموحّد (gpt-5.1).
+function pickModel(_tier: ModelTier): AIModelConfig {
+  // نستخدم gpt-5.1 لكل الطبقات. الطبقة «الرخيصة» كانت تختار Gemini Flash عند
+  // توفّر مفتاح Gemini، لكن نموذج البوابة GEMINI_FLASH (gemini-2.5-flash-preview-05-20)
+  // متوقّف/في cooldown على الإنتاج فيفشل التوليد بـ«no available model» (بطاقات فارغة)،
+  // بينما لا يظهر محلياً لغياب مفتاح Gemini. gpt-5.1 مثبت أنه يعمل ورخيص كفايةً
+  // للمطالبات القصيرة هنا. (المطالبات صغيرة؛ فرق الكلفة ضئيل.)
   return { ...AI_MODELS.GPT_5_1 };
 }
 
