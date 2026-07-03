@@ -50,6 +50,8 @@ struct SpMatchCenter: View {
 
     // إثراء (المرحلة 2): التعليق اللحظي المُعرَّب
     @State private var commentary: SpCommentary?
+    // التشكيلة المتوقعة (SportMonks) — تُجلب فقط قبل صدور الرسمية ولغير المنتهية
+    @State private var expectedLineup: SpExpectedLineups?
     // قوّة الفريقين من ترتيب البطولة — تغذّي «توقّع VARA» الديناميكي (أفضل جهد).
     @State private var strength: [Int: VaraTeamStrength] = [:]
 
@@ -136,6 +138,10 @@ struct SpMatchCenter: View {
     private var hasRatings: Bool { (ratings?.players.contains { ($0.rating ?? 0) > 0 }) ?? false }
     private var hasH2H: Bool { !(h2h?.meetings.isEmpty ?? true) }
     private var hasCommentary: Bool { !(commentary?.items.isEmpty ?? true) }
+    private var hasExpectedLineup: Bool {
+        guard let e = expectedLineup, e.available else { return false }
+        return e.home != nil || e.away != nil
+    }
 
     private var segments: [Segment] {
         guard let d = detail else { return [] }
@@ -144,7 +150,7 @@ struct SpMatchCenter: View {
         if hasCommentary { s.append(.commentary) }
         if hasAnalysis { s.append(.analysis) }
         if hasRatings { s.append(.ratings) }
-        if !d.lineups.isEmpty { s.append(.lineups) }
+        if !d.lineups.isEmpty || hasExpectedLineup { s.append(.lineups) }
         if let st = d.statistics, !st.rows.isEmpty { s.append(.stats) }
         if hasH2H { s.append(.h2h) }
         return s
@@ -571,7 +577,7 @@ struct SpMatchCenter: View {
                 case .commentary: commentaryView
                 case .analysis: analysisView
                 case .ratings: ratingsView
-                case .lineups: lineupsView(d.lineups)
+                case .lineups: lineupsSection(d)
                 case .stats: if let s = d.statistics { statsView(s) }
                 case .h2h: h2hView
                 }
@@ -1146,6 +1152,59 @@ struct SpMatchCenter: View {
         .padding(.horizontal, 16)
     }
 
+    /// الرسمية إن كان فيها أساسيون؛ وإلا المتوقعة بشارة تحذيرية؛ وإلا ما توفّر.
+    @ViewBuilder
+    private func lineupsSection(_ d: SpMatchDetail) -> some View {
+        if d.lineups.contains(where: { !$0.startXI.isEmpty }) {
+            lineupsView(d.lineups)
+        } else if hasExpectedLineup {
+            VStack(spacing: 12) {
+                expectedBadge
+                lineupsView(expectedAsLineups(d))
+            }
+        } else {
+            lineupsView(d.lineups)
+        }
+    }
+
+    private var expectedBadge: some View {
+        HStack(spacing: 8) {
+            Text("تشكيلة متوقعة")
+                .font(SportsFonts.app(size: 11, weight: .heavy))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 10).padding(.vertical, 3)
+                .background(Capsule().fill(Color.orange))
+            Text("ترشيح المزوّد قبل الإعلان الرسمي — قد تتغيّر")
+                .font(SportsFonts.app(size: 11))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .lineLimit(1).minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8).padding(.horizontal, 12)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.12)))
+        .padding(.horizontal, 16)
+    }
+
+    /// تحويل المتوقعة لشكل SpLineup لتُرسم بنفس الملعب. id=0 يعطّل فتح بطاقة اللاعب.
+    private func expectedAsLineups(_ d: SpMatchDetail) -> [SpLineup] {
+        guard let e = expectedLineup else { return [] }
+        func convert(_ side: SpExpectedSide?, team: SpTeam) -> SpLineup? {
+            guard let side else { return nil }
+            return SpLineup(
+                team: team,
+                formation: side.formation,
+                coach: nil,
+                startXI: side.starters.map {
+                    SpLineupPlayer(id: 0, number: $0.jersey, name: $0.name, pos: "", grid: $0.grid ?? "2:1")
+                },
+                substitutes: side.bench.map {
+                    SpLineupPlayer(id: 0, number: $0.jersey, name: $0.name, pos: "", grid: nil)
+                }
+            )
+        }
+        return [convert(e.home, team: d.fixture.home), convert(e.away, team: d.fixture.away)].compactMap { $0 }
+    }
+
     private func lineupCard(_ lu: SpLineup) -> some View {
         let rows = pitchRows(lu)
         return VStack(alignment: .leading, spacing: 12) {
@@ -1225,7 +1284,8 @@ struct SpMatchCenter: View {
     }
 
     private func pitchDot(_ p: SpLineupPlayer) -> some View {
-        Button { selectedPlayer = IDBox(id: p.id) } label: {
+        // id=0 (تشكيلة متوقعة) — لا صفحة لاعب لفتحها
+        Button { if p.id > 0 { selectedPlayer = IDBox(id: p.id) } } label: {
             VStack(spacing: 2) {
                 Text(p.number.map { "\($0)" } ?? "•")
                     .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(pitchBottom)
@@ -1249,7 +1309,7 @@ struct SpMatchCenter: View {
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], alignment: .leading, spacing: 8) {
                 ForEach(Array(subs.enumerated()), id: \.offset) { _, p in
-                    Button { selectedPlayer = IDBox(id: p.id) } label: { benchRow(p) }
+                    Button { if p.id > 0 { selectedPlayer = IDBox(id: p.id) } } label: { benchRow(p) }
                         .buttonStyle(.plain)
                 }
             }
@@ -1675,6 +1735,13 @@ struct SpMatchCenter: View {
         self.facts = await factsOpt
         self.ratings = await ratingsOpt
         self.commentary = await commentaryOpt
+        // التشكيلة المتوقعة — «الرسمية» تُعد صادرة فقط إذا فيها أساسيون؛ المزوّد
+        // قد يرسل قوائم بدلاء قبل المباراة فلا تحجب المتوقعة (نفس منطق الويب).
+        if let d = self.detail,
+           !d.fixture.status.finished,
+           !d.lineups.contains(where: { !$0.startXI.isEmpty }) {
+            self.expectedLineup = try? await APIClient.shared.fetchExpectedLineup(matchId: fixtureId)
+        }
         // المواجهات المباشرة — تحتاج معرّفَي الفريقين.
         if let f = preview ?? detail?.fixture {
             self.h2h = try? await APIClient.shared.fetchH2H(home: f.home.id, away: f.away.id)
