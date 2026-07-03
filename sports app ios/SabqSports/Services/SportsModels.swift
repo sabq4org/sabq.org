@@ -438,6 +438,27 @@ nonisolated struct SpLineup: Decodable, Hashable {
     let substitutes: [SpLineupPlayer]
 }
 
+// التشكيلة المتوقعة قبل المباراة (SportMonks عبر خادم سبق) — تُعرض حتى صدور الرسمية
+nonisolated struct SpExpectedPlayer: Decodable, Hashable {
+    let name: String
+    let jersey: Int?
+    let slot: Int?
+    let grid: String?
+    let row: Int?
+}
+
+nonisolated struct SpExpectedSide: Decodable, Hashable {
+    let formation: String?
+    let starters: [SpExpectedPlayer]
+    let bench: [SpExpectedPlayer]
+}
+
+nonisolated struct SpExpectedLineups: Decodable, Hashable {
+    let available: Bool
+    let home: SpExpectedSide?
+    let away: SpExpectedSide?
+}
+
 nonisolated struct SpMatchStatistics: Decodable, Hashable {
     let home: SpStatSide
     let away: SpStatSide
@@ -1286,6 +1307,9 @@ extension APIClient {
     }
     func fetchCommentary(matchId: Int, ignoreCache: Bool = false) async throws -> SpCommentary {
         try await get(SpCommentary.self, path: "/sports/match/\(matchId)/commentary", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+    func fetchExpectedLineup(matchId: Int, ignoreCache: Bool = false) async throws -> SpExpectedLineups {
+        try await get(SpExpectedLineups.self, path: "/sports/match/\(matchId)/expected-lineup", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
     /// لوحة المتصدّرين (عامّة) — period: all | month | week.
