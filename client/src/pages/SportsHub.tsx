@@ -1942,10 +1942,12 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     refetchInterval: data?.fixture?.status.live ? 30_000 : false,
   });
   // التشكيلة المتوقعة (SportMonks) — تُجلب فقط قبل صدور الرسمية ولغير المنتهية.
+  // «الرسمية» تُعد صادرة فقط إذا فيها أساسيون — المزوّد قد يرسل قوائم بدلاء
+  // جزئية قبل المباراة فلا تحجب المتوقعة الكاملة.
+  const officialXiReady = (data?.lineups ?? []).some((l) => l.startXI.length > 0);
   const { data: expectedData } = useQuery<SpExpectedLineups>({
     queryKey: [`/api/sports/match/${id}/expected-lineup`],
-    enabled:
-      id != null && !!data?.fixture && !fixtureFinished && (data?.lineups ?? []).length === 0,
+    enabled: id != null && !!data?.fixture && !fixtureFinished && !officialXiReady,
     staleTime: 60_000,
   });
 
@@ -1964,7 +1966,7 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     substitutes: side.bench.map((p) => ({ id: 0, number: p.jersey, name: p.name, pos: "", grid: null })),
   });
   const expectedLineups: SpLineup[] =
-    lineups.length === 0 && !fixtureFinished && expectedData?.available && fx
+    !officialXiReady && !fixtureFinished && expectedData?.available && fx
       ? ([
           expectedData.home && expSide(expectedData.home, { id: fx.home.id, name: fx.home.name, logo: fx.home.logo }),
           expectedData.away && expSide(expectedData.away, { id: fx.away.id, name: fx.away.name, logo: fx.away.logo }),
@@ -2175,14 +2177,14 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
           )}
           {!isLoading && activeKey === "lineups" && (
             <div className="space-y-3">
-              {lineups.length === 0 && expectedLineups.length > 0 && (
+              {expectedLineups.length > 0 && (
                 <div className="flex items-center justify-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
                   <span className="shrink-0 rounded-full bg-amber-500 text-white text-[10px] font-black px-2 py-0.5">تشكيلة متوقعة</span>
                   <p className="text-[11px] text-muted-foreground">ترشيح المزوّد قبل الإعلان الرسمي — قد تتغيّر</p>
                 </div>
               )}
               <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
-                {(lineups.length > 0 ? lineups : expectedLineups).map((l) => (
+                {(expectedLineups.length > 0 ? expectedLineups : lineups).map((l) => (
                   <LineupTeam key={l.team.id} lineup={l} />
                 ))}
               </div>

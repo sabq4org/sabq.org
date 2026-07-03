@@ -368,14 +368,17 @@ function LineupsTab({
   onOpenPlayer: (playerId: number) => void;
 }) {
   const { lineups, fixture } = detail;
+  // «رسمية قابلة للعرض» = فيها أساسيون. المزوّد قد يرسل تشكيلة جزئية قبل
+  // المباراة (قوائم بدلاء بلا أساسيين) — عندها نُفضّل المتوقعة الكاملة.
+  const hasOfficialXI = lineups.some((l) => l.startXI.length > 0);
   // التشكيلة المتوقعة (SportMonks) — تُجلب فقط قبل صدور الرسمية ولغير المنتهية
   const { data: expected } = useQuery<WcExpectedLineups>({
     queryKey: [`/api/world-cup/match/${fixture.id}/expected-lineup`],
-    enabled: lineups.length === 0 && !fixture.status.finished,
+    enabled: !hasOfficialXI && !fixture.status.finished,
     staleTime: 60_000,
   });
 
-  if (lineups.length > 0) {
+  if (hasOfficialXI) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {lineups.map((lineup) => (
@@ -408,6 +411,17 @@ function LineupsTab({
             />
           )}
         </div>
+      </div>
+    );
+  }
+
+  // رسمية جزئية (بدلاء فقط) بلا متوقعة متاحة — نعرض ما لدينا
+  if (lineups.length > 0) {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {lineups.map((lineup) => (
+          <TacticalPitch key={lineup.teamId} lineup={lineup} onOpenPlayer={onOpenPlayer} />
+        ))}
       </div>
     );
   }
