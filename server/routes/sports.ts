@@ -90,6 +90,7 @@ import {
   listMyPredictions,
   submitPrediction,
 } from "../services/sportsPredictionsService";
+import { getSportsSummary } from "../services/sportsSummaryService";
 import { requireAuth } from "../rbac";
 
 const RIYADH_TZ = "Asia/Riyadh";
@@ -173,6 +174,30 @@ export function registerSportsRoutes(app: Express) {
       console.error("[Sports] competitions meta failed:", error);
       // تدهور بسلاسة إلى القائمة الأساسية دون شعار/موسم/حالة.
       res.json({ configured: true, competitions: listCompetitions() });
+    }
+  });
+
+  // موجز البطولات: لقطة موحّدة لكل بطولة (متصدّر/هدّاف/بطل/عدّاد/مباراة قادمة)
+  // تغذّي رفّ «موجز البطولات» في /sports. نداء واحد مخزّن بدل عشرات النداءات.
+  app.get("/api/sports/summary", async (_req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.set("Cache-Control", "public, max-age=60, s-maxage=120");
+      res.json({ configured: false, competitions: [] });
+      return;
+    }
+    try {
+      const competitions = await getSportsSummary();
+      const hasLive = competitions.some((c) => c.liveCount > 0);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=15, stale-while-revalidate=60"
+          : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+      );
+      res.json({ configured: true, competitions });
+    } catch (error) {
+      console.error("[Sports] summary failed:", error);
+      res.status(502).json({ message: "تعذر جلب موجز البطولات حاليًا" });
     }
   });
 

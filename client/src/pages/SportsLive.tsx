@@ -145,7 +145,7 @@ export default function SportsLive() {
       <main className="flex-1">
         {/* ترويسة الصفحة */}
         <div className="bg-card border-b border-border">
-          <div className="max-w-5xl mx-auto px-3 py-4 sm:px-4 sm:py-5">
+          <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-7">
             <div className="flex items-start justify-between gap-3 flex-wrap sm:items-center">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-xl bg-accent-blue/30 shrink-0">
@@ -179,7 +179,7 @@ export default function SportsLive() {
         </div>
 
         {/* المحتوى */}
-        <div className="max-w-5xl mx-auto px-3 py-4 sm:px-4 sm:py-6">
+        <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6">
           {isLoading ? (
             <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
               <Loader2 className="w-5 h-5 animate-spin" /> جارٍ تحميل المباريات المباشرة…
@@ -210,8 +210,8 @@ export default function SportsLive() {
                   {/* دوريات الدولة */}
                   <div className="space-y-3">
                     {c.leagues.map((l) => (
-                      <div key={l.leagueId} className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
-                        <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border bg-gradient-to-l from-muted/60 to-transparent sm:px-4 sm:py-3">
+                      <div key={l.leagueId} className="overflow-hidden rounded-2xl border border-border bg-card">
+                        <div className="flex items-center gap-2.5 border-b border-border bg-muted/60 px-3 py-2.5 sm:px-4 sm:py-3">
                           {l.slug ? (
                             <Link href={`/sports/competition/${l.slug}`} className="group flex min-w-0 flex-1 items-center gap-2.5" title={`صفحة بطولة ${l.name}`}>
                               {l.logo ? (
@@ -232,9 +232,9 @@ export default function SportsLive() {
                               <span className="font-black text-foreground truncate flex-1">{l.name}</span>
                             </>
                           )}
-                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-black text-muted-foreground">
-                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                            {l.matches.length}
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
+                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                            {l.matches.length} مباشر
                           </span>
                         </div>
                         <div>

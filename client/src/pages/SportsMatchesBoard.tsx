@@ -1,10 +1,9 @@
 /**
- * لوحة "مباريات اليوم" — /sports/matches بهوية سبق البصرية v1.0.
+ * لوحة "مباريات اليوم" — /sports/matches بهوية موقع سبق الفاتحة (مطابقة لـ /sports).
  *
- * غلاف كحلي مدمج بأسلوب أغلفة الدليل (eyebrow أحادي المسافة + عنوان Alexandria
- * + موتيف الأعمدة الصاعدة)، طبقة تحكّم بحقول 10px وحدود الدليل، شريط فلاتر
- * لاصق، ومجموعات بطولات ببطاقات 16px وترويسة سماوية. الأرقام كلها Plex Mono.
- * الألوان عبر توكنز .sbq-sport (فاتح + داكن «حبري») من SportsBrand.tsx.
+ * ترويسة فاتحة (أيقونة بخلفية زرقاء + عنوان + وصف)، طبقة تحكّم بالتاريخ والبحث،
+ * شريط فلاتر لاصق، ومجموعات بطولات ببطاقات فاتحة وترويسة رمادية خفيفة. الأزرق
+ * الأساسي للتمييز والأحمر للمباشر، بدون أسطح كحلية غامقة أو خطوط خاصة.
  *
  * كل مباريات اليوم عبر بطولاتنا، مرتّبة بالوقت ومجمّعة حسب البطولة، مع توسيع
  * كل مباراة لإظهار الأهداف والبطاقات. فلترة: التاريخ، الحالة، الفئة، البحث،
@@ -42,7 +41,6 @@ import {
   type SpCompetitionCategory,
   type SpLiveItem,
 } from "./SportsHub";
-import { BRAND_CSS, useBrandFonts, RisingBars } from "./SportsBrand";
 
 // ---------- أدوات التاريخ (بتوقيت الرياض) ----------
 
@@ -260,7 +258,7 @@ function MatchScorers({ fixture }: { fixture: SpLiveItem }) {
               )}
             </span>
             {/* الوقت */}
-            <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums sbq-mono">{eventMinute(e)}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">{eventMinute(e)}</span>
             {/* علم/شعار المنتخب أو اسم الفريق */}
             <span className="shrink-0 w-16 flex items-center justify-end gap-1">
               {team?.logo ? (
@@ -344,7 +342,7 @@ export function MatchRow({
         >
           {isLive ? (
             <span className="inline-flex flex-col items-center gap-0.5 text-red-500">
-              <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums sbq-mono">
+              <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                 {liveClockLabel(f)}
               </span>
@@ -355,7 +353,7 @@ export function MatchRow({
           ) : st === "finished" ? (
             <span aria-label={f.status.label || "انتهت"} />
           ) : (
-            <span className="text-sm font-black text-foreground tabular-nums sbq-mono" dir="ltr">
+            <span className="text-sm font-black text-foreground tabular-nums" dir="ltr">
               {kickoffTime(f)}
             </span>
           )}
@@ -382,7 +380,7 @@ export function MatchRow({
         >
           {decided && hg != null && ag != null ? (
             <span
-              className={`inline-flex min-w-[3.75rem] flex-col items-center justify-center rounded-[10px] px-2 py-1 text-base font-black tabular-nums leading-none sbq-mono sm:py-0.5 ${isLive && !flat ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
+              className={`inline-flex min-w-[3.75rem] flex-col items-center justify-center rounded-[10px] px-2 py-1 text-base font-black tabular-nums leading-none sm:py-0.5 ${isLive && !flat ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
               dir="ltr"
             >
               <span>{ag} - {hg}</span>
@@ -452,8 +450,8 @@ function CompetitionGroup({
 }) {
   const liveCount = matches.filter((m) => m.status.live).length;
   return (
-    <div className="sbq-shadow-1 overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center gap-2.5 border-b border-border bg-accent/50 px-3 py-2.5 sm:px-4 sm:py-3">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-2.5 border-b border-border bg-muted/60 px-3 py-2.5 sm:px-4 sm:py-3">
         {slug ? (
           <Link
             href={`/sports/competition/${slug}`}
@@ -465,8 +463,8 @@ function CompetitionGroup({
             ) : (
               <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} strokeWidth={1.8} />
             )}
-            <span className="sbq-display truncate font-bold text-foreground transition-colors group-hover:text-accent-foreground">{name}</span>
-            <ChevronLeft className="w-4 h-4 shrink-0 text-muted-foreground transition-colors group-hover:text-accent-foreground" strokeWidth={1.8} />
+            <span className="truncate font-black text-foreground transition-colors group-hover:text-primary">{name}</span>
+            <ChevronLeft className="w-4 h-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" strokeWidth={1.8} />
           </Link>
         ) : (
           <>
@@ -475,16 +473,16 @@ function CompetitionGroup({
             ) : (
               <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} strokeWidth={1.8} />
             )}
-            <span className="sbq-display truncate font-bold text-foreground flex-1">{name}</span>
+            <span className="truncate font-black text-foreground flex-1">{name}</span>
           </>
         )}
         {liveCount > 0 ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-[#DD5C5C] px-2.5 py-0.5 text-[10px] font-bold text-white">
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
             <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
             {liveCount} مباشر
           </span>
         ) : (
-          <span className="sbq-mono text-[11px] font-bold text-muted-foreground">{matches.length}</span>
+          <span className="text-[11px] font-bold tabular-nums text-muted-foreground">{matches.length}</span>
         )}
       </div>
       <div>
@@ -515,7 +513,6 @@ export default function SportsMatchesBoard() {
     document.title = "مباريات اليوم | سبق";
   }, []);
   useCanonical("https://sabq.org/sports/matches");
-  useBrandFonts();
 
   const { data: compsData } = useQuery<{ competitions: SpCompetition[] }>({
     queryKey: ["/api/sports/competitions"],
@@ -647,59 +644,52 @@ export default function SportsMatchesBoard() {
       {/* هيدر الموقع غير لاصق — يمرّ طبيعيًا ويختفي عند النزول لتحرير المساحة */}
       <Header user={user || undefined} sticky={false} />
 
-      <div className="sbq-sport flex flex-1 flex-col bg-background text-foreground">
-        <style>{BRAND_CSS}</style>
-
-        <main className="flex-1">
-          {/* ===== غلاف كحلي مدمج — بأسلوب أغلفة الدليل ===== */}
-          <header className="sbq-ink relative overflow-hidden">
-            <RisingBars
-              className="absolute -bottom-5 left-4 opacity-[0.13] sm:left-8"
-              bars={[36, 60, 88, 118, 72]}
-              width={18}
-              gap={7}
-            />
-            <div className="relative mx-auto max-w-5xl px-4 pb-5 pt-7 sm:pt-8">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span dir="ltr" className="sbq-mono text-[11px] tracking-[2px] text-[#4CBCFD]">SABQ SPORT — MATCH BOARD</span>
-                {liveTotal > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#DD5C5C] px-3 py-1 text-[11px] font-bold text-white">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {liveTotal} مباشر الآن
-                  </span>
-                )}
-              </div>
-              <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <h1 className="sbq-display text-3xl font-extrabold leading-none text-white sm:text-4xl">مباريات اليوم</h1>
-                  <p className="mt-2 text-[13px] text-[#8CA3B5]">كل مباريات بطولاتنا مرتّبة بالوقت — نتيجة لحظية ومسجّلو أهداف فور التسجيل.</p>
+      <main className="flex-1">
+          {/* ===== ترويسة فاتحة — مطابقة لهوية /sports ===== */}
+          <div className="border-b border-border bg-card">
+            <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-7">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-primary/10">
+                    <CalendarDays className="h-7 w-7 text-primary" strokeWidth={1.8} />
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="text-2xl font-black leading-tight text-foreground sm:text-3xl">مباريات اليوم</h1>
+                    <p className="mt-0.5 text-sm text-muted-foreground">كل مباريات بطولاتنا مرتّبة بالوقت — نتيجة لحظية ومسجّلو أهداف فور التسجيل.</p>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  {liveTotal > 0 && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-1.5 text-[12px] font-bold tabular-nums text-white">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveTotal} مباشر الآن
+                    </span>
+                  )}
                   {isToday && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-bold text-[#CFE0EC]">
-                      {isLiveFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5 text-[#DD5C5C]" strokeWidth={1.8} />}
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground">
+                      {isLiveFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5 text-red-500" strokeWidth={1.8} />}
                       تحديث تلقائي
                     </span>
                   )}
                   <Link
                     href="/sports/live"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-bold text-[#CFE0EC] transition-colors hover:border-[#4CBCFD] hover:text-white"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                   >
-                    <Radio className="h-3.5 w-3.5 text-[#DD5C5C]" strokeWidth={1.8} /> البث المباشر · العالم
+                    <Radio className="h-3.5 w-3.5 text-red-500" strokeWidth={1.8} /> البث المباشر · العالم
                   </Link>
                   <Link
                     href="/sports"
-                    className="inline-flex items-center gap-1.5 rounded-full border border-white/15 px-3 py-1.5 text-[11px] font-bold text-[#CFE0EC] transition-colors hover:border-[#4CBCFD] hover:text-white"
+                    className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                   >
                     البوابة الرياضية <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
                   </Link>
                 </div>
               </div>
             </div>
-          </header>
+          </div>
 
           {/* ===== طبقة التحكم: التاريخ + البحث ===== */}
           <div className="border-b border-border bg-card">
-            <div className="mx-auto max-w-5xl px-3 py-3 sm:px-4">
+            <div className="mx-auto max-w-[1200px] px-4 py-3 sm:px-6">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="grid w-full grid-cols-[40px_minmax(0,1fr)_40px_auto] items-center gap-1 sm:flex sm:w-auto">
                   <button
@@ -711,8 +701,8 @@ export default function SportsMatchesBoard() {
                     <ChevronRight className="w-4 h-4" strokeWidth={1.8} />
                   </button>
                   <div className="min-w-0 px-2 text-center sm:min-w-[150px] sm:px-3">
-                    <div className="sbq-display truncate text-sm font-bold text-foreground">{humanDate(date)}</div>
-                    <div className="sbq-mono text-[10px] text-muted-foreground" dir="ltr">{date}</div>
+                    <div className="truncate text-sm font-black text-foreground">{humanDate(date)}</div>
+                    <div className="text-[10px] tabular-nums text-muted-foreground" dir="ltr">{date}</div>
                   </div>
                   <button
                     type="button"
@@ -726,7 +716,7 @@ export default function SportsMatchesBoard() {
                     <button
                       type="button"
                       onClick={() => setDate(today)}
-                      className="sbq-action mr-0 h-10 rounded-[10px] px-3 text-xs font-bold sm:mr-1 sm:h-9"
+                      className="mr-0 h-10 rounded-[10px] bg-primary px-3 text-xs font-bold text-white transition-opacity hover:opacity-90 sm:mr-1 sm:h-9"
                     >
                       اليوم
                     </button>
@@ -735,7 +725,7 @@ export default function SportsMatchesBoard() {
                     type="date"
                     value={date}
                     onChange={(e) => e.target.value && setDate(e.target.value)}
-                    className="sbq-mono col-span-4 mt-1 h-10 rounded-[10px] border border-border bg-card px-2 text-xs text-foreground sm:col-span-1 sm:mt-0 sm:mr-1 sm:h-9"
+                    className="col-span-4 mt-1 h-10 rounded-[10px] border border-border bg-card px-2 text-xs tabular-nums text-foreground sm:col-span-1 sm:mt-0 sm:mr-1 sm:h-9"
                   />
                 </div>
 
@@ -756,7 +746,7 @@ export default function SportsMatchesBoard() {
 
           {/* شريط الفلاتر وحده لاصق أعلى الشاشة — يبقى عند النزول لتحرير المساحة */}
           <div className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
-            <div className="mx-auto max-w-5xl px-3 py-2 sm:px-4 sm:py-2.5">
+            <div className="mx-auto max-w-[1200px] px-4 py-2 sm:px-6 sm:py-2.5">
               {/* الحالة + الفئة + طريقة العرض */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:pb-0">
                 <div className="flex items-center gap-1 rounded-[10px] bg-muted p-0.5 shrink-0">
@@ -765,10 +755,10 @@ export default function SportsMatchesBoard() {
                       key={s.key}
                       type="button"
                       onClick={() => setStateFilter(s.key)}
-                      className={`min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${stateFilter === s.key ? "bg-card text-foreground sbq-shadow-1" : "text-muted-foreground hover:text-foreground"}`}
+                      className={`min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${stateFilter === s.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                     >
                       {s.key === "live" && stateFilter !== "live" && liveTotal > 0 && (
-                        <span className="ml-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#DD5C5C] align-middle" />
+                        <span className="ml-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-red-500 align-middle" />
                       )}
                       {s.label}
                     </button>
@@ -781,7 +771,7 @@ export default function SportsMatchesBoard() {
                     <button
                       type="button"
                       onClick={() => setCatFilter("all")}
-                      className={`min-h-9 whitespace-nowrap rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${catFilter === "all" ? "bg-foreground text-background" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}
+                      className={`min-h-9 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${catFilter === "all" ? "bg-primary text-white" : "border border-border bg-card text-muted-foreground hover:border-primary/40"}`}
                     >
                       كل الفئات
                     </button>
@@ -790,7 +780,7 @@ export default function SportsMatchesBoard() {
                         key={cat}
                         type="button"
                         onClick={() => setCatFilter(cat)}
-                        className={`min-h-9 whitespace-nowrap rounded-[10px] px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${catFilter === cat ? "bg-foreground text-background" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}
+                        className={`min-h-9 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${catFilter === cat ? "bg-primary text-white" : "border border-border bg-card text-muted-foreground hover:border-primary/40"}`}
                       >
                         {COMP_CATEGORY_LABELS[cat]}
                       </button>
@@ -802,14 +792,14 @@ export default function SportsMatchesBoard() {
                   <button
                     type="button"
                     onClick={() => setGroupByComp(true)}
-                    className={`min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${groupByComp ? "bg-card text-foreground sbq-shadow-1" : "text-muted-foreground hover:text-foreground"}`}
+                    className={`min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${groupByComp ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                   >
                     حسب البطولة
                   </button>
                   <button
                     type="button"
                     onClick={() => setGroupByComp(false)}
-                    className={`min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${!groupByComp ? "bg-card text-foreground sbq-shadow-1" : "text-muted-foreground hover:text-foreground"}`}
+                    className={`min-h-9 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${!groupByComp ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                   >
                     حسب الوقت
                   </button>
@@ -819,7 +809,7 @@ export default function SportsMatchesBoard() {
           </div>
 
           {/* المحتوى */}
-          <div className="mx-auto max-w-5xl px-3 py-4 sm:px-4 sm:py-6">
+          <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6">
             {isLoading ? (
               <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
                 <Loader2 className="w-5 h-5 animate-spin" /> جارٍ تحميل المباريات…
@@ -847,13 +837,13 @@ export default function SportsMatchesBoard() {
                 ))}
               </div>
             ) : (
-              <div className="sbq-shadow-1 overflow-hidden rounded-2xl border border-border bg-card">
+              <div className="overflow-hidden rounded-2xl border border-border bg-card">
                 {flat.map((m) => (
                   <div key={m.id} className="border-b border-border last:border-b-0">
                     {m.competitionSlug ? (
                       <Link
                         href={`/sports/competition/${m.competitionSlug}`}
-                        className="flex w-fit items-center gap-1 px-4 pt-2 text-[11px] font-bold text-muted-foreground transition-colors hover:text-accent-foreground"
+                        className="flex w-fit items-center gap-1 px-4 pt-2 text-[11px] font-bold text-muted-foreground transition-colors hover:text-primary"
                       >
                         {m.competition}
                         <ChevronLeft className="w-3 h-3" strokeWidth={1.8} />
@@ -874,8 +864,7 @@ export default function SportsMatchesBoard() {
               </div>
             )}
           </div>
-        </main>
-      </div>
+      </main>
 
       <MatchDialog id={openMatch} onClose={() => setOpenMatch(null)} />
       <Footer />

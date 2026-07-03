@@ -753,6 +753,7 @@ const STATIC_INDEXABLE_PAGES: Record<string, { title: string; desc: string; loca
   '/polls': { title: 'استطلاعات الرأي — سبق', desc: 'شارك في استطلاعات الرأي على صحيفة سبق الإلكترونية وتعرّف على آراء القرّاء.' },
   '/poll': { title: 'استطلاعات الرأي — سبق', desc: 'شارك في استطلاعات الرأي على صحيفة سبق الإلكترونية وتعرّف على آراء القرّاء.' },
   '/ai': { title: 'iFox — مساعد سبق الذكي', desc: 'iFox هو مساعد سبق الذكي للأخبار والمعلومات والإجابات الفورية.' },
+  '/sabq-ai': { title: 'عقل سبق — الذكاء الاصطناعي في خدمة الصحافة', desc: 'كيف طوّعت سبق الذكاء الاصطناعي في خدمة الإعلام السعودي: أول صحيفة سعودية وعربية تدمج الذكاء في كامل دورة العمل التحريري — بقرار بشري في كل مادة، ووفق ميثاق معلن من ثماني مواد.' },
   '/en/news': { title: 'Latest News — Sabq', desc: 'Browse the latest breaking news and updates on Sabq News.', locale: 'en_US', siteName: 'Sabq News' },
   '/ur/news': { title: 'تازہ خبریں — سبق نیوز', desc: 'سبق نیوز پر تازہ ترین خبریں اور بریکنگ نیوز پڑھیں۔', locale: 'ur_PK', siteName: 'سبق نیوز' },
   // English mirrors

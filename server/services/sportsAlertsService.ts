@@ -38,6 +38,8 @@ import {
   isTheSportsConfigured,
   resolveTsNames,
   TS_I18N_TYPE,
+  TS_VAR_DECISIVE_RESULTS,
+  TS_VAR_RESULT_AR,
   type TsEvent,
   type TsMatchLive,
 } from "./theSportsService";
@@ -97,6 +99,11 @@ const eventSig = (e: SplMatchEvent): string => {
   if (e.type === "yellow-card" || e.type === "red-card") {
     return `${e.type}|${e.teamId}|${e.player}`;
   }
+  // الفار: المزوّد يعدّل الدقيقة ويملأ اسم اللاعب لاحقًا → توقيع بالفريق والتفصيل
+  // فقط كي لا يُرسَل إشعار المراجعة نفسها مرّتين.
+  if (e.type === "var") {
+    return `var|${e.teamId}|${e.label}`;
+  }
   return `${e.type}|${e.minute ?? ""}|${e.extra ?? ""}|${e.teamId}|${e.player}`;
 };
 
@@ -108,17 +115,24 @@ let lastTsEventCleanup = 0;
 // توقيع مستقرّ ضد تذبذب دقيقة المزوّد (السبب الشائع لتكرار إشعار البطاقة، مثل ظهور
 // نفس البطاقة عند د83 ثم د84):
 //   - البطاقات: لاعب واحد ≤ بطاقة واحدة من كل نوع في المباراة → بلا دقيقة.
-//   - الأهداف: قد تتعدّد للاعب الواحد → نُميّزها بالنتيجة التراكمية الثابتة بدل الدقيقة.
-//   - غير ذلك (فار/تبديل): نُبقي الدقيقة/الثانية للتمييز.
+//   - الأهداف (ومنها العكسية): قد تتعدّد للاعب الواحد → نُميّزها بالنتيجة التراكمية
+//     الثابتة بدل الدقيقة.
+//   - الفار: الدقيقة/الثانية والاسم تُستكمل لاحقًا → التوقيع بالفريق + سبب/نتيجة
+//     المراجعة. تضمين var_result مقصود: المراجعة المعلّقة (0) لا تُشعِر، وحين تُحسم
+//     تتغيّر النتيجة فيتولّد توقيع جديد يُطلق إشعار القرار مرّة واحدة.
+//   - غير ذلك (تبديل): نُبقي الدقيقة/الثانية للتمييز.
 const tsEventSig = (e: TsEvent): string => {
   const who = e.playerId ?? e.player ?? e.inPlayer ?? "";
   if (e.type === "yellow" || e.type === "red" || e.type === "yellow_red") {
     return `${e.type}|${e.team ?? ""}|${who}`;
   }
-  if (e.type === "goal" || e.type === "penalty_goal") {
+  if (e.type === "goal" || e.type === "penalty_goal" || e.type === "own_goal") {
     const score =
       e.homeScore != null && e.awayScore != null ? `${e.homeScore}-${e.awayScore}` : String(e.minute);
     return `${e.type}|${who}|${score}`;
+  }
+  if (e.type === "var") {
+    return `var|${e.team ?? ""}|${e.varReason ?? ""}|${e.varResult ?? ""}`;
   }
   return `${e.rawType}|${e.minute}|${e.second ?? ""}|${e.team ?? ""}|${who}`;
 };
@@ -132,7 +146,10 @@ const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?
 // الأحداث الجديدة فقط دون تكرار وبلا إغراق. القائد وحده يكتب (لا تسابق).
 // v2: تغيّرت صيغة توقيع الأحداث (dedup مستقلّ عن الدقيقة للبطاقات). نتجاهل حالة v1
 // القديمة فتُعيد الدورة الأولى تأسيس المباريات الجارية بصمت بدل إعادة إرسال أحداثها.
-const STATE_KEY = "sports_alerts:baseline:v2";
+// v3: توقيع الفار صار بالفريق + سبب/نتيجة المراجعة (بلا دقيقة/ثانية) وأُضيف الهدف
+// العكسي — أي تغيير لاحق في صيغة التوقيع يستلزم رفع الرقم هنا وإلا أعادت الحالة
+// المحفوظة القديمة إطلاق أحداث المباراة الجارية بعد النشر.
+const STATE_KEY = "sports_alerts:baseline:v3";
 const STATE_TTL_SEC = 6 * 3600; // يكفي مباراة + استراحة
 let stateHydrated = false;
 
@@ -305,6 +322,9 @@ async function detectEventAlerts(
           teamRefIds,
         });
       } else if (e.type === "var") {
+        // «تأكيد هدف بعد المراجعة» فحص روتيني يلي كل هدف تقريبًا — الهدف نفسه
+        // أُشعِر به للتوّ، فلا نُغرق المتابع بمراجعةٍ لم تغيّر شيئًا.
+        if (e.label === "تأكيد هدف بعد مراجعة الفار") continue;
         // التفصيل المعرّب (إلغاء هدف/احتساب ركلة...)؛ نُسقط البادئة العامة لتفادي التكرار مع العنوان.
         const detail = e.label && e.label !== "مراجعة الفار" ? `${e.label} · ` : "";
         out.push({
@@ -543,19 +563,23 @@ async function detectTsEventAlerts(
       const minute = e.minute ? ` · د${e.minute}` : "";
       const teamName = TEAM_NAME(m, e.team);
 
-      if (e.type === "goal" || e.type === "penalty_goal") {
+      if (e.type === "goal" || e.type === "penalty_goal" || e.type === "own_goal") {
         const who = arById(e.playerId) ?? (e.player ? tr(e.player) : teamName || matchName);
-        const pen = e.type === "penalty_goal" ? " (ركلة جزاء)" : "";
-        const assist = e.assist ? ` · صناعة ${tr(e.assist)}` : "";
         const score =
           e.homeScore != null && e.awayScore != null
             ? `${m.home.name} ${e.homeScore}-${e.awayScore} ${m.away.name}`
             : `${m.home.name} ${fmtScore(m)} ${m.away.name}`;
+        const body =
+          e.type === "own_goal"
+            ? `هدف عكسي${who ? ` من ${who}` : ""}${minute}`
+            : `هدف ${who}${e.type === "penalty_goal" ? " (ركلة جزاء)" : ""}${minute}${
+                e.assist ? ` · صناعة ${tr(e.assist)}` : ""
+              }`;
         out.push({
           fixtureId: m.id,
           kind: "goal",
           title: `⚽️ ${score}`,
-          body: `هدف ${who}${pen}${minute}${assist}`,
+          body,
           teamRefIds,
         });
       } else if (e.type === "red" || e.type === "yellow_red") {
@@ -577,11 +601,16 @@ async function detectTsEventAlerts(
           teamRefIds,
         });
       } else if (e.type === "var") {
+        // إشعار فقط عند قرارٍ حاسم (إلغاء/احتساب/تغيير). المزوّد يرسل حادثة VAR
+        // أيضًا للفحص الروتيني الذي يلي كل هدف (تأكيد) وللمراجعة المعلّقة (0) —
+        // وكانت هذه مصدر إشعار «مراجعة الفار» الزائف في كل مباراة.
+        if (e.varResult == null || !TS_VAR_DECISIVE_RESULTS.has(e.varResult)) continue;
+        const outcome = TS_VAR_RESULT_AR[e.varResult] ?? "قرار بعد مراجعة الفار";
         out.push({
           fixtureId: m.id,
           kind: "var",
           title: "🎦 مراجعة الفار",
-          body: `${matchName}${minute}`,
+          body: `${outcome} · ${matchName}${minute}`,
           teamRefIds,
         });
       }

@@ -34,6 +34,7 @@ import {
   resolveTsMatchId,
   resolveTsNames,
   TS_I18N_TYPE,
+  TS_VAR_RESULT_AR,
   type TsEvent,
   type TsLiveStats,
   type TsTeamStatSide,
@@ -735,11 +736,16 @@ const FINISHED_STATUSES = new Set(["FT", "AET", "PEN"]);
  * - الكؤوس: البطل = الفائز في آخر مباراة منتهية (النهائي) من الموسم السابق.
  * مخزَّن طويلًا (بيانات تاريخية ثابتة) ويتدهور بسلاسة إلى null عند أي فشل جزئي.
  */
-export async function getCompetitionHistory(comp: SaudiCompetition): Promise<SplCompetitionHistory> {
+export async function getCompetitionHistory(
+  comp: SaudiCompetition,
+  targetSeason?: number,
+): Promise<SplCompetitionHistory> {
   const current = await seasonFor(comp);
-  const prev = current - 1;
+  // الافتراضي = النسخة السابقة (current - 1) لعرض «حامل اللقب» في بطولة جارية/قادمة.
+  // للبطولة المنتهية نمرّر موسمها المنتهي نفسه فيصير البطل/الهدّاف من ذلك الموسم لا ما قبله.
+  const prev = typeof targetSeason === "number" ? targetSeason : current - 1;
 
-  return withSWR(`spl:history:v1:${comp.id}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 4, async () => {
+  return withSWR(`spl:history:v1:${comp.id}:${prev}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 4, async () => {
     let champion: SplPreviousChampion | null = null;
 
     if (comp.hasStandings) {
@@ -972,16 +978,24 @@ function getCompetitionByLeagueId(id: number): SaudiCompetition | undefined {
 const TS_EVENT_LABEL: Record<TsEvent["type"], { type: string; label: string } | null> = {
   goal: { type: "goal", label: "هدف" },
   penalty_goal: { type: "goal", label: "هدف من ركلة جزاء" },
+  own_goal: { type: "goal", label: "هدف عكسي" },
   penalty_missed: { type: "missed-penalty", label: "ركلة جزاء ضائعة" },
   yellow: { type: "yellow-card", label: "بطاقة صفراء" },
   red: { type: "red-card", label: "بطاقة حمراء" },
   yellow_red: { type: "red-card", label: "بطاقة حمراء (إنذاران)" },
   sub: { type: "substitution", label: "تبديل" },
   var: { type: "var", label: "مراجعة الفار" },
-  penalty: null, // ركلة جزاء احتُسبت — يكفيها سطر الهدف/الإهدار
   injury_time: null, // وقت بدل ضائع — لا يُعرَض كسطر
   other: null,
 };
+
+// تسمية حدث الفار بنتيجة المراجعة إن حُسمت (إلغاء هدف/احتساب جزاء...)، وإلا العامة.
+function tsEventLabel(e: TsEvent, meta: { type: string; label: string }): string {
+  if (e.type === "var" && e.varResult != null && TS_VAR_RESULT_AR[e.varResult]) {
+    return TS_VAR_RESULT_AR[e.varResult];
+  }
+  return meta.label;
+}
 
 async function mapTsEventsToSpl(events: TsEvent[], fx: SplFixture): Promise<SplMatchEvent[]> {
   const rawNames: (string | null | undefined)[] = [];
@@ -1006,7 +1020,7 @@ async function mapTsEventsToSpl(events: TsEvent[], fx: SplFixture): Promise<SplM
       out.push({
         minute: e.minute, extra: null, teamId, team,
         player: arById(e.playerId) ?? tr(e.player), assist: e.assist ? tr(e.assist) : null,
-        type: meta.type, label: meta.label,
+        type: meta.type, label: tsEventLabel(e, meta),
       });
     }
   }

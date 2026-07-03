@@ -8678,4 +8678,36 @@ router.post("/gulf-cup/predictions/long", async (req: Request, res: Response) =>
   }
 });
 
+// ==========================================
+// سجلّ البطولات الموحّد (Sabq Sports 2.0)
+// GET /api/v1/sports/tournaments — البطولات المرئية للتطبيق (visibleApp)
+// GET /api/v1/sports/hub         — payload مجمّع بطلب واحد: بطولات + مباريات
+//                                  قادمة/نتائج + متصدّر/هدّاف + «مباشر الآن»
+// نفس مصدر حقيقة الويب (sports_tournaments) — تغيير الداشبورد يسري خلال
+// دقيقة بدون تحديث من الستور. لا تمسّ endpoints القائمة أعلاه إطلاقًا.
+// ==========================================
+router.get("/sports/tournaments", async (_req: Request, res: Response) => {
+  try {
+    const { listVisibleTournaments } = await import("../services/sportsTournamentsService");
+    const tournaments = await listVisibleTournaments("app");
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json({ tournaments });
+  } catch (error) {
+    console.error("[Mobile Sports] tournaments error:", error);
+    res.json({ tournaments: [] });
+  }
+});
+
+router.get("/sports/hub", async (_req: Request, res: Response) => {
+  try {
+    const { getSportsHub } = await import("../services/sportsHubService");
+    const hub = await getSportsHub("app");
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json(hub);
+  } catch (error) {
+    console.error("[Mobile Sports] hub error:", error);
+    res.status(502).json({ message: "تعذر جلب هب الرياضة حاليًا" });
+  }
+});
+
 export default router;
