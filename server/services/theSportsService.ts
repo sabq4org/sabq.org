@@ -43,6 +43,9 @@ export const TS_COMPETITION_IDS: Record<string, string> = {
   "serie-a": "4zp5rzghp5q82w1",             // الدوري الإيطالي
   "bundesliga": "gy0or5jhg6qwzv3",          // الدوري الألماني
   "ligue-1": "yl5ergphnzr8k0o",             // الدوري الفرنسي
+  // من دعم TheSports (2026-07-03) — ضمن الاشتراك:
+  "asian-cup": "z318q66hegqo9jd",           // كأس آسيا (موسم 2027: 9vjxm8ghzkor6od)
+  "gulf-cup": "gpxwrxlhkgryk0j",            // كأس الخليج «خليجي» (لا موسم 26/27 لدى المزوّد بعد)
 };
 
 // حالات TheSports: 1=لم تبدأ، 2=ش1، 3=استراحة، 4=ش2، 5/6=وقت إضافي، 7=ركلات،
