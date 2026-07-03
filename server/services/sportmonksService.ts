@@ -42,19 +42,22 @@ export function isSportmonksConfigured(): boolean {
   return Boolean((process.env.SPORTMONKS_API_TOKEN || "").trim());
 }
 
-async function smGet(path: string, params: Record<string, string> = {}): Promise<any> {
+async function smFetch(url: URL): Promise<any> {
   const token = (process.env.SPORTMONKS_API_TOKEN || "").trim();
   if (!token) throw new Error("SPORTMONKS_API_TOKEN is not set");
-
-  const url = new URL(`${SM_BASE}/${path}`);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set("api_token", token);
 
   const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!response.ok) {
-    throw new Error(`[SportMonks] HTTP ${response.status} for ${path}`);
+    throw new Error(`[SportMonks] HTTP ${response.status} for ${url.pathname}`);
   }
   return response.json();
+}
+
+async function smGet(path: string, params: Record<string, string> = {}): Promise<any> {
+  const url = new URL(`${SM_BASE}/${path}`);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  return smFetch(url);
 }
 
 // ---------- أخبار SportMonks التحريرية (معاينات + تقارير) ----------
@@ -103,6 +106,8 @@ export interface SmNewsItem {
 const NEWS_INCLUDE = "lines;fixture;league";
 const NEWS_TTL = 5 * 60 * 1000;
 const NEWS_SWR = 2 * 60 * 1000;
+const NEWS_PER_PAGE = "50"; // أقصى حجم صفحة يقبله المزوّد
+const NEWS_MAX_PAGES = 12; // حارس ضد سلسلة مؤشّر لا تنتهي (600 عنصر تغطي بطولة كاملة)
 
 function normalizeNewsItem(raw: any): SmNewsItem | null {
   if (!raw || typeof raw.id !== "number") return null;
@@ -146,13 +151,56 @@ function normalizeNewsItem(raw: any): SmNewsItem | null {
   };
 }
 
+/**
+ * يتحقق من رابط next_cursor قبل اتباعه حرفيًا (نفس أصل المزوّد فقط).
+ * لا نعيد تركيب باراميتراته: المزوّد يرفض (400) إرسال per_page مع cursor.
+ */
+function sanitizeNextCursorUrl(nextCursorUrl: unknown): URL | null {
+  if (typeof nextCursorUrl !== "string" || !nextCursorUrl) return null;
+  try {
+    const url = new URL(nextCursorUrl);
+    return url.origin === new URL(SM_BASE).origin ? url : null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchNews(path: string, cacheKey: string): Promise<SmNewsItem[]> {
   if (!isSportmonksConfigured()) return [];
   try {
-    const data = await withSWR(cacheKey, NEWS_TTL, NEWS_SWR, () =>
-      smGet(path, { include: NEWS_INCLUDE })
-    );
-    const rows = Array.isArray(data?.data) ? data.data : [];
+    // المزوّد يرجّع الأقدم أولًا بصفحات؛ لا بد من تتبّع المؤشّر حتى النهاية
+    // وإلا سقطت أحدث التقارير خارج الصفحة الأولى بعد تجاوز عدد المباريات حجمها
+    const data = await withSWR(cacheKey, NEWS_TTL, NEWS_SWR, async () => {
+      const all: any[] = [];
+      let next: URL | null = null;
+      for (let page = 1; page <= NEWS_MAX_PAGES; page++) {
+        let res: any;
+        try {
+          res = next
+            ? await smFetch(next)
+            : await smGet(path, { include: NEWS_INCLUDE, per_page: NEWS_PER_PAGE });
+        } catch (error) {
+          if (!all.length) throw error;
+          console.warn(`[SportMonks] news pagination توقّف عند صفحة ${page} (${path}):`, error);
+          break;
+        }
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        all.push(...rows);
+        const pagination = res?.pagination;
+        if (!pagination?.has_more) break;
+        next = sanitizeNextCursorUrl(pagination.next_cursor);
+        if (!next) {
+          console.warn(`[SportMonks] news pagination: has_more بلا مؤشّر صالح (${path})`);
+          break;
+        }
+        if (page === NEWS_MAX_PAGES) {
+          console.warn(`[SportMonks] news pagination: بلغنا سقف ${NEWS_MAX_PAGES} صفحة (${path}) — الأحدث قد لم يُجلب`);
+          break;
+        }
+      }
+      return all;
+    });
+    const rows = Array.isArray(data) ? data : [];
     return rows.map(normalizeNewsItem).filter((x: SmNewsItem | null): x is SmNewsItem => x !== null);
   } catch (error) {
     console.warn(`[SportMonks] news fetch failed (${path}):`, error);
@@ -166,10 +214,8 @@ export function fetchPrematchNews(): Promise<SmNewsItem[]> {
 }
 
 /**
- * تقارير ما بعد المباراة (post-match) — المباريات المنتهية المتاحة.
- * تنبيه: المزود يرجّع الصفحة الأولى (50 عنصرًا، الأقدم أولًا). كافٍ في دور
- * المجموعات (< 50 مباراة)، لكن بعد تجاوز 50 مباراة (الأدوار الإقصائية) ستسقط
- * أحدث المباريات خارج الصفحة الأولى — يلزم حينها ترقيم بالمؤشّر (next_cursor).
+ * تقارير ما بعد المباراة (post-match) — كل المباريات المنتهية المتاحة،
+ * بتتبّع ترقيم المؤشّر (next_cursor) حتى النهاية.
  */
 export function fetchPostmatchNews(): Promise<SmNewsItem[]> {
   return fetchNews("news/post-match", "sm:news:postmatch");
