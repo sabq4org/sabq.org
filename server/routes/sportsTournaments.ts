@@ -19,6 +19,7 @@ import {
   updateTournament,
   type TournamentSurface,
 } from "../services/sportsTournamentsService";
+import { getSportsHub } from "../services/sportsHubService";
 
 const router: Router = Router();
 
@@ -33,6 +34,20 @@ router.get("/api/sports/tournaments", async (req, res) => {
   } catch (error) {
     console.error("[SportsTournaments] فشل جلب البطولات:", error);
     res.json({ tournaments: [] });
+  }
+});
+
+// هب الويب — payload واحد جاهز لتجربة /sports22: بطولات غنية + مباشر الآن
+// + قرار تحريري للواجهة (اللقطة الرئيسية والمسارات). نفس مصدر حقيقة الداشبورد.
+router.get("/api/sports/hub", async (req, res) => {
+  try {
+    const surface: TournamentSurface = String(req.query.surface || "web") === "app" ? "app" : "web";
+    const hub = await getSportsHub(surface);
+    res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=90");
+    res.json(hub);
+  } catch (error) {
+    console.error("[SportsHub] فشل جلب هب الويب:", error);
+    res.status(502).json({ message: "تعذر جلب هب الرياضة حاليًا" });
   }
 });
 

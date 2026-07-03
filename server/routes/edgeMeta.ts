@@ -1562,6 +1562,19 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       locale: "ar_SA",
     }),
   },
+  // عقل سبق — صفحة التعريف بمنظومة الذكاء الاصطناعي
+  {
+    pattern: /^\/sabq-ai\/?$/,
+    handle: async () => ({
+      title: "عقل سبق — الذكاء الاصطناعي في خدمة الصحافة | سبق",
+      description: "أول صحيفة سعودية وعربية تدمج الذكاء الاصطناعي في كامل دورة العمل التحريري — من رصد الخبر إلى نشره بثلاث لغات، بقرار بشري في كل مادة ووفق ميثاق معلن.",
+      image: BRAND_OG_IMAGE,
+      canonical: `${SITE_URL}/sabq-ai`,
+      robots: "index,follow",
+      type: "website",
+      locale: "ar_SA",
+    }),
+  },
   // World days landing
   {
     pattern: /^\/world-days\/?$/,

@@ -55,6 +55,7 @@ import {
   getTheSportsFastScore,
   getTheSportsMatchLive,
   isTheSportsConfigured,
+  TS_VAR_RESULT_AR,
   type TsEvent,
   type TsEventType,
   type TsLiveStats,
@@ -129,13 +130,13 @@ async function overlayLiveList(list: WcFixture[]): Promise<WcFixture[]> {
 const TS_EVENT_LABEL: Record<TsEventType, { type: string; label: string } | null> = {
   goal: { type: "goal", label: "هدف" },
   penalty_goal: { type: "goal", label: "هدف من ركلة جزاء" },
+  own_goal: { type: "goal", label: "هدف عكسي" },
   penalty_missed: { type: "missed-penalty", label: "ركلة جزاء ضائعة" },
   yellow: { type: "yellow-card", label: "بطاقة صفراء" },
   red: { type: "red-card", label: "بطاقة حمراء" },
   yellow_red: { type: "red-card", label: "بطاقة حمراء (إنذاران)" },
   sub: { type: "substitution", label: "تبديل" },
   var: { type: "var", label: "مراجعة الفار" },
-  penalty: null, // ركلة جزاء احتُسبت — يكفيها سطر الهدف/الإهدار
   injury_time: null, // وقت بدل ضائع — لا يُعرَض كسطر حدث
   other: null,
 };
@@ -164,18 +165,25 @@ function mapTsEventsToWc(
         assistId: null,
       });
     } else {
+      // حدث فار محسوم → التسمية بنتيجة المراجعة (إلغاء هدف/احتساب جزاء...).
+      const label =
+        e.type === "var" && e.varResult != null && TS_VAR_RESULT_AR[e.varResult]
+          ? TS_VAR_RESULT_AR[e.varResult]
+          : meta.label;
       out.push({
         minute: e.minute,
         extraMinute: null,
         teamId,
         type: meta.type,
-        label: meta.label,
+        label,
         detail:
           e.type === "penalty_goal"
             ? "Penalty"
-            : e.type === "yellow_red"
-              ? "Second Yellow card"
-              : "",
+            : e.type === "own_goal"
+              ? "Own Goal"
+              : e.type === "yellow_red"
+                ? "Second Yellow card"
+                : "",
         player: tr(e.player),
         playerId: null,
         assist: e.assist ? tr(e.assist) : null,

@@ -20,6 +20,8 @@ import {
   Goal,
   Handshake,
   Loader2,
+  Newspaper,
+  Sparkles,
   Square,
   Target,
   Trophy,
@@ -29,16 +31,21 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { OptimizedImage } from "@/components/OptimizedImage";
+import { getCacheBustedImageUrl } from "@/lib/imageUtils";
+import type { ArticleWithDetails } from "@shared/schema";
 import {
   ACCENT,
   CardLeaders,
   COMP_CATEGORY_LABELS,
   COMP_STATUS_LABELS,
   FollowControls,
+  LeaderboardBoard,
   MatchDialog,
   PodiumCard,
   StandingsTable,
   TitleRace,
+  timeAgo,
   type SpAssister,
   type SpCardLeader,
   type SpCompetition,
@@ -108,7 +115,7 @@ const COMP_EDITORIAL_NOTES: Record<string, string[]> = {
   ],
 };
 
-type TabKey = "standings" | "scorers" | "assists" | "cards" | "matches";
+type TabKey = "standings" | "scorers" | "assists" | "cards" | "matches" | "news" | "predictions";
 
 const TAB_META: Record<TabKey, { label: string; icon: typeof Trophy }> = {
   standings: { label: "الترتيب", icon: Trophy },
@@ -116,6 +123,8 @@ const TAB_META: Record<TabKey, { label: string; icon: typeof Trophy }> = {
   assists: { label: "صنّاع الأهداف", icon: Handshake },
   cards: { label: "البطاقات", icon: Square },
   matches: { label: "المباريات", icon: CalendarDays },
+  news: { label: "الأخبار", icon: Newspaper },
+  predictions: { label: "التوقّعات", icon: Sparkles },
 };
 
 // ---------- بطاقة حامل اللقب / هدّاف الموسم الماضي ----------
@@ -414,6 +423,73 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
   );
 }
 
+// ---------- أخبار البطولة (مقالات قسم الرياضة المطابقة لاسم البطولة) ----------
+
+const compImgOf = (a: ArticleWithDetails) => getCacheBustedImageUrl(a.imageUrl || a.thumbnailUrl, a.updatedAt);
+
+function NewsPane({ comp }: { comp: SpCompetition | undefined }) {
+  const { data: newsRaw, isLoading } = useQuery<ArticleWithDetails[]>({
+    queryKey: ["/api/categories", "sports", "articles"],
+  });
+  const items = useMemo(() => {
+    const list = Array.isArray(newsRaw) ? newsRaw : [];
+    if (!comp) return list.slice(0, 12);
+    // نطابق اسم البطولة بعد تجريد بادئات عامة (كأس/دوري/بطولة) لالتقاط أكبر عدد.
+    const needles = [comp.name]
+      .filter(Boolean)
+      .map((s) => String(s).replace(/^(كأس|دوري|بطولة)\s+/, "").trim())
+      .filter((s) => s.length >= 3);
+    const matched = list.filter((a) =>
+      needles.some((n) => a.title?.includes(n) || (a as any).excerpt?.includes?.(n)),
+    );
+    return matched.slice(0, 12);
+  }, [newsRaw, comp]);
+
+  if (isLoading) return <TabLoader />;
+  if (items.length === 0) return <TabEmpty text="لا توجد أخبار مطابقة لهذه البطولة حاليًا — تابع البوابة الرياضية." />;
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {items.map((a) => (
+        <Link
+          key={a.id}
+          href={`/article/${a.englishSlug || a.slug}`}
+          className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-3 transition-colors hover:border-primary/40"
+        >
+          {compImgOf(a) && (
+            <div className="h-[72px] w-[104px] shrink-0 overflow-hidden rounded-xl">
+              <OptimizedImage
+                src={compImgOf(a)!}
+                alt=""
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                wrapperClassName="w-full h-full"
+              />
+            </div>
+          )}
+          <div className="min-w-0">
+            <h4 className="text-[13.5px] font-bold leading-relaxed text-foreground line-clamp-2 transition-colors group-hover:text-primary">
+              {a.title}
+            </h4>
+            <span className="mt-1.5 block text-[10.5px] text-muted-foreground tabular-nums">{timeAgo(a.publishedAt)}</span>
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+// ---------- توقّعات الجمهور (لعبة التوقّع + لوحة المتصدّرين) ----------
+
+function PredictionsPane() {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-primary/20 bg-primary/[0.04] px-4 py-3 text-sm leading-6 text-muted-foreground">
+        توقّع نتائج المباريات من نافذة كل مباراة في تبويب «المباريات»، وتصدّر لوحة الجمهور أدناه.
+      </div>
+      <LeaderboardBoard />
+    </div>
+  );
+}
+
 // ---------- حالات مشتركة ----------
 
 function TabLoader() {
@@ -487,7 +563,7 @@ export default function SportsCompetition() {
     const t: TabKey[] = [];
     if (!comp || comp.hasStandings) t.push("standings");
     if (!comp || comp.hasScorers) t.push("scorers", "assists", "cards");
-    t.push("matches");
+    t.push("matches", "news", "predictions");
     return t;
   }, [comp]);
 
@@ -613,6 +689,8 @@ export default function SportsCompetition() {
             {tab === "assists" && <AssistsPane slug={slug} />}
             {tab === "cards" && <CardsPane slug={slug} />}
             {tab === "matches" && <MatchesPane slug={slug} onOpen={setOpenMatch} />}
+            {tab === "news" && <NewsPane comp={comp} />}
+            {tab === "predictions" && <PredictionsPane />}
           </div>
 
           <div className="flex items-center justify-center pt-2">

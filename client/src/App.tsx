@@ -335,6 +335,8 @@ const OpinionTicketsAdmin = lazy(() => retryImport(() => import("@/pages/dashboa
 const OpinionTicketAdminDetail = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionTicketAdminDetail")));
 
 // === LAZY IMPORTS (AI/iFox) ===
+// عقل سبق — صفحة تعريفية عامة بمنظومة الذكاء الاصطناعي (غير /ai الخاص بأخبار آي سبق)
+const SabqAI = lazy(() => retryImport(() => import("@/pages/SabqAI")));
 const AIHomePage = lazy(() => retryImport(() => import("@/pages/ai/AIHomePage")));
 const AICategoryPage = lazy(() => retryImport(() => import("@/pages/ai/AICategoryPage")));
 const AIArticleDetail = lazy(() => retryImport(() => import("@/pages/ai/AIArticleDetail")));
@@ -380,11 +382,6 @@ const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")
 const SportsMatch = lazy(() => retryImport(() => import("@/pages/SportsMatch")));
 // مركز انتقالات الدوري السعودي — موجز موحّد للصفقات على /sports/transfers
 const SportsTransfers = lazy(() => retryImport(() => import("@/pages/SportsTransfers")));
-// بوابة رياضية متخصصة بتصميم مستقل على /sports10
-const Sports10 = lazy(() => retryImport(() => import("@/pages/Sports10")));
-// سبق الرياضية 2.0 — هَب البطولات الموحّد (مسار تجريبي قبل اعتماده مكان /sports)
-const Sports22 = lazy(() => retryImport(() => import("@/pages/Sports22")));
-const Sports22Competition = lazy(() => retryImport(() => import("@/pages/Sports22Competition")));
 // هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
 const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
 const RoshnPredictions = lazy(() => retryImport(() => import("@/pages/RoshnPredictions")));
@@ -889,6 +886,9 @@ function Router() {
         <Route path="/moment-by-moment">{() => <LazyRoute component={MomentByMoment} />}</Route>
         <Route path="/live">{() => <LazyRoute component={MomentByMoment} />}</Route>
         <Route path="/gulf-live">{() => <LazyRoute component={GulfLiveCoverage} />}</Route>
+        {/* عقل سبق — التعريف بمنظومة الذكاء الاصطناعي؛ /about-ai تحويلة إليه */}
+        <Route path="/sabq-ai">{() => <LazyRoute component={SabqAI} />}</Route>
+        <Route path="/about-ai">{() => <Redirect to="/sabq-ai" />}</Route>
         <Route path="/world-cup/predictions">{() => <LazyRoute component={WorldCupPredictions} />}</Route>
         <Route path="/world-cup/team/:teamId">{() => <LazyRoute component={WorldCupTeam} />}</Route>
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
@@ -905,10 +905,12 @@ function Router() {
         <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
         <Route path="/rsl/predictions">{() => <Redirect to="/roshn/predictions" />}</Route>
         <Route path="/rsl">{() => <Redirect to="/roshn" />}</Route>
-        {/* بوابة رياضية متخصصة مطلوبة على /sports10 — قبل /sports/:id الأرشيفي */}
-        <Route path="/sports10">{() => <LazyRoute component={Sports10} />}</Route>
-        <Route path="/sports22/competition/:slug">{() => <LazyRoute component={Sports22Competition} />}</Route>
-        <Route path="/sports22">{() => <LazyRoute component={Sports22} />}</Route>
+        {/* توحيد البوابة الرياضية: التجارب القديمة (/sports10، /sports22) اندمجت في
+            /sports — رفّ موجز البطولات + الغلاف الذكي، وقالب البطولة موحّد على
+            /sports/competition/:slug. نحوّل مساراتها القديمة حفاظًا على الروابط. */}
+        <Route path="/sports10">{() => <Redirect to="/sports" />}</Route>
+        <Route path="/sports22/competition/:slug">{(p) => <Redirect to={`/sports/competition/${p.slug}`} />}</Route>
+        <Route path="/sports22">{() => <Redirect to="/sports" />}</Route>
         {/* البوابة الرياضية المعتمدة على /sports — تُسجّل قبل /sports/:id الأرشيفي ولا تتعارض مع /category/sports */}
         <Route path="/sports/competition/:slug">{() => <LazyRoute component={SportsCompetition} />}</Route>
         <Route path="/sports/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>

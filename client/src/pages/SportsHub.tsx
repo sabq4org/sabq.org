@@ -163,6 +163,19 @@ interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winn
 interface SpH2HMeeting { id: number; timestamp: number; date: string; competition: string; home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string }; goals: { home: number | null; away: number | null }; }
 interface SpH2H { summary: { total: number; homeWins: number; draws: number; awayWins: number } | null; meetings: SpH2HMeeting[]; }
 export interface SpShort { id: string; title: string; slug: string; coverImage: string; duration: number | null; views: number; }
+// موجز البطولات (مطابق لـ GET /api/sports/summary) — لقطة بطولة واحدة لبطاقة الرفّ.
+export interface SpSummaryTeam { name: string; logo: string; }
+export interface SpSummary {
+  slug: string; name: string; category: SpCompetitionCategory; type: "league" | "cup";
+  logo: string | null; season: number | null; status: SpCompetitionStatus;
+  hasStandings: boolean; hasScorers: boolean;
+  leader: { id: number; name: string; logo: string; points: number } | null;
+  topScorer: { id: number; name: string; goals: number } | null;
+  champion: { id: number; name: string; logo: string } | null;
+  daysUntilKickoff: number | null;
+  liveCount: number; todayCount: number; matchday: string | null;
+  nextMatch: { id: number; timestamp: number; round: string | null; home: SpSummaryTeam; away: SpSummaryTeam } | null;
+}
 // المرحلة 4 (المجتمع): توقّع النتيجة + لوحة المتصدّرين
 interface SpPredictionRow {
   id: string; fixtureId: number; homeName: string; awayName: string;
@@ -234,6 +247,222 @@ export const moreLink = (href: string, label = "عرض الكل") => (
     <span className={`text-sm font-bold ${ACCENT} hover:underline`}>{label} ←</span>
   </Link>
 );
+
+// ============================================================
+// بطاقة «موجز البطولة» — بلاطة بهوية سبق تلخّص بطولة في نظرة، وتتكيّف مع حالتها:
+//   جارية  → المتصدّر + الهدّاف + المباراة القادمة.
+//   قادمة  → عدّاد بدء الموسم + حامل اللقب.
+//   منتهية → البطل + هدّاف النسخة.
+// ترويسة سماوية بالشعار، جسم بتسلسل بصري واضح (بلاطة رئيسية + صفوف)، وتذييل
+// دعوة. تُصبغ تلقائيًا عبر توكنز .sbq-sport. تعتمد على GET /api/sports/summary.
+// ============================================================
+const summaryFixtureDayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { weekday: "short", day: "numeric", month: "short" });
+const summaryRiyadhKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
+const summarySeasonLabel = (season: number | null | undefined): string =>
+  season == null ? "" : `${season}/${String((season + 1) % 100).padStart(2, "0")}`;
+
+// صف «شعار/أيقونة + وسم + اسم + قيمة» — لعرض المتصدّر أو الهدّاف بوضوح.
+function SummaryEntity({
+  logo,
+  fallback,
+  round,
+  label,
+  name,
+  value,
+  valueUnit,
+  tone = "muted",
+}: {
+  logo?: string | null;
+  fallback: React.ReactNode;
+  round?: boolean;
+  label: string;
+  name: string;
+  value?: string;
+  valueUnit?: string;
+  tone?: "muted" | "gold";
+}) {
+  return (
+    <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 ${tone === "gold" ? "border border-amber-400/30 bg-amber-400/10" : "bg-muted/60"}`}>
+      <span className="grid h-8 w-8 shrink-0 place-items-center">
+        {logo ? (
+          <img src={logo} alt="" className={`h-8 w-8 object-contain ${round ? "rounded-full" : ""}`} loading="lazy" />
+        ) : (
+          fallback
+        )}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className={`text-[10px] font-bold ${tone === "gold" ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>{label}</div>
+        <div className="truncate text-[13.5px] font-bold text-foreground">{name}</div>
+      </div>
+      {value != null && (
+        <div className="shrink-0 text-left">
+          <span className="text-lg font-black leading-none tabular-nums text-primary">{value}</span>
+          {valueUnit && <span className="mr-0.5 text-[10px] font-bold text-muted-foreground">{valueUnit}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SummaryMatchStrip({ m, live }: { m: NonNullable<SpSummary["nextMatch"]>; live?: boolean }) {
+  const todayKey = summaryRiyadhKey.format(new Date());
+  const matchKey = summaryRiyadhKey.format(new Date(m.timestamp * 1000));
+  const when = live
+    ? "مباشر الآن"
+    : matchKey === todayKey
+      ? `اليوم · ${fmtTime(m.timestamp)}`
+      : `${summaryFixtureDayFmt.format(new Date(m.timestamp * 1000))} · ${fmtTime(m.timestamp)}`;
+  const side = (t: SpSummaryTeam, dir: "start" | "end") => (
+    <span className={`flex min-w-0 flex-1 items-center gap-1.5 ${dir === "end" ? "flex-row-reverse" : ""}`}>
+      {t.logo ? <img src={t.logo} alt="" className="h-5 w-5 shrink-0 object-contain" loading="lazy" /> : <span className="h-5 w-5 shrink-0" />}
+      <span className="truncate text-[11.5px] font-bold text-foreground">{t.name}</span>
+    </span>
+  );
+  return (
+    <div className="rounded-xl border border-border bg-background/60 px-3 py-2">
+      <div className="mb-1.5 flex items-center justify-center gap-1.5">
+        {live && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />}
+        <span className={`text-[10px] font-bold tabular-nums ${live ? "text-red-500" : "text-muted-foreground"}`}>{when}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        {side(m.home, "start")}
+        <span className="shrink-0 text-[10px] font-bold text-muted-foreground">×</span>
+        {side(m.away, "end")}
+      </div>
+    </div>
+  );
+}
+
+export function CompetitionSummaryCard({ summary }: { summary: SpSummary }) {
+  const { status, liveCount } = summary;
+  const isFinished = status === "finished";
+  const isUpcoming = status === "upcoming";
+
+  const statusChip = liveCount > 0 ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold tabular-nums text-white">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {liveCount} مباشر
+    </span>
+  ) : isUpcoming ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+      <Clock className="h-3 w-3" strokeWidth={1.8} /> قريبًا
+    </span>
+  ) : isFinished ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">انتهى</span>
+  ) : summary.todayCount > 0 ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {summary.todayCount} اليوم
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">جارية</span>
+  );
+
+  const seasonText = summarySeasonLabel(summary.season);
+
+  return (
+    <Link
+      href={`/sports/competition/${summary.slug}`}
+      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-right transition-colors hover:border-primary/40"
+      data-testid={`summary-card-${summary.slug}`}
+    >
+      {/* الترويسة: شعار البطولة + اسمها + الفئة/الموسم + شارة الحالة */}
+      <div className="flex items-center gap-3 border-b border-border bg-muted/50 px-4 py-3">
+        {summary.logo ? (
+          <img src={summary.logo} alt="" className="h-10 w-10 shrink-0 object-contain" loading="lazy" />
+        ) : (
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10"><Trophy className="h-5 w-5 text-primary" strokeWidth={1.8} /></span>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[15px] font-black leading-tight text-foreground">{summary.name}</div>
+          <div className="truncate text-[10px] tabular-nums text-muted-foreground">
+            {COMP_CATEGORY_LABELS[summary.category]}{seasonText ? ` · ${seasonText}` : ""}
+          </div>
+        </div>
+        <span className="shrink-0 self-start">{statusChip}</span>
+      </div>
+
+      {/* الجسم — يتكيّف مع الحالة */}
+      <div className="flex flex-1 flex-col gap-2.5 p-4">
+        {isUpcoming ? (
+          <>
+            {summary.daysUntilKickoff != null ? (
+              <div className="flex items-center gap-3 rounded-xl bg-primary/[0.06] px-3 py-2.5">
+                <span className="text-4xl font-black leading-none tabular-nums text-primary">{summary.daysUntilKickoff}</span>
+                <span className="text-[12px] font-bold leading-tight text-primary/80">يومًا حتى<br />انطلاق الموسم</span>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-primary/[0.06] px-3 py-2.5 text-[12px] font-bold text-primary">لم تبدأ بعد — ترقّب الجدول</div>
+            )}
+            {summary.champion && (
+              <SummaryEntity
+                logo={summary.champion.logo}
+                fallback={<Crown className="h-6 w-6 text-amber-500" strokeWidth={1.8} />}
+                label="حامل اللقب"
+                name={summary.champion.name}
+              />
+            )}
+          </>
+        ) : isFinished ? (
+          <>
+            {summary.champion ? (
+              <SummaryEntity
+                logo={summary.champion.logo}
+                fallback={<Trophy className="h-6 w-6 text-amber-500" strokeWidth={1.8} />}
+                label="بطل الموسم 🏆"
+                name={summary.champion.name}
+                tone="gold"
+              />
+            ) : (
+              <div className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-[11.5px] text-muted-foreground">انتهى الموسم — تظهر تفاصيل النسخة القادمة قريبًا</div>
+            )}
+            {summary.topScorer && (
+              <SummaryEntity
+                round
+                fallback={<Goal className="h-6 w-6 text-emerald-500" strokeWidth={1.8} />}
+                label="هدّاف النسخة"
+                name={summary.topScorer.name}
+                value={String(summary.topScorer.goals)}
+                valueUnit="هدف"
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {summary.leader && (
+              <SummaryEntity
+                logo={summary.leader.logo}
+                fallback={<Crown className="h-6 w-6 text-amber-500" strokeWidth={1.8} />}
+                label={summary.matchday ? `المتصدّر · ${summary.matchday}` : "المتصدّر"}
+                name={summary.leader.name}
+                value={String(summary.leader.points)}
+                valueUnit="نقطة"
+              />
+            )}
+            {summary.topScorer && (
+              <SummaryEntity
+                round
+                fallback={<Goal className="h-6 w-6 text-emerald-500" strokeWidth={1.8} />}
+                label="الهدّاف"
+                name={summary.topScorer.name}
+                value={String(summary.topScorer.goals)}
+                valueUnit="هدف"
+              />
+            )}
+            {summary.nextMatch && <SummaryMatchStrip m={summary.nextMatch} live={liveCount > 0} />}
+            {!summary.leader && !summary.topScorer && !summary.nextMatch && (
+              <div className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-[11.5px] text-muted-foreground">تظهر التفاصيل مع انطلاق المنافسة</div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* التذييل — دعوة الدخول للبطولة الكاملة */}
+      <div className="mt-auto flex items-center justify-between border-t border-border px-4 py-2.5">
+        <span className="text-[11.5px] font-bold text-primary">كل تفاصيل البطولة</span>
+        <ChevronLeft className="h-4 w-4 text-primary transition-transform group-hover:-translate-x-1" strokeWidth={2} />
+      </div>
+    </Link>
+  );
+}
 
 // ============================================================
 // لوحة «مباريات اليوم · كل البطولات» — نظرة سريعة موحّدة أعلى الصفحة:
