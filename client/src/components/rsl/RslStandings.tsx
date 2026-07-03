@@ -6,7 +6,7 @@
  */
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3 } from "lucide-react";
+import { ArrowDown, ArrowUp, BarChart3, Minus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RSL_SLUG, type RslStandingRow } from "./rslTypes";
 
@@ -131,7 +131,15 @@ export function RslStandings({ standings, isLoading, inSeason, previousSeason }:
                     }`}
                     data-testid={`rsl-standing-${r.team.id}`}
                   >
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">{r.rank}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        {r.rank}
+                        {/* سهم الحراك اللحظي أثناء المباريات الجارية */}
+                        {r.live && (r.liveDelta ?? 0) > 0 && <ArrowUp className="h-3 w-3 text-emerald-500" aria-label={`صعد ${r.liveDelta} مركزًا`} />}
+                        {r.live && (r.liveDelta ?? 0) < 0 && <ArrowDown className="h-3 w-3 text-rose-500" aria-label={`هبط ${Math.abs(r.liveDelta ?? 0)} مركزًا`} />}
+                        {r.live && (r.liveDelta ?? 0) === 0 && <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="ثابت لحظيًا" />}
+                      </span>
+                    </td>
                     <td className="px-2 py-2">
                       <Link href={`/sports/team/${r.team.id}`} className="flex items-center gap-2 min-w-0 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
                         <span className="h-6 w-6 shrink-0 rounded-full bg-white ring-1 ring-border p-0.5">
@@ -139,7 +147,10 @@ export function RslStandings({ standings, isLoading, inSeason, previousSeason }:
                         </span>
                         <span className="truncate font-bold">{r.team.name}</span>
                         {r.live && (
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500 animate-pulse" title="تُحدَّث لحظيًّا" />
+                          <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[9px] font-black text-red-600 dark:text-red-400" title="تُحدَّث لحظيًّا">
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                            مباشر
+                          </span>
                         )}
                       </Link>
                     </td>

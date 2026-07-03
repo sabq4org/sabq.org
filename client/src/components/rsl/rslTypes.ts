@@ -66,6 +66,7 @@ export interface RslStandingRow {
   away: RslStandingSplit | null;
   trend: "up" | "down" | "same" | null;
   live?: boolean;
+  liveDelta?: number;
 }
 
 export interface RslScorer {

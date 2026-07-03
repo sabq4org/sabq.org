@@ -22,6 +22,9 @@ export interface StandingRowLike {
   goalsDiff: number;
   points: number;
   live?: boolean;
+  // فرق المركز الناتج عن نتائج المباريات الجارية مقارنةً بالجدول الرسمي:
+  // موجب = صعد، سالب = هبط، 0/غياب = بلا حراك لحظي (سهم الاتجاه في الواجهة).
+  liveDelta?: number;
 }
 
 export interface LiveFixtureLike {
@@ -58,6 +61,8 @@ export function applyProvisionalTable<T extends StandingRowLike>(
 ): T[] {
   const live = liveFixtures.filter((f) => f.status.live && !f.status.finished);
   if (live.length === 0) return rows;
+  // المركز الرسمي قبل تطبيق المباريات الجارية — مرجع حساب سهم الحراك اللحظي.
+  const baseRank = new Map<number, number>(rows.map((r) => [r.team.id, r.rank]));
   const draft = new Map<number, T>(rows.map((r) => [r.team.id, { ...r }]));
   let changed = false;
   for (const f of live) {
@@ -77,6 +82,9 @@ export function applyProvisionalTable<T extends StandingRowLike>(
   );
   out.forEach((r, i) => {
     r.rank = i + 1;
+    // موجب = صعد (مركزه الجديد أصغر رقمًا). يشمل فرقًا لم تلعب لكن تخطّاها غيرها.
+    const br = baseRank.get(r.team.id);
+    r.liveDelta = typeof br === "number" ? br - r.rank : 0;
   });
   return out;
 }

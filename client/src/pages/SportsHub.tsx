@@ -44,9 +44,7 @@ import {
   Star,
   Bell,
   BellOff,
-  Target,
   Medal,
-  Check,
   Minus,
   Plus,
   Gauge,
@@ -54,6 +52,11 @@ import {
   Droplets,
   Activity,
   Tv,
+  Radio,
+  MapPin,
+  ShieldAlert,
+  ArrowLeftRight,
+  MonitorPlay,
 } from "lucide-react";
 import { Bar, BarChart, Cell, ReferenceLine, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { Header } from "@/components/Header";
@@ -87,6 +90,7 @@ export interface SpStandingRow {
   home?: SpStandingSplit | null; away?: SpStandingSplit | null;
   trend?: "up" | "down" | "same" | null;
   live?: boolean;
+  liveDelta?: number;
 }
 export interface SpScorer {
   rank: number; id: number; name: string; photo: string; team: SpTeam;
@@ -176,14 +180,7 @@ export interface SpSummary {
   liveCount: number; todayCount: number; matchday: string | null;
   nextMatch: { id: number; timestamp: number; round: string | null; home: SpSummaryTeam; away: SpSummaryTeam } | null;
 }
-// المرحلة 4 (المجتمع): توقّع النتيجة + لوحة المتصدّرين
-interface SpPredictionRow {
-  id: string; fixtureId: number; homeName: string; awayName: string;
-  homeLogo: string | null; awayLogo: string | null;
-  predHome: number; predAway: number;
-  actualHome: number | null; actualAway: number | null;
-  points: number | null; kickoffTs: number; createdAt: string;
-}
+// المرحلة 4 (المجتمع): لوحة المتصدّرين
 interface SpLeaderboardEntry { userId: string; name: string; avatar: string | null; totalPoints: number; predictions: number; exact: number; correct: number; rank: number; }
 
 // ============================================================
@@ -194,10 +191,6 @@ const dayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { weekday: 
 const timeFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { hour: "2-digit", minute: "2-digit", hour12: true });
 const fmtDay = (ts: number) => dayFmt.format(new Date(ts * 1000));
 const fmtTime = (ts: number) => timeFmt.format(new Date(ts * 1000));
-
-const EVENT_EMOJI: Record<string, string> = {
-  goal: "⚽", "missed-penalty": "❌", "yellow-card": "🟨", "red-card": "🟥", substitution: "🔁", var: "📺",
-};
 
 function fmtDuration(sec: number | null): string {
   if (!sec || sec <= 0) return "";
@@ -261,6 +254,18 @@ const summaryRiyadhKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riya
 const summarySeasonLabel = (season: number | null | undefined): string =>
   season == null ? "" : `${season}/${String((season + 1) % 100).padStart(2, "0")}`;
 
+// الهاب الفاخر المخصّص لكل بطولة كبرى — يُعتمد في الروابط بدل القالب العام
+// /sports/competition/:slug. البطولات غير المذكورة تبقى على القالب العام.
+export const DEDICATED_HUB_BY_SLUG: Record<string, string> = {
+  "pro-league": "/roshn",
+  "world-cup": "/world-cup",
+  "gulf-cup": "/gulf-cup",
+  "kings-cup": "/kings-cup",
+  "asian-cup": "/asian-cup",
+};
+export const competitionHref = (slug: string): string =>
+  DEDICATED_HUB_BY_SLUG[slug] ?? `/sports/competition/${slug}`;
+
 // صف «شعار/أيقونة + وسم + اسم + قيمة» — لعرض المتصدّر أو الهدّاف بوضوح.
 function SummaryEntity({
   logo,
@@ -282,7 +287,7 @@ function SummaryEntity({
   tone?: "muted" | "gold";
 }) {
   return (
-    <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 ${tone === "gold" ? "border border-amber-400/30 bg-amber-400/10" : "bg-muted/60"}`}>
+    <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 ${tone === "gold" ? "bg-amber-400/[0.06]" : "bg-muted/60"}`}>
       <span className="grid h-8 w-8 shrink-0 place-items-center">
         {logo ? (
           <img src={logo} alt="" className={`h-8 w-8 object-contain ${round ? "rounded-full" : ""}`} loading="lazy" />
@@ -291,7 +296,7 @@ function SummaryEntity({
         )}
       </span>
       <div className="min-w-0 flex-1">
-        <div className={`text-[10px] font-bold ${tone === "gold" ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>{label}</div>
+        <div className={`text-[10px] font-bold ${tone === "gold" ? "text-amber-600/80 dark:text-amber-400/80" : "text-muted-foreground"}`}>{label}</div>
         <div className="truncate text-[13.5px] font-bold text-foreground">{name}</div>
       </div>
       {value != null && (
@@ -360,7 +365,7 @@ export function CompetitionSummaryCard({ summary }: { summary: SpSummary }) {
 
   return (
     <Link
-      href={`/sports/competition/${summary.slug}`}
+      href={competitionHref(summary.slug)}
       className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-right transition-colors hover:border-primary/40"
       data-testid={`summary-card-${summary.slug}`}
     >
@@ -1141,15 +1146,25 @@ export function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
                         <span className={`inline-grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-black tabular-nums ${positionTone}`}>
                           {pos}
                         </span>
-                        {scope === "all" && r.trend === "up" && <ArrowUp className="h-3 w-3 text-emerald-500" aria-label="صاعد" />}
-                        {scope === "all" && r.trend === "down" && <ArrowDown className="h-3 w-3 text-rose-500" aria-label="هابط" />}
-                        {scope === "all" && r.trend === "same" && <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="ثابت" />}
+                        {/* أثناء المباريات الجارية: سهم الحراك اللحظي (liveDelta) يقدَّم على اتجاه الجولة */}
+                        {scope === "all" && r.live && (r.liveDelta ?? 0) > 0 && <ArrowUp className="h-3 w-3 text-emerald-500" aria-label={`صعد ${r.liveDelta} مركزًا`} />}
+                        {scope === "all" && r.live && (r.liveDelta ?? 0) < 0 && <ArrowDown className="h-3 w-3 text-rose-500" aria-label={`هبط ${Math.abs(r.liveDelta ?? 0)} مركزًا`} />}
+                        {scope === "all" && r.live && (r.liveDelta ?? 0) === 0 && <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="ثابت لحظيًا" />}
+                        {scope === "all" && !r.live && r.trend === "up" && <ArrowUp className="h-3 w-3 text-emerald-500" aria-label="صاعد" />}
+                        {scope === "all" && !r.live && r.trend === "down" && <ArrowDown className="h-3 w-3 text-rose-500" aria-label="هابط" />}
+                        {scope === "all" && !r.live && r.trend === "same" && <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="ثابت" />}
                       </span>
                     </td>
                     <td className="border-b border-border/35 py-1.5 px-3 sm:py-2">
                       <Link href={`/sports/team/${r.team.id}`} className="flex items-center gap-2.5 hover:text-primary transition-colors">
                         {r.team.logo && <img src={r.team.logo} alt="" className="w-5 h-5 object-contain shrink-0" loading="lazy" />}
                         <span className="font-semibold text-foreground hover:text-primary truncate">{r.team.name}</span>
+                        {r.live && (
+                          <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[9px] font-black text-red-600 dark:text-red-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                            مباشر
+                          </span>
+                        )}
                       </Link>
                     </td>
                     <td className="border-b border-border/35 py-1.5 px-2 text-center text-muted-foreground tabular-nums sm:py-2">{r.played}</td>
@@ -1650,54 +1665,37 @@ function H2HView({ h2h, homeId, homeName, awayName }: { h2h: SpH2H; homeId: numb
 // على محور 0→النهاية. المضيف فوق المحور، الضيف تحته. RTL: البداية على اليمين.
 // يُبنى بالكامل من بيانات الأحداث المجلوبة أصلًا (بلا أي نداء إضافي للمزوّد).
 // ============================================================
-function MatchTimeline({ events, homeId }: { events: SpMatchEvent[]; homeId: number | null }) {
-  const KEY_TYPES = new Set(["goal", "yellow-card", "red-card", "missed-penalty"]);
-  const marks = events.filter((e) => e.minute != null && KEY_TYPES.has(e.type));
-  if (marks.length === 0) return null;
+// أيقونة الحدث بنمط مركز مباريات المونديال (بدل الإيموجي) — توحيد الهوية البصرية.
+function SpEventIcon({ type }: { type: string }) {
+  if (type === "goal") return <Goal className="h-4 w-4 text-emerald-500" />;
+  if (type === "missed-penalty") return <ShieldAlert className="h-4 w-4 text-red-500" />;
+  if (type === "yellow-card") return <Square className="h-4 w-4 fill-yellow-400 text-yellow-400" />;
+  if (type === "red-card") return <Square className="h-4 w-4 fill-red-500 text-red-500" />;
+  if (type === "substitution") return <ArrowLeftRight className="h-4 w-4 text-sky-500" />;
+  if (/var/i.test(type)) return <MonitorPlay className="h-4 w-4 text-purple-500" />;
+  return <Radio className="h-4 w-4 text-muted-foreground" />;
+}
 
-  const minuteOf = (e: SpMatchEvent) => (e.minute ?? 0) + (e.extra ?? 0);
-  const maxMin = Math.max(90, ...marks.map(minuteOf));
-  // RTL: 0' على اليمين (left=100%)، النهاية على اليسار.
-  const leftPct = (m: number) => 100 - Math.min(100, (m / maxMin) * 100);
-  const iconOf = (t: string) => (t === "goal" ? "⚽" : t === "missed-penalty" ? "❌" : t === "red-card" ? "🟥" : "🟨");
-
+// بطاقة حدث على جانب فريقه في الخط الزمني (الأيقونة تلاصق العمود المركزي) — نمط المونديال.
+function SpTimelineChip({ ev, extra, side }: { ev: SpMatchEvent; extra: string | null; side: "home" | "away" }) {
+  const isGoal = ev.type === "goal";
   return (
-    <div className="mb-5 rounded-xl border border-border bg-muted/20 p-3">
-      <div className="text-[11px] font-bold text-muted-foreground mb-3">خط زمن المباراة</div>
-      <div className="relative h-20">
-        {/* المحور الأفقي */}
-        <div className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 bg-border" />
-        {/* علامات الدقائق المرجعية */}
-        {[0, 45, 90].filter((m) => m <= maxMin).map((m) => (
-          <div key={m} className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center" style={{ left: `${leftPct(m)}%` }}>
-            <span className="w-px h-3 bg-border" />
-            <span className="mt-3 text-[9px] text-muted-foreground tabular-nums">{m}&apos;</span>
-          </div>
-        ))}
-        {/* أحداث المباراة — المضيف أعلى، الضيف أسفل */}
-        {marks.map((e, i) => {
-          const isHome = homeId != null && e.teamId === homeId;
-          const goal = e.type === "goal";
-          return (
-            <div
-              key={i}
-              className={`absolute -translate-x-1/2 flex flex-col items-center ${isHome ? "top-0" : "bottom-0"}`}
-              style={{ left: `${leftPct(minuteOf(e))}%` }}
-              title={`${e.minute}'${e.extra ? `+${e.extra}` : ""} — ${e.player}${goal ? " (هدف)" : ` (${e.label})`}`}
-            >
-              <span className={`grid place-items-center rounded-full leading-none ${goal ? "w-6 h-6 bg-card ring-2 ring-primary/50 text-sm shadow-sm" : "w-5 h-5 text-[11px]"}`}>
-                {iconOf(e.type)}
-              </span>
-              <span className={`text-[8px] tabular-nums ${isHome ? "order-first mb-0.5" : "mt-0.5"} ${goal ? "font-bold text-foreground" : "text-muted-foreground"}`}>
-                {e.minute}&apos;
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-2 flex items-center justify-between text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-primary" /> المضيف (أعلى)</span>
-        <span className="flex items-center gap-1">الضيف (أسفل) <span className="w-2 h-2 rounded-full bg-amber-400" /></span>
+    <div
+      className={`inline-flex items-start gap-2 max-w-full rounded-lg px-2.5 py-1.5 ${
+        isGoal ? "bg-emerald-500/10 ring-1 ring-emerald-500/25" : "bg-muted/40"
+      } ${side === "home" ? "flex-row" : "flex-row-reverse"}`}
+    >
+      <span className="mt-0.5 shrink-0">
+        <SpEventIcon type={ev.type} />
+      </span>
+      <div className="min-w-0" dir="rtl">
+        <p className="text-xs font-bold truncate">{ev.player || ev.label}</p>
+        {extra && <p className="text-[10px] text-emerald-700 dark:text-emerald-300 truncate">{extra}</p>}
+        {ev.assist && isGoal && <p className="text-[10px] text-muted-foreground truncate">صناعة: {ev.assist}</p>}
+        {ev.assist && ev.type === "substitution" && (
+          <p className="text-[10px] text-muted-foreground truncate">بديلًا عن: {ev.assist}</p>
+        )}
+        {!isGoal && ev.type !== "substitution" && <p className="text-[10px] text-muted-foreground truncate">{ev.label}</p>}
       </div>
     </div>
   );
@@ -1727,121 +1725,6 @@ function AiNarrative({ loading, text, kind, live }: {
       </div>
       <p className="text-sm leading-7 text-foreground whitespace-pre-line">{text}</p>
       <p className="mt-3 text-[10px] text-muted-foreground">وُلِّد آليًا اعتمادًا على بيانات المباراة — قد يحتاج لمراجعة.</p>
-    </div>
-  );
-}
-
-// المرحلة 4 (المجتمع): توقّع نتيجة المباراة. يظهر للمباريات المرتقبة (قبل
-// الانطلاق) للمستخدم المسجَّل. بعد التسوية يعرض النتيجة المتوقّعة والنقاط.
-function MatchPredict({ fixture }: { fixture: SpFixture }) {
-  const { user } = useAuth();
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const fixtureId = fixture.id;
-  const started = fixture.status.live || fixture.status.finished;
-
-  const { data } = useQuery<{ prediction: SpPredictionRow | null }>({
-    queryKey: [`/api/sports/match/${fixtureId}/predict`],
-    enabled: !!user,
-    staleTime: 30_000,
-  });
-  const existing = data?.prediction ?? null;
-
-  const [h, setH] = useState(0);
-  const [a, setA] = useState(0);
-  const [dirty, setDirty] = useState(false);
-  useEffect(() => {
-    if (existing && !dirty) { setH(existing.predHome); setA(existing.predAway); }
-  }, [existing, dirty]);
-
-  const [saving, setSaving] = useState(false);
-  const submit = async () => {
-    setSaving(true);
-    try {
-      await apiRequest(`/api/sports/match/${fixtureId}/predict`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          predHome: h, predAway: a, kickoffTs: fixture.timestamp,
-          homeId: fixture.home.id, awayId: fixture.away.id,
-          homeName: fixture.home.name, awayName: fixture.away.name,
-          homeLogo: fixture.home.logo, awayLogo: fixture.away.logo,
-        }),
-      });
-      qc.invalidateQueries({ queryKey: [`/api/sports/match/${fixtureId}/predict`] });
-      qc.invalidateQueries({ queryKey: ["/api/sports/predictions/me"] });
-      setDirty(false);
-      toast({ description: existing ? "تم تحديث توقّعك" : "تم حفظ توقّعك — بالتوفيق!" });
-    } catch (err: any) {
-      const locked = String(err?.message || "").includes("409") || String(err?.message || "").includes("أُقفل");
-      toast({ variant: "destructive", description: locked ? "أُقفل التوقّع — انطلقت المباراة" : "تعذّر حفظ التوقّع، حاول مجددًا" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!user) {
-    return (
-      <div className="px-4 py-3 border-b border-border bg-muted/30 text-center text-xs text-muted-foreground">
-        <Link href="/login" className={`font-bold ${ACCENT} hover:underline`}>سجّل دخولك</Link> لتوقّع النتيجة وتنافس على لوحة المتصدّرين
-      </div>
-    );
-  }
-
-  // المباراة انطلقت/انتهت: نعرض التوقّع والنقاط فقط (لا تعديل).
-  if (started) {
-    if (!existing) return null;
-    const settled = existing.points != null;
-    return (
-      <div className="px-4 py-3 border-b border-border bg-muted/30">
-        <div className="flex items-center justify-center gap-2 text-sm">
-          <Target className={`w-4 h-4 ${ACCENT}`} />
-          <span className="text-muted-foreground">توقّعك:</span>
-          <span className="font-black tabular-nums text-foreground">{existing.predHome} : {existing.predAway}</span>
-          {settled && (
-            <span className={`mr-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${existing.points === 3 ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : existing.points === 1 ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-muted text-muted-foreground"}`}>
-              {existing.points === 3 ? "إصابة تامة" : existing.points === 1 ? "اتجاه صحيح" : "بلا نقاط"} · +{existing.points}
-            </span>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  const Stepper = ({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) => (
-    <div className="flex flex-col items-center gap-1">
-      <span className="text-[11px] text-muted-foreground font-bold truncate max-w-[88px]">{label}</span>
-      <div className="flex items-center gap-1.5">
-        <button type="button" onClick={() => { onChange(Math.max(0, value - 1)); setDirty(true); }}
-          className="w-7 h-7 inline-flex items-center justify-center rounded-full border border-border hover:bg-muted transition-colors" aria-label="إنقاص">
-          <Minus className="w-3.5 h-3.5" />
-        </button>
-        <span className="w-8 text-center text-2xl font-black tabular-nums text-foreground">{value}</span>
-        <button type="button" onClick={() => { onChange(Math.min(30, value + 1)); setDirty(true); }}
-          className="w-7 h-7 inline-flex items-center justify-center rounded-full border border-border hover:bg-muted transition-colors" aria-label="زيادة">
-          <Plus className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  );
-
-  const changed = !existing || existing.predHome !== h || existing.predAway !== a;
-  return (
-    <div className="px-4 py-3 border-b border-border bg-accent-blue/10">
-      <div className="flex items-center justify-center gap-1.5 mb-2 text-xs font-bold text-muted-foreground">
-        <Target className={`w-3.5 h-3.5 ${ACCENT}`} /> توقّع النتيجة
-        {existing && <span className="inline-flex items-center gap-0.5 text-emerald-600 dark:text-emerald-400"><Check className="w-3 h-3" /> محفوظ</span>}
-      </div>
-      <div className="flex items-center justify-center gap-4">
-        <Stepper value={h} onChange={setH} label={fixture.home.name} />
-        <span className="text-xl font-black text-muted-foreground pt-4">:</span>
-        <Stepper value={a} onChange={setA} label={fixture.away.name} />
-      </div>
-      <button type="button" onClick={() => void submit()} disabled={saving || !changed}
-        className="mt-3 w-full py-2 rounded-lg bg-primary text-white text-sm font-bold transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed">
-        {saving ? "جارٍ الحفظ…" : existing ? "تحديث التوقّع" : "احفظ توقّعي"}
-      </button>
-      <p className="mt-1.5 text-center text-[10px] text-muted-foreground">إصابة تامة 3 نقاط · اتجاه صحيح نقطة · يُقفل عند انطلاق المباراة</p>
     </div>
   );
 }
@@ -2179,10 +2062,10 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
   const tabs = [
     isUpcoming ? { key: "preview", label: "المعاينة" } : null,
     forecast?.available ? { key: "forecast", label: "توقّعات" } : null,
-    events.length > 0 ? { key: "events", label: "مجريات المباراة" } : null,
+    events.length > 0 ? { key: "events", label: "الأحداث" } : null,
     started ? { key: "commentary", label: "التعليق" } : null,
     started ? { key: "story", label: "ملخّص ذكي" } : null,
-    hasStatsTab ? { key: "stats", label: "نبض الأرقام" } : null,
+    hasStatsTab ? { key: "stats", label: "الإحصائيات" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
     started ? { key: "momentum", label: "الزخم" } : null,
     lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
@@ -2195,31 +2078,47 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
         <div className="shrink-0 relative bg-accent-blue/20 border-b border-border p-4 pt-5">
           {isLoading || !fx ? <Skeleton className="h-16 rounded-lg" /> : (
             <>
-              <div className="text-center text-xs text-muted-foreground mb-2">{fx.round} {fx.venue.name ? `· ${fx.venue.name}` : ""}</div>
-              <div className="flex items-center justify-center gap-4">
-                <div className="flex-1 flex flex-col items-center gap-1">
-                  {fx.home.logo && <img src={fx.home.logo} alt="" className="w-12 h-12 object-contain" />}
-                  <span className="font-semibold text-sm text-center text-foreground">{fx.home.name}</span>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-3">
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="h-12 w-12 rounded-full bg-white ring-1 ring-border p-1">
+                    {fx.home.logo && <img src={fx.home.logo} alt="" className="h-full w-full object-contain" />}
+                  </div>
+                  <span className="text-sm font-extrabold text-center text-foreground">{fx.home.name}</span>
                   <TeamFollowControls refId={fx.home.id} refName={fx.home.name} refLogo={fx.home.logo} />
                 </div>
-                <div className="text-center">
-                  <div className="text-3xl font-black tabular-nums tracking-wider text-foreground">
-                    {fx.status.finished || fx.status.live ? (
-                      <span dir="ltr">
-                        <span>{fx.goals.away ?? 0}</span>
-                        <span className="mx-1 text-muted-foreground/60">:</span>
-                        <span>{fx.goals.home ?? 0}</span>
-                      </span>
-                    ) : fmtTime(fx.timestamp)}
-                  </div>
-                  <div className={`text-xs mt-1 ${fx.status.live ? "text-red-500 font-bold" : "text-muted-foreground"}`}>{fx.status.live ? `${fx.status.elapsed ?? ""}${fx.status.extra ? `+${fx.status.extra}` : ""}'` : fx.status.label}</div>
+                <div className="flex flex-col items-center gap-1 pt-1">
+                  {fx.status.finished || fx.status.live ? (
+                    <span className="text-3xl font-black tabular-nums text-foreground" dir="ltr">
+                      {fx.goals.away ?? 0} - {fx.goals.home ?? 0}
+                    </span>
+                  ) : (
+                    <span className="text-xl font-black text-foreground">{fmtTime(fx.timestamp)}</span>
+                  )}
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full border-0 px-2.5 py-0.5 text-xs font-semibold ${
+                      fx.status.live ? "bg-red-500 text-white" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {fx.status.live && <Radio className="h-3 w-3 animate-pulse" />}
+                    {fx.status.live
+                      ? `${fx.status.elapsed ?? ""}${fx.status.extra ? `+${fx.status.extra}` : ""}'`
+                      : fx.status.label}
+                  </span>
                 </div>
-                <div className="flex-1 flex flex-col items-center gap-1">
-                  {fx.away.logo && <img src={fx.away.logo} alt="" className="w-12 h-12 object-contain" />}
-                  <span className="font-semibold text-sm text-center text-foreground">{fx.away.name}</span>
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="h-12 w-12 rounded-full bg-white ring-1 ring-border p-1">
+                    {fx.away.logo && <img src={fx.away.logo} alt="" className="h-full w-full object-contain" />}
+                  </div>
+                  <span className="text-sm font-extrabold text-center text-foreground">{fx.away.name}</span>
                   <TeamFollowControls refId={fx.away.id} refName={fx.away.name} refLogo={fx.away.logo} />
                 </div>
               </div>
+              {(fx.round || fx.venue.name) && (
+                <p className="mt-2 flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
+                  <MapPin className="h-3 w-3" />
+                  {[fx.round, fx.venue.name].filter(Boolean).join(" · ")}
+                </p>
+              )}
             </>
           )}
         </div>
@@ -2239,53 +2138,101 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
           </div>
         )}
         {prediction && fx && <PredictionBar prediction={prediction} homeName={fx.home.name} awayName={fx.away.name} />}
-        {fx && <MatchPredict fixture={fx} />}
         {tabs.length > 0 && (
-          <div className="shrink-0 flex border-b border-border bg-card">
-            {tabs.map((t) => (
-              <button key={t.key} onClick={() => setTab(t.key)}
-                className={`flex-1 py-3 text-sm font-bold transition-colors ${activeKey === t.key ? `${ACCENT} border-b-2 border-primary` : "text-muted-foreground hover:text-foreground"}`}>
-                {t.label}
-              </button>
-            ))}
+          <div className="shrink-0 flex flex-wrap justify-center gap-1 border-b border-border bg-card px-2 py-2">
+            {tabs.map((t) => {
+              const active = activeKey === t.key;
+              const Icon =
+                t.key === "momentum" ? Activity :
+                t.key === "pressure" ? Gauge :
+                t.key === "ratings" ? Star :
+                t.key === "commentary" && live ? Radio :
+                null;
+              return (
+                <button key={t.key} onClick={() => setTab(t.key)}
+                  className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-bold transition-colors ${active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}>
+                  {Icon && <Icon className={`h-3.5 w-3.5 ${t.key === "ratings" ? "text-amber-500" : ""} ${t.key === "commentary" ? "animate-pulse" : ""}`} />}
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
         )}
         <div className={`${scrollable ? "flex-1 min-h-0 overflow-y-auto overscroll-contain " : ""}p-4 lg:p-6`}>
           {isLoading && <div className="py-10 text-center text-muted-foreground text-sm">جارٍ تحميل التفاصيل…</div>}
-          {!isLoading && activeKey === "events" && (
-            <div className="lg:max-w-2xl lg:mx-auto">
-            {facts?.halftime && (
-              <div className="mb-3 text-center text-[11px] text-muted-foreground">
-                نتيجة الشوط الأول{" "}
-                <span className="font-black tabular-nums text-foreground" dir="ltr">{facts.halftime.away} - {facts.halftime.home}</span>
-              </div>
-            )}
-            <MatchTimeline events={events} homeId={fx?.home.id ?? null} />
-            <ul className="relative space-y-3 pr-4 border-r-2 border-border">
-              {events.map((e, i) => {
-                const homeSide = e.teamId === fx?.home.id;
-                // تركيب تفصيل SportMonks (طريقة الهدف/سبب البطاقة/VAR) فوق حدث API-Football
-                const klass = e.type === "goal" ? "goal" : /card/i.test(e.type) ? "card" : /var/i.test(e.type) ? "var" : null;
-                const fd = klass && facts?.eventDetails && e.minute != null
-                  ? facts.eventDetails.find((d) => d.klass === klass && d.location === (homeSide ? "home" : "away") && Math.abs(d.minute - (e.minute as number)) <= 1)?.detail ?? null
-                  : null;
-                return (
-                  <li key={i} className="relative flex items-start gap-2.5 text-sm">
-                    <span className={`absolute -right-[21px] top-1.5 w-2.5 h-2.5 rounded-full ring-2 ring-card ${homeSide ? "bg-primary" : "bg-amber-500"}`} />
-                    <span className="w-8 shrink-0 text-xs font-bold text-muted-foreground tabular-nums">{e.minute != null ? `${e.minute}'` : ""}</span>
-                    <span className="shrink-0 leading-5">{EVENT_EMOJI[e.type] ?? "•"}</span>
-                    <div className="min-w-0">
-                      <span className="font-semibold text-foreground">{e.player}</span>
-                      {e.assist && <span className="text-xs text-muted-foreground"> (صناعة {e.assist})</span>}
-                      <div className="text-xs text-muted-foreground">{e.type !== "goal" ? `${e.label} · ` : ""}{e.team}</div>
-                      {fd && <div className="text-[11px] text-sky-600 dark:text-sky-400">{fd}</div>}
+          {!isLoading && activeKey === "events" && (() => {
+            // ترتيب تنازلي (الأحدث أعلى)، ومطابقة تفصيل SportMonks (طريقة الهدف/سبب البطاقة/VAR).
+            const sorted = [...events].sort(
+              (a, b) => (b.minute ?? 0) - (a.minute ?? 0) || (b.extra ?? 0) - (a.extra ?? 0),
+            );
+            const detailFor = (e: SpMatchEvent): string | null => {
+              const klass = e.type === "goal" ? "goal" : /card/i.test(e.type) ? "card" : /var/i.test(e.type) ? "var" : null;
+              if (!klass || !facts?.eventDetails || e.minute == null) return null;
+              const loc = e.teamId === fx?.home.id ? "home" : "away";
+              return (
+                facts.eventDetails.find(
+                  (d) => d.klass === klass && d.location === loc && Math.abs(d.minute - (e.minute as number)) <= 1,
+                )?.detail ?? null
+              );
+            };
+            return (
+              <div className="lg:max-w-2xl lg:mx-auto">
+                {facts?.halftime && (
+                  <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground pb-2">
+                    <span>نتيجة الشوط الأول</span>
+                    <span className="font-black tabular-nums text-foreground" dir="ltr">
+                      {facts.halftime.away} - {facts.halftime.home}
+                    </span>
+                  </div>
+                )}
+                {events.length === 0 ? (
+                  <p className="text-center text-sm text-muted-foreground py-8">
+                    {fx && (fx.status.finished || fx.status.live)
+                      ? "لا توجد أحداث مسجلة لهذه المباراة"
+                      : "الأحداث تظهر هنا لحظة بلحظة مع انطلاق المباراة"}
+                  </p>
+                ) : (
+                  <>
+                    {/* رأس الجانبين: المضيف يمينًا، الضيف يسارًا */}
+                    <div dir="ltr" className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 mb-2 px-1">
+                      <div className="flex items-center gap-1.5 justify-end min-w-0">
+                        <span className="text-xs font-bold truncate">{fx?.away.name}</span>
+                        {fx?.away.logo && <img src={fx.away.logo} alt="" className="h-5 w-5 object-contain shrink-0" loading="lazy" />}
+                      </div>
+                      <span className="min-w-[2.75rem]" />
+                      <div className="flex items-center gap-1.5 justify-start min-w-0">
+                        {fx?.home.logo && <img src={fx.home.logo} alt="" className="h-5 w-5 object-contain shrink-0" loading="lazy" />}
+                        <span className="text-xs font-bold truncate">{fx?.home.name}</span>
+                      </div>
                     </div>
-                  </li>
-                );
-              })}
-            </ul>
-            </div>
-          )}
+                    {/* الخط الزمني: عمود مركزي لأقراص الدقائق (نمط المونديال) */}
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-emerald-500/20" />
+                      <div className="space-y-1.5">
+                        {sorted.map((e, i) => {
+                          const isHome = e.teamId === fx?.home.id;
+                          const extra = detailFor(e);
+                          return (
+                            <div key={i} dir="ltr" className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                              <div className="flex justify-end min-w-0">
+                                {!isHome && <SpTimelineChip ev={e} extra={extra} side="away" />}
+                              </div>
+                              <span className="z-[1] grid place-items-center min-w-[2.75rem] rounded-full bg-emerald-600 px-1.5 py-0.5 text-[11px] font-bold tabular-nums text-white">
+                                {e.minute ?? 0}&apos;{e.extra ? `+${e.extra}` : ""}
+                              </span>
+                              <div className="flex justify-start min-w-0">
+                                {isHome && <SpTimelineChip ev={e} extra={extra} side="home" />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
           {!isLoading && activeKey === "preview" && (
             <div className="space-y-4">
               {facts?.absentees && facts.absentees.length > 0 && (
