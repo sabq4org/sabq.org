@@ -51,9 +51,16 @@ function TotwPlayerChip({ player }: { player: WcTotwPlayer }) {
   );
 }
 
-export function TeamOfTheWeekSection() {
+export function TeamOfTheWeekSection({
+  endpoint = "/api/world-cup/totw",
+  subtitle = "الأعلى تقييمًا في آخر جولة من المونديال",
+}: {
+  /** نقطة البيانات — للمونديال افتراضيًا، وللبطولات: /api/sports/{comp}/totw */
+  endpoint?: string;
+  subtitle?: string;
+} = {}) {
   const { data } = useQuery<WcTeamOfTheWeek>({
-    queryKey: ["/api/world-cup/totw"],
+    queryKey: [endpoint],
     staleTime: 10 * 60 * 1000,
   });
 
@@ -85,9 +92,7 @@ export function TeamOfTheWeekSection() {
             </Badge>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mb-3">
-          الأعلى تقييمًا في آخر جولة من المونديال
-        </p>
+        <p className="text-xs text-muted-foreground mb-3">{subtitle}</p>
         <div className="relative rounded-2xl overflow-hidden bg-gradient-to-b from-emerald-700 to-emerald-800 ring-1 ring-emerald-900/40 aspect-[4/5] sm:aspect-[4/3]">
           {/* خطوط الملعب */}
           <div className="absolute inset-2 rounded-xl border border-white/25" />

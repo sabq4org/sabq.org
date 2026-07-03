@@ -69,6 +69,7 @@ import {
   getMatchFacts,
   getForecast,
   getExpectedLineups,
+  getTeamOfTheWeek,
   resolveSmIdByNames,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
@@ -838,6 +839,46 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] xg failed:", error);
       res.status(502).json({ available: false, home: { xg: 0, xgot: 0 }, away: { xg: 0, xgot: 0 }, topPlayers: [] });
+    }
+  });
+
+  // تشكيلة الجولة (SportMonks TOTW) للبطولات المغطاة باشتراكنا — الأعلى تقييمًا
+  // في آخر جولة مكتملة. معرّفات SportMonks متحقَّقة من /v3/football/leagues.
+  const SM_TOTW_LEAGUES: Record<string, number> = {
+    "pro-league": 944,
+    "kings-cup": 950,
+    "afc-champions-league": 1085,
+    "premier-league": 8,
+    "la-liga": 564,
+    "bundesliga": 82,
+    "ligue-1": 301,
+  };
+  app.get("/api/sports/:comp/totw", async (req, res) => {
+    const empty = { available: false, formation: null, players: [] };
+    const leagueId = SM_TOTW_LEAGUES[String(req.params.comp)];
+    if (!leagueId || !isSportmonksConfigured()) {
+      res.json(empty);
+      return;
+    }
+    try {
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getTeamOfTheWeek(leagueId));
+      if (data.available) {
+        const tr = await resolveNames(
+          data.players.flatMap((p) => [p.name, p.teamName])
+        ).catch(() => null);
+        if (tr) {
+          for (const p of data.players) {
+            p.name = tr(p.name) || p.name;
+            p.teamName = tr(p.teamName) || p.teamName;
+          }
+        }
+      }
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error("[Sports] totw failed:", error);
+      res.status(502).json(empty);
     }
   });
 

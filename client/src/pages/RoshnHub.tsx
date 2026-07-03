@@ -17,6 +17,7 @@ import { SportsNewsBlock } from "@/components/sports/SportsNewsBlock";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import { MatchDialog } from "@/pages/SportsHub";
+import { TeamOfTheWeekSection } from "@/components/worldcup/TeamOfTheWeekSection";
 import { RslHero } from "@/components/rsl/RslHero";
 import { RslFacts } from "@/components/rsl/RslFacts";
 import { RslMatches, type RslMatchBuckets } from "@/components/rsl/RslMatches";
@@ -94,6 +95,10 @@ export default function RoshnHub() {
           previousSeason={previousSeason}
         />
         <RslScorers inSeason={inSeason} previousSeason={previousSeason} />
+        <TeamOfTheWeekSection
+          endpoint="/api/sports/pro-league/totw"
+          subtitle="الأعلى تقييمًا في آخر جولة من دوري روشن"
+        />
         <RslTeams standings={standings} isLoading={standingsLoading} />
         <SportsNewsBlock query="دوري روشن" title="أخبار دوري روشن" />
       </main>

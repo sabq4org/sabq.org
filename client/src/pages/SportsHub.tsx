@@ -108,6 +108,10 @@ interface SpLineup {
   formation: string | null; coach: string | null;
   startXI: SpLineupPlayer[]; substitutes: SpLineupPlayer[];
 }
+// التشكيلة المتوقعة قبل المباراة (SportMonks expectedLineups)
+interface SpExpectedPlayer { name: string; jersey: number | null; slot: number | null; grid: string | null; row: number | null; }
+interface SpExpectedSide { formation: string | null; starters: SpExpectedPlayer[]; bench: SpExpectedPlayer[]; }
+interface SpExpectedLineups { available: boolean; home: SpExpectedSide | null; away: SpExpectedSide | null; }
 interface SpMatchDetail {
   fixture: SpFixture; events: SpMatchEvent[];
   statistics: { home: { id: number; name: string }; away: { id: number; name: string }; rows: SpStatRow[] } | null;
@@ -1930,10 +1934,19 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     staleTime: 30 * 60_000,
   });
   // التوقّعات الاحتمالية المتقدّمة (SportMonks) — قبل المباراة (قادمة/جارية).
+  // أثناء اللعب تتحدّث الاحتمالات مع المجريات (الخادم يقصّر الكاش بالتوازي).
   const { data: forecast } = useQuery<SpForecast>({
     queryKey: [`/api/sports/match/${id}/forecast`],
     enabled: id != null && !!data?.fixture && !fixtureFinished,
     staleTime: 15 * 60_000,
+    refetchInterval: data?.fixture?.status.live ? 30_000 : false,
+  });
+  // التشكيلة المتوقعة (SportMonks) — تُجلب فقط قبل صدور الرسمية ولغير المنتهية.
+  const { data: expectedData } = useQuery<SpExpectedLineups>({
+    queryKey: [`/api/sports/match/${id}/expected-lineup`],
+    enabled:
+      id != null && !!data?.fixture && !fixtureFinished && (data?.lineups ?? []).length === 0,
+    staleTime: 60_000,
   });
 
   if (id == null) return null;
@@ -1941,6 +1954,22 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
   const events = Array.isArray(data?.events) ? data!.events : [];
   const lineups = Array.isArray(data?.lineups) ? data!.lineups : [];
   const started = !!fx && (fx.status.finished || fx.status.live);
+  // تحويل التشكيلة المتوقعة لشكل SpLineup لتُعرض بنفس مكوّنات الملعب.
+  // معرّف اللاعب 0 = بلا رابط لصفحة اللاعب (لا معرّف API-Football في المتوقعة).
+  const expSide = (side: SpExpectedSide, team: SpLineup["team"]): SpLineup => ({
+    team,
+    formation: side.formation,
+    coach: null,
+    startXI: side.starters.map((p) => ({ id: 0, number: p.jersey, name: p.name, pos: "", grid: p.grid ?? "2:1" })),
+    substitutes: side.bench.map((p) => ({ id: 0, number: p.jersey, name: p.name, pos: "", grid: null })),
+  });
+  const expectedLineups: SpLineup[] =
+    lineups.length === 0 && !fixtureFinished && expectedData?.available && fx
+      ? ([
+          expectedData.home && expSide(expectedData.home, { id: fx.home.id, name: fx.home.name, logo: fx.home.logo }),
+          expectedData.away && expSide(expectedData.away, { id: fx.away.id, name: fx.away.name, logo: fx.away.logo }),
+        ].filter(Boolean) as SpLineup[])
+      : [];
   // إحصاءات بديلة من SportMonks (facts.statistics) حين تغيب إحصاءات API-Football،
   // فيظهر تبويب «نبض الأرقام» لمباريات أكثر بدل أن يُهدَر مصدر جاهز.
   const factStatRows: SpStatRow[] = (facts?.statistics ?? []).map((s) => ({ type: s.key, label: s.label, home: s.home, away: s.away }));
@@ -1956,7 +1985,7 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     hasStatsTab ? { key: "stats", label: "نبض الأرقام" } : null,
     started ? { key: "pressure", label: "الضغط" } : null,
     started ? { key: "momentum", label: "الزخم" } : null,
-    lineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
+    lineups.length > 0 || expectedLineups.length > 0 ? { key: "lineups", label: "التشكيلات" } : null,
     started ? { key: "ratings", label: "التقييمات" } : null,
     h2hMeetings.length > 0 ? { key: "h2h", label: "المواجهات" } : null,
   ].filter(Boolean) as { key: string; label: string }[];
@@ -2145,8 +2174,18 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
             <SpCommentaryView data={commentary} live={live} />
           )}
           {!isLoading && activeKey === "lineups" && (
-            <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
-              {lineups.map((l) => <LineupTeam key={l.team.id} lineup={l} />)}
+            <div className="space-y-3">
+              {lineups.length === 0 && expectedLineups.length > 0 && (
+                <div className="flex items-center justify-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
+                  <span className="shrink-0 rounded-full bg-amber-500 text-white text-[10px] font-black px-2 py-0.5">تشكيلة متوقعة</span>
+                  <p className="text-[11px] text-muted-foreground">ترشيح المزوّد قبل الإعلان الرسمي — قد تتغيّر</p>
+                </div>
+              )}
+              <div className="space-y-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-5 lg:items-start">
+                {(lineups.length > 0 ? lineups : expectedLineups).map((l) => (
+                  <LineupTeam key={l.team.id} lineup={l} />
+                ))}
+              </div>
             </div>
           )}
           {!isLoading && activeKey === "ratings" && id != null && <RatingsList id={id} homeId={fx?.home.id ?? null} />}
