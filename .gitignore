@@ -95,6 +95,12 @@ asian-cup app ios/build/
 asian-cup app ios/DerivedData/
 asian-cup app ios/**/xcuserdata/
 asian-cup app ios/**/*.xcuserstate
+# Gulf Cup SwiftUI app (gulf-cup app ios/) — sources tracked, build state ignored.
+gulf-cup app ios/build/
+gulf-cup app ios/DerivedData/
+gulf-cup app ios/test-results/
+gulf-cup app ios/**/xcuserdata/
+gulf-cup app ios/**/*.xcuserstate
 .DS_Store
 .vercel
 .env*
