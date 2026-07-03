@@ -368,6 +368,7 @@ const GulfCupPredictions = lazy(() => retryImport(() => import("@/pages/GulfCupP
 const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
 const KingsCupTeam = lazy(() => retryImport(() => import("@/pages/KingsCupTeam")));
 const KingsCupPredictions = lazy(() => retryImport(() => import("@/pages/KingsCupPredictions")));
+const SuperCupPredictions = lazy(() => retryImport(() => import("@/pages/SuperCupPredictions")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
@@ -898,6 +899,7 @@ function Router() {
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
 
         <Route path="/kings-cup/predictions">{() => <LazyRoute component={KingsCupPredictions} />}</Route>
+        <Route path="/super-cup/predictions">{() => <LazyRoute component={SuperCupPredictions} />}</Route>
         <Route path="/kings-cup/team/:teamId">{() => <LazyRoute component={KingsCupTeam} />}</Route>
         <Route path="/kings-cup">{() => <LazyRoute component={KingsCup} />}</Route>
         {/* مركز دوري روشن السعودي بنظام تصميم المونديال — /rsl يحوّل إليه */}
@@ -911,6 +913,14 @@ function Router() {
         <Route path="/sports10">{() => <Redirect to="/sports" />}</Route>
         <Route path="/sports22/competition/:slug">{(p) => <Redirect to={`/sports/competition/${p.slug}`} />}</Route>
         <Route path="/sports22">{() => <Redirect to="/sports" />}</Route>
+        {/* البطولات الكبرى ذات الهاب الفاخر المخصّص: يُعتمد الهاب في الرابط، ويُحوّل
+            القالب العام /sports/competition/:slug إليها حتى لا تظهر نسخة باهتة مكرّرة.
+            تُسجّل قبل المسار الديناميكي ليفوز التطابق الأخص. */}
+        <Route path="/sports/competition/pro-league">{() => <Redirect to="/roshn" />}</Route>
+        <Route path="/sports/competition/world-cup">{() => <Redirect to="/world-cup" />}</Route>
+        <Route path="/sports/competition/gulf-cup">{() => <Redirect to="/gulf-cup" />}</Route>
+        <Route path="/sports/competition/kings-cup">{() => <Redirect to="/kings-cup" />}</Route>
+        <Route path="/sports/competition/asian-cup">{() => <Redirect to="/asian-cup" />}</Route>
         {/* البوابة الرياضية المعتمدة على /sports — تُسجّل قبل /sports/:id الأرشيفي ولا تتعارض مع /category/sports */}
         <Route path="/sports/competition/:slug">{() => <LazyRoute component={SportsCompetition} />}</Route>
         <Route path="/sports/team/:id">{() => <LazyRoute component={SportsTeam} />}</Route>

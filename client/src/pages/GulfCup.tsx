@@ -16,6 +16,7 @@ import { GcTeams } from "@/components/gulfcup/GcTeams";
 import { GcHostShowcase } from "@/components/gulfcup/GcHostShowcase";
 import { GcPredictionsCTA } from "@/components/gulfcup/GcPredictionsCTA";
 import { GcMatchCenterDialog } from "@/components/gulfcup/GcMatchCenterDialog";
+import { SportsNewsBlock } from "@/components/sports/SportsNewsBlock";
 import type {
   GcFixture,
   GcGroup,
@@ -97,6 +98,9 @@ export default function GulfCup() {
         <GcHistorySection />
         <GcTeams teams={teams} isLoading={teamsLoading} />
         <GcHostShowcase overview={overview} />
+        <div className="mx-auto max-w-6xl px-3 sm:px-4 pb-10">
+          <SportsNewsBlock query="خليجي" title="أخبار كأس الخليج" />
+        </div>
       </main>
 
       <GcMatchCenterDialog fixtureId={openFixtureId} onClose={() => setOpenFixtureId(null)} />

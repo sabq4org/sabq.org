@@ -90,21 +90,14 @@ const DOMAINS = [
 
 /** ميثاق سبق للذكاء الاصطناعي — ثماني مواد معتمدة من الإدارة */
 const CHARTER = [
-  { no: "١", title: "الإنسان يقرّر", desc: "كل مادة تمرّ بمسؤولية تحريرية بشرية، قبل النشر وبعده." },
-  { no: "٢", title: "لا اختلاق", desc: "النموذج يصوغ من بيانات ومصادر موثّقة فقط، ولا يضيف معلومة من عنده." },
-  { no: "٣", title: "الشفافية", desc: "نُبيّن للقارئ دور الذكاء حيث يكون جوهريًا في إنتاج المادة." },
-  { no: "٤", title: "الرأي للإنسان", desc: "الذكاء لا يكتب رأيًا ولا يتبنّى موقفًا؛ الموقف لكتّابنا." },
-  { no: "٥", title: "مسؤوليتنا كاملة", desc: "سبق تتحمّل مسؤولية كل ما تنشره، أيًّا كانت الأداة." },
-  { no: "٦", title: "خصوصية القارئ", desc: "بيانات القرّاء تُستخدم لخدمتهم، ولا شيء غير ذلك." },
-  { no: "٧", title: "قياس دائم", desc: "جودة كل نموذج وتكلفته تُراقبان عبر بوابة موحّدة، والأفضل يبقى." },
-  { no: "٨", title: "عربيةٌ أولًا", desc: "نُطوّع النماذج للغة العربية وسياقها السعودي — لا العكس." },
-];
-
-const CTA_LINKS = [
-  { label: "تحليلات عُمق", href: "/omq", primary: true },
-  { label: "النشرات الصوتية", href: "/audio-newsletters", primary: false },
-  { label: "مركز المونديال", href: "/world-cup", primary: false },
-  { label: "موجزك اليومي", href: "/daily-brief", primary: false },
+  { no: "1", title: "الإنسان يقرّر", desc: "كل مادة تمرّ بمسؤولية تحريرية بشرية، قبل النشر وبعده." },
+  { no: "2", title: "لا اختلاق", desc: "النموذج يصوغ من بيانات ومصادر موثّقة فقط، ولا يضيف معلومة من عنده." },
+  { no: "3", title: "الشفافية", desc: "نُبيّن للقارئ دور الذكاء حيث يكون جوهريًا في إنتاج المادة." },
+  { no: "4", title: "الرأي للإنسان", desc: "الذكاء لا يكتب رأيًا ولا يتبنّى موقفًا؛ الموقف لكتّابنا." },
+  { no: "5", title: "مسؤوليتنا كاملة", desc: "سبق تتحمّل مسؤولية كل ما تنشره، أيًّا كانت الأداة." },
+  { no: "6", title: "خصوصية القارئ", desc: "بيانات القرّاء تُستخدم لخدمتهم، ولا شيء غير ذلك." },
+  { no: "7", title: "قياس دائم", desc: "جودة كل نموذج وتكلفته تُراقبان عبر بوابة موحّدة، والأفضل يبقى." },
+  { no: "8", title: "عربيةٌ أولًا", desc: "نُطوّع النماذج للغة العربية وسياقها السعودي — لا العكس." },
 ];
 
 function Ticker() {
@@ -300,7 +293,7 @@ function Charter() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10">
           {CHARTER.map((art) => (
             <div key={art.no} className="flex gap-4 py-4 border-b border-border">
-              <span className="text-2xl font-extrabold text-primary min-w-[2.5rem] text-center leading-tight">
+              <span className="text-4xl md:text-5xl font-extrabold text-primary min-w-[3rem] text-center leading-none">
                 {art.no}
               </span>
               <div>
@@ -320,29 +313,6 @@ function Charter() {
             وصحفيّونا يملكون القرار الأخير.
           </p>
         </div>
-      </div>
-    </section>
-  );
-}
-
-function CtaSection() {
-  return (
-    <section className="px-4 py-10 md:py-12 text-center" data-testid="sabqai-cta">
-      <h2 className="text-lg md:text-xl font-extrabold mb-5">لا تصدّق الوصف — جرّب النتيجة</h2>
-      <div className="flex flex-wrap justify-center gap-2.5">
-        {CTA_LINKS.map((cta) => (
-          <Link
-            key={cta.href}
-            href={cta.href}
-            className={`text-sm font-bold rounded-full px-6 py-2.5 border transition-colors ${
-              cta.primary
-                ? "bg-primary border-primary text-primary-foreground hover:opacity-90"
-                : "border-border hover:border-primary hover:text-primary"
-            }`}
-          >
-            {cta.label}
-          </Link>
-        ))}
       </div>
     </section>
   );
@@ -369,7 +339,6 @@ export default function SabqAI() {
         <SportsBand />
         <DomainsGrid />
         <Charter />
-        <CtaSection />
       </main>
 
       <Footer />

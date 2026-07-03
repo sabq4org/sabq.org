@@ -91,7 +91,7 @@ const SEED_TOURNAMENTS: InsertSportsTournament[] = [
     visibleApp: false,
     sortOrder: 30,
     season: 2026,
-    features: { bracket: true, scorers: true, teams: true, news: true },
+    features: { bracket: true, scorers: true, predictions: true, teams: true, news: true, entryPath: "/super-cup" },
   },
   {
     slug: "afc-champions-league",
@@ -117,7 +117,7 @@ const SEED_TOURNAMENTS: InsertSportsTournament[] = [
     visibleApp: false,
     sortOrder: 50,
     season: 2027,
-    features: { bracket: true, scorers: true, predictions: true, teams: true, news: true, entryPath: "/asian-cup" },
+    features: { bracket: true, scorers: true, teams: true, news: true, entryPath: "/asian-cup" },
   },
   {
     slug: "gulf-cup",
@@ -130,7 +130,7 @@ const SEED_TOURNAMENTS: InsertSportsTournament[] = [
     visibleApp: false,
     sortOrder: 60,
     season: 2026,
-    features: { bracket: true, scorers: true, predictions: true, teams: true, news: true, entryPath: "/gulf-cup" },
+    features: { bracket: true, scorers: true, teams: true, news: true, entryPath: "/gulf-cup" },
   },
   {
     slug: "division-1",

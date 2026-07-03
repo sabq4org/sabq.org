@@ -618,6 +618,8 @@ export interface SplStandingRow {
   trend: "up" | "down" | "same" | null;
   // true إذا طُبّقت عليه نتيجة مباراة جارية (ترتيب مبدئي لحظي).
   live?: boolean;
+  // حراك المركز اللحظي بسبب المباريات الجارية (موجب=صعد، سالب=هبط) — سهم الاتجاه.
+  liveDelta?: number;
 }
 
 export async function getStandings(comp: SaudiCompetition, seasonOverride?: number): Promise<SplStandingRow[]> {

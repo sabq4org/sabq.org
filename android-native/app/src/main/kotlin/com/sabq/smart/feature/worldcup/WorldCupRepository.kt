@@ -54,4 +54,9 @@ class WorldCupRepository @Inject constructor(
         api.submitWcPrediction(WcPredictionSubmitBody(fixtureId, predHome, predAway))
     suspend fun myPredictions(): List<WcPredictionHistoryItem> = api.getWcMyPredictions().predictions
     suspend fun leaderboard(): List<WcPredLeader> = api.getWcLeaderboard().leaders
+
+    // -- توقّعات البطولة: البطل + الهدّاف (Bearer) --
+    suspend fun longPredictions(): WcLongData = api.getWcLongPredictions()
+    suspend fun submitLong(kind: String, teamId: Int? = null, playerId: Int? = null): Boolean =
+        api.submitWcLongPrediction(WcLongSubmitBody(kind, teamId, playerId)).ok
 }

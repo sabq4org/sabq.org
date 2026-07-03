@@ -15,16 +15,28 @@ import { formatNumber } from "@/lib/format";
 import type { KcScorer } from "../kcTypes";
 import { KC_COMPETITION_SLUG, type KcLongData } from "./kcPredictionsTypes";
 
-const LONG_KEY = [`/api/sports/predictions/long?comp=${KC_COMPETITION_SLUG}`];
-
 export function KcLongPredictions({
   isAuthenticated,
   onRequireLogin,
+  endpoint,
+  scorersKey = "/api/kings-cup/scorers",
 }: {
   isAuthenticated: boolean;
   onRequireLogin: () => void;
+  /**
+   * مسار توقّعات البطولة طويلة المدى (GET/POST /long). افتراضيًّا محرّك الحوض
+   * القديم؛ الكؤوس المُوحّدة تمرّر مسارها الخاص مثل "/api/kings-cup/predictions"
+   * ليُدار خلف علمها المستقل نفسه (نفس جدول sports_pool_long تحت الغطاء).
+   */
+  endpoint?: string;
+  /** مسار قائمة الهدّافين المرشّحين. */
+  scorersKey?: string;
 }) {
   const { toast } = useToast();
+  // GET/POST المسار: إمّا المسار المُوحّد الممرَّر أو محرّك الحوض القديم مع ?comp=
+  const longGetKey = endpoint ? `${endpoint}/long` : `/api/sports/predictions/long?comp=${KC_COMPETITION_SLUG}`;
+  const longPostUrl = endpoint ? `${endpoint}/long` : "/api/sports/predictions/long";
+  const LONG_KEY = [longGetKey];
   const { data, isLoading } = useQuery<KcLongData>({
     queryKey: LONG_KEY,
     retry: false,
@@ -33,7 +45,7 @@ export function KcLongPredictions({
 
   // هدّافو البطولة الحاليون — مرشّحون جاهزون لتوقّع الهدّاف
   const { data: scorersData } = useQuery<{ scorers: KcScorer[] }>({
-    queryKey: ["/api/kings-cup/scorers"],
+    queryKey: [scorersKey],
     staleTime: 10 * 60_000,
   });
   const scorers = Array.isArray(scorersData?.scorers) ? scorersData.scorers.slice(0, 10) : [];
@@ -71,7 +83,7 @@ export function KcLongPredictions({
 
   const champMutation = useMutation({
     mutationFn: (teamId: number) =>
-      apiRequest("/api/sports/predictions/long", {
+      apiRequest(longPostUrl, {
         method: "POST",
         body: JSON.stringify({ competitionSlug: KC_COMPETITION_SLUG, kind: "champion", teamId }),
       }),
@@ -85,7 +97,7 @@ export function KcLongPredictions({
 
   const scorerMutation = useMutation({
     mutationFn: (playerName: string) =>
-      apiRequest("/api/sports/predictions/long", {
+      apiRequest(longPostUrl, {
         method: "POST",
         body: JSON.stringify({ competitionSlug: KC_COMPETITION_SLUG, kind: "top_scorer", playerName }),
       }),

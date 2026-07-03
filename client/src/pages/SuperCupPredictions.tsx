@@ -1,10 +1,9 @@
 /**
- * صفحة توقّعات كأس خادم الحرمين الشريفين — على محرّك المونديال/روشن الموحّد
- * (/api/kings-cup/predictions/*): بانر بطل، تبويبات حبوب (المباريات / البطل
- * والهدّاف / توقّعاتي / المتصدّرون)، وبطاقات توقّع بعدّادات أهداف وجائزة 500
- * نقطة تُقسَّم بين مصيبي النتيجة الدقيقة. توقّعات البطل/الهدّاف على النظام
- * الموحّد sports_pool_long. يعيد الخادم 503 قبل KINGS_CUP_PREDICTIONS_ENABLED
- * فتُخفي الصفحة الميزة بسلاسة.
+ * صفحة توقّعات كأس السوبر السعودي — نفس محرّك المونديال/روشن الموحّد على
+ * /api/super-cup/predictions/*: بانر بطل، تبويبات حبوب (المباريات / توقّعاتي /
+ * المتصدّرون)، وبطاقات توقّع بعدّادات أهداف وجائزة 500 نقطة تُقسَّم بين مصيبي
+ * النتيجة الدقيقة. كأس السوبر مباراة/مباراتان فقط فلا تبويب «بطل وهدّاف».
+ * يعيد الخادم 503 قبل SUPER_CUP_PREDICTIONS_ENABLED فتُخفي الصفحة الميزة بسلاسة.
  */
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -21,20 +20,16 @@ import { formatNumber } from "@/lib/format";
 import { RslPredictionMatchCard } from "@/components/rsl/predictions/RslPredictionMatchCard";
 import { RslPredictionsLeaderboard } from "@/components/rsl/predictions/RslPredictionsLeaderboard";
 import { RslMyPredictions } from "@/components/rsl/predictions/RslMyPredictions";
-import { KcLongPredictions } from "@/components/kingscup/predictions/KcLongPredictions";
-import type { KcLongData } from "@/components/kingscup/predictions/kcPredictionsTypes";
 import type {
   PredictableMatch,
   LeaderRow,
   MyPredictionRow,
 } from "@/components/rsl/predictions/rslPredictionsTypes";
 
-type Tab = "today" | "tournament" | "mine" | "leaders";
-const TAB_VALUES: Tab[] = ["today", "tournament", "mine", "leaders"];
+type Tab = "today" | "mine" | "leaders";
+const TAB_VALUES: Tab[] = ["today", "mine", "leaders"];
 
-const CUP_BASE = "/api/kings-cup/predictions";
-
-export default function KingsCupPredictions() {
+export default function SuperCupPredictions() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const search = useSearch();
@@ -42,11 +37,11 @@ export default function KingsCupPredictions() {
   const [tab, setTab] = useState<Tab>(tabParam && TAB_VALUES.includes(tabParam) ? tabParam : "today");
 
   useEffect(() => {
-    document.title = "توقّعات كأس الملك — توقّع واربح نقاط الولاء | سبق";
+    document.title = "توقّعات كأس السوبر السعودي — توقّع واربح نقاط الولاء | سبق";
   }, []);
 
   const { data: todayData, isLoading: todayLoading } = useQuery<{ matches: PredictableMatch[] }>({
-    queryKey: [`${CUP_BASE}/today`],
+    queryKey: ["/api/super-cup/predictions/today"],
     retry: false,
     refetchInterval: (query) => {
       const matches = query.state.data?.matches ?? [];
@@ -59,30 +54,20 @@ export default function KingsCupPredictions() {
   });
 
   const { data: mineData, isLoading: mineLoading } = useQuery<{ predictions: MyPredictionRow[] }>({
-    queryKey: [`${CUP_BASE}/mine`],
+    queryKey: ["/api/super-cup/predictions/mine"],
     enabled: isAuthenticated,
     retry: false,
     staleTime: 30_000,
   });
 
   const { data: leaderData, isLoading: leaderLoading } = useQuery<{ leaders: LeaderRow[] }>({
-    queryKey: [`${CUP_BASE}/leaderboard`],
+    queryKey: ["/api/super-cup/predictions/leaderboard"],
     retry: false,
     staleTime: 60_000,
   });
-
-  // توقّعات البطولة طويلة المدى — التبويب يظهر فقط متى فعّل الخادم المسابقة
-  // (503 قبل KINGS_CUP_PREDICTIONS_ENABLED ⇒ نُخفي التبويب).
-  const { data: longData } = useQuery<KcLongData>({
-    queryKey: [`${CUP_BASE}/long`],
-    retry: false,
-    staleTime: 60_000,
-  });
-  const longAvailable = !!longData;
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "today", label: "المباريات" },
-    ...(longAvailable ? ([{ key: "tournament", label: "البطل والهدّاف" }] as const) : []),
     { key: "mine", label: "توقّعاتي" },
     { key: "leaders", label: "المتصدّرون" },
   ];
@@ -94,14 +79,14 @@ export default function KingsCupPredictions() {
 
   const submitMutation = useMutation({
     mutationFn: (vars: { fixtureId: number; predHome: number; predAway: number }) =>
-      apiRequest(CUP_BASE, {
+      apiRequest("/api/super-cup/predictions", {
         method: "POST",
         body: JSON.stringify(vars),
       }),
     onSuccess: () => {
       toast({ title: "تم حفظ توقّعك ✅", description: "بالتوفيق! النتيجة تظهر فور انتهاء المباراة." });
-      queryClient.invalidateQueries({ queryKey: [`${CUP_BASE}/today`] });
-      queryClient.invalidateQueries({ queryKey: [`${CUP_BASE}/mine`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/super-cup/predictions/today"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/super-cup/predictions/mine"] });
     },
     onError: (err: any) => {
       toast({
@@ -109,7 +94,7 @@ export default function KingsCupPredictions() {
         description: err?.message || "حاول مرة أخرى",
         variant: "destructive",
       });
-      queryClient.invalidateQueries({ queryKey: [`${CUP_BASE}/today`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/super-cup/predictions/today"] });
     },
   });
 
@@ -124,37 +109,36 @@ export default function KingsCupPredictions() {
 
       <main className="flex-1">
         {/* بانر البطل */}
-        <section className="relative overflow-hidden bg-gradient-to-bl from-emerald-600 via-emerald-700 to-emerald-800 text-white">
+        <section className="relative overflow-hidden bg-gradient-to-bl from-amber-600 via-amber-700 to-yellow-800 text-white">
           <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(circle_at_20%_30%,white_1px,transparent_1px)] [background-size:24px_24px]" />
           <div className="relative mx-auto max-w-4xl px-4 py-10 sm:py-12">
-            <div className="flex items-center gap-2 text-emerald-100">
-              <Trophy className="h-5 w-5 text-amber-300" />
-              <span className="text-sm font-bold">كأس خادم الحرمين الشريفين</span>
+            <div className="flex items-center gap-2 text-amber-100">
+              <Trophy className="h-5 w-5 text-white" />
+              <span className="text-sm font-bold">كأس السوبر السعودي</span>
             </div>
-            <h1 className="mt-2 text-3xl font-black sm:text-4xl">توقّعات كأس الملك</h1>
-            <p className="mt-2 max-w-xl text-emerald-50/90">
+            <h1 className="mt-2 text-3xl font-black sm:text-4xl">توقّعات كأس السوبر</h1>
+            <p className="mt-2 max-w-xl text-amber-50/90">
               توقّع النتيجة الدقيقة بالأهداف قبل صافرة البداية. من يصيب النتيجة يربح من جائزة الـ
-              <span className="font-black"> 500 نقطة</span> ولاء لكل مباراة — تُقسَّم بين كل المصيبين،
-              وتوقّع البطل والهدّاف يربحك آلاف النقاط.
+              <span className="font-black"> 500 نقطة</span> ولاء لكل مباراة — تُقسَّم بين كل المصيبين.
             </p>
 
             {isAuthenticated ? (
               <div className="mt-5 inline-flex items-center gap-4 rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur">
                 <div className="text-center">
                   <p className="text-xl font-black tabular-nums">{formatNumber(myRank?.totalPoints ?? 0)}</p>
-                  <p className="text-[11px] text-emerald-100">نقاط التوقّعات</p>
+                  <p className="text-[11px] text-amber-100">نقاط التوقّعات</p>
                 </div>
                 <div className="h-8 w-px bg-white/25" />
                 <div className="text-center">
                   <p className="text-xl font-black tabular-nums">{formatNumber(myRank?.correctCount ?? 0)}</p>
-                  <p className="text-[11px] text-emerald-100">إصابة دقيقة</p>
+                  <p className="text-[11px] text-amber-100">إصابة دقيقة</p>
                 </div>
                 {myRank && (
                   <>
                     <div className="h-8 w-px bg-white/25" />
                     <div className="text-center">
                       <p className="text-xl font-black tabular-nums">#{formatNumber(myRank.rank)}</p>
-                      <p className="text-[11px] text-emerald-100">ترتيبك</p>
+                      <p className="text-[11px] text-amber-100">ترتيبك</p>
                     </div>
                   </>
                 )}
@@ -162,7 +146,7 @@ export default function KingsCupPredictions() {
             ) : (
               <button
                 onClick={goLogin}
-                className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50"
+                className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-amber-700 transition hover:bg-amber-50"
               >
                 <Sparkles className="h-4 w-4" /> سجّل دخولك وابدأ التوقّع
               </button>
@@ -179,10 +163,10 @@ export default function KingsCupPredictions() {
                 onClick={() => setTab(t.key)}
                 className={`flex-1 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition sm:flex-none ${
                   tab === t.key
-                    ? "bg-emerald-600 text-white shadow-sm"
+                    ? "bg-amber-600 text-white shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
-                data-testid={`kc-pred-tab-${t.key}`}
+                data-testid={`sc-pred-tab-${t.key}`}
               >
                 {t.label}
               </button>
@@ -198,14 +182,6 @@ export default function KingsCupPredictions() {
               submittingFixtureId={submitMutation.isPending ? submitMutation.variables?.fixtureId : undefined}
               onSubmit={(fixtureId, predHome, predAway) => submitMutation.mutate({ fixtureId, predHome, predAway })}
               onRequireLogin={goLogin}
-            />
-          )}
-
-          {tab === "tournament" && (
-            <KcLongPredictions
-              isAuthenticated={isAuthenticated}
-              onRequireLogin={goLogin}
-              endpoint={CUP_BASE}
             />
           )}
 
@@ -245,7 +221,7 @@ function TodayTab({
   if (isLoading) {
     return (
       <div className="grid gap-3 sm:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
+        {Array.from({ length: 2 }).map((_, i) => (
           <div key={i} className="h-56 animate-pulse rounded-xl bg-muted/60" />
         ))}
       </div>
@@ -256,9 +232,9 @@ function TodayTab({
     return (
       <div className="rounded-2xl border border-dashed border-border py-14 text-center">
         <Target className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
-        <p className="font-bold">لا مباريات اليوم أو غدًا</p>
+        <p className="font-bold">لا مباراة متاحة للتوقّع حاليًا</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          تُفتح مباريات كل دور للتوقّع هنا قبل يومها — وحتى ذلك الحين توقّع البطل من تبويب «البطل والهدّاف».
+          تُفتح مباراة كأس السوبر للتوقّع هنا قبل يومها — عُد قريبًا.
         </p>
       </div>
     );
@@ -281,8 +257,8 @@ function TodayTab({
     <div className="space-y-6">
       {groups.map((g) => (
         <section key={g.key}>
-          <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-emerald-700 dark:text-emerald-300">
-            <span className="h-4 w-1 rounded-full bg-emerald-500" />
+          <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-amber-700 dark:text-amber-300">
+            <span className="h-4 w-1 rounded-full bg-amber-500" />
             {g.label}
             <span className="text-xs font-normal text-muted-foreground">({formatNumber(g.items.length)})</span>
           </h2>
@@ -311,7 +287,7 @@ function SignInPrompt({ onLogin }: { onLogin: () => void }) {
       <p className="font-bold">سجّل دخولك لعرض توقّعاتك</p>
       <button
         onClick={onLogin}
-        className="mt-3 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
+        className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-amber-700"
       >
         تسجيل الدخول
       </button>

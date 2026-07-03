@@ -281,12 +281,19 @@ struct AcLoading: View {
 // بطاقة مباراة واحدة — تُستعمل في الجدول واليوم. الضغط يفتح ورقة التفاصيل.
 struct AcMatchCard: View {
     let fixture: AcFixture
-    @State private var showDetail = false
-    @State private var pressed = false
 
     private var started: Bool { fixture.status.live || fixture.status.finished }
 
     var body: some View {
+        NavigationLink {
+            AcMatchDetailSheet(fixture: fixture)
+        } label: {
+            cardLabel
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var cardLabel: some View {
         VStack(spacing: 10) {
             HStack(spacing: 6) {
                 Text(LRound(fixture.roundEn, fallback: fixture.round))
@@ -326,18 +333,6 @@ struct AcMatchCard: View {
                         .stroke(AcTheme.outline, lineWidth: 1)
                 )
         )
-        .scaleEffect(pressed ? 0.97 : 1)
-        .contentShape(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous))
-        .onTapGesture {
-            withAnimation(.easeOut(duration: 0.12)) { pressed = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                withAnimation(.easeOut(duration: 0.12)) { pressed = false }
-                showDetail = true
-            }
-        }
-        .sheet(isPresented: $showDetail) {
-            AcMatchDetailSheet(fixture: fixture)
-        }
     }
 
     private var venueText: String {
@@ -441,8 +436,7 @@ struct AcMatchDetailSheet: View {
             .padding(.top, 4)
         }
         .background(AcAmbientBackground())
-        .presentationDragIndicator(.visible)
-        .presentationDetents([.large])
+        .navigationBarTitleDisplayMode(.inline)
         .asianCupRTL()
         .task { await load() }
     }
@@ -515,26 +509,34 @@ struct AcMatchDetailSheet: View {
     }
 
     private func bigTeam(_ team: AcTeam, saudi: Bool) -> some View {
-        VStack(spacing: 10) {
-            AcTeamLogo(logo: team.logo, size: 68)
-                .overlay(alignment: .topTrailing) {
-                    if saudi {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.white)
-                            .padding(4)
-                            .background(Circle().fill(AcTheme.gold))
-                            .offset(x: 4, y: -4)
+        NavigationLink {
+            AcTeamProfileScreen(teamId: team.id, fallback: team)
+        } label: {
+            VStack(spacing: 10) {
+                AcTeamLogo(logo: team.logo, size: 68)
+                    .overlay(alignment: .topTrailing) {
+                        if saudi {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.white)
+                                .padding(4)
+                                .background(Circle().fill(AcTheme.gold))
+                                .offset(x: 4, y: -4)
+                        }
                     }
-                }
-            Text(LTeam(String(team.id), fallback: team.name))
-                .font(AsianCupFonts.app(size: 14, weight: .bold))
-                .foregroundStyle(AcTheme.onDark)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .frame(height: 38)
+                Text(LTeam(String(team.id), fallback: team.name))
+                    .font(AsianCupFonts.app(size: 14, weight: .bold))
+                    .foregroundStyle(AcTheme.onDark)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(height: 38)
+                Text(L("team.profile.eyebrow"))
+                    .font(AsianCupFonts.app(size: 10, weight: .semibold))
+                    .foregroundStyle(AcTheme.goldDeep)
+            }
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
+        .buttonStyle(.plain)
     }
 
     private var infoCard: some View {
@@ -644,8 +646,8 @@ struct AcPredictionBarsCard: View {
     var body: some View {
         AcDetailCard {
             AcDetailSectionTitle(icon: "sparkles", title: L("match.prediction"), tint: AcTheme.azure)
-            bar(LTeam(String(home.id), fallback: home.name), prediction.home, AcTheme.gold)
-            bar(L("predictions.draw"), prediction.draw, AcTheme.teal)
+            bar(LTeam(String(home.id), fallback: home.name), prediction.home, AcTheme.emerald)
+            bar(L("predictions.draw"), prediction.draw, AcTheme.neutralAccent)
             bar(LTeam(String(away.id), fallback: away.name), prediction.away, AcTheme.emeraldSoft)
             Text(L("match.prediction.note"))
                 .font(AsianCupFonts.app(size: 10))
@@ -686,10 +688,10 @@ struct AcManOfMatchCard: View {
     var body: some View {
         HStack(spacing: 14) {
             ZStack {
-                Circle().fill(AcTheme.gold).frame(width: 54, height: 54)
+                Circle().fill(AcTheme.emerald).frame(width: 54, height: 54)
                 Image(systemName: "star.fill")
                     .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(AcTheme.emeraldDeep)
+                    .foregroundStyle(.white)
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text(L("match.mom"))

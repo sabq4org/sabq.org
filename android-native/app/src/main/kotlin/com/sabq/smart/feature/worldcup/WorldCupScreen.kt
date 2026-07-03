@@ -30,7 +30,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.FormatListNumbered
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SportsSoccer
@@ -113,8 +112,14 @@ fun WorldCupScreen(
                         item { WcPulseCard(pulse, state.pulseGoalFlash, onOpenMatch) }
                     }
 
-                    state.overview?.saudi?.takeIf { it.fixtures.isNotEmpty() }?.let { saudi ->
-                        item { SaudiSpotlight(saudi, state.saudiSquad, onOpenMatch, viewModel::openPlayer) }
+                    // المنتخبات العربية في المونديال (بدل «مشوار الأخضر») — مطابق iOS.
+                    if (state.fixtures.isNotEmpty() || state.standings.isNotEmpty()) {
+                        item {
+                            ArabTeamsSpotlight(
+                                fixtures = state.fixtures, groups = state.standings,
+                                onOpenMatch = onOpenMatch, onOpenPlayer = viewModel::openPlayer, onOpenTeam = onOpenTeam,
+                            )
+                        }
                     }
 
                     item { MatchesSection(state.fixtures, state.fixturesLoading, onOpenMatch) }
@@ -290,64 +295,6 @@ private fun Pill(text: String, bg: Color, fg: Color) {
         text, color = fg, fontSize = 12.sp, fontWeight = FontWeight.Bold,
         modifier = Modifier.clip(RoundedCornerShape(50)).background(bg).padding(horizontal = 12.dp, vertical = 5.dp),
     )
-}
-
-// ---------- مشوار الأخضر ----------
-
-@Composable
-private fun SaudiSpotlight(
-    saudi: WcSaudi,
-    saudiSquad: List<WcSquadPlayer>,
-    onOpenMatch: (Int) -> Unit,
-    onOpenPlayer: (Int) -> Unit,
-) {
-    androidx.compose.runtime.CompositionLocalProvider(LocalWcForceDark provides true) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(Brush.linearGradient(listOf(WcColors.royal, WcColors.stadiumTop)))
-            .padding(20.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("مشوار الأخضر", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Black)
-            saudi.group?.let {
-                Text(it.group, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Color.White.copy(alpha = 0.15f)).padding(horizontal = 8.dp, vertical = 3.dp))
-            }
-        }
-        saudi.next?.let { n ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Icon(Icons.Filled.LocationOn, null, tint = WcColors.emerald.copy(alpha = 0.85f), modifier = Modifier.size(14.dp))
-                Text("${n.venue.name} — ${n.venue.city}", color = WcColors.emerald.copy(alpha = 0.85f), fontSize = 12.sp)
-            }
-        }
-        saudi.fixtures.forEach { f -> SaudiRow(f, onOpenMatch) }
-        SaudiSquadStrip(saudiSquad, onOpenPlayer)
-    }
-    }
-}
-
-@Composable
-private fun SaudiRow(f: WcFixture, onOpenMatch: (Int) -> Unit) {
-    val opp = if (f.home.id == WC_SAUDI_TEAM_ID) f.away else f.home
-    val saudiGoals = if (f.home.id == WC_SAUDI_TEAM_ID) f.goals.home else f.goals.away
-    val oppGoals = if (f.home.id == WC_SAUDI_TEAM_ID) f.goals.away else f.goals.home
-    Row(
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color.White.copy(alpha = 0.08f))
-            .clickable { onOpenMatch(f.id) }.padding(horizontal = 12.dp, vertical = 10.dp),
-    ) {
-        WcTeamLogo(opp, size = 34)
-        Column(modifier = Modifier.weight(1f)) {
-            Text("ضد ${opp.name}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-            Text("${f.round} · ${WcFormat.day(f)}", color = WcColors.emerald.copy(alpha = 0.7f), fontSize = 11.sp)
-        }
-        if (f.started) LtrText("${saudiGoals ?: 0} - ${oppGoals ?: 0}", Color.White, 17, FontWeight.Black)
-        else Text(WcFormat.time(f), color = WcColors.emerald, fontSize = 14.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.width(2.dp))
-        WcStatusPill(f)
-    }
 }
 
 // ---------- المباريات (تبويبات) ----------

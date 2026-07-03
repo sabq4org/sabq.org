@@ -1953,6 +1953,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // تسوية توقّعات الكؤوس المحلية (كأس الملك + كأس السوبر) على المحرّك المُعمّم
+      // الموحّد — نفس نمط روشن: تسجيل دائم وفحص القيادة/الأعلام داخل الدورة.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startCupPredictionsJob } = await import("./jobs/cupPredictionsJob");
+            startCupPredictionsJob();
+          } catch (error) {
+            console.error("[Server] Error starting cup predictions job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // تسوية توقّعات خليجي 27 (بركة متدرّجة + جائزة متراكمة + شارات + إشعار):
       // نفس نمط كأس آسيا — تسجيل دائم وفحص القيادة داخل الدورة.
       if (enableBackgroundWorkers) {

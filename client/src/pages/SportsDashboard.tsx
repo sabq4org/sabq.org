@@ -17,6 +17,7 @@ import {
   Star,
   Clock,
   Flame,
+  Goal,
   Radio,
   ChevronLeft,
   ArrowLeftRight,
@@ -128,15 +129,56 @@ function sortCompetitionsForPortal(rows: SpCompetition[], selectedSlug: string):
     .map(({ c }) => c);
 }
 
-// ترويسة قسم بسيطة بهوية الموقع: عنوان أسود عريض + وصف + رابط اختياري.
+// ترويسة قسم بأسلوب /sabq-ai: عنوان مركزي بين فاصلين خطيّين + وصف + رابط اختياري تحته.
 function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
-    <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h2 className="text-xl font-black leading-tight text-foreground sm:text-2xl">{title}</h2>
-        {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
+    <div className="mb-6 text-center">
+      <div className="flex items-center gap-4">
+        <span className="h-px flex-1 bg-border" aria-hidden="true" />
+        <h2 className="whitespace-nowrap text-xl font-extrabold text-foreground sm:text-2xl">{title}</h2>
+        <span className="h-px flex-1 bg-border" aria-hidden="true" />
       </div>
-      {action}
+      {subtitle && <p className="mt-2 text-sm text-muted-foreground">{subtitle}</p>}
+      {action && <div className="mt-3 flex justify-center">{action}</div>}
+    </div>
+  );
+}
+
+// شريط «على الهواء» — عبارات وصفية رياضية تتحرّك أفقيًا (نفس بلاط /sabq-ai).
+const TICKER_ITEMS: { tag: string; text: string }[] = [
+  { tag: "بطولات", text: "المونديال وآسيا والخليج ودوري روشن وكأس الملك — كلها في مكان واحد" },
+  { tag: "مباشر", text: "نتائج المباريات لحظة بلحظة فور وقوع الحدث" },
+  { tag: "ترتيب", text: "جداول الترتيب والهدّافون تتحدّث تلقائيًا" },
+  { tag: "توقّعات", text: "توقّع النتائج ونافِس الجمهور على القمّة" },
+  { tag: "انتقالات", text: "مَن وصل ومَن غادر في دوري روشن — موجز الصفقات" },
+];
+
+function SportsTicker() {
+  return (
+    <div className="flex items-center overflow-hidden border-b border-[#123047] bg-[#0E2233]" aria-hidden="true">
+      <span className="relative z-10 shrink-0 bg-primary px-4 py-2 text-xs font-bold text-primary-foreground">
+        على الهواء
+      </span>
+      {/* غلاف overflow-hidden مستقل حتى لا ينزلق الحزام فوق التسمية */}
+      <div className="flex-1 overflow-hidden">
+        <div className="sports-belt flex whitespace-nowrap">
+          {[0, 1].map((half) => (
+            <div key={half} className="flex shrink-0">
+              {TICKER_ITEMS.map((item, i) => (
+                <span key={i} className="inline-flex items-center gap-2 py-2 pe-12 text-[13px] text-slate-300">
+                  <b className="font-bold text-primary">{item.tag}</b>
+                  {item.text}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+      <style>{`
+        .sports-belt { animation: sports-belt 55s linear infinite; }
+        @keyframes sports-belt { from { transform: translateX(0); } to { transform: translateX(50%); } }
+        @media (prefers-reduced-motion: reduce) { .sports-belt { animation: none; } }
+      `}</style>
     </div>
   );
 }
@@ -175,53 +217,50 @@ function SportsHero({
 }) {
   const today = useMemo(() => coverDateFmt.format(new Date()), []);
   return (
-    <div className="border-b border-border bg-card">
-      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5">
-            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-primary/10 sm:h-16 sm:w-16">
-              <Trophy className="h-7 w-7 text-primary sm:h-8 sm:w-8" strokeWidth={1.8} />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-2xl font-black leading-tight text-foreground sm:text-3xl">الرياضة</h1>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                تغطية لحظية: أخبار ونتائج مباشرة وترتيب وأرقام كل البطولات.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2.5">
-            {liveCount > 0 && (
-              <button
-                type="button"
-                onClick={() => onJump("live-pulse")}
-                className="inline-flex items-center gap-2 rounded-full bg-red-500 px-4 py-1.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
-                data-testid="hero-live-chip"
-              >
-                <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveCount} مباشر الآن
-              </button>
-            )}
-            <span className="hidden text-xs text-muted-foreground sm:inline">
-              {today} · <span className="tabular-nums">{todayCount}</span> اليوم · <span className="tabular-nums">{compCount}</span> بطولة
-            </span>
-          </div>
-        </div>
+    <section className="border-b border-border bg-card px-4 pt-14 pb-10 text-center sm:pt-16 sm:pb-12" data-testid="sports-hero">
+      <span className="mb-5 inline-block rounded-full border border-primary/20 bg-primary/10 px-5 py-1.5 text-xs font-bold text-primary md:text-[13px]">
+        البوابة الرياضية — كل الملاعب في شاشة واحدة
+      </span>
+      <h1 className="mx-auto max-w-3xl text-balance text-3xl font-extrabold leading-[1.4] text-foreground md:text-5xl">
+        من أرض الملعب إلى شاشتك…
+        <br />
+        <span className="text-primary">لحظة بلحظة</span>
+      </h1>
+      <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground md:text-lg">
+        أخبار ونتائج مباشرة وترتيب وأرقام كل البطولات — من المونديال إلى دوري روشن، في مكان واحد.
+      </p>
 
-        {nav.length > 0 && (
-          <nav className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
-            {nav.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                onClick={() => onJump(n.id)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3.5 py-1.5 text-[13px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-              >
-                {n.label}
-              </button>
-            ))}
-          </nav>
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        {liveCount > 0 && (
+          <button
+            type="button"
+            onClick={() => onJump("live-pulse")}
+            className="inline-flex items-center gap-2 rounded-full bg-red-500 px-4 py-1.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+            data-testid="hero-live-chip"
+          >
+            <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveCount} مباشر الآن
+          </button>
         )}
+        <span className="text-xs text-muted-foreground">
+          {today} · <span className="tabular-nums">{todayCount}</span> اليوم · <span className="tabular-nums">{compCount}</span> بطولة
+        </span>
       </div>
-    </div>
+
+      {nav.length > 0 && (
+        <nav className="mt-6 flex flex-wrap justify-center gap-2">
+          {nav.map((n) => (
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => onJump(n.id)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3.5 py-1.5 text-[13px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            >
+              {n.label}
+            </button>
+          ))}
+        </nav>
+      )}
+    </section>
   );
 }
 
@@ -518,6 +557,13 @@ type SpSeasonOutlook = {
   openers: SpFixture[];
 };
 
+// إرث النسخة السابقة — البطل + الهدّاف، من GET /api/sports/:slug/history.
+type CompHistory = {
+  previousSeason: number | null;
+  champion: { id: number; name: string; logo: string } | null;
+  topScorer: { id: number; name: string; photo: string; team: { id: number; name: string; logo: string }; goals: number } | null;
+};
+
 const seasonLabel = (y: number) => `${y}/${String((y + 1) % 100).padStart(2, "0")}`;
 const outlookDateFmt = new Intl.DateTimeFormat("ar", {
   calendar: "gregory",
@@ -528,7 +574,7 @@ const outlookDateFmt = new Intl.DateTimeFormat("ar", {
   timeZone: "Asia/Riyadh",
 });
 
-function SeasonOutlookBanner({ outlook, onOpen }: { outlook: SpSeasonOutlook; onOpen: (id: number) => void }) {
+function SeasonOutlookBanner({ outlook, history }: { outlook: SpSeasonOutlook; history: CompHistory | null }) {
   if (outlook.phase === "in-season" || outlook.phase === "unknown") return null;
   const kickoff = outlook.firstKickoff ? outlookDateFmt.format(new Date(outlook.firstKickoff)) : null;
 
@@ -554,7 +600,9 @@ function SeasonOutlookBanner({ outlook, onOpen }: { outlook: SpSeasonOutlook; on
     );
   }
 
-  // ما قبل الموسم — عدّ تنازلي + افتتاحيات الجولة الأولى
+  // ما قبل الموسم — عدّ تنازلي + إرث الموسم الماضي (البطل + الهدّاف). لا نكرّر
+  // افتتاحيات الجولة الأولى هنا لأنها تظهر كاملةً في «مركز المباريات» أسفله.
+  const hasLegacy = Boolean(history?.champion || history?.topScorer);
   return (
     <div className="mb-6 rounded-2xl border border-primary/20 bg-primary/[0.04] p-5 sm:p-6">
       <div className="flex flex-wrap items-center gap-4">
@@ -572,25 +620,43 @@ function SeasonOutlookBanner({ outlook, onOpen }: { outlook: SpSeasonOutlook; on
           )}
         </div>
       </div>
-      {outlook.openers.length > 0 && (
+      {hasLegacy && (
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {outlook.openers.slice(0, 6).map((f) => (
-            <button
-              key={f.id}
-              onClick={() => onOpen(f.id)}
-              className="flex items-center justify-between gap-2 rounded-xl border border-border bg-card px-3 py-2 transition-colors hover:border-primary/40"
-            >
-              <span className="flex min-w-0 items-center gap-1.5">
-                {f.home.logo && <img src={f.home.logo} alt="" className="h-5 w-5 shrink-0 object-contain" />}
-                <span className="truncate text-xs font-bold">{f.home.name}</span>
+          {history!.champion && (
+            <div className="flex items-center gap-3 rounded-xl bg-amber-400/[0.06] px-3 py-2.5">
+              <span className="grid h-10 w-10 shrink-0 place-items-center">
+                {history!.champion.logo ? (
+                  <img src={history!.champion.logo} alt="" className="h-10 w-10 object-contain" loading="lazy" />
+                ) : (
+                  <Trophy className="h-6 w-6 text-amber-500" strokeWidth={1.8} />
+                )}
               </span>
-              <span className="shrink-0 text-[10px] text-muted-foreground">×</span>
-              <span className="flex min-w-0 items-center justify-end gap-1.5">
-                <span className="truncate text-xs font-bold">{f.away.name}</span>
-                {f.away.logo && <img src={f.away.logo} alt="" className="h-5 w-5 shrink-0 object-contain" />}
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold text-amber-600/80 dark:text-amber-400/80">
+                  حامل اللقب{history!.previousSeason ? ` · ${history!.previousSeason}` : ""}
+                </div>
+                <div className="truncate text-sm font-black text-foreground">{history!.champion.name}</div>
+              </div>
+            </div>
+          )}
+          {history!.topScorer && (
+            <div className="flex items-center gap-3 rounded-xl bg-emerald-400/[0.06] px-3 py-2.5">
+              <span className="grid h-10 w-10 shrink-0 place-items-center">
+                {history!.topScorer.photo ? (
+                  <img src={history!.topScorer.photo} alt="" className="h-10 w-10 rounded-full object-cover" loading="lazy" />
+                ) : (
+                  <Goal className="h-6 w-6 text-emerald-500" strokeWidth={1.8} />
+                )}
               </span>
-            </button>
-          ))}
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] font-bold text-emerald-600/80 dark:text-emerald-400/80">هدّاف الموسم الماضي</div>
+                <div className="truncate text-sm font-black text-foreground">
+                  {history!.topScorer.name}
+                  <span className="mr-1.5 text-xs font-bold tabular-nums text-muted-foreground">{history!.topScorer.goals} هدفًا</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -788,6 +854,15 @@ export default function SportsDashboard() {
     staleTime: 10 * 60_000,
   });
   const outlook = outlookData?.outlook ?? null;
+
+  // إرث النسخة السابقة للبطولة المختارة — يغذّي بطاقة «العدّ التنازلي» بدل تكرار
+  // افتتاحيات الجولة الأولى (الظاهرة في مركز المباريات أدناه).
+  const { data: historyData } = useQuery<{ history: CompHistory }>({
+    queryKey: [`/api/sports/${compSlug}/history`],
+    staleTime: 6 * 60 * 60_000,
+  });
+  const compHistory = historyData?.history ?? null;
+
   const matches = {
     live: Array.isArray(matchesData?.live) ? matchesData!.live : [],
     today: Array.isArray(matchesData?.today) ? matchesData!.today : [],
@@ -923,7 +998,7 @@ export default function SportsDashboard() {
       <Header user={user || undefined} />
 
       <main className="flex-1">
-        {/* ===== ترويسة البوابة — بطاقة فاتحة بهوية الموقع ===== */}
+        {/* ===== ترويسة البوابة — عبارة كبيرة في المنتصف بأسلوب /sabq-ai ===== */}
         <SportsHero
           liveCount={liveNow}
           todayCount={todayMatches.length}
@@ -931,6 +1006,9 @@ export default function SportsDashboard() {
           nav={heroNav}
           onJump={scrollTo}
         />
+
+        {/* ===== شريط «على الهواء» المتحرك ===== */}
+        <SportsTicker />
 
         {/* ===== نبض المباشر — يظهر فقط حين توجد مباريات جارية (مرتّبة بالأهمية) ===== */}
         <LivePulse items={rankedLive} onOpen={setOpenMatch} />
@@ -1071,7 +1149,7 @@ export default function SportsDashboard() {
                   </div>
                 </div>
               )}
-              {outlook && <SeasonOutlookBanner outlook={outlook} onOpen={setOpenMatch} />}
+              {outlook && <SeasonOutlookBanner outlook={outlook} history={compHistory} />}
               <MatchHub key={compSlug} data={matches} configured={matchesConfigured} compSlug={compSlug} onOpen={setOpenMatch} />
             </div>
 

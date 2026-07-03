@@ -651,4 +651,11 @@ interface SabqApi {
 
     @GET("api/v1/world-cup/predictions/leaderboard")
     suspend fun getWcLeaderboard(): com.sabq.smart.feature.worldcup.WcLeaderboardResponse
+
+    // -- توقّعات البطولة: البطل + الهدّاف (Bearer) --
+    @GET("api/v1/world-cup/predictions/long")
+    suspend fun getWcLongPredictions(): com.sabq.smart.feature.worldcup.WcLongData
+
+    @POST("api/v1/world-cup/predictions/long")
+    suspend fun submitWcLongPrediction(@Body body: com.sabq.smart.feature.worldcup.WcLongSubmitBody): com.sabq.smart.feature.worldcup.WcLongSubmitResponse
 }

@@ -268,9 +268,9 @@ private struct AcPredictionsHero: View {
             HStack(spacing: 12) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(AcTheme.emeraldDeep)
+                    .foregroundStyle(.white)
                     .frame(width: 54, height: 54)
-                    .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(AcTheme.gold))
+                    .background(RoundedRectangle(cornerRadius: 17, style: .continuous).fill(AcTheme.emerald))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("predictions.hero.title"))
                         .font(AsianCupFonts.app(size: 17, weight: .bold))
@@ -405,8 +405,8 @@ private struct AcPredictionMatchCard: View {
             }
 
             VStack(spacing: 8) {
-                AcProbabilityRow(title: LTeam(String(match.fixture.home.id), fallback: match.fixture.home.name), value: match.probs.home, tint: AcTheme.gold)
-                AcProbabilityRow(title: L("predictions.draw"), value: match.probs.draw, tint: AcTheme.teal)
+                AcProbabilityRow(title: LTeam(String(match.fixture.home.id), fallback: match.fixture.home.name), value: match.probs.home, tint: AcTheme.emerald)
+                AcProbabilityRow(title: L("predictions.draw"), value: match.probs.draw, tint: AcTheme.neutralAccent)
                 AcProbabilityRow(title: LTeam(String(match.fixture.away.id), fallback: match.fixture.away.name), value: match.probs.away, tint: AcTheme.emeraldSoft)
             }
 
@@ -420,7 +420,7 @@ private struct AcPredictionMatchCard: View {
             } label: {
                 Text(match.locked ? L("predictions.locked.note") : L("predictions.login.note"))
                     .font(AsianCupFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(match.locked ? AcTheme.onDarkFaint : AcTheme.emeraldDeep)
+                    .foregroundStyle(match.locked ? AcTheme.onDarkFaint : .white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous).fill(match.locked ? AcTheme.chipFill : AcTheme.gold))
@@ -599,9 +599,10 @@ private struct AcTeamsScreen: View {
     let teams: [AcTeam]
     let loading: Bool
     let refresh: () async -> Void
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        AcScreenScaffold {
+        AcScreenScaffold(onBack: { dismiss() }) {
             VStack(spacing: 18) {
                 AcTopBar(title: L("teams.title"), subtitle: L("teams.subtitle"), state: "\(teams.count)")
                 AcTeamsSection(teams: teams)
@@ -659,7 +660,7 @@ private struct AcMoreScreen: View {
         .navigationDestination(for: AcTeam.self) { team in
             AcTeamProfileScreen(teamId: team.id, fallback: team)
         }
-        .sheet(isPresented: $showLanguage) {
+        .navigationDestination(isPresented: $showLanguage) {
             AcLanguagePicker().asianCupRTL()
         }
     }
@@ -670,13 +671,14 @@ private struct AcMoreHub: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             AcSectionHeader(icon: "square.grid.2x2.fill", title: L("more.explore.title"), subtitle: L("more.explore.subtitle"), tint: AcTheme.azure)
-            VStack(spacing: 10) {
+            AcGroupedCard {
                 NavigationLink { AcScorersScreen() } label: {
-                    AcMoreLinkCard(icon: "soccerball.inverse", title: L("scorers.title"), subtitle: L("scorers.subtitle"))
+                    AcNavRow(icon: "soccerball.inverse", tint: AcTheme.gold, title: L("scorers.title"), subtitle: L("scorers.subtitle"))
                 }
                 .buttonStyle(.plain)
+                AcRowDivider()
                 NavigationLink { AcBracketScreen() } label: {
-                    AcMoreLinkCard(icon: "trophy.fill", title: L("bracket.title"), subtitle: L("bracket.subtitle"))
+                    AcNavRow(icon: "trophy.fill", tint: AcTheme.emerald, title: L("bracket.title"), subtitle: L("bracket.subtitle"))
                 }
                 .buttonStyle(.plain)
             }
@@ -722,11 +724,9 @@ private struct AcLanguageRow: View {
 // قائمة اختيار اللغة — تعرض كل اللغات المدعومة (لغات المنتخبات الـ24 + العربية).
 private struct AcLanguagePicker: View {
     @ObservedObject private var loc = AcLocalization.shared
-    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
+        ScrollView {
                 VStack(spacing: 10) {
                     Text(L("language.note"))
                         .font(AsianCupFonts.app(size: 12))
@@ -773,29 +773,54 @@ private struct AcLanguagePicker: View {
             .background(AcAmbientBackground())
             .navigationTitle(L("language.title"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(AcTheme.onDarkFaint)
-                    }
-                }
-            }
-        }
     }
 }
 
 private struct AcScreenScaffold<Content: View>: View {
+    var onBack: (() -> Void)? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
         ScrollView {
-            content
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-                .padding(.bottom, 118)
+            VStack(spacing: 0) {
+                if let onBack {
+                    AcBackBar(action: onBack)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 10)
+                        .padding(.bottom, 4)
+                }
+                content
+                    .padding(.horizontal, 16)
+                    .padding(.top, onBack == nil ? 18 : 6)
+                    .padding(.bottom, 118)
+            }
         }
         .background(AcAmbientBackground())
+    }
+}
+
+// زر العودة الموحّد لكل الصفحات الداخلية (يدفعها كصفحات مستقلة لا منبثقة).
+private struct AcBackBar: View {
+    let action: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 14, weight: .bold))
+                    Text(L("common.back"))
+                        .font(AsianCupFonts.app(size: 14, weight: .bold))
+                }
+                .foregroundStyle(AcTheme.emeraldDeep)
+                .padding(.vertical, 8)
+                .padding(.horizontal, 14)
+                .background(Capsule().fill(AcTheme.cardFillStrong))
+                .overlay(Capsule().stroke(AcTheme.outline, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
+            Spacer(minLength: 0)
+        }
     }
 }
 
@@ -1013,9 +1038,9 @@ private struct AcPredictionsBanner: View {
             HStack(spacing: 14) {
                 Image(systemName: "sparkles")
                     .font(.system(size: 22, weight: .bold))
-                    .foregroundStyle(AcTheme.emeraldDeep)
+                    .foregroundStyle(AcTheme.emerald)
                     .frame(width: 52, height: 52)
-                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(AcTheme.gold))
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("banner.predictions.title"))
                         .font(AsianCupFonts.app(size: 16, weight: .bold))
@@ -1066,10 +1091,10 @@ private struct AcNextFixturesPreview: View {
                 Button(action: onOpenMatches) {
                     Label(L("home.next.viewAll"), systemImage: "calendar")
                         .font(AsianCupFonts.app(size: 13, weight: .bold))
-                        .foregroundStyle(AcTheme.emeraldDeep)
+                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
-                        .background(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous).fill(AcTheme.gold))
+                        .background(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous).fill(AcTheme.emerald))
                 }
                 .buttonStyle(.plain)
             }
@@ -1191,9 +1216,9 @@ private struct AcRefreshBanner: View {
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(AcTheme.emeraldDeep)
+                    .foregroundStyle(.white)
                     .frame(width: 32, height: 32)
-                    .background(Circle().fill(AcTheme.gold))
+                    .background(Circle().fill(AcTheme.emerald))
             }
             .buttonStyle(.plain)
         }
@@ -1226,28 +1251,65 @@ private struct AcMoreLinkCard: View {
     let subtitle: String
 
     var body: some View {
+        AcNavRow(icon: icon, tint: AcTheme.gold, title: title, subtitle: subtitle)
+    }
+}
+
+// صفّ تنقّل موحّد ومضغوط — يُستعمل داخل حاويات مجمّعة (قوائم نظيفة بلا إطارات متفرّقة).
+struct AcNavRow: View {
+    let icon: String
+    var tint: Color = AcTheme.gold
+    let title: String
+    let subtitle: String
+    var showChevron: Bool = true
+
+    var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(AcTheme.gold)
-                .frame(width: 42, height: 42)
-                .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(AcTheme.gold.opacity(0.12)))
-            VStack(alignment: .leading, spacing: 3) {
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 38, height: 38)
+                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(tint.opacity(0.12)))
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(AsianCupFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(AcTheme.onDark)
+                    .lineLimit(1)
                 Text(subtitle)
                     .font(AsianCupFonts.app(size: 11))
                     .foregroundStyle(AcTheme.onDarkDim)
+                    .lineLimit(1)
             }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.left")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(AcTheme.onDarkFaint)
+            Spacer(minLength: 8)
+            if showChevron {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AcTheme.onDarkFaint)
+            }
         }
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(AcTheme.cardFill))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .contentShape(Rectangle())
+    }
+}
+
+// حاوية قائمة مجمّعة — بطاقة واحدة بحدّ خفيف وفواصل رفيعة بدل بطاقات متفرّقة.
+struct AcGroupedCard<Content: View>: View {
+    @ViewBuilder var content: Content
+    var body: some View {
+        VStack(spacing: 0) { content }
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(AcTheme.cardFillStrong))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+}
+
+struct AcRowDivider: View {
+    var body: some View {
+        Rectangle()
+            .fill(AcTheme.outline)
+            .frame(height: 1)
+            .padding(.leading, 64)
     }
 }
 
@@ -1388,10 +1450,9 @@ struct AcHero: View {
 struct AcCountdownCard: View {
     let iso: String
 
-    private var numberGradient: LinearGradient {
-        LinearGradient(colors: [AcTheme.teal, AcTheme.azure],
-                       startPoint: .top, endPoint: .bottom)
-    }
+    // كتلة أخضر رسمي داخل بطاقة الـHero البيضاء — أرقام بيضاء وخلايا شفافة فاتحة.
+    private static let headerTint = Color(red: 0.749, green: 0.941, blue: 0.831) // #BFF0D3
+    private static let labelTint  = Color(red: 0.663, green: 0.863, blue: 0.753) // #A9DCC0
 
     var body: some View {
         VStack(spacing: 12) {
@@ -1401,7 +1462,8 @@ struct AcCountdownCard: View {
                     .font(AsianCupFonts.app(size: 12, weight: .semibold))
                     .tracking(1)
             }
-            .foregroundStyle(AcTheme.onDarkDim)
+            .foregroundStyle(Self.headerTint)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let c = AcCountdownMath.to(iso: iso)
@@ -1415,28 +1477,32 @@ struct AcCountdownCard: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    LinearGradient(colors: [AcTheme.emeraldDeep, AcTheme.emerald],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
+        )
     }
 
     private func cell(_ n: Int, _ label: String) -> some View {
         VStack(spacing: 6) {
             Text(String(format: "%02d", n))
-                .font(AsianCupFonts.app(size: 32, weight: .bold))
+                .font(AsianCupFonts.app(size: 30, weight: .bold))
                 .monospacedDigit()
-                .foregroundStyle(numberGradient)
+                .foregroundStyle(.white)
                 .contentTransition(.numericText(countsDown: true))
             Text(label)
                 .font(AsianCupFonts.app(size: 10))
-                .foregroundStyle(AcTheme.onDarkFaint)
+                .foregroundStyle(Self.labelTint)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
+        .padding(.vertical, 12)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AcTheme.chipFill)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(AcTheme.outline, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color.white.opacity(0.12))
         )
     }
 }
@@ -1604,7 +1670,7 @@ struct AcStandingsLegend: View {
     var body: some View {
         HStack(spacing: 16) {
             swatch(AcTheme.emeraldSoft, L("standings.legend.qualified"))
-            swatch(AcTheme.gold, L("standings.legend.third"))
+            swatch(AcTheme.neutralAccent, L("standings.legend.third"))
             Spacer(minLength: 0)
         }
     }
@@ -1741,12 +1807,12 @@ struct AcGroupRow: View {
 
     private var rowFill: Color {
         if qualifying { return AcTheme.emeraldSoft.opacity(0.13) }
-        if thirdPlace { return AcTheme.gold.opacity(0.08) }
+        if thirdPlace { return AcTheme.neutralAccent.opacity(0.10) }
         return AcTheme.onDark.opacity(0.04)
     }
     private var accent: Color {
         if qualifying { return AcTheme.emeraldSoft }
-        if thirdPlace { return AcTheme.goldDeep }
+        if thirdPlace { return AcTheme.neutralAccent }
         return .clear
     }
 
@@ -1803,11 +1869,11 @@ struct AcGroupRow: View {
         } else if thirdPlace {
             Text("\(visualRank)")
                 .font(AsianCupFonts.app(size: 12, weight: .bold))
-                .foregroundStyle(AcTheme.gold)
+                .foregroundStyle(AcTheme.neutralAccent)
                 .monospacedDigit()
                 .frame(width: 20, height: 20)
-                .background(Circle().fill(AcTheme.gold.opacity(0.16)))
-                .overlay(Circle().stroke(AcTheme.gold.opacity(0.5), lineWidth: 1))
+                .background(Circle().fill(AcTheme.neutralAccent.opacity(0.16)))
+                .overlay(Circle().stroke(AcTheme.neutralAccent.opacity(0.5), lineWidth: 1))
         } else {
             Text("\(visualRank)")
                 .font(AsianCupFonts.app(size: 12, weight: .bold))
@@ -1999,31 +2065,25 @@ struct AcHostShowcase: View {
             if overview.venues.isEmpty {
                 AcEmptyState(icon: "building.2", title: L("venues.empty.title"), subtitle: L("venues.empty.subtitle"))
             } else {
-                VStack(spacing: 10) {
-                    ForEach(overview.venues, id: \.name) { v in
+                AcGroupedCard {
+                    ForEach(Array(overview.venues.enumerated()), id: \.element.name) { idx, v in
+                        if idx > 0 { AcRowDivider() }
                         HStack(spacing: 12) {
                             Image(systemName: "mappin.and.ellipse")
-                                .font(.system(size: 18))
+                                .font(.system(size: 16, weight: .bold))
                                 .foregroundStyle(AcTheme.gold)
-                                .frame(width: 42, height: 42)
-                                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AcTheme.gold.opacity(0.12)))
+                                .frame(width: 38, height: 38)
+                                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(AcTheme.gold.opacity(0.12)))
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(v.name).font(AsianCupFonts.app(size: 14, weight: .bold)).foregroundStyle(AcTheme.onDark)
+                                Text(v.name).font(AsianCupFonts.app(size: 14, weight: .bold)).foregroundStyle(AcTheme.onDark).lineLimit(1)
                                 if !v.city.isEmpty {
-                                    Text(v.city).font(AsianCupFonts.app(size: 12)).foregroundStyle(AcTheme.onDarkDim)
+                                    Text(v.city).font(AsianCupFonts.app(size: 11)).foregroundStyle(AcTheme.onDarkDim).lineLimit(1)
                                 }
                             }
-                            Spacer(minLength: 0)
+                            Spacer(minLength: 8)
                         }
-                        .padding(12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(AcTheme.cardFill)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(AcTheme.outline, lineWidth: 1)
-                                )
-                        )
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
                     }
                 }
             }
@@ -2037,9 +2097,10 @@ struct AcScorersScreen: View {
     @State private var scorers: [AcScorer] = []
     @State private var loading = true
     @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        AcScreenScaffold {
+        AcScreenScaffold(onBack: { dismiss() }) {
             VStack(spacing: 16) {
                 AcTopBar(title: L("scorers.title"), subtitle: L("scorers.subtitle"), state: scorers.isEmpty ? "—" : "\(scorers.count)")
 
@@ -2165,11 +2226,12 @@ struct AcBracketScreen: View {
     @State private var bracket: AcBracket?
     @State private var loading = true
     @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
 
     private var hasRounds: Bool { (bracket?.rounds.isEmpty == false) }
 
     var body: some View {
-        AcScreenScaffold {
+        AcScreenScaffold(onBack: { dismiss() }) {
             VStack(spacing: 18) {
                 AcTopBar(title: L("bracket.title"), subtitle: L("bracket.subtitle"), state: hasRounds ? "\(bracket?.rounds.count ?? 0)" : "—")
 
@@ -2218,11 +2280,12 @@ struct AcTeamProfileScreen: View {
     @State private var profile: AcTeamProfile?
     @State private var loading = true
     @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
 
     private var team: AcTeam { profile?.team ?? fallback }
 
     var body: some View {
-        AcScreenScaffold {
+        AcScreenScaffold(onBack: { dismiss() }) {
             VStack(spacing: 18) {
                 AcTeamHero(
                     team: team,
@@ -2568,9 +2631,10 @@ private struct AcQualificationTimelineScreen: View {
     @State private var journey: AcQualificationJourney?
     @State private var loading = true
     @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        AcScreenScaffold {
+        AcScreenScaffold(onBack: { dismiss() }) {
             VStack(spacing: 18) {
                 header
 
@@ -2937,7 +3001,7 @@ private struct AcTeamNextMatchFeature: View {
             .shadow(color: .black.opacity(0.035), radius: 8, y: 4)
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showDetail) {
+        .navigationDestination(isPresented: $showDetail) {
             AcMatchDetailSheet(fixture: fixture)
         }
     }
@@ -3070,7 +3134,7 @@ private struct AcTeamJourneyRow: View {
             .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showDetail) {
+        .navigationDestination(isPresented: $showDetail) {
             AcMatchDetailSheet(fixture: fixture)
         }
     }
@@ -3089,9 +3153,10 @@ private struct AcPlayerProfileScreen: View {
     @State private var player: AcPlayerCard?
     @State private var loading = true
     @State private var errorMessage: String?
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        AcScreenScaffold {
+        AcScreenScaffold(onBack: { dismiss() }) {
             VStack(spacing: 18) {
                 header
 
