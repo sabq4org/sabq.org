@@ -68,6 +68,7 @@ import {
   getCommentary,
   getMatchFacts,
   getForecast,
+  getExpectedLineups,
   resolveSmIdByNames,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
@@ -837,6 +838,35 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] xg failed:", error);
       res.status(502).json({ available: false, home: { xg: 0, xgot: 0 }, away: { xg: 0, xgot: 0 }, topPlayers: [] });
+    }
+  });
+
+  // التشكيلة المتوقعة قبل المباراة (SportMonks) — تُعرض حتى صدور الرسمية.
+  app.get("/api/sports/match/:id/expected-lineup", async (req, res) => {
+    const empty = { available: false, home: null, away: null };
+    if (!isSportmonksConfigured()) {
+      res.json(empty);
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+    try {
+      const smId = await resolveSportsSmId(id);
+      if (!smId) return res.json(empty);
+      // نسخة عميقة قبل التعريب كي لا نلوّث النسخة المكاشة بالخدمة
+      const data = structuredClone(await getExpectedLineups(id, { directSmId: smId }));
+      if (data.available) {
+        const players = [data.home, data.away]
+          .filter(Boolean)
+          .flatMap((side) => [...side!.starters, ...side!.bench]);
+        const tr = await resolveNames(players.map((p) => p.name)).catch(() => null);
+        if (tr) for (const p of players) p.name = tr(p.name) || p.name;
+      }
+      res.set("Cache-Control", "public, max-age=60, s-maxage=180, stale-while-revalidate=600");
+      res.json(data);
+    } catch (error) {
+      console.error("[Sports] expected-lineup failed:", error);
+      res.status(502).json(empty);
     }
   });
 

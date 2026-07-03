@@ -107,7 +107,8 @@ const SEED_TOURNAMENTS: InsertSportsTournament[] = [
   },
   {
     slug: "asian-cup",
-    apiFootballLeagueId: null,
+    // نفس معرّف asianCupService (كان null خطأً — تناقض السجل مع الخدمة)
+    apiFootballLeagueId: 7,
     name: "كأس آسيا",
     shortName: "كأس آسيا",
     kind: "seasonal",
@@ -115,6 +116,7 @@ const SEED_TOURNAMENTS: InsertSportsTournament[] = [
     visibleWeb: false,
     visibleApp: false,
     sortOrder: 50,
+    season: 2027,
     features: { bracket: true, scorers: true, predictions: true, teams: true, news: true, entryPath: "/asian-cup" },
   },
   {

@@ -14,6 +14,7 @@ import { PlayerCardDialog } from "@/components/worldcup/PlayerCardDialog";
 import { ArabTeamsSpotlight } from "@/components/worldcup/ArabTeamsSpotlight";
 import { ScorersSection } from "@/components/worldcup/ScorersSection";
 import { StandingsSection } from "@/components/worldcup/StandingsSection";
+import { TeamOfTheWeekSection } from "@/components/worldcup/TeamOfTheWeekSection";
 import { TeamsSection } from "@/components/worldcup/TeamsSection";
 import { TournamentFacts } from "@/components/worldcup/TournamentFacts";
 import type { WcFixture, WcGroup, WcOverview, WcScorer } from "@/components/worldcup/wcTypes";
@@ -100,6 +101,7 @@ export default function WorldCup() {
           tournamentStarted={fixtures.some((f) => f.status.live || f.status.finished)}
           onOpenPlayer={setOpenPlayerId}
         />
+        <TeamOfTheWeekSection />
         <TeamsSection />
         <NewsSection />
       </main>

@@ -26,7 +26,6 @@ import {
   getTsVenue,
   getTsCompetitionExtra,
   getTsCompetitionMatchPairs,
-  getTsLiveStandings,
   getTsFifaRanking,
   getTsTeamInjuries,
   getTsMatchTv,
