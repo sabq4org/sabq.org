@@ -5653,6 +5653,47 @@ router.put("/sports/alert-prefs", async (req: Request, res: Response) => {
 });
 
 // ==========================================
+// محرّك الذكاء الرياضي (VARA Intelligence) — نظائر الموبايل.
+//   GET  /api/v1/sports/intel/digest   الموجز المخصّص (جلسة العضو)
+//   POST /api/v1/sports/intel/ask      المساعد المحادثي (عام)
+// «المشهد/بطاقة المباراة/قصص الموسم» عامة تُقرأ مباشرة من /api/sports/intel/*
+// (طرق GET بلا حماية CSRF)؛ الموجز يحتاج متابعات العضو، والمساعد POST فيلزم
+// إعفاء CSRF المتوفّر لكل مسارات /api/v1/*.
+// ==========================================
+router.get("/sports/intel/digest", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { isSaudiLeagueConfigured } = await import("../services/saudiLeagueService");
+    const { buildDigest } = await import("../services/sportsIntelligence");
+    if (!isSaudiLeagueConfigured()) return res.json({ success: true, configured: false, digest: null });
+    const digest = await buildDigest(session.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, configured: true, digest });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/intel/digest error:", error);
+    res.status(502).json({ success: false, message: "تعذّر تجهيز موجزك حاليًا" });
+  }
+});
+
+router.post("/sports/intel/ask", async (req: Request, res: Response) => {
+  try {
+    const { isSaudiLeagueConfigured } = await import("../services/saudiLeagueService");
+    const { askCopilot } = await import("../services/sportsIntelligence");
+    const question = String(req.body?.question ?? "").trim();
+    if (!question) return res.status(400).json({ success: false, message: "اكتب سؤالك أولاً" });
+    if (question.length > 400) return res.status(400).json({ success: false, message: "السؤال طويل جدًا" });
+    if (!isSaudiLeagueConfigured()) return res.json({ success: true, configured: false, answer: null });
+    const result = await askCopilot(question);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, configured: true, ...(result ?? { answer: null }) });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/intel/ask error:", error);
+    res.status(502).json({ success: false, message: "تعذّر الإجابة حاليًا" });
+  }
+});
+
+// ==========================================
 // توقّعات المباريات (المجتمع) — نظائر الموبايل لمسارات /api/sports/*/predict
 // المحميّة بـrequireAuth (Passport)؛ هنا بجلسة العضو (Bearer) عبر verifyMemberSession.
 //   GET  /api/v1/sports/match/:id/predict   توقّعي لمباراة

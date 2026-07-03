@@ -16,8 +16,14 @@ struct SpForYouView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                // موجزك من VARA (يظهر لعضو مسجّل وبوجود موجز جاهز — يختفي ذاتيًّا).
+                VaraDigestCard()
+
                 // مبارياتك المتابَعة (المكوّن القائم — يختفي ذاتيًّا حين لا متابعات).
                 SpMyMatchesCard()
+
+                // مدخل المساعد الرياضي المحادثي (RAG).
+                VaraCopilotEntry()
 
                 if !followedTeams.isEmpty {
                     SpSectionHeader(icon: "star.fill", title: "فِرقك")
