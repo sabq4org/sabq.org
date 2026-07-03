@@ -228,6 +228,27 @@ export interface WcLineup {
   substitutes: WcLineupPlayer[];
 }
 
+// التشكيلة المتوقعة قبل المباراة (SportMonks expectedLineups)
+export interface WcExpectedLineupPlayer {
+  name: string;
+  jersey: number | null;
+  slot: number | null;
+  grid: string | null;
+  row: number | null;
+}
+
+export interface WcExpectedLineupSide {
+  formation: string | null;
+  starters: WcExpectedLineupPlayer[];
+  bench: WcExpectedLineupPlayer[];
+}
+
+export interface WcExpectedLineups {
+  available: boolean;
+  home: WcExpectedLineupSide | null;
+  away: WcExpectedLineupSide | null;
+}
+
 export interface WcStatistic {
   key: string;
   label: string;

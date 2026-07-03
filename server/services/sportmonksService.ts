@@ -685,9 +685,127 @@ export async function getForecast(
 ): Promise<WcForecast> {
   const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
   if (!r) return EMPTY_FORECAST;
-  // التوقعات مستقرّة نسبيًا — كاش متوسط بغضّ النظر عن حالة المباراة
-  return withSWR(`wc:forecast:${r.smId}`, CACHE_TTL.MEDIUM, CACHE_TTL.LONG, () =>
-    buildForecast(r.smId)
+  // قبل المباراة كاش متوسط؛ أثناءها قصير كي تتحدّث الاحتمالات مع المجريات
+  const live = r.ttl === SM_LIVE_TTL;
+  return withSWR(
+    `wc:forecast:${r.smId}`,
+    live ? SM_LIVE_TTL : CACHE_TTL.MEDIUM,
+    live ? SM_LIVE_TTL * 3 : CACHE_TTL.LONG,
+    () => buildForecast(r.smId)
+  );
+}
+
+// ---------- التشكيلة المتوقعة قبل المباراة (expectedLineups) ----------
+
+export interface WcExpectedPlayer {
+  name: string;
+  jersey: number | null;
+  /** خانة اللاعب داخل الخطة (1 = الحارس) — للأساسيين فقط */
+  slot: number | null;
+  /** موقع اللاعب على الملعب "صف:عمود" (نفس صيغة grid في التشكيلة الرسمية) */
+  grid: string | null;
+  /** صف الخطة (مشتق من grid) — لاشتقاق شكل الخطة */
+  row: number | null;
+}
+
+export interface WcExpectedSide {
+  formation: string | null;
+  starters: WcExpectedPlayer[];
+  bench: WcExpectedPlayer[];
+}
+
+export interface WcExpectedLineups {
+  available: boolean;
+  home: WcExpectedSide | null;
+  away: WcExpectedSide | null;
+}
+
+const EMPTY_EXPECTED_LINEUPS: WcExpectedLineups = { available: false, home: null, away: null };
+
+// متحقَّق حيًّا (2026-07-03): 77614 = أساسي (11 صفًّا لكل فريق)، 77615 = بديل
+const SM_EXPECTED_STARTER_TYPE = 77614;
+
+function mapExpectedPlayer(raw: any): WcExpectedPlayer {
+  const field = typeof raw.formation_field === "string" ? raw.formation_field : "";
+  const grid = /^\d+:\d+$/.test(field) ? field : null;
+  return {
+    name: String(raw.player_name || "").trim(),
+    jersey: Number.isFinite(Number(raw.jersey_number)) ? Number(raw.jersey_number) : null,
+    slot: Number.isFinite(Number(raw.formation_position)) ? Number(raw.formation_position) : null,
+    grid,
+    row: grid ? Number(grid.split(":")[0]) : null,
+  };
+}
+
+/** يشتقّ شكل الخطة ("4-2-3-1") من صفوف الأساسيين عند غياب `formations` الرسمية */
+function deriveFormation(starters: WcExpectedPlayer[]): string | null {
+  const counts = new Map<number, number>();
+  for (const p of starters) {
+    if (p.row && p.row > 1) counts.set(p.row, (counts.get(p.row) || 0) + 1);
+  }
+  if (!counts.size) return null;
+  return Array.from(counts.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([, n]) => n)
+    .join("-");
+}
+
+async function buildExpectedLineups(smId: number): Promise<WcExpectedLineups> {
+  const data = await smGet(`fixtures/${smId}`, {
+    include: "expectedLineups;formations;participants",
+  });
+  const fx = data?.data;
+  const rows: any[] = Array.isArray(fx?.expectedlineups) ? fx.expectedlineups : [];
+  if (!rows.length) return EMPTY_EXPECTED_LINEUPS;
+
+  const sideByTeam = new Map<number, "home" | "away">();
+  for (const p of Array.isArray(fx?.participants) ? fx.participants : []) {
+    const loc = p?.meta?.location;
+    if (loc === "home" || loc === "away") sideByTeam.set(Number(p.id), loc);
+  }
+  const formationBySide = new Map<string, string>();
+  for (const f of Array.isArray(fx?.formations) ? fx.formations : []) {
+    if (f?.location && typeof f.formation === "string") {
+      formationBySide.set(f.location, f.formation);
+    }
+  }
+
+  const sides = {
+    home: { starters: [] as WcExpectedPlayer[], bench: [] as WcExpectedPlayer[] },
+    away: { starters: [] as WcExpectedPlayer[], bench: [] as WcExpectedPlayer[] },
+  };
+  for (const raw of rows) {
+    const side = sideByTeam.get(Number(raw?.team_id));
+    if (!side || !raw?.player_name) continue;
+    const player = mapExpectedPlayer(raw);
+    if (Number(raw.type_id) === SM_EXPECTED_STARTER_TYPE) sides[side].starters.push(player);
+    else sides[side].bench.push(player);
+  }
+  if (!sides.home.starters.length && !sides.away.starters.length) return EMPTY_EXPECTED_LINEUPS;
+
+  const buildSide = (side: "home" | "away"): WcExpectedSide => {
+    const starters = sides[side].starters.sort((a, b) => (a.slot ?? 99) - (b.slot ?? 99));
+    return {
+      formation: formationBySide.get(side) ?? deriveFormation(starters),
+      starters,
+      bench: sides[side].bench,
+    };
+  };
+  return { available: true, home: buildSide("home"), away: buildSide("away") };
+}
+
+/**
+ * التشكيلة المتوقعة قبل المباراة (Expected Lineups — ينشرها المزوّد قبل يومين تقريبًا).
+ * تُعرض حتى صدور التشكيلة الرسمية؛ أفضل جهد: أي غياب → { available:false }.
+ */
+export async function getExpectedLineups(
+  apiFootballFixtureId: number,
+  opts: { directSmId?: number } = {}
+): Promise<WcExpectedLineups> {
+  const r = await resolveFixture(apiFootballFixtureId, opts.directSmId);
+  if (!r) return EMPTY_EXPECTED_LINEUPS;
+  return withSWR(`wc:explineup:${r.smId}`, CACHE_TTL.SHORT, CACHE_TTL.MEDIUM, () =>
+    buildExpectedLineups(r.smId)
   );
 }
 
