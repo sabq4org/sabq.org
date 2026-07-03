@@ -45,10 +45,21 @@ nonisolated struct SpFixture: Codable, Identifiable, Hashable {
     let home: SpTeam
     let away: SpTeam
     let goals: SpScore
+    /// نتيجة ركلات الترجيح — لحظية أثناء الترجيح (code=P) ونهائية بعده (PEN).
+    let penalties: SpScore?
     let competition: String?
     let competitionSlug: String?
 
     var started: Bool { status.live || status.finished }
+
+    /// ركلات الترجيح جارية الآن.
+    var shootoutLive: Bool { status.live && status.code == "P" }
+
+    /// نتيجة ترجيح معلومة (جارية أو نهائية) — nil إن لا ترجيح.
+    var penaltyScore: SpScore? {
+        guard let p = penalties, p.home != nil || p.away != nil else { return nil }
+        return p
+    }
 
     /// لحظة انطلاق المباراة (من الطابع الزمني) — أساس العدّاد التنازلي.
     var kickoff: Date { Date(timeIntervalSince1970: TimeInterval(timestamp)) }

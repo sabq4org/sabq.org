@@ -815,9 +815,13 @@ export interface WcRefereeStats {
   /** مباريات الموسم/البطولة التي تخصها الأرقام */
   matches: number;
   yellowAvg: number | null;
+  /** إجمالي الصفراء — قرار المالك 2026-07-04: الأعداد الصحيحة لا الكسور («18 بطاقة في 4 مباريات» لا «4.5/مباراة») */
+  yellowCount: number | null;
   /** حمراء مباشرة + صفراء ثانية (إجمالي لا معدل — الأوضح للقارئ) */
   redCount: number;
   penaltiesAvg: number | null;
+  /** إجمالي ركلات الجزاء المحتسبة */
+  penaltiesCount: number | null;
   foulsAvg: number | null;
   varMoments: number | null;
 }
@@ -885,8 +889,10 @@ async function buildMatchReferee(smId: number): Promise<WcMatchReferee> {
         ? {
             matches,
             yellowAvg: typeof yellow?.all?.average === "number" ? yellow.all.average : null,
+            yellowCount: typeof yellow?.all?.count === "number" ? yellow.all.count : null,
             redCount: (Number(red?.all?.count) || 0) + (Number(yellowRed?.all?.count) || 0),
             penaltiesAvg: typeof pens?.all?.average === "number" ? pens.all.average : null,
+            penaltiesCount: typeof pens?.all?.count === "number" ? pens.all.count : null,
             foulsAvg: typeof fouls?.average === "number" ? fouls.average : null,
             varMoments: typeof varMoments?.count === "number" ? varMoments.count : null,
           }

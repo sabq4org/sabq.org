@@ -376,6 +376,7 @@ final class SpMatchFollows {
             finishedAtById = stored
         }
         pruneExpiredFinishedMatches()
+        purgeScheduledKickoffNotifications()
     }
 
     func isFollowing(_ id: Int) -> Bool { items.contains { $0.id == id } }
@@ -601,16 +602,25 @@ final class SpMatchFollows {
         guard !fixture.started else { return }
         let title = "\(fixture.home.name) ✕ \(fixture.away.name)"
 
-        // تذكير قبل ١٠ دقائق.
+        // تذكير قبل ١٠ دقائق فقط. لا إشعار محلّي عند الموعد المجدول — إشعار
+        // «انطلقت المباراة» يصل من الخادم عند البداية الفعلية (تغيّر الحالة)،
+        // والمحلّي كان يزدوج معه ويكذب حين تتأخر الصافرة (قرار المالك 2026-07-04).
         let preDate = fixture.kickoff.addingTimeInterval(-10 * 60)
         if preDate > Date() {
             schedule(center, id: "match-\(fixture.id)-pre", at: preDate,
                      title: title, body: "تبدأ المباراة بعد ١٠ دقائق ⚽")
         }
-        // تذكير لحظة الانطلاق.
-        if fixture.kickoff > Date() {
-            schedule(center, id: "match-\(fixture.id)-kick", at: fixture.kickoff,
-                     title: title, body: "انطلقت المباراة الآن! 🔥")
+    }
+
+    /// تنظيف إشعارات «الانطلاق بالموعد» المعلّقة من إصدارات سابقة — مرة عند الإقلاع.
+    private func purgeScheduledKickoffNotifications() {
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { requests in
+            let ids = requests.map(\.identifier)
+                .filter { $0.hasPrefix("match-") && $0.hasSuffix("-kick") }
+            if !ids.isEmpty {
+                center.removePendingNotificationRequests(withIdentifiers: ids)
+            }
         }
     }
 

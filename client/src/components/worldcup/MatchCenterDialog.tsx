@@ -1450,8 +1450,10 @@ interface WcMatchReferee {
   stats: {
     matches: number;
     yellowAvg: number | null;
+    yellowCount: number | null;
     redCount: number;
     penaltiesAvg: number | null;
+    penaltiesCount: number | null;
     foulsAvg: number | null;
     varMoments: number | null;
   } | null;
@@ -1466,9 +1468,13 @@ function MatchRefereeSection({ fixtureId }: { fixtureId: number }) {
   const s = data.stats;
   const chips: string[] = [];
   if (s) {
-    if (s.yellowAvg != null) chips.push(`🟨 ${s.yellowAvg.toFixed(1)}/مباراة`);
-    chips.push(`🟥 ${s.redCount}`);
-    if (s.penaltiesAvg != null) chips.push(`⚽ جزاء ${s.penaltiesAvg.toFixed(2)}/مباراة`);
+    // أعداد صحيحة مفهومة («18 صفراء») لا متوسطات كسرية («4.5/مباراة») —
+    // قرار المالك 2026-07-04. استرجاع بالمعدل×المباريات إن غاب الإجمالي.
+    const yellow = s.yellowCount ?? (s.yellowAvg != null ? Math.round(s.yellowAvg * s.matches) : null);
+    const pens = s.penaltiesCount ?? (s.penaltiesAvg != null ? Math.round(s.penaltiesAvg * s.matches) : null);
+    if (yellow != null) chips.push(`🟨 ${yellow} صفراء`);
+    chips.push(`🟥 ${s.redCount} حمراء`);
+    if (pens != null) chips.push(`⚽ ${pens} ${pens === 1 ? "ركلة جزاء" : "ركلات جزاء"}`);
     if (s.varMoments != null) chips.push(`فار ×${s.varMoments}`);
   }
   return (

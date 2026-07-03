@@ -383,14 +383,26 @@ struct SpScoreRow: View {
         if fixture.status.live {
             HStack(spacing: 4) {
                 Circle().fill(SpTheme.crimson).frame(width: 5, height: 5)
-                Text(liveMinute)
+                if fixture.shootoutLive, let p = fixture.penaltyScore {
+                    penaltyDigits(p)
+                } else {
+                    Text(liveMinute)
+                }
             }
             .font(SportsFonts.app(size: 10.5, weight: .bold))
-            .foregroundStyle(SpTheme.crimson).lineLimit(1).minimumScaleFactor(0.8)
+            .foregroundStyle(SpTheme.crimson).lineLimit(1).minimumScaleFactor(0.6)
         } else if fixture.status.finished {
-            Text("انتهت")
-                .font(SportsFonts.app(size: 10.5, weight: .semibold))
-                .foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
+            if let p = fixture.penaltyScore {
+                penaltyDigits(p)
+                    .font(SportsFonts.app(size: 10.5, weight: .bold))
+                    .foregroundStyle(SpTheme.green)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            } else {
+                Text("انتهت")
+                    .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+            }
         } else {
             Text("موعد")
                 .font(SportsFonts.app(size: 10.5, weight: .semibold))
@@ -410,6 +422,17 @@ struct SpScoreRow: View {
         guard let e = fixture.status.elapsed else { return fixture.status.label }
         if let extra = fixture.status.extra, extra > 0 { return "\(e)+\(extra)'" }
         return "\(e)'"
+    }
+
+    /// أرقام الترجيح محاذيةً لعمودَي الفريقين (ضيف-مضيف كسطر النتيجة) في Text
+    /// مستقل مفروض LTR — دمجها بسلسلة عربية واحدة يقلب الأرقام في التصيير (بيدي).
+    private func penaltyDigits(_ p: SpScore) -> some View {
+        HStack(spacing: 3) {
+            Text("ترجيح")
+            Text("\(p.away ?? 0)-\(p.home ?? 0)")
+                .monospacedDigit()
+                .environment(\.layoutDirection, .leftToRight)
+        }
     }
 }
 
