@@ -2032,6 +2032,59 @@ export const rslLongPredictions = pgTable("rsl_long_predictions", {
 export type RslLongPrediction = typeof rslLongPredictions.$inferSelect;
 
 // ============================================================================
+// Cup predictions — generic per-tournament engine (World Cup / roshn model),
+// COMPETITION-SCOPED so one table set serves كأس الملك (kings-cup) + كأس السوبر
+// (super-cup) — «توحيد» بلا تكرار جداول لكل بطولة. سلوكه مطابق لجداول rsl_*:
+// توقّع دقيق واحد لكل (مباراة، مستخدم)، وجائزة 500 نقطة تُقسَّم بالتساوي على
+// مصيبي النتيجة بالضبط. النتيجة المعكوسة لا تفوز أبدًا (يُحترم ترتيب المضيف/
+// الضيف عند التسوية). المباريات تُجلب حيّة (API-Football) — نخزّن فقط توقّعات
+// المستخدمين ولقطة تسوية كل مباراة. التوقّعات طويلة المدى (البطل/الهدّاف) تُخزَّن
+// في sports_pool_long الموحّد. مفتاح fixture_id عالمي فريد (API-Football) عبر
+// كل البطولات فيبقى أحادي التوقّع لكل مباراة.
+export const cupPredictions = pgTable("cup_predictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  competitionSlug: text("competition_slug").notNull(),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predHome: integer("pred_home").notNull(),
+  predAway: integer("pred_away").notNull(),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  uniqueIndex("idx_cup_pred_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_cup_pred_comp_user").on(table.competitionSlug, table.userId),
+  index("idx_cup_pred_fixture").on(table.fixtureId),
+]);
+
+export const cupPredictionMatches = pgTable("cup_prediction_matches", {
+  fixtureId: varchar("fixture_id").primaryKey(),
+  competitionSlug: text("competition_slug").notNull(),
+  kickoffAt: timestamp("kickoff_at").notNull(),
+  homeTeamName: text("home_team_name").notNull(),
+  homeTeamLogo: text("home_team_logo").notNull().default(""),
+  awayTeamName: text("away_team_name").notNull(),
+  awayTeamLogo: text("away_team_logo").notNull().default(""),
+  finalHome: integer("final_home"),
+  finalAway: integer("final_away"),
+  status: text("status").notNull().default("open"), // open | locked | settled
+  winnersCount: integer("winners_count").notNull().default(0),
+  predictionsCount: integer("predictions_count").notNull().default(0),
+  pointsPool: integer("points_pool").notNull().default(500),
+  pointsPerWinner: integer("points_per_winner").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"),
+}, (table) => [
+  index("idx_cup_pred_match_comp_status").on(table.competitionSlug, table.status),
+]);
+
+export type CupPrediction = typeof cupPredictions.$inferSelect;
+export type CupPredictionMatch = typeof cupPredictionMatches.$inferSelect;
+
+// ============================================================================
 // Asian Cup 2027 — Smart Predictions Game
 // Fixtures are NOT stored (fetched live from API-Football via asianCupService).
 // Unlike the World Cup pool-split, scoring here is SKILL-BASED and per-user:

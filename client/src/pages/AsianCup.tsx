@@ -11,6 +11,7 @@ import { AcGroups } from "@/components/asiancup/AcGroups";
 import { AcSchedule } from "@/components/asiancup/AcSchedule";
 import { AcTeams } from "@/components/asiancup/AcTeams";
 import { AcHostShowcase } from "@/components/asiancup/AcHostShowcase";
+import { SportsNewsBlock } from "@/components/sports/SportsNewsBlock";
 import type { AcFixture, AcGroup, AcOverview, AcTeam } from "@/components/asiancup/acTypes";
 
 export default function AsianCup() {
@@ -67,6 +68,9 @@ export default function AsianCup() {
         <AcSchedule fixtures={fixtures} isLoading={fixturesLoading} />
         <AcTeams teams={teams} isLoading={teamsLoading} />
         <AcHostShowcase overview={overview} />
+        <div className="mx-auto max-w-6xl px-3 sm:px-4 pb-10">
+          <SportsNewsBlock query="كأس آسيا" title="أخبار كأس آسيا" />
+        </div>
       </main>
 
       <Footer />

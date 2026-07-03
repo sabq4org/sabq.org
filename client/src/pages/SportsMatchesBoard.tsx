@@ -37,6 +37,7 @@ import {
   COMP_CATEGORY_LABELS,
   COMP_CATEGORY_ORDER,
   MatchDialog,
+  competitionHref,
   type SpCompetition,
   type SpCompetitionCategory,
   type SpLiveItem,
@@ -454,7 +455,7 @@ function CompetitionGroup({
       <div className="flex items-center gap-2.5 border-b border-border bg-muted/60 px-3 py-2.5 sm:px-4 sm:py-3">
         {slug ? (
           <Link
-            href={`/sports/competition/${slug}`}
+            href={competitionHref(slug)}
             className="group flex min-w-0 flex-1 items-center gap-2.5"
             title={`صفحة بطولة ${name}`}
           >
@@ -645,47 +646,44 @@ export default function SportsMatchesBoard() {
       <Header user={user || undefined} sticky={false} />
 
       <main className="flex-1">
-          {/* ===== ترويسة فاتحة — مطابقة لهوية /sports ===== */}
-          <div className="border-b border-border bg-card">
-            <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-7">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-primary/10">
-                    <CalendarDays className="h-7 w-7 text-primary" strokeWidth={1.8} />
-                  </div>
-                  <div className="min-w-0">
-                    <h1 className="text-2xl font-black leading-tight text-foreground sm:text-3xl">مباريات اليوم</h1>
-                    <p className="mt-0.5 text-sm text-muted-foreground">كل مباريات بطولاتنا مرتّبة بالوقت — نتيجة لحظية ومسجّلو أهداف فور التسجيل.</p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {liveTotal > 0 && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-1.5 text-[12px] font-bold tabular-nums text-white">
-                      <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveTotal} مباشر الآن
-                    </span>
-                  )}
-                  {isToday && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground">
-                      {isLiveFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5 text-red-500" strokeWidth={1.8} />}
-                      تحديث تلقائي
-                    </span>
-                  )}
-                  <Link
-                    href="/sports/live"
-                    className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-                  >
-                    <Radio className="h-3.5 w-3.5 text-red-500" strokeWidth={1.8} /> البث المباشر · العالم
-                  </Link>
-                  <Link
-                    href="/sports"
-                    className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-                  >
-                    البوابة الرياضية <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
-                  </Link>
-                </div>
-              </div>
+          {/* ===== ترويسة — عبارة كبيرة في المنتصف بأسلوب /sabq-ai ===== */}
+          <section className="border-b border-border bg-card px-4 pt-10 pb-8 text-center sm:pt-12 sm:pb-9" data-testid="matches-hero">
+            <span className="mb-4 inline-block rounded-full border border-primary/20 bg-primary/10 px-5 py-1.5 text-xs font-bold text-primary md:text-[13px]">
+              لوحة المباريات — كل بطولاتنا في يومٍ واحد
+            </span>
+            <h1 className="mx-auto max-w-2xl text-balance text-3xl font-extrabold leading-[1.4] text-foreground md:text-4xl">
+              كل مبارياتنا اليوم… <span className="text-primary">لحظة بلحظة</span>
+            </h1>
+            <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground md:text-base">
+              مرتّبة بالوقت ومجمّعة حسب البطولة — نتيجة لحظية ومسجّلو أهداف فور التسجيل.
+            </p>
+
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+              {liveTotal > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-1.5 text-[12px] font-bold tabular-nums text-white">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveTotal} مباشر الآن
+                </span>
+              )}
+              {isToday && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground">
+                  {isLiveFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5 text-red-500" strokeWidth={1.8} />}
+                  تحديث تلقائي
+                </span>
+              )}
+              <Link
+                href="/sports/live"
+                className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              >
+                <Radio className="h-3.5 w-3.5 text-red-500" strokeWidth={1.8} /> البث المباشر · العالم
+              </Link>
+              <Link
+                href="/sports"
+                className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              >
+                البوابة الرياضية <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
+              </Link>
             </div>
-          </div>
+          </section>
 
           {/* ===== طبقة التحكم: التاريخ + البحث ===== */}
           <div className="border-b border-border bg-card">
@@ -842,7 +840,7 @@ export default function SportsMatchesBoard() {
                   <div key={m.id} className="border-b border-border last:border-b-0">
                     {m.competitionSlug ? (
                       <Link
-                        href={`/sports/competition/${m.competitionSlug}`}
+                        href={competitionHref(m.competitionSlug)}
                         className="flex w-fit items-center gap-1 px-4 pt-2 text-[11px] font-bold text-muted-foreground transition-colors hover:text-primary"
                       >
                         {m.competition}

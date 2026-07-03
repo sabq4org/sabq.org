@@ -18,7 +18,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
-import { ACCENT, MatchDialog, type SpLiveItem } from "./SportsHub";
+import { ACCENT, MatchDialog, competitionHref, type SpLiveItem } from "./SportsHub";
 import { MatchRow } from "./SportsMatchesBoard";
 
 const LIVE_REFETCH_MS = 15_000;
@@ -143,40 +143,42 @@ export default function SportsLive() {
       <Header user={user || undefined} sticky={false} />
 
       <main className="flex-1">
-        {/* ترويسة الصفحة */}
-        <div className="bg-card border-b border-border">
-          <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-7">
-            <div className="flex items-start justify-between gap-3 flex-wrap sm:items-center">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-accent-blue/30 shrink-0">
-                  <Radio className={`w-5 h-5 ${ACCENT}`} />
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-muted-foreground tracking-wide uppercase">سبق سبورت</span>
-                  <h1 className="text-[1.7rem] sm:text-3xl font-black text-foreground tracking-tight leading-none">البث المباشر · العالم</h1>
-                  <p className="mt-1 text-xs text-muted-foreground">البطولات العالمية التي موسمها قائم الآن</p>
-                </div>
-              </div>
-              <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:w-auto sm:overflow-visible sm:pb-0">
-                {total > 0 && (
-                  <span className="inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-background text-foreground text-xs font-bold">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" /> {total} مباشر الآن
-                  </span>
-                )}
-                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
-                  {isFetching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5 text-red-500" />}
-                  تحديث تلقائي
-                </span>
-                <Link
-                  href="/sports/matches"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-bold text-foreground hover:border-primary/40 transition-colors"
-                >
-                  مباريات اليوم <ChevronLeft className="w-4 h-4" />
-                </Link>
-              </div>
-            </div>
+        {/* ترويسة — عبارة كبيرة في المنتصف بأسلوب /sabq-ai */}
+        <section className="border-b border-border bg-card px-4 pt-10 pb-8 text-center sm:pt-12 sm:pb-9" data-testid="live-hero">
+          <span className="mb-4 inline-block rounded-full border border-primary/20 bg-primary/10 px-5 py-1.5 text-xs font-bold text-primary md:text-[13px]">
+            سبق سبورت — البث المباشر
+          </span>
+          <h1 className="mx-auto max-w-2xl text-balance text-3xl font-extrabold leading-[1.4] text-foreground md:text-4xl">
+            كل ملاعب <span className="text-primary">العالم</span>… على الهواء الآن
+          </h1>
+          <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground md:text-base">
+            المباريات المباشرة في البطولات العالمية التي موسمها قائم — مجمّعة حسب الدولة والدوري.
+          </p>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+            {total > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-1.5 text-[12px] font-bold tabular-nums text-white">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {total} مباشر الآن
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground">
+              {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5 text-red-500" />}
+              تحديث تلقائي
+            </span>
+            <Link
+              href="/sports/matches"
+              className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            >
+              مباريات اليوم <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </Link>
+            <Link
+              href="/sports"
+              className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            >
+              البوابة الرياضية <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
+            </Link>
           </div>
-        </div>
+        </section>
 
         {/* المحتوى */}
         <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6">
@@ -213,7 +215,7 @@ export default function SportsLive() {
                       <div key={l.leagueId} className="overflow-hidden rounded-2xl border border-border bg-card">
                         <div className="flex items-center gap-2.5 border-b border-border bg-muted/60 px-3 py-2.5 sm:px-4 sm:py-3">
                           {l.slug ? (
-                            <Link href={`/sports/competition/${l.slug}`} className="group flex min-w-0 flex-1 items-center gap-2.5" title={`صفحة بطولة ${l.name}`}>
+                            <Link href={competitionHref(l.slug)} className="group flex min-w-0 flex-1 items-center gap-2.5" title={`صفحة بطولة ${l.name}`}>
                               {l.logo ? (
                                 <img src={l.logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
                               ) : (
