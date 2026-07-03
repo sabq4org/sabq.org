@@ -166,8 +166,6 @@ struct SpMatchCenter: View {
             VStack(spacing: 18) {
                 if let f = fixture { header(f) }
 
-                VaraSmartMatchCardView(fixtureId: fixtureId)   // بطاقة VARA الذكية + توقّع مفسّر (تختفي إن فارغة).
-
                 preMatchCard
                 matchInfoCard
                 varaModelCard
