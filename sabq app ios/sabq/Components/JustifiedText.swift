@@ -158,13 +158,12 @@ struct JustifiedAttributedText: UIViewRepresentable {
     final class Coordinator: NSObject, UITextViewDelegate {
         var onLinkTap: ((URL) -> Void)?
         var fingerprint: String = ""
-        func textView(_ textView: UITextView, shouldInteractWith URL: URL,
-                      in characterRange: NSRange, interaction: UITextItemInteraction) -> Bool {
-            if let handler = onLinkTap {
-                handler(URL)
-                return false
+        func textView(_ textView: UITextView, primaryActionFor textItem: UITextItem,
+                      defaultAction: UIAction) -> UIAction? {
+            if case .link(let url) = textItem.content, let handler = onLinkTap {
+                return UIAction { _ in handler(url) }
             }
-            return true
+            return defaultAction
         }
     }
 }

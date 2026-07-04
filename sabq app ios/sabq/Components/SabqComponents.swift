@@ -950,7 +950,7 @@ struct ImageLightbox: View {
 
 // MARK: - Theme
 
-enum SabqTheme {
+nonisolated enum SabqTheme {
     static let background  = Color(UIColor { t in
         t.userInterfaceStyle == .dark
             ? UIColor(red: 0.07, green: 0.07, blue: 0.09, alpha: 1)

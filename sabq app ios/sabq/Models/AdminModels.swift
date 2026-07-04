@@ -10,7 +10,7 @@ import SwiftUI
 
 /// The four real editorial states on `articles.status`, matching the web CMS.
 /// Drives the segmented control, the per-item badge, and the metric tiles.
-enum AdminArticleStatus: String, CaseIterable, Codable, Identifiable, Hashable {
+nonisolated enum AdminArticleStatus: String, CaseIterable, Codable, Identifiable, Hashable {
     case draft
     case scheduled
     case published
@@ -61,7 +61,7 @@ enum AdminArticleStatus: String, CaseIterable, Codable, Identifiable, Hashable {
 
 /// A single news row in the dashboard. Decoded from `/api/v1/admin/articles`.
 /// Deliberately flat — the simplified editor edits these fields directly.
-struct AdminNewsItem: Identifiable, Hashable, Decodable {
+nonisolated struct AdminNewsItem: Identifiable, Hashable, Decodable {
     let id: String
     var title: String
     var excerpt: String
@@ -107,8 +107,8 @@ struct AdminNewsItem: Identifiable, Hashable, Decodable {
 
 /// KPI groups decoded from `/api/v1/admin/dashboard/full-stats`. One tolerant
 /// `Group` shape (all-optional) covers every card so missing keys never throw.
-struct AdminFullStats: Decodable {
-    struct Group: Decodable {
+nonisolated struct AdminFullStats: Decodable {
+    nonisolated struct Group: Decodable {
         var total: Int?
         var published: Int?
         var draft: Int?
@@ -162,7 +162,7 @@ struct AdminFullStats: Decodable {
 }
 
 /// One compact KPI tile.
-struct AdminStatCard: Identifiable {
+nonisolated struct AdminStatCard: Identifiable {
     let key: String
     let title: String
     let value: String
@@ -174,7 +174,7 @@ struct AdminStatCard: Identifiable {
 }
 
 /// Lightweight overview — just the two counts the simplified dashboard shows.
-struct AdminCounts: Decodable {
+nonisolated struct AdminCounts: Decodable {
     var draft: Int
     var scheduled: Int
 }
@@ -182,14 +182,14 @@ struct AdminCounts: Decodable {
 // MARK: - Full editor detail
 
 /// SEO sub-object stored in `articles.seo` jsonb.
-struct AdminSEO: Codable, Hashable {
+nonisolated struct AdminSEO: Codable, Hashable {
     var metaTitle: String = ""
     var metaDescription: String = ""
     var keywords: [String] = []
 }
 
 /// Complete editor payload decoded from `GET /api/v1/admin/articles/:id`.
-struct AdminArticleDetail: Decodable, Hashable {
+nonisolated struct AdminArticleDetail: Decodable, Hashable {
     let id: String
     var title: String
     var subtitle: String
@@ -257,7 +257,7 @@ struct AdminArticleDetail: Decodable, Hashable {
 
 /// Unified result from توليد ذكي شامل / تحرير وتوليد شامل. Only the present
 /// fields are applied to the editor (content is set only by edit-and-generate).
-struct AdminGenerationResult: Decodable {
+nonisolated struct AdminGenerationResult: Decodable {
     var title: String?
     var subtitle: String?
     var summary: String?
@@ -290,7 +290,7 @@ struct AdminGenerationResult: Decodable {
 }
 
 /// One proofreading issue (original → suggestion).
-struct AdminProofIssue: Decodable, Identifiable, Hashable {
+nonisolated struct AdminProofIssue: Decodable, Identifiable, Hashable {
     let original: String
     let suggestion: String
     var type: String?
@@ -300,7 +300,7 @@ struct AdminProofIssue: Decodable, Identifiable, Hashable {
 
 /// Body sent to PATCH /api/v1/admin/articles/:id. Nil optionals are omitted
 /// by JSONEncoder, so the backend treats them as "no change".
-struct AdminArticleEditPayload: Encodable {
+nonisolated struct AdminArticleEditPayload: Encodable {
     var title: String
     var subtitle: String
     var excerpt: String
@@ -320,7 +320,7 @@ struct AdminArticleEditPayload: Encodable {
 
 /// Body sent to POST /api/v1/admin/articles (create). Carries `articleType`
 /// and `opinionAuthorId` (opinion byline) which the edit payload doesn't.
-struct AdminCreateBody: Encodable {
+nonisolated struct AdminCreateBody: Encodable {
     var title: String
     var subtitle: String
     var excerpt: String
@@ -340,7 +340,7 @@ struct AdminCreateBody: Encodable {
 }
 
 /// A staff member shown in the reporter / opinion-author picker.
-struct AdminUser: Decodable, Identifiable, Hashable {
+nonisolated struct AdminUser: Decodable, Identifiable, Hashable {
     let id: String
     let name: String
     var email: String?
