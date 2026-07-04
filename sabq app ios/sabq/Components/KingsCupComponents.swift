@@ -141,6 +141,64 @@ struct KcLoading: View {
     }
 }
 
+/// شريط احتمالات الفوز الثلاثي — مرآة WCProbabilityBar بألوان العائلة نفسها.
+/// المصدر: API-Football predictions (الخادم يُسقط العنصر الوهمي 33/33/33).
+struct KcProbabilityBar: View {
+    let fixture: KcFixture
+    let prediction: KcPrediction
+
+    var body: some View {
+        let total = max(1, prediction.homePct + prediction.drawPct + prediction.awayPct)
+        let h = Int(Double(prediction.homePct) / Double(total) * 100)
+        let d = Int(Double(prediction.drawPct) / Double(total) * 100)
+        let a = Int(Double(prediction.awayPct) / Double(total) * 100)
+        VStack(spacing: 6) {
+            HStack {
+                Text("فوز \(fixture.home.name) \(h)%")
+                Spacer()
+                Text("تعادل \(d)%").foregroundStyle(WCTheme.onDarkDim)
+                Spacer()
+                Text("فوز \(fixture.away.name) \(a)%")
+            }
+            .font(SabqFonts.app(size: 11, weight: .semibold))
+            .foregroundStyle(WCTheme.emeraldDeep)
+
+            GeometryReader { geo in
+                HStack(spacing: 0) {
+                    Rectangle().fill(WCTheme.royal).frame(width: geo.size.width * CGFloat(h) / 100)
+                    Rectangle().fill(WCTheme.onDarkDim.opacity(0.5)).frame(width: geo.size.width * CGFloat(d) / 100)
+                    Rectangle().fill(WCTheme.gold)
+                }
+            }
+            .frame(height: 10)
+            .clipShape(Capsule())
+
+            Text("توقعات خوارزمية للاستئناس من مزود البيانات")
+                .font(SabqFonts.app(size: 10))
+                .foregroundStyle(WCTheme.onDarkDim)
+        }
+    }
+}
+
+/// شريط احتمالات ذاتي الجلب — للمواضع التي لا يصلها التوقّع جاهزًا
+/// (مركز المباراة). يختفي بصمت قبل توفّر توقّع حقيقي أو بعد نهاية المباراة.
+struct KcFetchedPrediction: View {
+    let fixture: KcFixture
+    @State private var prediction: KcPrediction?
+
+    var body: some View {
+        Group {
+            if let p = prediction, !fixture.status.finished {
+                KcProbabilityBar(fixture: fixture, prediction: p)
+            }
+        }
+        .task(id: fixture.id) {
+            guard !fixture.status.finished else { return }
+            prediction = try? await APIClient.shared.fetchKingsCupPrediction(fixtureId: fixture.id)
+        }
+    }
+}
+
 /// نص حالة فارغة موحّد داخل الأقسام.
 @ViewBuilder
 func kcEmptyText(_ message: String) -> some View {

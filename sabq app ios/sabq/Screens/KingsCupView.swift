@@ -44,6 +44,8 @@ struct KingsCupView: View {
                 )
 
                 KcTeamsSection(teams: teams)
+
+                KcRecordSection()
             }
             .padding(.bottom, 36)
         }
@@ -219,6 +221,14 @@ struct KcHeroSection: View {
             }
 
             if !f.started { KcCountdownChips(timestamp: f.timestamp) }
+
+            // شريط الاحتمالات — يصل جاهزًا مع overview للمباراة المميّزة،
+            // ويختفي بعد نهاية المباراة (نفس سلوك هيرو المونديال)
+            if let pred = overview?.matchOfTheDay?.prediction,
+               f.id == overview?.matchOfTheDay?.fixture.id,
+               !f.status.finished {
+                KcProbabilityBar(fixture: f, prediction: pred)
+            }
 
             Button { onOpenMatch(f.id) } label: {
                 Text("مركز المباراة")
