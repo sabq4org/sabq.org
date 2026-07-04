@@ -244,9 +244,17 @@ export function registerKingsCupRoutes(app: Express) {
       return res.status(400).json({ message: "معرّف نادٍ غير صالح" });
     }
     try {
-      const profile = await getKcTeamProfile(teamId);
+      // ?with=stats يضمّن الإثراء الثقيل (إحصائيات/مدرب/هدّافون/انتقالات/كأس) —
+      // الصفحة تطلب الأساس أولًا فيرتسم فورًا ثم تجلب الإثراء بلا حجب
+      const withExtras = req.query.with === "stats";
+      const profile = await getKcTeamProfile(teamId, { withExtras });
       if (!profile) return res.status(404).json({ message: "النادي غير موجود" });
-      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+      res.set(
+        "Cache-Control",
+        withExtras
+          ? "public, max-age=120, s-maxage=300, stale-while-revalidate=900"
+          : "public, max-age=60, s-maxage=120, stale-while-revalidate=300",
+      );
       res.json(profile);
     } catch (error) {
       console.error(`[KingsCup] team ${teamId} failed:`, error);

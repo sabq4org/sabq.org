@@ -99,9 +99,17 @@ export default function KingsCupPlayer() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
 
+  // البطاقة الأساسية (ملف + أرقام الموسم + مسيرة + ألقاب) — ترسم الصفحة فورًا
   const { data, isLoading, isError } = useQuery<SpPlayerCard>({
-    queryKey: [`/api/kings-cup/player/${id}`, { with: "extras" }],
+    queryKey: [`/api/kings-cup/player/${id}`],
     enabled: Number.isFinite(id) && id > 0,
+    staleTime: 10 * 60_000,
+  });
+
+  // الإثراء (سلسلة المواسم + الانتقالات + الإصابات) — غير حاجب، بطاقاته تظهر عند وصوله
+  const { data: extrasData } = useQuery<SpPlayerCard>({
+    queryKey: [`/api/kings-cup/player/${id}`, { with: "extras" }],
+    enabled: Number.isFinite(id) && id > 0 && !!data,
     staleTime: 10 * 60_000,
   });
 
@@ -226,7 +234,7 @@ export default function KingsCupPlayer() {
               {form?.available && form.matches.length > 0 && <RecentFormCard matches={form.matches} />}
 
               {/* تطوّر الأداء عبر المواسم */}
-              {data.history && data.history.length > 1 && <PerformanceChart points={data.history} />}
+              {extrasData?.history && extrasData.history.length > 1 && <PerformanceChart points={extrasData.history} />}
 
               {/* أرقام بقية البطولات هذا الموسم */}
               {otherStats.length > 0 && (
@@ -290,8 +298,8 @@ export default function KingsCupPlayer() {
               )}
 
               {/* الانتقالات والإصابات */}
-              {data.transfers && data.transfers.length > 0 && <TransfersCard transfers={data.transfers} />}
-              {data.injuries && data.injuries.length > 0 && <InjuriesCard injuries={data.injuries} />}
+              {extrasData?.transfers && extrasData.transfers.length > 0 && <TransfersCard transfers={extrasData.transfers} />}
+              {extrasData?.injuries && extrasData.injuries.length > 0 && <InjuriesCard injuries={extrasData.injuries} />}
 
               {/* الألقاب */}
               {data.trophies.length > 0 && (

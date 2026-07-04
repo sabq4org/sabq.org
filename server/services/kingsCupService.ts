@@ -196,7 +196,16 @@ export async function getKcTeamCupStats(teamId: number): Promise<KcTeamCupStats 
   return null;
 }
 
-export async function getKcTeamProfile(teamId: number) {
+/**
+ * ملف النادي على مرحلتين (نمط صفحة نادي البوابة): الأساس سريع (معلومات +
+ * تشكيلة + مباريات + ترتيب) يرسم الصفحة فورًا، والإثراء الثقيل (إحصائيات
+ * الدوري والكأس + مدرب + هدّافون + انتقالات) يُطلب لاحقًا عبر ?with=stats
+ * فلا يحجب الرسم الأول — كان التجميع الواحد يُبطئ الفتح عدة ثوانٍ على البرود.
+ */
+export async function getKcTeamProfile(teamId: number, opts?: { withExtras?: boolean }) {
+  if (!opts?.withExtras) {
+    return splGetTeamProfile(teamId, { withExtras: false });
+  }
   const [profile, kcStats, transfers] = await Promise.all([
     splGetTeamProfile(teamId, { withExtras: true }),
     getKcTeamCupStats(teamId).catch(() => null),

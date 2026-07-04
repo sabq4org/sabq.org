@@ -112,12 +112,12 @@ export function KcHistorySection() {
           </div>
         )}
 
-        {/* الشريط الزمني للنسخ */}
+        {/* النسخ — شبكة ملتفّة بلا تمرير أفقي (طلب المالك) */}
         {editions.length > 0 && (
-          <div className="-mx-4 overflow-x-auto px-4 pb-2" dir="rtl">
-            <div className="flex w-max gap-3">
+          <div dir="rtl">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {editions.map((e) => (
-                <div key={e.season} className="w-44 shrink-0 rounded-2xl bg-white/[0.05] p-3 ring-1 ring-white/10">
+                <div key={e.season} className="rounded-2xl bg-white/[0.05] p-3 ring-1 ring-white/10">
                   <p className="text-[11px] font-bold text-emerald-100/60">نسخة {kcSeasonLabel(e.season)}</p>
                   {e.champion && (
                     <div className="mt-1.5 flex items-center gap-2">
