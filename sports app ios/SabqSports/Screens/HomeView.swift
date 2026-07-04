@@ -514,7 +514,8 @@ struct HomeView: View {
     // MARK: - لوحة دوري روشن (تدفّق واحد غنيّ بالأرقام — هادئ، أبيض + أخضر)
 
     @ViewBuilder private var dashboardContent: some View {
-        VStack(spacing: 22) {
+        // فراغ مريح بين بطاقات روشن (40 بدل 22) — قرار 2026-07-04.
+        VStack(spacing: 40) {
             if let fav = favorites.team, !heroIsFavorite {
                 favoriteCard(fav).padding(.horizontal, 16)
             }
