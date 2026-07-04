@@ -26,6 +26,8 @@ import {
   getPlayerMarketValue as splGetPlayerMarketValue,
   getMatchDetail as splGetMatchDetail,
   getMatchTvChannels as splGetMatchTvChannels,
+  getTeamStats as splGetTeamStats,
+  getTeamTransfers as splGetTeamTransfers,
   getMatchPlayerRatings as splGetMatchPlayerRatings,
   getFixturePrediction as splGetFixturePrediction,
   getCompetitionHistory as splGetCompetitionHistory,
@@ -35,6 +37,7 @@ import {
   type SplFixture,
   type SplScorer,
   type SplTeam,
+  type SplTeamStats,
 } from "./saudiLeagueService";
 import {
   detectCupChampion,
@@ -170,8 +173,34 @@ export async function getKcSquad(teamId: number) {
   return splGetSquad(teamId);
 }
 
+/**
+ * إحصائيات النادي في كأس الملك تحديدًا (teams/statistics على league 504 —
+ * تعمل للكؤوس رغم علم hasStats، متحقَّق حيًّا). الموسم الجاري أولًا؛ وقبل
+ * انطلاقه (0 مباريات) نعرض مشوار النسخة السابقة مع سنتها ليعرف القارئ السياق.
+ */
+export interface KcTeamCupStats {
+  season: number;
+  stats: SplTeamStats;
+}
+
+export async function getKcTeamCupStats(teamId: number): Promise<KcTeamCupStats | null> {
+  const c = comp();
+  const cur = await splGetTeamStats(teamId, c, { force: true }).catch(() => null);
+  if (cur && cur.fixtures.played.total > 0) return { season: cur.season, stats: cur };
+  const prevSeason = (cur?.season ?? new Date().getFullYear() + 1) - 1;
+  const prev = await splGetTeamStats(teamId, c, { force: true, seasonOverride: prevSeason }).catch(() => null);
+  if (prev && prev.fixtures.played.total > 0) return { season: prev.season, stats: prev };
+  return null;
+}
+
 export async function getKcTeamProfile(teamId: number) {
-  return splGetTeamProfile(teamId, { withExtras: true });
+  const [profile, kcStats, transfers] = await Promise.all([
+    splGetTeamProfile(teamId, { withExtras: true }),
+    getKcTeamCupStats(teamId).catch(() => null),
+    splGetTeamTransfers(teamId, 8).catch(() => ({ arrivals: [], departures: [] })),
+  ]);
+  if (!profile) return null;
+  return { ...profile, kcStats, transfers };
 }
 
 export async function getKcPlayerCard(playerId: number) {

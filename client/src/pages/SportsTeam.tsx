@@ -63,7 +63,7 @@ interface SpTeamProfile {
 }
 // الموجة 1: إحصاءات النادي الشاملة + المدرب + هدّافو النادي.
 interface SpStatTriple { total: number; home: number; away: number; }
-interface SpTeamStats {
+export interface SpTeamStats {
   leagueId: number; season: number;
   fixtures: {
     played: SpStatTriple; wins: SpStatTriple; draws: SpStatTriple; loses: SpStatTriple;
@@ -84,21 +84,21 @@ interface SpTeamStats {
   };
   timing: { bucket: string; for: number; against: number }[];
 }
-interface SpCoach {
+export interface SpCoach {
   id: number; name: string; photo: string; nationality: string;
   age: number | null; startDate: string | null;
   career: { team: string; start: string | null; end: string | null }[];
 }
-interface SpTeamScorer {
+export interface SpTeamScorer {
   rank: number; id: number; name: string; photo: string;
   goals: number; assists: number; penalties: number; matches: number;
 }
 // الموجة 2: انتقالات النادي (وصل/غادر).
-interface SpTeamTransfer {
+export interface SpTeamTransfer {
   date: string; type: string; playerId: number; player: string;
   teamId: number; team: string; teamLogo: string;
 }
-interface SpTeamTransfers { arrivals: SpTeamTransfer[]; departures: SpTeamTransfer[]; }
+export interface SpTeamTransfers { arrivals: SpTeamTransfer[]; departures: SpTeamTransfer[]; }
 
 const dayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { weekday: "short", day: "numeric", month: "short" });
 const fmtDay = (ts: number) => dayFmt.format(new Date(ts * 1000));
@@ -147,7 +147,7 @@ function GoalTimingChart({ timing }: { timing: { bucket: string; for: number; ag
   );
 }
 
-function TeamStatsCard({ stats }: { stats: SpTeamStats }) {
+export function TeamStatsCard({ stats }: { stats: SpTeamStats }) {
   const { fixtures, goals, biggest, summary } = stats;
   const timing = Array.isArray(stats.timing) ? stats.timing : [];
   const wdlTotal = `${fixtures.wins.total}-${fixtures.draws.total}-${fixtures.loses.total}`;
@@ -218,7 +218,7 @@ function TeamStatsCard({ stats }: { stats: SpTeamStats }) {
 }
 
 // الموجة 1: بطاقة المدرب.
-function CoachCard({ coach }: { coach: SpCoach }) {
+export function CoachCard({ coach }: { coach: SpCoach }) {
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2 mb-4">
@@ -265,7 +265,7 @@ function CoachCard({ coach }: { coach: SpCoach }) {
 }
 
 // الموجة 1: هدّافو النادي.
-function TeamScorersCard({ scorers }: { scorers: SpTeamScorer[] }) {
+export function TeamScorersCard({ scorers }: { scorers: SpTeamScorer[] }) {
   if (scorers.length === 0) return null;
   return (
     <Card className="p-5">
@@ -341,7 +341,7 @@ function TransferColumn({ title, dir, items, limit }: { title: string; dir: "in"
 
 const TRANSFERS_COLLAPSED = 5;
 
-function TeamTransfersCard({ transfers }: { transfers: SpTeamTransfers }) {
+export function TeamTransfersCard({ transfers }: { transfers: SpTeamTransfers }) {
   const [expanded, setExpanded] = useState(false);
   if (transfers.arrivals.length === 0 && transfers.departures.length === 0) return null;
   // الطيّ مفيد فقط لو تجاوز أحد العمودين الحدّ — وإلا نخفي الزر.
@@ -372,7 +372,7 @@ function TeamTransfersCard({ transfers }: { transfers: SpTeamTransfers }) {
   );
 }
 
-const POSITION_SECTIONS: { en: string; label: string }[] = [
+export const POSITION_SECTIONS: { en: string; label: string }[] = [
   { en: "Goalkeeper", label: "حراسة المرمى" },
   { en: "Defender", label: "الدفاع" },
   { en: "Midfielder", label: "الوسط" },
