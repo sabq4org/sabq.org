@@ -51,6 +51,24 @@ import { LOYALTY_ACTIONS } from "@shared/loyalty";
 // ---------------------------------------------------------------------------
 
 const POOL_BASE = 1000;
+
+/**
+ * ملفات بطولات تخالف الافتراضي — كأس الملك بمواصفات محرّك المونديال حرفيًا
+ * (طلب المالك 2026-07-04): جائزة 500 لكل مباراة، طبقة «النتيجة بالضبط» وحدها
+ * تقتسمها بالتساوي (لا نصيب للفارق/الاتجاه)، وبلا ترحيل جاكبوت (الفائض يسقط
+ * كما في wcPredictionsService — floor(500/عدد المصيبين)).
+ */
+const COMP_POOL_PROFILES: Record<string, { base: number; exactOnly: boolean; noCarry: boolean }> = {
+  "kings-cup": { base: 500, exactOnly: true, noCarry: true },
+};
+
+function poolProfileFor(slug: string | null | undefined) {
+  return slug ? COMP_POOL_PROFILES[slug] : undefined;
+}
+
+function poolBaseFor(slug: string | null | undefined): number {
+  return poolProfileFor(slug)?.base ?? POOL_BASE;
+}
 const LONG_POOL = { champion: 5000, top_scorer: 5000 } as const;
 
 /** Feature flag — keep the contest dark until an explicit deploy decision. */
@@ -322,6 +340,7 @@ export async function submitPrediction(
       probHome: probs.home,
       probDraw: probs.draw,
       probAway: probs.away,
+      poolBase: poolBaseFor(input.competitionSlug),
       status: "open",
     })
     .onConflictDoUpdate({
@@ -507,7 +526,7 @@ export async function getUpcomingPredictableMatches(
         : await probsForFixture(fixture.id);
       const c = crowdByFixture.get(fixture.id);
       const crowd = crowdFrom(Number(c?.home ?? 0), Number(c?.draw ?? 0), Number(c?.away ?? 0));
-      const base = snap?.poolBase ?? POOL_BASE;
+      const base = snap?.poolBase ?? poolBaseFor(fixture.competitionSlug);
       const compJackpot = jackpotBySlug.get(fixture.competitionSlug ?? null) ?? 0;
       const poolAvailable =
         snap?.status === "settled" ? base + Number(snap.poolCarryIn) : base + compJackpot;
@@ -598,7 +617,7 @@ export async function getMatchPredictionsSummary(
     exactWinners: snap?.exactWinners ?? 0,
     marginWinners: snap?.marginWinners ?? 0,
     outcomeWinners: snap?.outcomeWinners ?? 0,
-    poolBase: snap?.poolBase ?? POOL_BASE,
+    poolBase: snap?.poolBase ?? poolBaseFor(snap?.competitionSlug),
     poolCarryIn: snap?.poolCarryIn ?? 0,
     carryOut: snap?.carryOut ?? 0,
     crowd,
@@ -773,11 +792,23 @@ export async function settleFinishedMatches(maxFixtures = 40): Promise<SpSettlem
           outcome: scored.filter((s) => s.tier === "outcome").length,
         };
 
-        const available = POOL_BASE + carryIn;
+        const profile = poolProfileFor(m.competitionSlug);
+        const available = (profile?.base ?? POOL_BASE) + (profile?.noCarry ? 0 : carryIn);
         const noPreds = scored.length === 0;
         const dist = noPreds
-          ? { shareExact: 0, shareMargin: 0, shareOutcome: 0, paidExact: 0, paidMargin: 0, paidOutcome: 0, carryOut: carryIn }
-          : distributePool(available, winners);
+          ? { shareExact: 0, shareMargin: 0, shareOutcome: 0, paidExact: 0, paidMargin: 0, paidOutcome: 0, carryOut: profile?.noCarry ? 0 : carryIn }
+          : profile?.exactOnly
+            ? (() => {
+                // نمط المونديال: الدقيقة فقط تقتسم بالتساوي، والفائض/غياب المصيب يسقط
+                const n = winners.exact;
+                const share = n > 0 ? Math.max(1, Math.floor(available / n)) : 0;
+                return {
+                  shareExact: share, shareMargin: 0, shareOutcome: 0,
+                  paidExact: share * n, paidMargin: 0, paidOutcome: 0,
+                  carryOut: profile.noCarry ? 0 : available - share * n,
+                };
+              })()
+            : distributePool(available, winners);
 
         const wins: { userId: string; points: number; tier: GcTier }[] = [];
         for (const s of scored) {
