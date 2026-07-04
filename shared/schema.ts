@@ -12951,6 +12951,16 @@ export const editorialNotifications = pgTable("editorial_notifications", {
   index("idx_editorial_notifs_user").on(table.userId, table.createdAt),
   index("idx_editorial_notifs_unread").on(table.userId, table.readAt),
   index("idx_editorial_notifs_article").on(table.articleId),
+  // حارس التكرار: لا يمكن إرسال إشعارين متطابقين (نفس المستخدم + المقال + النوع)
+  // مهما تكرّرت الطلبات أو تسابقت (PATCH ويب + PATCH موبايل، أو إعادة طلب).
+  // Partial لأن article_id nullable عمودياً (ويُفرَّغ بـ ON DELETE SET NULL عند
+  // حذف المقال)، وكل أحداث التحرير الفعلية تضبطه — فيغطّي الـ index كل الصفوف
+  // الواقعية. يُستعمل مع onConflictDoNothing في notifyEditorialEvent.
+  // ⚠️ قبل أوّل db:push على بيئة فيها تكرار تاريخي، نفّذ سكربت التنظيف في
+  // docs/EDITORIAL_DEDUP_CLEANUP.md كي لا يرفض Postgres بناء الـ index.
+  uniqueIndex("idx_editorial_notifs_dedup")
+    .on(table.userId, table.articleId, table.type)
+    .where(sql`article_id IS NOT NULL`),
 ]);
 
 /**

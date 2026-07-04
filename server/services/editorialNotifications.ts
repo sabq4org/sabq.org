@@ -286,6 +286,10 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
 
     // Insert log row first — we update it after the APNs response so the in-app
     // notification center has a record either way.
+    //
+    // حارس التكرار: partial unique index على (user_id, article_id, type) يفصل
+    // أيّ سباق بين المتعاملين (PATCH ويب + PATCH موبايل، أو إعادة طلب). عند
+    // التعارض يُرجع الإدراج صفاً فارغاً → نخرج بصمت بلا APNs ولا تكرار.
     const [logRow] = await db
       .insert(editorialNotifications)
       .values({
@@ -300,7 +304,23 @@ export async function notifyEditorialEvent(args: NotifyEditorialArgs): Promise<v
         reviewerNote: args.reviewerNote ?? null,
         deliveryStatus: "pending",
       })
+      .onConflictDoNothing({
+        target: [
+          editorialNotifications.userId,
+          editorialNotifications.articleId,
+          editorialNotifications.type,
+        ],
+      })
       .returning({ id: editorialNotifications.id });
+
+    // تكرار: نفس (المستخدم + المقال + النوع) سُجِّل من قبل → لا إدراج ولا APNs.
+    if (!logRow) {
+      console.log(
+        `[Editorial Notify] duplicate skipped event=${args.event} ` +
+        `user=${args.userId} article=${args.article.id}`,
+      );
+      return;
+    }
 
     // Find iOS devices to deliver to.
     const devices = await db
