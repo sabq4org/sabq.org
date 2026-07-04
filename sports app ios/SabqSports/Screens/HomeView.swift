@@ -180,7 +180,6 @@ struct HomeView: View {
             brandBar
             leagueHeader
             SpMyMatchesCard()   // أوّل بطاقة في الواجهة عند متابعة مباريات.
-            VaraInsightCard(context: varaInsightContext)   // ذكاء VARA السلوكي.
             if let f = featured {
                 heroMatch(f)
                     .transition(.opacity)
@@ -294,6 +293,23 @@ struct HomeView: View {
                     heroTeam(f.away)
                 }
 
+                if let story = heroStoryLine(f) {
+                    HStack(spacing: 7) {
+                        Image(systemName: f.status.finished ? "checkmark.seal.fill" : "calendar.badge.clock")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(rslAccent)
+                        Text(story)
+                            .font(SportsFonts.app(size: 11.5, weight: .bold))
+                            .foregroundStyle(SpTheme.onDarkDim)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(rslAccent.opacity(0.055)))
+                }
+
                 let stats = heroStats(f)
                 if !stats.isEmpty {
                     HStack(spacing: 7) {
@@ -334,25 +350,40 @@ struct HomeView: View {
                     .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(SpTheme.chipFill))
                 }
 
-                HStack(spacing: 6) {
-                    Text("مركز المباراة والتحليل")
-                        .font(SportsFonts.app(size: 13, weight: .bold))
-                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold))
+                HStack(spacing: 7) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(rslAccent)
+                    Text("اضغط لفتح مركز المباراة والتحليل")
+                        .font(SportsFonts.app(size: 11.5, weight: .bold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(SpTheme.onDarkFaint)
                 }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 11)
-                // التدرّج يتبع لون التطبيق المحوري.
-                .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(SpTheme.isVaraStyle
-                        ? LinearGradient(colors: [SpTheme.compAccent("pro-league"), SpTheme.compAccent("pro-league").opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing)
-                        : LinearGradient(colors: [rslAccent, rslAccent], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                .padding(.top, 1)
             }
             .padding(16)
             .background(heroBackground)
             .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         }
         .buttonStyle(SpPressStyle())
+    }
+
+    private func heroStoryLine(_ f: SpFixture) -> String? {
+        if f.status.finished, let home = f.goals.home, let away = f.goals.away {
+            let margin = abs(home - away)
+            if home == away {
+                return "تعادل مثير في آخر ظهور لفريقك"
+            }
+            let visualWinner = away > home ? f.away.name : f.home.name
+            return margin >= 3 ? "\(visualWinner) حسمها بفارق \(margin)" : "\(visualWinner) انتصر بفارق \(margin)"
+        }
+        if f.status.live {
+            return "مباراة فريقك مباشرة الآن — التحديث لحظة بلحظة"
+        }
+        return "\(SpFormat.kickoffDay(f.date)) · \(SpFormat.kickoffTime(f.date))"
     }
 
     private func heroTeam(_ team: SpTeam) -> some View {

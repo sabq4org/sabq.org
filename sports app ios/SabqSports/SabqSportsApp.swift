@@ -6,6 +6,7 @@ struct SabqSportsApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @State private var auth = SpAuthStore.shared
     @State private var favorites = SpFavorites.shared
+    @State private var competitionFavorites = SpCompetitionFavorites.shared
     @State private var matchFollows = SpMatchFollows.shared
     @State private var tabBarVis = SpTabBarVisibility.shared
     @State private var liveActivity = SpLiveActivityManager.shared
@@ -23,6 +24,7 @@ struct SabqSportsApp: App {
             RootTabView()
                 .environment(auth)
                 .environment(favorites)
+                .environment(competitionFavorites)
                 .environment(matchFollows)
                 .environment(tabBarVis)
                 .environment(liveActivity)

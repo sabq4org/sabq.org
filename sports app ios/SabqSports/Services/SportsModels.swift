@@ -94,7 +94,7 @@ nonisolated struct SpScorer: Decodable, Identifiable, Hashable {
 }
 
 // بطولة — listCompetitions الأساسية، تُثرى بـ logo/season/status عند توفّر المفتاح.
-nonisolated struct SpCompetition: Decodable, Identifiable, Hashable {
+nonisolated struct SpCompetition: Codable, Identifiable, Hashable {
     let slug: String
     let name: String
     let type: String        // "league" | "cup"

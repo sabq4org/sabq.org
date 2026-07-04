@@ -480,27 +480,25 @@ struct SpMyMatchesCard: View {
     @Environment(SpAuthStore.self) private var auth
 
     var body: some View {
-        let matches = follows.visibleItems
+        let matches = follows.visibleItems.sorted { $0.timestamp < $1.timestamp }
+        let groups = dayGroups(matches)
         if !matches.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 header(count: matches.count)
                 VStack(spacing: 0) {
-                    ForEach(Array(matches.enumerated()), id: \.element.id) { idx, f in
-                        if idx > 0 {
-                            // عند تغيّر اليوم بين مباراتين متتاليتين نُظهر فاصل التاريخ
-                            // بدل الفاصل الرفيع؛ المصفوفة مرتّبة تصاعدياً حسب timestamp
-                            // فمباريات نفس اليوم متجاورة دائماً (SpMatchFollows.sortAndPersist).
-                            if SpFormat.dateKey(matches[idx - 1].kickoff) != SpFormat.dateKey(f.kickoff) {
-                                dateSeparator(f.kickoff)
-                            } else {
+                    ForEach(Array(groups.enumerated()), id: \.element.id) { groupIndex, group in
+                        dayHeader(for: group.date, count: group.fixtures.count)
+                            .padding(.top, groupIndex == 0 ? 8 : 12)
+
+                        ForEach(Array(group.fixtures.enumerated()), id: \.element.id) { idx, f in
+                            if idx > 0 {
                                 Rectangle().fill(SpTheme.outline).frame(height: 1)
                                     .padding(.leading, 14)
                             }
+                            row(f)
                         }
-                        row(f)
                     }
                 }
-                .padding(.top, 4)
                 .padding(.bottom, 6)
                 if !auth.isLoggedIn { loginHint }
             }
@@ -553,20 +551,66 @@ struct SpMyMatchesCard: View {
         .padding(.top, 14)
     }
 
-    // فاصل التاريخ بين مجموعتي يوم: خطّان رفيعان يحصران نصّ اليوم والتاريخ
-    // بالمنتصف (ــــــــ اليوم · 2026/07/04 ــــــــ). الألوان والسماكة تطابق
-    // MatchesView.dayHeader؛ fixedSize تمنع قطع التاريخ الطويل.
-    private func dateSeparator(_ date: Date) -> some View {
-        HStack(spacing: 10) {
-            Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 0.5)
-            Text(SpFormat.daySeparator(date))
-                .font(SportsFonts.app(size: 11, weight: .bold))
-                .foregroundStyle(SpTheme.onDarkDim)
-                .fixedSize()
-            Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 0.5)
+    private struct DayGroup: Identifiable {
+        let date: Date
+        let fixtures: [SpFixture]
+        var id: TimeInterval { date.timeIntervalSince1970 }
+    }
+
+    private var dayCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Riyadh") ?? .current
+        return calendar
+    }
+
+    private func dayGroups(_ fixtures: [SpFixture]) -> [DayGroup] {
+        let calendar = dayCalendar
+        let grouped = Dictionary(grouping: fixtures) { fixture in
+            calendar.startOfDay(for: fixture.kickoff)
+        }
+        return grouped
+            .map { DayGroup(date: $0.key, fixtures: $0.value.sorted { $0.timestamp < $1.timestamp }) }
+            .sorted { $0.date < $1.date }
+    }
+
+    private func dayHeader(for date: Date, count: Int) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "calendar")
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(SpTheme.green)
+            Text(dayTitle(date))
+                .font(SportsFonts.app(size: 11.5, weight: .heavy))
+                .foregroundStyle(SpTheme.onDark)
+            Text(matchesCountLabel(count))
+                .font(SportsFonts.app(size: 9.5, weight: .bold))
+                .foregroundStyle(SpTheme.green)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(SpTheme.green.opacity(0.10)))
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .padding(.vertical, 7)
+        .background(SpTheme.green.opacity(0.045))
+    }
+
+    private func dayTitle(_ date: Date) -> String {
+        let calendar = dayCalendar
+        let today = calendar.startOfDay(for: Date())
+        let day = calendar.startOfDay(for: date)
+        let diff = calendar.dateComponents([.day], from: today, to: day).day ?? 0
+        switch diff {
+        case -1: return "أمس"
+        case 0: return "اليوم"
+        case 1: return "غدًا"
+        case 2: return "بعد غد"
+        default:
+            return "\(SpFormat.weekdayName(day)) \(SpFormat.dayMonthLabel(day))"
+        }
+    }
+
+    private func matchesCountLabel(_ count: Int) -> String {
+        count == 1 ? "مباراة" : "\(count) مباريات"
     }
 
     // صفّ موحّد مطابق لشاشة «المباريات» عبر SpScoreRow + نجمة إلغاء المتابعة.

@@ -4,6 +4,8 @@ import SwiftUI
 // نظيفة بصفوف مفصولة بخطوط خفيفة (لا كروت مؤطّرة منفصلة، لا غمر أخضر). لمسة
 // خضراء واحدة فقط في رؤوس الأقسام. كل بطولة تفتح صفحة تفاصيلها.
 struct CompetitionsView: View {
+    @Environment(SpCompetitionFavorites.self) private var competitionFavorites
+
     @State private var competitions: [SpCompetition] = []
     @State private var loading = true
     @State private var loadError: String?
@@ -38,6 +40,7 @@ struct CompetitionsView: View {
                         SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
                     } else {
                         overview
+                        myCompetitionsCard
                         filters
                         ForEach(grouped, id: \.category) { group in
                             categorySection(group.category, group.items)
@@ -124,6 +127,58 @@ struct CompetitionsView: View {
         .buttonStyle(.plain)
     }
 
+    @ViewBuilder private var myCompetitionsCard: some View {
+        let favs = competitionFavorites.items
+        if !favs.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    Text("بطولاتي")
+                        .font(SportsFonts.app(size: 16, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                    Text("\(favs.count)")
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(SpTheme.green)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(SpTheme.green.opacity(0.12)))
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(SpTheme.gold)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 14)
+                .padding(.bottom, 4)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(favs.enumerated()), id: \.element.id) { idx, comp in
+                        if idx > 0 {
+                            Rectangle().fill(SpTheme.outline).frame(height: 1)
+                                .padding(.leading, 62)
+                        }
+                        NavigationLink {
+                            CompetitionDetailView(comp: comp)
+                        } label: {
+                            CompetitionRow(comp: comp, isFavorite: true) {
+                                competitionFavorites.remove(comp.slug)
+                            }
+                        }
+                        .buttonStyle(SpPressStyle())
+                    }
+                }
+                .padding(.bottom, 6)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                    .fill(SpTheme.card)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                    .stroke(SpTheme.cardStroke, lineWidth: 1)
+            )
+        }
+    }
+
     private func categorySection(_ category: String, _ items: [SpCompetition]) -> some View {
         let isSaudi = category == "saudi"
         return VStack(alignment: .leading, spacing: 10) {
@@ -150,7 +205,9 @@ struct CompetitionsView: View {
                     NavigationLink {
                         CompetitionDetailView(comp: comp)
                     } label: {
-                        CompetitionRow(comp: comp)
+                        CompetitionRow(comp: comp, isFavorite: competitionFavorites.isFavorite(comp.slug)) {
+                            competitionFavorites.toggle(comp)
+                        }
                     }
                     .buttonStyle(SpPressStyle())
                 }
@@ -188,6 +245,7 @@ struct CompetitionsView: View {
         do {
             let resp = try await APIClient.shared.fetchCompetitions(ignoreCache: force)
             self.competitions = resp.competitions
+            competitionFavorites.sync(with: resp.competitions)
             self.loadError = nil
         } catch {
             self.loadError = error.localizedDescription
@@ -200,8 +258,10 @@ struct CompetitionsView: View {
 // بطاقة الفئة المجمّعة)، فالمظهر مسطّح هادئ بفواصل خفيفة بين الصفوف.
 struct CompetitionRow: View {
     let comp: SpCompetition
+    var isFavorite = false
+    var onFavoriteToggle: (() -> Void)?
 
-    /// اللون المحوري الموحّد للشعار الاحتياطي والقدرات والشارة.
+    /// اللون المحوري الموحّد للشعار الاحتياطي والشارة.
     private var accent: Color { SpTheme.compAccent(comp.slug) }
 
     var body: some View {
@@ -211,15 +271,21 @@ struct CompetitionRow: View {
                 Text(comp.name)
                     .font(SportsFonts.app(size: 14.5, weight: .bold))
                     .foregroundStyle(SpTheme.onDark)
-                    .lineLimit(1).minimumScaleFactor(0.8)
-                HStack(spacing: 5) {
-                    capability("مباريات", true)
-                    capability("ترتيب", comp.hasStandings)
-                    capability("هدافون", comp.hasScorers)
-                }
+                    .lineLimit(2).minimumScaleFactor(0.82)
             }
             Spacer(minLength: 8)
             if let status = comp.status { statusBadge(status) }
+            if let onFavoriteToggle {
+                Button(action: onFavoriteToggle) {
+                    Image(systemName: isFavorite ? "star.fill" : "star")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(isFavorite ? SpTheme.gold : SpTheme.onDarkFaint)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isFavorite ? "إزالة من بطولاتي" : "إضافة إلى بطولاتي")
+            }
             Image(systemName: "chevron.left")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(SpTheme.onDarkFaint)
@@ -248,15 +314,6 @@ struct CompetitionRow: View {
                 .frame(width: 36, height: 36)
                 .background(Circle().fill(accent.opacity(0.10)))
         }
-    }
-
-    private func capability(_ label: String, _ enabled: Bool) -> some View {
-        Text(label)
-            .font(SportsFonts.app(size: 9.5, weight: .bold))
-            .foregroundStyle(enabled ? accent : SpTheme.onDarkFaint)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Capsule().fill(enabled ? accent.opacity(0.08) : SpTheme.chipFill))
     }
 
     private func statusBadge(_ status: String) -> some View {
