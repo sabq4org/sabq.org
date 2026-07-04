@@ -1,7 +1,6 @@
 import SwiftUI
 
-// صبغة هَب روشن — كل «أخضر» هذه الشاشة يتبع نمط الألوان: سماوي روشن في
-// «ألوان VARA»، واللون المحوري في «لون موحّد» (compAccent ترجعه تلقائيًا).
+// صبغة هَب روشن تتبع لون التطبيق المحوري؛ البطولات لا تعيد صبغ الشاشة.
 private var rslAccent: Color { SpTheme.compAccent("pro-league") }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -341,7 +340,7 @@ struct HomeView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 11)
-                // سماوي روشن في نمط «ألوان VARA»؛ التدرّج الأخضر في النمط الموحّد.
+                // التدرّج يتبع لون التطبيق المحوري.
                 .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .fill(SpTheme.isVaraStyle
                         ? LinearGradient(colors: [SpTheme.compAccent("pro-league"), SpTheme.compAccent("pro-league").opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -613,8 +612,7 @@ struct HomeView: View {
     }
 
     private func pulseTile(_ label: String, _ value: String, _ sub: String, logo: String?) -> some View {
-        // «الهدّاف» و«المتصدّر» بلغة التميّز الذهبية (نمط ألوان VARA) — لا يتساوى
-        // كل شيء بالأخضر؛ في النمط الموحّد excellence ترجع اللون المحوري نفسه.
+        // «الهدّاف» و«المتصدّر» بلغة التميّز الذهبية المحدودة.
         let highlight = (label == "الهدّاف" || label == "المتصدّر") ? SpTheme.excellence : rslAccent
         return VStack(alignment: .leading, spacing: 5) {
             Text(label).font(SportsFonts.app(size: 9.5, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)

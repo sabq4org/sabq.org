@@ -70,16 +70,20 @@ export async function translateCommentaries(comments: SmCommentary[]): Promise<W
     aiMap[en] = applyNames(ar, tr);
   }
 
-  const items = templated.map<WcCommentaryItem>((r) => ({
-    minute: r.src.minute ?? 0,
-    extraMinute: r.src.extra_minute,
-    goal: r.src.is_goal,
-    important: r.src.is_important,
-    // نُفضّل ترجمة الـAI إن نجحت (دقّة أعلى للأنماط غير المصنّفة)، وإلا القالب.
-    textAr: (aiMap[r.src.comment] || "").trim() || r.ar,
-    textEn: r.src.comment,
-    order: r.src.order,
-  }));
+  const items = templated.map<WcCommentaryItem>((r) => {
+    const ai = (aiMap[r.src.comment] || "").trim();
+    const usableAi = ai && ai !== r.src.comment && isArabicOnly(ai);
+    return {
+      minute: r.src.minute ?? 0,
+      extraMinute: r.src.extra_minute,
+      goal: r.src.is_goal,
+      important: r.src.is_important,
+      // نُفضّل ترجمة الـAI فقط إذا نجحت فعليًا؛ وإلا نعرض القالب العربي ولا نرجع للنص الخام.
+      textAr: usableAi ? ai : r.ar,
+      textEn: r.src.comment,
+      order: r.src.order,
+    };
+  });
 
   // تنازليًا: الأحدث أولًا
   items.sort((a, b) => b.order - a.order);
@@ -208,8 +212,28 @@ function translateOne(raw: string, tr: (n: string) => string, isGoal: boolean): 
   const ar = applyNames(s, tr);
 
   // ===== الأهداف (أنماط متعدّدة) =====
+  // "Goal! Australia 1(2), Egypt 1(4). Hossam ... converts the penalty with..."
+  let m = s.match(
+    /^Goal!\s+(.+?)\s+(\d+\(\d+\)),\s+(.+?)\s+(\d+\(\d+\))\.\s+(.+?)\s+converts\s+the\s+penalty\s+with\s+a\s+(.+?)\s+to\s+(.+?)(?:\.|$)/i
+  );
+  if (m) {
+    return `هدف في ركلات الترجيح! ${player(m[5], tr)} يسجّل لـ${penaltyPlayerTeam(m[5], tr)} ${shotPhrase(m[6], m[7])}. النتيجة ${team(m[1], tr)} ${m[2]}، ${team(m[3], tr)} ${m[4]}`;
+  }
+  // "Goal! In the penalty shootout: <Player> scores for <Team> with..."
+  m = s.match(
+    /^Goal!\s+In\s+the\s+penalty\s+shootout:\s+(.+?)\s+scores\s+for\s+(.+?)\s+with\s+a\s+(.+?)\s+to\s+(.+?)\.\s+The\s+match\s+remains\s+(\d+-\d+),\s+and\s+(.+?)\s+now\s+has\s+(\d+)\s+penalties\s+scored\.?$/i
+  );
+  if (m) {
+    return `هدف في ركلات الترجيح! ${player(m[1], tr)} يسجّل لـ${team(m[2], tr)} ${shotPhrase(m[3], m[4])}. النتيجة الأصلية ما زالت ${m[5]}، و${team(m[6], tr)} لديه ${m[7]} ركلات ناجحة`;
+  }
+  // "Goal! <Player> converts the penalty with..."
+  m = s.match(/^Goal!\s+(.+?)\s+converts\s+the\s+penalty\s+with\s+a\s+(.+?)\s+to\s+(.+?)(?:\.|$)/i);
+  if (m) {
+    return `هدف! ${player(m[1], tr)} يسجّل من ركلة جزاء ${shotPhrase(m[2], m[3])}`;
+  }
+
   // "Goal! <Team> takes the lead N-M with <Player> scoring..."
-  let m = s.match(/^Goal!\s+(.+?)\s+takes the lead\s+(\d+-\d+)\s+with\s+(.+?)\s+scoring/i);
+  m = s.match(/^Goal!\s+(.+?)\s+takes the lead\s+(\d+-\d+)\s+with\s+(.+?)\s+scoring/i);
   if (m) {
     return `هدف! ${team(m[1], tr)} يتقدّم ${m[2]} عبر ${player(m[3], tr)}${goalTail(s)}`;
   }
@@ -380,6 +404,32 @@ function goalTail(s: string): string {
   return map[m[1].toLowerCase()] ?? "";
 }
 
+function shotPhrase(footRaw: string, targetRaw: string): string {
+  const foot = shotFoot(footRaw);
+  const target = shotTarget(targetRaw);
+  return [foot, target].filter(Boolean).join(" ");
+}
+
+function shotFoot(raw: string): string {
+  const low = raw.toLowerCase();
+  if (/right/.test(low)) return "بتسديدة بالقدم اليمنى";
+  if (/left/.test(low)) return "بتسديدة بالقدم اليسرى";
+  if (/header|headed/.test(low)) return "برأسية";
+  return "بتسديدة";
+}
+
+function shotTarget(raw: string): string {
+  const low = raw.toLowerCase().replace(/\.$/, "").trim();
+  if (/bottom left corner/.test(low)) return "إلى الزاوية اليسرى السفلية";
+  if (/bottom right corner/.test(low)) return "إلى الزاوية اليمنى السفلية";
+  if (/top left corner/.test(low)) return "إلى الزاوية اليسرى العليا";
+  if (/top right corner/.test(low)) return "إلى الزاوية اليمنى العليا";
+  if (/centre|center/.test(low)) return "في وسط المرمى";
+  if (/left/.test(low)) return "جهة اليسار";
+  if (/right/.test(low)) return "جهة اليمين";
+  return "";
+}
+
 // موضع الركلة الحرة: "on the left wing" ← " على الجناح الأيسر"
 function freeKickWhere(rest: string): string {
   const low = rest.toLowerCase();
@@ -395,6 +445,11 @@ function player(name: string, tr: (n: string) => string): string {
   const cleaned = name.replace(/\s*\([^)]*\)\s*$/, "").trim();
   if (!cleaned) return "";
   return tr(cleaned) || cleaned;
+}
+
+function penaltyPlayerTeam(name: string, tr: (n: string) => string): string {
+  const m = name.match(/\(([^)]+)\)\s*$/);
+  return m ? team(m[1], tr) : "فريقه";
 }
 
 // تعريب اسم منتخب: قد يأتي بصيغة «<Team> after <X> concedes» فنأخذ الأول

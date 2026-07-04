@@ -1023,6 +1023,10 @@ struct SpMatchCenter: View {
             switch e.type {
             case "goal":
                 Image(systemName: "soccerball").foregroundStyle(acc)
+            case "score-summary":
+                Image(systemName: "soccerball").foregroundStyle(acc)
+            case "shootout-summary":
+                Image(systemName: "checkmark.seal.fill").foregroundStyle(SpTheme.gold)
             case "missed-penalty":
                 Image(systemName: "exclamationmark.shield.fill").foregroundStyle(SpTheme.crimson)
             case "var":

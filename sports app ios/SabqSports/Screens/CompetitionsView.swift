@@ -201,7 +201,7 @@ struct CompetitionsView: View {
 struct CompetitionRow: View {
     let comp: SpCompetition
 
-    /// صبغة البطولة (نمط «ألوان VARA») — تلوّن الشعار الاحتياطي والقدرات والشارة.
+    /// اللون المحوري الموحّد للشعار الاحتياطي والقدرات والشارة.
     private var accent: Color { SpTheme.compAccent(comp.slug) }
 
     var body: some View {

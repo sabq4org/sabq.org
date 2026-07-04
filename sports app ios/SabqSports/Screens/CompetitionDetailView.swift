@@ -5,7 +5,7 @@ import SwiftUI
 // مقتطف الترتيب، هدّاف/صانع البطولة، آخر النتائج) ثم تبويبات الترتيب/الهدّافون/
 // الصنّاع/المباريات/الانتقالات. تُخفى التبويبات الفارغة تلقائيًا.
 struct CompetitionDetailView: View {
-    /// صبغة البطولة — تصبغ الصفحة كاملة بلون بطولتها في نمط «ألوان VARA».
+    /// لون صفحة البطولة يتبع لون التطبيق المحوري.
     private var acc: Color { SpTheme.compAccent(comp.slug) }
 
     let comp: SpCompetition

@@ -894,6 +894,76 @@ function localizeEventRow(e: any, tr: NameTranslator): SplMatchEvent {
   };
 }
 
+function creditedGoalCounts(events: SplMatchEvent[], homeId: number): { home: number; away: number } {
+  let home = 0;
+  let away = 0;
+  for (const e of events) {
+    if (e.type !== "goal") continue;
+    const scoredByHome = e.teamId === homeId;
+    const ownGoal = e.label.includes("عكسي");
+    const creditHome = ownGoal ? !scoredByHome : scoredByHome;
+    if (creditHome) home += 1;
+    else away += 1;
+  }
+  return { home, away };
+}
+
+function appendScoreSummaryEvents(fixture: SplFixture, events: SplMatchEvent[]): SplMatchEvent[] {
+  if (!fixture.status.finished) return events;
+  const out = [...events];
+  const counted = creditedGoalCounts(events, fixture.home.id);
+  const homeGoals = fixture.goals.home ?? 0;
+  const awayGoals = fixture.goals.away ?? 0;
+
+  const pushMissingGoals = (team: SplTeam, missing: number, total: number) => {
+    if (missing <= 0 || total <= 0) return;
+    out.push({
+      minute: null,
+      extra: null,
+      teamId: team.id,
+      team: team.name,
+      player: "ملخص الأهداف",
+      assist: null,
+      type: "score-summary",
+      label: total === 1 ? "هدف مسجل دون تفاصيل من المصدر" : `${total} أهداف مسجلة دون تفاصيل من المصدر`,
+    });
+  };
+
+  pushMissingGoals(fixture.home, homeGoals - counted.home, homeGoals);
+  pushMissingGoals(fixture.away, awayGoals - counted.away, awayGoals);
+
+  const pen = fixture.penalties;
+  const hasPenaltySummary = events.some((e) => e.type === "shootout-summary" || e.label.includes("الترجيح"));
+  if (!hasPenaltySummary && pen && (pen.home != null || pen.away != null)) {
+    if (pen.home != null) {
+      out.push({
+        minute: 120,
+        extra: null,
+        teamId: fixture.home.id,
+        team: fixture.home.name,
+        player: "ركلات الترجيح",
+        assist: null,
+        type: "shootout-summary",
+        label: `${pen.home} ركلات ناجحة`,
+      });
+    }
+    if (pen.away != null) {
+      out.push({
+        minute: 120,
+        extra: null,
+        teamId: fixture.away.id,
+        team: fixture.away.name,
+        player: "ركلات الترجيح",
+        assist: null,
+        type: "shootout-summary",
+        label: `${pen.away} ركلات ناجحة`,
+      });
+    }
+  }
+
+  return out;
+}
+
 function localizeStats(rows: any[]): SplMatchDetail["statistics"] {
   if (rows.length < 2) return null;
   const [home, away] = rows;
@@ -936,9 +1006,10 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
       for (const p of t.substitutes ?? []) rawNames.push(p.player?.name);
     }
     const tr = await resolveNames(rawNames);
+    const events = eventsRaw.map((e: any) => localizeEventRow(e, tr));
     return {
       fixture,
-      events: eventsRaw.map((e: any) => localizeEventRow(e, tr)),
+      events: appendScoreSummaryEvents(fixture, events),
       statistics: localizeStats(statsRaw),
       lineups: localizeLineups(lineupsRaw, tr),
       leagueId: item.league?.id ?? null,

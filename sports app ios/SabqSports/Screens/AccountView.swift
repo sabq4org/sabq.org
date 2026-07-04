@@ -172,7 +172,7 @@ struct AccountView: View {
         }
     }
 
-    // MARK: - المظهر (تلقائي / فاتح / داكن)
+    // MARK: - المظهر (تلقائي / فاتح / داكن + لون التطبيق)
 
     private var appearanceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -183,55 +183,20 @@ struct AccountView: View {
                 }
             }
             hint("«تلقائي» يتبع إعداد جهازك؛ أو اختر الفاتح/الداكن يدويًّا.")
-            colorStylePicker
-            teamColorPicker
+            appColorPicker
         }
     }
 
-    // نمط الألوان — «ألوان VARA» (بطولات ملوّنة + ذهبي التميّز، الافتراضي) أو
-    // «لون موحّد» لمن يفضّل صبغة واحدة لكل التطبيق (قرار المالك 2026-07-04).
-    private var colorStylePicker: some View {
+    // مُنتقي لون التطبيق — المستخدم يختار لونًا محوريًا بدون صبغ البطولات بألوان مختلفة.
+    private var appColorPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("نمط الألوان")
-                .font(SportsFonts.app(size: 12.5, weight: .bold))
-                .foregroundStyle(SpTheme.onDarkDim)
-            HStack(spacing: 8) {
-                colorStyleChip("ألوان VARA", id: "vara", icon: "paintpalette.fill")
-                colorStyleChip("لون موحّد", id: "unified", icon: "circle.fill")
-            }
-            hint("«ألوان VARA» يمنح كل بطولة صبغتها؛ «لون موحّد» يصبغ التطبيق بلونك المميّز فقط.")
-        }
-        .padding(.top, 6)
-    }
-
-    private func colorStyleChip(_ label: String, id: String, icon: String) -> some View {
-        let active = accent.styleId == id
-        return Button {
-            withAnimation(.easeInOut(duration: 0.25)) { accent.styleId = id }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: icon).font(.system(size: 12, weight: .semibold))
-                Text(label).font(SportsFonts.app(size: 13, weight: active ? .heavy : .semibold))
-            }
-            .foregroundStyle(active ? .white : SpTheme.onDarkDim)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(Capsule().fill(active ? SpTheme.green : SpTheme.chipFill))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-
-    // مُنتقي اللون المميّز — العضو يختار لونًا فيتغيّر مظهر التطبيق بالكامل.
-    private var teamColorPicker: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("اللون المميّز")
+            Text("لون التطبيق")
                 .font(SportsFonts.app(size: 12.5, weight: .bold))
                 .foregroundStyle(SpTheme.onDarkDim)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 14) {
                 ForEach(SpTeamPalette.all) { p in colorSwatch(p) }
             }
-            hint("اختر لونًا ليتغيّر مظهر التطبيق بالكامل.")
+            hint("اختر لونك المفضل للأزرار والأيقونات والترويسات؛ البطولات تبقى بنفس قالب التطبيق.")
         }
         .padding(.top, 6)
     }
