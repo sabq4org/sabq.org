@@ -201,6 +201,9 @@ struct CompetitionsView: View {
 struct CompetitionRow: View {
     let comp: SpCompetition
 
+    /// صبغة البطولة (نمط «ألوان VARA») — تلوّن الشعار الاحتياطي والقدرات والشارة.
+    private var accent: Color { SpTheme.compAccent(comp.slug) }
+
     var body: some View {
         HStack(spacing: 12) {
             logo
@@ -241,26 +244,26 @@ struct CompetitionRow: View {
         } else {
             Image(systemName: comp.type == "cup" ? "trophy.fill" : "sportscourt.fill")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(SpTheme.green)
+                .foregroundStyle(accent)
                 .frame(width: 36, height: 36)
-                .background(Circle().fill(SpTheme.green.opacity(0.10)))
+                .background(Circle().fill(accent.opacity(0.10)))
         }
     }
 
     private func capability(_ label: String, _ enabled: Bool) -> some View {
         Text(label)
             .font(SportsFonts.app(size: 9.5, weight: .bold))
-            .foregroundStyle(enabled ? SpTheme.green : SpTheme.onDarkFaint)
+            .foregroundStyle(enabled ? accent : SpTheme.onDarkFaint)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(Capsule().fill(enabled ? SpTheme.green.opacity(0.08) : SpTheme.chipFill))
+            .background(Capsule().fill(enabled ? accent.opacity(0.08) : SpTheme.chipFill))
     }
 
     private func statusBadge(_ status: String) -> some View {
         let (label, color): (String, Color) = {
             switch status {
             case "ongoing": return ("جارٍ", SpTheme.leaf)
-            case "upcoming": return ("قريبًا", SpTheme.green)
+            case "upcoming": return ("قريبًا", accent)
             case "finished": return ("انتهى", SpTheme.onDarkFaint)
             default: return ("", SpTheme.onDarkFaint)
             }

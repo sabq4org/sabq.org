@@ -81,6 +81,10 @@ nonisolated struct SpTeamPalette: Identifiable, Equatable {
 /// يُحدَّث من `SpAccentTheme` (MainActor) عند تبديل النادي.
 nonisolated(unsafe) var spActivePalette: SpTeamPalette = .emerald
 
+/// نمط الألوان الفعّال: true = «ألوان VARA» (بطولات ملوّنة + ذهبي التميّز، الافتراضي)،
+/// false = «لون موحّد» (اللون المحوري يصبغ كل شيء — سلوك ما قبل 2026-07-04).
+nonisolated(unsafe) var spVaraColorStyle: Bool = true
+
 nonisolated enum SpTheme {
     /// مُعرّف المنتخب السعودي (api-sports) — للإبراز السعودي.
     static let saudiId = 23
@@ -105,6 +109,32 @@ nonisolated enum SpTheme {
     static let goldSoft  = dyn(Color(red: 0.93, green: 0.80, blue: 0.42), Color(red: 0.98, green: 0.86, blue: 0.56))
     // لون الخطأ/المباشر #C64840 من ألوان الحالة في دليل الهوية.
     static let crimson   = dyn(Color(red: 0.776, green: 0.282, blue: 0.251), Color(red: 0.98, green: 0.40, blue: 0.45))
+
+    // ── نمط «ألوان VARA» (الافتراضي منذ 2026-07-04) ──
+    /// هل النمط المتعدد فعّال؟ («لون موحّد» في الإعدادات يعيد سلوك اللون الواحد.)
+    static var isVaraStyle: Bool { spVaraColorStyle }
+
+    /// لون «التميّز» — الهدّاف/المتصدّر/الأرقام البارزة: ذهبي في نمط ألوان VARA،
+    /// ويتوحّد على اللون المحوري في النمط الموحّد.
+    static var excellence: Color { spVaraColorStyle ? gold : green }
+
+    /// صبغة البطولة من هويتها الرسمية — تكسر أحادية اللون وتجعل اللون معلومة
+    /// (أين أنا؟). في النمط الموحّد ترجع اللون المحوري فيبقى السلوك القديم حرفيًّا.
+    static func compAccent(_ slug: String?) -> Color {
+        guard spVaraColorStyle, let slug else { return green }
+        switch slug {
+        case "pro-league":    return dyn(Color(red: 0.00, green: 0.51, blue: 0.60), Color(red: 0.27, green: 0.75, blue: 0.83))  // سماوي روشن
+        case "division-1":    return dyn(Color(red: 0.66, green: 0.50, blue: 0.00), Color(red: 0.89, green: 0.73, blue: 0.28))  // أصفر يلو
+        case "division-2":    return dyn(Color(red: 0.73, green: 0.33, blue: 0.13), Color(red: 0.89, green: 0.53, blue: 0.31))  // برتقالي
+        case "kings-cup":     return dyn(Color(red: 0.55, green: 0.42, blue: 0.11), Color(red: 0.81, green: 0.66, blue: 0.31))  // ذهبي ملكي
+        case "super-cup":     return dyn(Color(red: 0.42, green: 0.31, blue: 0.63), Color(red: 0.66, green: 0.56, blue: 0.86))  // بنفسجي
+        case "womens-league": return dyn(Color(red: 0.65, green: 0.30, blue: 0.47), Color(red: 0.85, green: 0.53, blue: 0.68))  // وردي
+        case "world-cup":     return dyn(Color(red: 0.11, green: 0.31, blue: 0.62), Color(red: 0.44, green: 0.61, blue: 0.88))  // أزرق فيفا
+        case "gulf-cup":      return dyn(Color(red: 0.05, green: 0.42, blue: 0.55), Color(red: 0.36, green: 0.69, blue: 0.80))  // أزرق خليجي
+        case "asian-cup":     return dyn(Color(red: 0.68, green: 0.20, blue: 0.24), Color(red: 0.88, green: 0.46, blue: 0.49))  // أحمر آسيوي
+        default:              return green
+        }
+    }
     // ألوان دلالية مركزية — لا تثبّت قيمها في الشاشات: الكرت الأصفر وميداليتا الفضة/البرونز (الذهب = gold أعلاه).
     static let yellowCard  = dyn(Color(red: 0.95, green: 0.76, blue: 0.22), Color(red: 0.98, green: 0.83, blue: 0.34))
     static let medalSilver = dyn(Color(red: 0.74, green: 0.76, blue: 0.80), Color(red: 0.80, green: 0.82, blue: 0.86))
@@ -125,6 +155,13 @@ nonisolated enum SpTheme {
     /// تدرّج الترويسة الخضراء (نص أبيض دائمًا).
     static var heroGradient: LinearGradient {
         LinearGradient(colors: [heroTop, heroBottom], startPoint: .top, endPoint: .bottom)
+    }
+
+    /// تدرّج ترويسة بصبغة البطولة (نص أبيض) — heroGradient في النمط الموحّد.
+    static func compHeroGradient(_ slug: String?) -> LinearGradient {
+        guard spVaraColorStyle, let slug, slug != "" else { return heroGradient }
+        let a = compAccent(slug)
+        return LinearGradient(colors: [a, a.opacity(0.78)], startPoint: .top, endPoint: .bottom)
     }
 
     /// تدرّج الكتلة الخضراء السعودية البارزة (نص أبيض).
@@ -274,6 +311,7 @@ final class SpAccentTheme {
     static let shared = SpAccentTheme()
 
     private let key = "sabqsports.accent.team"
+    private let styleKey = "sabqsports.accent.style"
 
     var paletteId: String {
         didSet {
@@ -286,11 +324,24 @@ final class SpAccentTheme {
         }
     }
 
+    /// نمط الألوان: "vara" (متعدد — البطولات بألوانها والذهبي للتميّز، الافتراضي)
+    /// أو "unified" (اللون المحوري يصبغ كل شيء — سلوك ما قبل 2026-07-04).
+    var styleId: String {
+        didSet {
+            UserDefaults.standard.set(styleId, forKey: styleKey)
+            spVaraColorStyle = styleId != "unified"
+            SpTabBarVisibility.shared.hidden = false
+        }
+    }
+
     var palette: SpTeamPalette { SpTeamPalette.by(id: paletteId) }
 
     private init() {
         let saved = UserDefaults.standard.string(forKey: key) ?? SpTeamPalette.emerald.id
         paletteId = saved
         spActivePalette = SpTeamPalette.by(id: saved)
+        let savedStyle = UserDefaults.standard.string(forKey: styleKey) ?? "vara"
+        styleId = savedStyle
+        spVaraColorStyle = savedStyle != "unified"
     }
 }

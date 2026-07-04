@@ -1,5 +1,9 @@
 import SwiftUI
 
+// صبغة هَب روشن — كل «أخضر» هذه الشاشة يتبع نمط الألوان: سماوي روشن في
+// «ألوان VARA»، واللون المحوري في «لون موحّد» (compAccent ترجعه تلقائيًا).
+private var rslAccent: Color { SpTheme.compAccent("pro-league") }
+
 // ════════════════════════════════════════════════════════════════════════
 //  HomeView — تطبيق VARA الرياضي · واجهة «دوري روشن» (إعادة تصميم)
 //
@@ -226,7 +230,7 @@ struct HomeView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 (Text("دوري ").foregroundStyle(SpTheme.onDark)
-                    + Text("روشن").foregroundStyle(SpTheme.green))
+                    + Text("روشن").foregroundStyle(rslAccent))
                     .font(SportsFonts.app(size: 19, weight: .heavy))
                 Text(metaText)
                     .font(SportsFonts.app(size: 11, weight: .semibold))
@@ -276,9 +280,9 @@ struct HomeView: View {
                             .lineLimit(1)
                     }
                     .font(SportsFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(SpTheme.green)
+                    .foregroundStyle(rslAccent)
                     .padding(.horizontal, 9).padding(.vertical, 4)
-                    .background(Capsule().fill(SpTheme.green.opacity(0.10)))
+                    .background(Capsule().fill(rslAccent.opacity(0.10)))
                     Spacer(minLength: 8)
                     heroStatusBadge(f)
                 }
@@ -318,7 +322,7 @@ struct HomeView: View {
                 if f.status.live, let line = latestCommentLine {
                     HStack(spacing: 7) {
                         Image(systemName: "bolt.horizontal.circle.fill")
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.green)
+                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(rslAccent)
                         Text(line)
                             .font(SportsFonts.app(size: 11, weight: .semibold))
                             .foregroundStyle(SpTheme.onDarkDim)
@@ -337,8 +341,11 @@ struct HomeView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 11)
+                // سماوي روشن في نمط «ألوان VARA»؛ التدرّج الأخضر في النمط الموحّد.
                 .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(LinearGradient(colors: [SpTheme.green, SpTheme.greenDeep], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    .fill(SpTheme.isVaraStyle
+                        ? LinearGradient(colors: [SpTheme.compAccent("pro-league"), SpTheme.compAccent("pro-league").opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(colors: [rslAccent, rslAccent], startPoint: .topLeading, endPoint: .bottomTrailing)))
             }
             .padding(16)
             .background(heroBackground)
@@ -401,9 +408,9 @@ struct HomeView: View {
                 .background(Capsule().fill(SpTheme.chipFill))
         } else {
             Text("قادمة").font(SportsFonts.app(size: 11, weight: .bold))
-                .foregroundStyle(SpTheme.green)
+                .foregroundStyle(rslAccent)
                 .padding(.horizontal, 9).padding(.vertical, 5)
-                .background(Capsule().fill(SpTheme.green.opacity(0.10)))
+                .background(Capsule().fill(rslAccent.opacity(0.10)))
         }
     }
 
@@ -469,7 +476,7 @@ struct HomeView: View {
         HStack(spacing: 7) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(SpTheme.green)
+                .foregroundStyle(rslAccent)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .font(SportsFonts.app(size: 9, weight: .bold))
@@ -484,8 +491,8 @@ struct HomeView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
         .padding(.horizontal, 10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.green.opacity(0.055)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SpTheme.green.opacity(0.16), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(rslAccent.opacity(0.055)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(rslAccent.opacity(0.16), lineWidth: 1))
     }
 
     private func findStat(_ keys: [String]) -> String? {
@@ -554,10 +561,10 @@ struct HomeView: View {
                     if let g = gap {
                         Text(g == 0 ? "صدارة مشتعلة" : "الفارق \(g) نقطة")
                             .font(SportsFonts.app(size: 11, weight: .bold))
-                            .foregroundStyle(SpTheme.green)
+                            .foregroundStyle(rslAccent)
                             .padding(.horizontal, 9)
                             .padding(.vertical, 4)
-                            .background(Capsule().fill(SpTheme.green.opacity(0.10)))
+                            .background(Capsule().fill(rslAccent.opacity(0.10)))
                     }
                 }
                 Text(leaguePulseSummary(leader: leader, topScorer: topScorer, gap: gap))
@@ -606,14 +613,17 @@ struct HomeView: View {
     }
 
     private func pulseTile(_ label: String, _ value: String, _ sub: String, logo: String?) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        // «الهدّاف» و«المتصدّر» بلغة التميّز الذهبية (نمط ألوان VARA) — لا يتساوى
+        // كل شيء بالأخضر؛ في النمط الموحّد excellence ترجع اللون المحوري نفسه.
+        let highlight = (label == "الهدّاف" || label == "المتصدّر") ? SpTheme.excellence : rslAccent
+        return VStack(alignment: .leading, spacing: 5) {
             Text(label).font(SportsFonts.app(size: 9.5, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
             HStack(spacing: 6) {
                 if let logo, !logo.isEmpty { SpTeamLogo(logo: logo, size: 17) }
                 Text(value).font(SportsFonts.app(size: 12.5, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                     .lineLimit(1).minimumScaleFactor(0.65)
             }
-            Text(sub).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.green)
+            Text(sub).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(highlight)
                 .lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(width: 112, alignment: .leading)
@@ -630,8 +640,8 @@ struct HomeView: View {
                 SpTeamLogo(logo: fav.logo ?? "", size: 48)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
-                        Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(SpTheme.green)
-                        Text("فريقي المفضّل").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                        Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(rslAccent)
+                        Text("فريقي المفضّل").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(rslAccent)
                     }
                     Text(fav.name).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                     Text(favLabel(favMatch)).font(SportsFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
@@ -673,10 +683,10 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 HStack {
                     Text(SpFormat.kickoffDay(f.date))
-                        .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                        .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(rslAccent)
                         .lineLimit(1).minimumScaleFactor(0.7)
                         .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(SpTheme.green.opacity(0.1)))
+                        .background(Capsule().fill(rslAccent.opacity(0.1)))
                     Spacer(minLength: 6)
                     Text(SpFormat.kickoffTime(f.date))
                         .font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
@@ -716,7 +726,7 @@ struct HomeView: View {
                     HStack(spacing: 3) {
                         Text("الترتيب الكامل").font(SportsFonts.app(size: 12, weight: .bold))
                         Image(systemName: "chevron.left").font(.system(size: 10, weight: .bold))
-                    }.foregroundStyle(SpTheme.green)
+                    }.foregroundStyle(rslAccent)
                 }
             }
             VStack(spacing: 0) {
@@ -741,7 +751,7 @@ struct HomeView: View {
                                     .foregroundStyle(SpTheme.onDark).monospacedDigit()
                                 Text(titleRaceGap(row, leader: top.first))
                                     .font(SportsFonts.app(size: 10, weight: .bold))
-                                    .foregroundStyle(row.rank == 1 ? SpTheme.green : SpTheme.onDarkFaint)
+                                    .foregroundStyle(row.rank == 1 ? rslAccent : SpTheme.onDarkFaint)
                                     .lineLimit(1)
                             }
                         }
@@ -770,7 +780,7 @@ struct HomeView: View {
         return GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(SpTheme.chipFill)
-                Capsule().fill(row.rank == 1 ? SpTheme.green : SpTheme.green.opacity(0.55))
+                Capsule().fill(row.rank == 1 ? rslAccent : rslAccent.opacity(0.55))
                     .frame(width: geo.size.width * pct)
             }
         }
@@ -787,7 +797,7 @@ struct HomeView: View {
                 ForEach(Array(chars.enumerated()), id: \.offset) { _, c in
                     Group {
                         switch c {
-                        case "W", "w": Circle().fill(SpTheme.green)
+                        case "W", "w": Circle().fill(rslAccent)
                         case "L", "l": Circle().stroke(SpTheme.onDarkFaint, lineWidth: 1.3)
                         default: Circle().fill(SpTheme.onDarkFaint.opacity(0.5))
                         }
@@ -809,7 +819,7 @@ struct HomeView: View {
                     HStack(spacing: 3) {
                         Text("الكل").font(SportsFonts.app(size: 12, weight: .bold))
                         Image(systemName: "chevron.left").font(.system(size: 10, weight: .bold))
-                    }.foregroundStyle(SpTheme.green)
+                    }.foregroundStyle(rslAccent)
                 }
             }
             if !assists.isEmpty {
@@ -861,9 +871,9 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 11) {
             sectionTitle("أبرز الأرقام")
             HStack(spacing: 8) {
-                if let t = topAtk { statTile("أكثر تهديفًا", t.team.name, "\(t.goalsFor) هدفًا", SpTheme.green) }
-                if let d = bestDef { statTile("أمتن دفاع", d.team.name, "\(d.goalsAgainst) عليه", SpTheme.green) }
-                if let w = mostWin { statTile("أكثر فوزًا", w.team.name, "\(w.win) فوزًا", SpTheme.green) }
+                if let t = topAtk { statTile("أكثر تهديفًا", t.team.name, "\(t.goalsFor) هدفًا", rslAccent) }
+                if let d = bestDef { statTile("أمتن دفاع", d.team.name, "\(d.goalsAgainst) عليه", rslAccent) }
+                if let w = mostWin { statTile("أكثر فوزًا", w.team.name, "\(w.win) فوزًا", rslAccent) }
             }
             VStack(alignment: .leading, spacing: 8) {
                 Text("الأكثر تهديفًا في الدوري")
@@ -876,7 +886,7 @@ struct HomeView: View {
                         GeometryReader { geo in
                             ZStack(alignment: .leading) {
                                 Capsule().fill(SpTheme.chipFill).frame(height: 7)
-                                Capsule().fill(LinearGradient(colors: [SpTheme.green, SpTheme.greenSoft], startPoint: .leading, endPoint: .trailing))
+                                Capsule().fill(LinearGradient(colors: [rslAccent, rslAccent], startPoint: .leading, endPoint: .trailing))
                                     .frame(width: geo.size.width * CGFloat(row.goalsFor) / CGFloat(maxAtk), height: 7)
                             }
                         }.frame(height: 7)
@@ -954,13 +964,13 @@ struct HomeView: View {
                     Text(t.player.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                     HStack(spacing: 4) {
                         Image(systemName: toRoshn ? "arrow.down.left" : "arrow.up.right")
-                            .font(.system(size: 9, weight: .bold)).foregroundStyle(toRoshn ? SpTheme.green : SpTheme.onDarkDim)
+                            .font(.system(size: 9, weight: .bold)).foregroundStyle(toRoshn ? rslAccent : SpTheme.onDarkDim)
                         Text(toRoshn ? "إلى \(t.to.name)" : "من \(t.from.name)")
                             .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
-                Text(t.type).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.green).lineLimit(1)
+                Text(t.type).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(rslAccent).lineLimit(1)
             }
             .padding(.horizontal, 14).padding(.vertical, 11)
             .contentShape(Rectangle())
@@ -1033,7 +1043,7 @@ struct HomeView: View {
                 .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
 
                 HStack(spacing: 14) {
-                    legendChip(SpTheme.greenSoft, "أبطال آسيا")
+                    legendChip(rslAccent, "أبطال آسيا")
                     legendChip(SpTheme.crimson, "الهبوط")
                 }
                 .padding(.horizontal, 4)
@@ -1059,7 +1069,7 @@ struct HomeView: View {
     }
 
     private func zoneColor(_ rank: Int) -> Color {
-        if rank <= 3 { return SpTheme.green }
+        if rank <= 3 { return rslAccent }
         return SpTheme.onDarkFaint
     }
 
@@ -1098,7 +1108,7 @@ struct HomeView: View {
         return Button { selectedPlayer = IDBox(id: s.id) } label: {
             HStack(spacing: 11) {
                 Text("\(s.rank)").font(SportsFonts.app(size: 13, weight: .heavy))
-                    .foregroundStyle(s.rank <= 3 ? SpTheme.green : SpTheme.onDarkFaint)
+                    .foregroundStyle(s.rank <= 3 ? rslAccent : SpTheme.onDarkFaint)
                     .monospacedDigit().frame(width: 22)
                 playerAvatar(photo: s.photo, teamLogo: s.team.logo, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
@@ -1107,7 +1117,7 @@ struct HomeView: View {
                 }
                 Spacer(minLength: 0)
                 VStack(spacing: 1) {
-                    Text("\(primary)").font(SportsFonts.app(size: 18, weight: .heavy)).foregroundStyle(SpTheme.green).monospacedDigit()
+                    Text("\(primary)").font(SportsFonts.app(size: 18, weight: .heavy)).foregroundStyle(rslAccent).monospacedDigit()
                     Text(primaryLabel).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
                 }
                 if secondary > 0 {
@@ -1247,7 +1257,7 @@ struct NewsView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").font(.system(size: 14)).foregroundStyle(SpTheme.onDarkFaint)
             TextField("", text: $query, prompt: Text("ابحث في الأخبار").foregroundStyle(SpTheme.onDarkFaint))
-                .font(SportsFonts.app(size: 15)).foregroundStyle(SpTheme.onDark).tint(SpTheme.green)
+                .font(SportsFonts.app(size: 15)).foregroundStyle(SpTheme.onDark).tint(rslAccent)
                 .autocorrectionDisabled()
             if !query.isEmpty {
                 Button { query = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(SpTheme.onDarkFaint) }

@@ -29,9 +29,9 @@ struct SabqSportsApp: App {
                 .environment(themeMode)
                 .environment(accent)
                 .environment(liveStream)
-                // إعادة بناء الشجرة عند تبديل لون النادي كي تلتقط كل الشاشات اللون
-                // الجديد فورًا (اللون المحوري يُقرأ من spActivePalette أثناء الرسم).
-                .id(accent.paletteId)
+                // إعادة بناء الشجرة عند تبديل لون النادي أو نمط الألوان كي تلتقط
+                // كل الشاشات القيم الجديدة فورًا (تُقرأ من الحوامل العامة أثناء الرسم).
+                .id("\(accent.paletteId)|\(accent.styleId)")
                 .sportsRTL()
                 .preferredColorScheme(themeMode.colorScheme)
                 .task { await auth.restore() }

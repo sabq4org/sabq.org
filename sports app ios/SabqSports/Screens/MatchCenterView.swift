@@ -34,6 +34,9 @@ nonisolated struct SpMatchReferee: Decodable {
 }
 
 struct SpMatchCenter: View {
+    /// صبغة بطولة المباراة — تصبغ المركز كاملًا بلونها في نمط «ألوان VARA».
+    private var acc: Color { SpTheme.compAccent((detail?.fixture ?? preview)?.competitionSlug) }
+
     let fixtureId: Int
     /// معاينة من بطاقة المباراة لعرض الترويسة فورًا قبل اكتمال التحميل.
     var preview: SpFixture?
@@ -199,9 +202,6 @@ struct SpMatchCenter: View {
 
                 preMatchCard
                 matchInfoCard
-                refereeCard
-                varaModelCard
-                varaVerdictCard
 
                 if loading && detail == nil {
                     SpLoading()
@@ -226,7 +226,7 @@ struct SpMatchCenter: View {
                         let following = matchFollows.isFollowing(f.id)
                         Image(systemName: following ? "star.fill" : "star")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(following ? SpTheme.gold : SpTheme.green)
+                            .foregroundStyle(following ? SpTheme.gold : acc)
                     }
                 }
                 // متابعة لحظية على شاشة القفل (Live Activity) — جارية أو قريبة (≤ ساعة).
@@ -238,7 +238,7 @@ struct SpMatchCenter: View {
                             let on = liveActivity.isActive(f.id)
                             Image(systemName: on ? "lock.iphone" : "platter.filled.bottom.iphone")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(on ? SpTheme.green : SpTheme.onDarkDim)
+                                .foregroundStyle(on ? acc : SpTheme.onDarkDim)
                         }
                     }
                 }
@@ -248,7 +248,7 @@ struct SpMatchCenter: View {
                     ShareLink(item: url, subject: Text(shareTitle), message: Text(shareTitle)) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(SpTheme.green)
+                            .foregroundStyle(acc)
                     }
                 }
             }
@@ -292,7 +292,7 @@ struct SpMatchCenter: View {
                         .environment(\.layoutDirection, .leftToRight)
                 }
                 .font(SportsFonts.app(size: 13, weight: .heavy))
-                .foregroundStyle(SpTheme.green)
+                .foregroundStyle(acc)
             }
             let meta = headerMeta(f)
             if !meta.isEmpty {
@@ -344,7 +344,7 @@ struct SpMatchCenter: View {
             } else {
                 Text(SpFormat.kickoffTime(f.date))
                     .font(SportsFonts.app(size: 28, weight: .heavy))
-                    .foregroundStyle(SpTheme.green)
+                    .foregroundStyle(acc)
                     .environment(\.layoutDirection, .leftToRight)
             }
             // أثناء الترجيح فقط: النتيجة الجارية ركلةً بركلة (بعد الحسم تكفي جملة
@@ -375,7 +375,7 @@ struct SpMatchCenter: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 8) {
                     Image(systemName: "hourglass")
-                        .font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                        .font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
                     Text("الوقت المتبقّي على المباراة")
                         .font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
@@ -439,9 +439,9 @@ struct SpMatchCenter: View {
     private func infoLine(_ icon: String, _ label: String, _ value: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold)).foregroundStyle(SpTheme.green)
+                .font(.system(size: 13, weight: .semibold)).foregroundStyle(acc)
                 .frame(width: 26, height: 26)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(SpTheme.green.opacity(0.10)))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(acc.opacity(0.10)))
             Text(label).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
             Spacer(minLength: 8)
             Text(value).font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark)
@@ -464,7 +464,7 @@ struct SpMatchCenter: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("حكم المباراة")
                             .font(SportsFonts.app(size: 11, weight: .heavy))
-                            .foregroundStyle(SpTheme.green)
+                            .foregroundStyle(acc)
                         Text(r.name)
                             .font(SportsFonts.app(size: 15, weight: .heavy))
                             .foregroundStyle(SpTheme.onDark)
@@ -535,28 +535,30 @@ struct SpMatchCenter: View {
             neutralVenue: neutral, h2h: tuple)
     }
 
+    // بطاقتا توقّع VARA (النموذج + نتيجة التوقّعات) غير معروضتين بقرار المالك
+    // 2026-07-04 — لا تبويب توقّعات في التطبيق (الويب وحده). تُعادان عند إضافته.
     @ViewBuilder private var varaModelCard: some View {
         if let f = fixture, !f.started {
             let pick = varaPick(f)
             VStack(spacing: 12) {
                 HStack(spacing: 8) {
-                    Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                    Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
                     Text("توقّع VARA").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
                     Text("الأرجح \(pick.scoreHome)-\(pick.scoreAway)")
-                        .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.green)
+                        .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(acc)
                         .monospacedDigit().environment(\.layoutDirection, .leftToRight)
                         .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(SpTheme.green.opacity(0.10)))
+                        .background(Capsule().fill(acc.opacity(0.10)))
                 }
                 HStack(alignment: .top) {
-                    varaStat("\(pick.home)٪", f.home.name, SpTheme.green)
+                    varaStat("\(pick.home)٪", f.home.name, acc)
                     varaStat("\(pick.draw)٪", "تعادل", SpTheme.onDarkDim)
                     varaStat("\(pick.away)٪", f.away.name, SpTheme.onDark)
                 }
                 GeometryReader { geo in
                     HStack(spacing: 2) {
-                        Capsule().fill(SpTheme.green).frame(width: geo.size.width * CGFloat(pick.home) / 100)
+                        Capsule().fill(acc).frame(width: geo.size.width * CGFloat(pick.home) / 100)
                         Capsule().fill(SpTheme.onDarkFaint.opacity(0.45)).frame(width: geo.size.width * CGFloat(pick.draw) / 100)
                         Capsule().fill(SpTheme.teal).frame(width: geo.size.width * CGFloat(pick.away) / 100)
                     }
@@ -608,7 +610,7 @@ struct SpMatchCenter: View {
         if let f = fixture, !f.started, auth.isLoggedIn {
             VStack(spacing: 14) {
                 HStack(spacing: 8) {
-                    Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                    Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
                     Text(myPrediction == nil ? "توقّع النتيجة" : "توقّعك")
                         .font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
@@ -627,7 +629,7 @@ struct SpMatchCenter: View {
                             .font(SportsFonts.app(size: 15, weight: .bold))
                     }
                     .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 46)
-                    .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(SpTheme.green))
+                    .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(acc))
                 }
                 .buttonStyle(.plain).disabled(predicting)
                 if let predictError {
@@ -667,8 +669,8 @@ struct SpMatchCenter: View {
     private func stepButton(_ icon: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .bold)).foregroundStyle(SpTheme.green)
-                .frame(width: 32, height: 32).background(Circle().fill(SpTheme.green.opacity(0.12)))
+                .font(.system(size: 13, weight: .bold)).foregroundStyle(acc)
+                .frame(width: 32, height: 32).background(Circle().fill(acc.opacity(0.12)))
         }
         .buttonStyle(.plain)
     }
@@ -725,7 +727,7 @@ struct SpMatchCenter: View {
                                 .font(SportsFonts.app(size: 13, weight: .semibold))
                                 .foregroundStyle(active ? .white : SpTheme.onDarkDim)
                                 .padding(.horizontal, 14).padding(.vertical, 8)
-                                .background(Capsule().fill(active ? SpTheme.green : SpTheme.chipFill))
+                                .background(Capsule().fill(active ? acc : SpTheme.chipFill))
                         }
                         .buttonStyle(.plain)
                         .id(s)
@@ -757,7 +759,7 @@ struct SpMatchCenter: View {
                 // المحور الأخضر المركزي (تغطّيه شارات الدقائق فتبدو متّصلة).
                 HStack(spacing: 0) {
                     Spacer(minLength: 0)
-                    Capsule().fill(SpTheme.green.opacity(0.28)).frame(width: 2)
+                    Capsule().fill(acc.opacity(0.28)).frame(width: 2)
                     Spacer(minLength: 0)
                 }
                 .padding(.vertical, 10)
@@ -794,17 +796,17 @@ struct SpMatchCenter: View {
             let marks: [Int] = maxMin > 95 ? [0, 45, 90, maxMin] : [0, 45, 90]
             VStack(alignment: .leading, spacing: 10) {
                 Text("خطّ زمن المباراة")
-                    .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                    .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(acc)
 
                 GeometryReader { geo in
                     let w = geo.size.width
                     ZStack(alignment: .topLeading) {
-                        Rectangle().fill(SpTheme.green.opacity(0.22))
+                        Rectangle().fill(acc.opacity(0.22))
                             .frame(width: w - barInset * 2, height: 2)
                             .position(x: w / 2, y: barAxisY)
                         ForEach(marks, id: \.self) { m in
                             let x = barX(m, maxMin: maxMin, width: w)
-                            Rectangle().fill(SpTheme.green.opacity(0.12))
+                            Rectangle().fill(acc.opacity(0.12))
                                 .frame(width: 1, height: barHeight - 22)
                                 .position(x: x, y: (barHeight - 22) / 2)
                             Text("\(m)'")
@@ -829,7 +831,7 @@ struct SpMatchCenter: View {
 
                 HStack(spacing: 10) {
                     HStack(spacing: 5) {
-                        Circle().fill(SpTheme.green).frame(width: 7, height: 7)
+                        Circle().fill(acc).frame(width: 7, height: 7)
                         Text("\(d.fixture.home.name) · أعلى")
                             .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
                     }
@@ -872,10 +874,10 @@ struct SpMatchCenter: View {
         case "goal":
             Image(systemName: "soccerball")
                 .font(.system(size: 12))
-                .foregroundStyle(SpTheme.green)
+                .foregroundStyle(acc)
                 .padding(3)
                 .background(Circle().fill(.white))
-                .overlay(Circle().stroke(SpTheme.green.opacity(0.6), lineWidth: 1.5))
+                .overlay(Circle().stroke(acc.opacity(0.6), lineWidth: 1.5))
         case "yellow-card":
             RoundedRectangle(cornerRadius: 2).fill(SpTheme.yellowCard).frame(width: 9, height: 13)
         case "red-card":
@@ -950,7 +952,7 @@ struct SpMatchCenter: View {
             if let typeLine {
                 Text(typeLine)
                     .font(SportsFonts.app(size: 10))
-                    .foregroundStyle(SpTheme.green)
+                    .foregroundStyle(acc)
                     .lineLimit(1).minimumScaleFactor(0.8)
             }
             if let detailLine {
@@ -975,11 +977,11 @@ struct SpMatchCenter: View {
         .padding(.horizontal, 10).padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(isGoal ? SpTheme.green.opacity(0.10) : SpTheme.chipFill)
+                .fill(isGoal ? acc.opacity(0.10) : SpTheme.chipFill)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(isGoal ? SpTheme.green.opacity(0.25) : Color.clear, lineWidth: 1)
+                .stroke(isGoal ? acc.opacity(0.25) : Color.clear, lineWidth: 1)
         )
     }
 
@@ -991,7 +993,7 @@ struct SpMatchCenter: View {
             .monospacedDigit()
             .padding(.horizontal, 8).padding(.vertical, 3)
             .frame(minWidth: 40)
-            .background(Capsule().fill(SpTheme.green))
+            .background(Capsule().fill(acc))
             .environment(\.layoutDirection, .leftToRight)
             .fixedSize()
     }
@@ -1020,7 +1022,7 @@ struct SpMatchCenter: View {
         Group {
             switch e.type {
             case "goal":
-                Image(systemName: "soccerball").foregroundStyle(SpTheme.green)
+                Image(systemName: "soccerball").foregroundStyle(acc)
             case "missed-penalty":
                 Image(systemName: "exclamationmark.shield.fill").foregroundStyle(SpTheme.crimson)
             case "var":
@@ -1156,7 +1158,7 @@ struct SpMatchCenter: View {
         return HStack(alignment: .top, spacing: 10) {
             Text(commentaryMinute(item))
                 .font(SportsFonts.app(size: 11.5, weight: .heavy))
-                .foregroundStyle(highlight ? SpTheme.green : SpTheme.onDarkDim)
+                .foregroundStyle(highlight ? acc : SpTheme.onDarkDim)
                 .monospacedDigit()
                 .frame(width: 42)
                 .environment(\.layoutDirection, .leftToRight)
@@ -1174,10 +1176,10 @@ struct SpMatchCenter: View {
         .padding(.horizontal, 12).padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
-                .fill(highlight ? SpTheme.green.opacity(0.07) : SpTheme.cardFill)
+                .fill(highlight ? acc.opacity(0.07) : SpTheme.cardFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
-                        .stroke(highlight ? SpTheme.green.opacity(0.28) : SpTheme.cardStroke, lineWidth: 1)
+                        .stroke(highlight ? acc.opacity(0.28) : SpTheme.cardStroke, lineWidth: 1)
                 )
         )
     }
@@ -1209,7 +1211,7 @@ struct SpMatchCenter: View {
     @ViewBuilder private func commentaryIcon(_ kind: String) -> some View {
         switch kind {
         case "goal":
-            Image(systemName: "soccerball").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+            Image(systemName: "soccerball").font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
         case "yellow":
             RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                 .fill(SpTheme.yellowCard).frame(width: 12, height: 16)
@@ -1223,7 +1225,7 @@ struct SpMatchCenter: View {
         case "substitution":
             Image(systemName: "arrow.left.arrow.right").font(.system(size: 13, weight: .bold)).foregroundStyle(SpTheme.teal)
         case "shot-saved":
-            Image(systemName: "hand.raised.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(SpTheme.greenSoft)
+            Image(systemName: "hand.raised.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(acc)
         case "shot-missed":
             Image(systemName: "paperplane.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
         case "fulltime":
@@ -1266,9 +1268,9 @@ struct SpMatchCenter: View {
             }
             GeometryReader { geo in
                 HStack(spacing: 3) {
-                    Capsule().fill(SpTheme.greenSoft)
+                    Capsule().fill(acc)
                         .frame(width: geo.size.width * CGFloat(h / total))
-                    Capsule().fill(SpTheme.green.opacity(0.7))
+                    Capsule().fill(acc.opacity(0.7))
                         .frame(width: geo.size.width * CGFloat(a / total))
                 }
             }
@@ -1289,17 +1291,21 @@ struct SpMatchCenter: View {
     }
 
     /// الرسمية إن كان فيها أساسيون؛ وإلا المتوقعة بشارة تحذيرية؛ وإلا ما توفّر.
+    /// حكم المباراة هنا (قرار المالك 2026-07-04: ضمن التشكيلة لا أعلى المركز).
     @ViewBuilder
     private func lineupsSection(_ d: SpMatchDetail) -> some View {
-        if d.lineups.contains(where: { !$0.startXI.isEmpty }) {
-            lineupsView(d.lineups)
-        } else if hasExpectedLineup {
-            VStack(spacing: 12) {
-                expectedBadge
-                lineupsView(expectedAsLineups(d))
+        VStack(spacing: 14) {
+            refereeCard
+            if d.lineups.contains(where: { !$0.startXI.isEmpty }) {
+                lineupsView(d.lineups)
+            } else if hasExpectedLineup {
+                VStack(spacing: 12) {
+                    expectedBadge
+                    lineupsView(expectedAsLineups(d))
+                }
+            } else {
+                lineupsView(d.lineups)
             }
-        } else {
-            lineupsView(d.lineups)
         }
     }
 
@@ -1439,8 +1445,8 @@ struct SpMatchCenter: View {
     private func benchGrid(_ subs: [SpLineupPlayer]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "figure.seated.side").font(.system(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
-                Text("دكة البدلاء").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.green)
+                Image(systemName: "figure.seated.side").font(.system(size: 11, weight: .bold)).foregroundStyle(acc)
+                Text("دكة البدلاء").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(acc)
                 Text("(\(subs.count))").font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], alignment: .leading, spacing: 8) {
@@ -1459,7 +1465,7 @@ struct SpMatchCenter: View {
                 .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.emeraldDeep)
                 .monospacedDigit()
                 .frame(width: 22, height: 22)
-                .background(Circle().fill(SpTheme.green.opacity(0.15)))
+                .background(Circle().fill(acc.opacity(0.15)))
                 .environment(\.layoutDirection, .leftToRight)
             Text(p.name)
                 .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDark)
@@ -1474,7 +1480,7 @@ struct SpMatchCenter: View {
         HStack(spacing: 10) {
             Text(p.number.map { "\($0)" } ?? "—")
                 .font(SportsFonts.app(size: 13, weight: .bold))
-                .foregroundStyle(starter ? SpTheme.green : SpTheme.onDarkFaint)
+                .foregroundStyle(starter ? acc : SpTheme.onDarkFaint)
                 .frame(width: 26).monospacedDigit()
                 .environment(\.layoutDirection, .leftToRight)
             Text(p.name)
@@ -1512,7 +1518,7 @@ struct SpMatchCenter: View {
                 divider
                 ForEach(Array(x.topPlayers.prefix(4).enumerated()), id: \.offset) { _, p in
                     HStack(spacing: 8) {
-                        Circle().fill(p.location == "home" ? SpTheme.green : SpTheme.onDarkDim).frame(width: 7, height: 7)
+                        Circle().fill(p.location == "home" ? acc : SpTheme.onDarkDim).frame(width: 7, height: 7)
                         Text(p.name).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                         Spacer(minLength: 0)
                         Text(String(format: "%.2f", p.xg)).font(SportsFonts.app(size: 13, weight: .bold))
@@ -1561,7 +1567,7 @@ struct SpMatchCenter: View {
                 Text("الغيابات").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.emeraldDeep)
                 ForEach(Array(f.absentees.prefix(6).enumerated()), id: \.offset) { _, ab in
                     HStack(spacing: 8) {
-                        Circle().fill(ab.location == "home" ? SpTheme.green : SpTheme.onDarkDim).frame(width: 7, height: 7)
+                        Circle().fill(ab.location == "home" ? acc : SpTheme.onDarkDim).frame(width: 7, height: 7)
                         Text(ab.name).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                         Spacer(minLength: 0)
                         Text(ab.reason).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkFaint).lineLimit(1)
@@ -1575,7 +1581,7 @@ struct SpMatchCenter: View {
     // عناصر التحليل المشتركة
     private func sectionTitle(_ title: String, icon: String) -> some View {
         HStack(spacing: 8) {
-            Image(systemName: icon).font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.greenSoft)
+            Image(systemName: icon).font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
             Text(title).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
             Spacer(minLength: 0)
         }
@@ -1595,7 +1601,7 @@ struct SpMatchCenter: View {
             }
             GeometryReader { geo in
                 HStack(spacing: 3) {
-                    Capsule().fill(SpTheme.green).frame(width: geo.size.width * CGFloat(home / total))
+                    Capsule().fill(acc).frame(width: geo.size.width * CGFloat(home / total))
                     Capsule().fill(SpTheme.onDarkDim).frame(width: geo.size.width * CGFloat(away / total))
                 }
             }
@@ -1614,7 +1620,7 @@ struct SpMatchCenter: View {
 
     private var chartLegend: some View {
         HStack(spacing: 16) {
-            legendDot(SpTheme.green, detail?.fixture.home.name ?? "المضيف")
+            legendDot(acc, detail?.fixture.home.name ?? "المضيف")
             legendDot(SpTheme.onDarkDim, detail?.fixture.away.name ?? "الضيف")
             Spacer(minLength: 0)
         }
@@ -1667,8 +1673,8 @@ struct SpMatchCenter: View {
                 playerPhoto(photo, size: 52)
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 5) {
-                        Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(SpTheme.green)
-                        Text("أفضل لاعب في المباراة").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                        Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(acc)
+                        Text("أفضل لاعب في المباراة").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(acc)
                     }
                     Text(m.name).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                     Text(m.team).font(SportsFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
@@ -1677,7 +1683,7 @@ struct SpMatchCenter: View {
                 ratingBadge(m.rating)
             }
             .padding(13).frame(maxWidth: .infinity)
-            .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.green.opacity(0.06)))
+            .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(acc.opacity(0.06)))
             .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
         }
         .buttonStyle(SpPressStyle())
@@ -1691,7 +1697,7 @@ struct SpMatchCenter: View {
                     HStack(spacing: 5) {
                         if let n = p.number { Text("\(n)").font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint).monospacedDigit() }
                         Text(p.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                        if p.captain == true { Image(systemName: "c.square.fill").font(.system(size: 11)).foregroundStyle(SpTheme.green) }
+                        if p.captain == true { Image(systemName: "c.square.fill").font(.system(size: 11)).foregroundStyle(acc) }
                     }
                     HStack(spacing: 5) {
                         Text(p.team).font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
@@ -1702,7 +1708,7 @@ struct SpMatchCenter: View {
                 Spacer(minLength: 0)
                 if (p.goals ?? 0) > 0 {
                     Label("\(p.goals!)", systemImage: "soccerball.inverse").labelStyle(.titleAndIcon)
-                        .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                        .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(acc)
                 }
                 if let r = p.rating, r > 0 { ratingBadge(r) }
             }
@@ -1716,7 +1722,7 @@ struct SpMatchCenter: View {
         Text(String(format: "%.1f", r))
             .font(SportsFonts.app(size: 13, weight: .heavy)).foregroundStyle(.white)
             .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(Capsule().fill(r >= 7 ? SpTheme.green : (r >= 6 ? SpTheme.onDarkDim : SpTheme.crimson)))
+            .background(Capsule().fill(r >= 7 ? acc : (r >= 6 ? SpTheme.onDarkDim : SpTheme.crimson)))
             .environment(\.layoutDirection, .leftToRight)
     }
 
@@ -1749,13 +1755,13 @@ struct SpMatchCenter: View {
         let total = max(1, s.total)
         return VStack(spacing: 12) {
             HStack(alignment: .top) {
-                h2hStat("\(s.homeWins)", home?.name ?? "المضيف", SpTheme.green)
+                h2hStat("\(s.homeWins)", home?.name ?? "المضيف", acc)
                 h2hStat("\(s.draws)", "تعادل", SpTheme.onDarkDim)
                 h2hStat("\(s.awayWins)", away?.name ?? "الضيف", SpTheme.onDark)
             }
             GeometryReader { geo in
                 HStack(spacing: 2) {
-                    Capsule().fill(SpTheme.green).frame(width: geo.size.width * CGFloat(s.homeWins) / CGFloat(total))
+                    Capsule().fill(acc).frame(width: geo.size.width * CGFloat(s.homeWins) / CGFloat(total))
                     Capsule().fill(SpTheme.onDarkFaint.opacity(0.45)).frame(width: geo.size.width * CGFloat(s.draws) / CGFloat(total))
                     Capsule().fill(SpTheme.onDarkDim).frame(width: geo.size.width * CGFloat(s.awayWins) / CGFloat(total))
                 }
