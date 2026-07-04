@@ -141,11 +141,24 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
     return s.statusLabel.isEmpty ? "قريبًا" : s.statusLabel
 }
 
-// عرض الحالة الحيّة مطابق لتطبيق سبق: الدقيقة نص ثابت يأتي من ContentState
-// ويحدّثه الخادم بالدفع. لا نستخدم ساعة ذاتية على الجهاز حتى لا تظهر الثواني.
+// عرض الحالة الحيّة — يفضّل الساعة الذاتية (clockStartEpoch) التي تتقدّم على
+// الجهاز كل ثانية بلا دفعة APNs، فتُحلّ مشكلة تجمّد الدقيقة جذريًّا. المرساة
+// = «الآن − الزمن المنقضي»، فالوقت المنقضي = الآن − المرساة. نعرضه تصاعديًّا
+// عبر نطاق (المرساة ... الآن+1ثانية) مع countsDown: false — يتقدّم كل ثانية.
+// عند الاستراحة/الترجيح (clockStartEpoch=nil) نسقط على النصّ المدفوع ثابتًا.
 @ViewBuilder
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
-    Text(statusText(s, kickoff: kickoff)).lineLimit(1)
+    if s.isLive, let epoch = s.clockStartEpoch {
+        let start = Date(timeIntervalSince1970: epoch)
+        // نطاق ينتهي بعد ثانية من الآن: يعيد العرض كل ثانية، فيتقدّم العدّاد.
+        // countsDown: false يجعله يبدأ من 0:00 ويتزايد — فيطابق زمن المباراة.
+        Text(timerInterval: start...Date().addingTimeInterval(1), countsDown: false)
+            .monospacedDigit()
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .center)
+    } else {
+        Text(statusText(s, kickoff: kickoff)).lineLimit(1)
+    }
 }
 
 // البطاقة RTL: المضيف يمينًا والضيف يسارًا. نرسم النتيجة LTR بترتيب
@@ -243,7 +256,7 @@ private struct LockScreenView: View {
                 if context.state.isLive {
                     Circle().fill(SpLA.liveDot).frame(width: 7, height: 7)
                 }
-                Text(primaryStatusLine)
+                liveClockOrText
                     .font(.system(size: 13, weight: .bold))
                     .monospacedDigit()
                     .foregroundStyle(context.state.isLive ? SpLA.liveDot : SpLA.dim)
@@ -256,6 +269,19 @@ private struct LockScreenView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
+        }
+    }
+
+    /// العدّاد الأوّلي: يفضّل الساعة الذاتية (clockStartEpoch) على الجهاز
+    /// فتتقدّم الدقيقة كل ثانية بلا انتظار دفعة APNs. عند غياب المرساة
+    /// (استراحة/ترجيح/قبل الانطلاق) يسقط على النصّ المدفوع ثابتًا.
+    @ViewBuilder private var liveClockOrText: some View {
+        let s = context.state
+        if s.isLive, let epoch = s.clockStartEpoch {
+            let start = Date(timeIntervalSince1970: epoch)
+            Text(timerInterval: start...Date().addingTimeInterval(1), countsDown: false)
+        } else {
+            Text(primaryStatusLine)
         }
     }
 

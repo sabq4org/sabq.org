@@ -442,8 +442,9 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     }
 
     const state = stabilizeClockAnchor(fixtureId, buildContentState(detail, ts, live));
-    // بصمة الدفع تشمل `minute`: الويدجت يعرض الدقيقة كنصّ مدفوع، فندفع عند كل
-    // تغيّر دقيقة/نتيجة/حالة/آخر حدث ليبقى العرض على الجهاز متزامنًا مع الخادم.
+    // بصمة الدفع تشمل `minute` و `clockStartEpoch`: الويدجت يعرض الدقيقة كنصّ مدفوع
+    // عند توقّف الساعة (استراحة/ترجيح) ويعتمد على clockStartEpoch للساعة الذاتية
+    // الجارية. ندفع عند كل تغيّر دقيقة/نتيجة/حالة/حدث/مرساة ليبقى العرض متزامنًا.
     const pushKey = JSON.stringify({
       h: state.homeScore,
       a: state.awayScore,
@@ -452,6 +453,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
       l: state.isLive,
       f: state.isFinished,
       e: state.lastEvent ?? null,
+      c: state.clockStartEpoch ?? null,
     });
     const finished = state.isFinished;
     const staleDate = staleDateFor(detail);
