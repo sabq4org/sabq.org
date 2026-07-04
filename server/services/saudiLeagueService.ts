@@ -2188,9 +2188,15 @@ const numOrNull = (v: any): number | null =>
 export async function getTeamStats(
   teamId: number,
   compOverride?: SaudiCompetition | null,
+  opts?: {
+    /** موسم محدد بدل الحالي (سجل النادي في نسخة سابقة) — يوسّع مفتاح الكاش */
+    seasonOverride?: number;
+    /** تجاوز حارس hasStats — teams/statistics يعمل فعليًا للكؤوس (متحقَّق على كأس الملك 504) */
+    force?: boolean;
+  },
 ): Promise<SplTeamStats | null> {
   // البطولة الممرّرة أولًا؛ وإلا نكتشفها من الترتيب.
-  let comp = competitionForStats(compOverride ?? null);
+  let comp = opts?.force ? (compOverride ?? null) : competitionForStats(compOverride ?? null);
   if (!comp) {
     const leagueComps = SAUDI_COMPETITIONS.filter((c) => c.hasStats);
     for (const c of leagueComps) {
@@ -2202,9 +2208,13 @@ export async function getTeamStats(
     }
   }
   if (!comp) return null;
-  const season = await seasonFor(comp);
+  const season = opts?.seasonOverride ?? (await seasonFor(comp));
+  const cacheKey =
+    opts?.seasonOverride != null
+      ? `spl:teamstats:${teamId}:${comp.id}:${opts.seasonOverride}`
+      : `spl:teamstats:${teamId}:${comp.id}`;
 
-  return withSWR(`spl:teamstats:${teamId}:${comp.id}`, TEAM_STATS_TTL, TEAM_STATS_TTL * 2, async () => {
+  return withSWR(cacheKey, TEAM_STATS_TTL, TEAM_STATS_TTL * 2, async () => {
     // ملاحظة: teams/statistics لا يدعم معامل timezone (عكس fixtures) — إرساله
     // يردّ خطأ "The Timezone field do not exist." ويفشل الطلب كله. تُترك الأهداف
     // كما يرجعها المزوّد (UTC)؛ الأرقام الإجمالية لا تتأثر بالمنطقة الزمنية.

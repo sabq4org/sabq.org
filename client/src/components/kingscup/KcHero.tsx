@@ -58,7 +58,7 @@ function TeamSide({
   );
 }
 
-function CountdownChips({ timestamp }: { timestamp: number }) {
+export function CountdownChips({ timestamp }: { timestamp: number }) {
   const [countdown, setCountdown] = useState(() => countdownTo(timestamp));
   useEffect(() => {
     const interval = setInterval(() => setCountdown(countdownTo(timestamp)), 1000);
