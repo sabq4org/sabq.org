@@ -29,7 +29,7 @@ struct SabqSportsApp: App {
                 .environment(themeMode)
                 .environment(accent)
                 .environment(liveStream)
-                // إعادة بناء الشجرة عند تبديل لون النادي أو نمط الألوان كي تلتقط
+                // إعادة بناء الشجرة عند تبديل لون التطبيق كي تلتقط
                 // كل الشاشات القيم الجديدة فورًا (تُقرأ من الحوامل العامة أثناء الرسم).
                 .id("\(accent.paletteId)|\(accent.styleId)")
                 .sportsRTL()

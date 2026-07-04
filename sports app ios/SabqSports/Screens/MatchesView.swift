@@ -1,7 +1,6 @@
 import SwiftUI
 
-// صبغة المونديال — كل «أخضر» هذه الشاشة يتبع نمط الألوان: أزرق فيفا في
-// «ألوان VARA»، واللون المحوري في «لون موحّد».
+// صبغة المونديال تتبع لون التطبيق المحوري؛ البطولات لا تعيد صبغ الشاشة.
 private var wcAccent: Color { SpTheme.compAccent("world-cup") }
 
 // MARK: - تبويب «المباريات» — جدول كأس العالم بالتواريخ + تنقّل هجين
@@ -1857,6 +1856,8 @@ struct WcMatchCenter: View {
         Group {
             switch e.type {
             case "goal": Image(systemName: "soccerball").foregroundStyle(wcAccent)
+            case "score-summary": Image(systemName: "soccerball").foregroundStyle(wcAccent)
+            case "shootout-summary": Image(systemName: "checkmark.seal.fill").foregroundStyle(SpTheme.gold)
             case "missed-penalty": Image(systemName: "exclamationmark.shield.fill").foregroundStyle(SpTheme.crimson)
             case "var": Image(systemName: "play.tv.fill").foregroundStyle(varPurple)
             case "yellow-card": cardChip(SpTheme.yellowCard)
@@ -1873,6 +1874,7 @@ struct WcMatchCenter: View {
     }
 
     private func pillMinute(_ e: SpWcEvent) -> String {
+        if e.type == "score-summary" { return "—" }
         if let x = e.extraMinute, x > 0 { return "\(e.minute)'+\(x)" }
         return "\(e.minute)'"
     }

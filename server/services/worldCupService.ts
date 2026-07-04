@@ -2604,6 +2604,82 @@ function localizeMatchEvents(
   });
 }
 
+function creditedWcGoalCounts(events: WcMatchEvent[], homeId: number): { home: number; away: number } {
+  let home = 0;
+  let away = 0;
+  for (const e of events) {
+    if (e.type !== "goal") continue;
+    const scoredByHome = e.teamId === homeId;
+    const ownGoal = e.label.includes("عكسي") || e.detail === "Own Goal";
+    const creditHome = ownGoal ? !scoredByHome : scoredByHome;
+    if (creditHome) home += 1;
+    else away += 1;
+  }
+  return { home, away };
+}
+
+function appendWcScoreSummaryEvents(fixture: WcFixture, events: WcMatchEvent[]): WcMatchEvent[] {
+  if (!fixture.status.finished) return events;
+  const out = [...events];
+  const counted = creditedWcGoalCounts(events, fixture.home.id);
+  const homeGoals = fixture.goals.home ?? 0;
+  const awayGoals = fixture.goals.away ?? 0;
+
+  const pushMissingGoals = (team: WcTeam, missing: number, total: number) => {
+    if (missing <= 0 || total <= 0) return;
+    out.push({
+      minute: 0,
+      extraMinute: null,
+      teamId: team.id,
+      type: "score-summary",
+      label: total === 1 ? "هدف مسجل دون تفاصيل من المصدر" : `${total} أهداف مسجلة دون تفاصيل من المصدر`,
+      detail: "Score Summary",
+      player: "ملخص الأهداف",
+      playerId: null,
+      assist: null,
+      assistId: null,
+    });
+  };
+
+  pushMissingGoals(fixture.home, homeGoals - counted.home, homeGoals);
+  pushMissingGoals(fixture.away, awayGoals - counted.away, awayGoals);
+
+  const pen = fixture.penalties;
+  const hasPenaltySummary = events.some((e) => e.type === "shootout-summary" || e.label.includes("الترجيح"));
+  if (!hasPenaltySummary && pen && (pen.home != null || pen.away != null)) {
+    if (pen.home != null) {
+      out.push({
+        minute: 120,
+        extraMinute: null,
+        teamId: fixture.home.id,
+        type: "shootout-summary",
+        label: `${pen.home} ركلات ناجحة`,
+        detail: "Penalty Shootout",
+        player: "ركلات الترجيح",
+        playerId: null,
+        assist: null,
+        assistId: null,
+      });
+    }
+    if (pen.away != null) {
+      out.push({
+        minute: 120,
+        extraMinute: null,
+        teamId: fixture.away.id,
+        type: "shootout-summary",
+        label: `${pen.away} ركلات ناجحة`,
+        detail: "Penalty Shootout",
+        player: "ركلات الترجيح",
+        playerId: null,
+        assist: null,
+        assistId: null,
+      });
+    }
+  }
+
+  return out;
+}
+
 /**
  * مسار خفيف يجلب أحداث المباراة فقط (نداء `fixtures` واحد) دون توقعات أو سجل
  * مواجهات. تجميع سباقات الهدّافين يحتاج الأحداث وحدها، فلا داعي لإشعال نداءين
@@ -2679,7 +2755,11 @@ export async function getMatchDetail(
     const tr = await resolveNames(rawNames);
     const arName = nameResolverById(tr, bestById);
 
-    const events: WcMatchEvent[] = localizeMatchEvents(item, tr, bestById);
+    const fixture = localizeFixture(item);
+    const events: WcMatchEvent[] = appendWcScoreSummaryEvents(
+      fixture,
+      localizeMatchEvents(item, tr, bestById)
+    );
 
     let lineups: WcLineup[] = (item.lineups ?? []).map((lineup: any): WcLineup => {
       const mapPlayer = (p: any): WcLineupPlayer => ({
@@ -2745,7 +2825,7 @@ export async function getMatchDetail(
         };
       });
 
-    return { fixture: localizeFixture(item), events, lineups, statistics, ratings };
+    return { fixture, events, lineups, statistics, ratings };
   }, opts.forceFresh ?? false);
 
   if (!detail) return null;

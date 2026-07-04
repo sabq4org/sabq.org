@@ -13,12 +13,10 @@ import UIKit
 // كل لون يُحلّ ديناميكيًّا حسب مظهر الجهاز عبر `dyn(فاتح:داكن:)` — فتبديل المظهر
 // (تلقائي/فاتح/داكن من «حسابي») يسري على كل الشاشات فورًا بلا تغيير أي رمز.
 // كل أسماء الرموز محفوظة (470+ استخدامًا)؛ تغيّر تمثيلها إلى لون تكيّفي فقط.
-// MARK: - لوحة ألوان النادي (هوية المشجّع)
+// MARK: - لوحة لون التطبيق (اختيار المستخدم)
 //
-// كل مشجّع يميل للون ناديه. اللون المحوري في التطبيق (الأخضر تاريخيًّا) صار
-// يتبع «اللوحة المختارة»، فيُعاد تلوين كل الواجهة عند تبديل النادي. النطاق:
-// اللون المحوري فقط (أزرار/أيقونات/حالات نشطة/أشرطة/الترويسة الملوّنة)؛ خلفيات
-// المحتوى تبقى محايدة لضمان القراءة.
+// اللون المحوري في التطبيق يتبع «اللوحة المختارة» من الإعدادات. النطاق متعمّد:
+// أزرار/أيقونات/حالات نشطة/أشرطة فقط؛ خلفيات المحتوى تبقى محايدة لضمان القراءة.
 nonisolated struct SpTeamPalette: Identifiable, Equatable {
     let id: String
     let name: String
@@ -56,20 +54,18 @@ nonisolated struct SpTeamPalette: Identifiable, Equatable {
         )
     }
 
-    // ١٠ ألوان مميّزة — كل لون قابل للقراءة كنصّ/زرّ على الأبيض (نسخة فاتحة أغمق)
-    // وعلى الداكن (نسخة داكنة أفتح). الأخضر هو الافتراضي.
-    // الزمردي = «الأخضر الملعبي» #0A4431 من دليل الهوية (VARA Brand Identity v1.0)؛
-    // make() يشتق منه تلقائيًّا الثانوي #0D513B (soft) والعميق (deep).
-    static let emerald  = make("emerald",  "أخضر",   Color(red: 0.039, green: 0.267, blue: 0.192), Color(red: 0.24, green: 0.68, blue: 0.50))
-    static let blue     = make("blue",     "أزرق",   Color(red: 0.12, green: 0.36, blue: 0.78), Color(red: 0.40, green: 0.60, blue: 0.98))
-    static let teal     = make("teal",     "سماوي",  Color(red: 0.06, green: 0.49, blue: 0.55), Color(red: 0.30, green: 0.74, blue: 0.82))
-    static let indigo   = make("indigo",   "نيلي",   Color(red: 0.26, green: 0.30, blue: 0.66), Color(red: 0.52, green: 0.56, blue: 0.96))
-    static let purple   = make("purple",   "بنفسجي", Color(red: 0.42, green: 0.27, blue: 0.74), Color(red: 0.64, green: 0.52, blue: 0.96))
-    static let pink     = make("pink",     "وردي",   Color(red: 0.78, green: 0.22, blue: 0.48), Color(red: 0.96, green: 0.46, blue: 0.67))
-    static let red      = make("red",      "أحمر",   Color(red: 0.80, green: 0.20, blue: 0.22), Color(red: 0.97, green: 0.43, blue: 0.43))
-    static let orange   = make("orange",   "برتقالي", Color(red: 0.80, green: 0.42, blue: 0.10), Color(red: 0.98, green: 0.61, blue: 0.27))
-    static let amber    = make("amber",    "كهرماني", Color(red: 0.70, green: 0.52, blue: 0.06), Color(red: 0.93, green: 0.73, blue: 0.22))
-    static let graphite = make("graphite", "رمادي",  Color(red: 0.30, green: 0.34, blue: 0.40), Color(red: 0.62, green: 0.67, blue: 0.74))
+    // ١٠ ألوان هادئة — كل لون قابل للقراءة كنص/زر على الأبيض والداكن. الأخضر
+    // الملعبي هو الافتراضي، وبقية الألوان شخصية لا تغيّر هوية البطولات.
+    static let emerald  = make("emerald",  "أخضر",    Color(red: 0.059, green: 0.463, blue: 0.431), Color(red: 0.302, green: 0.729, blue: 0.650))
+    static let blue     = make("blue",     "أزرق",    Color(red: 0.145, green: 0.388, blue: 0.620), Color(red: 0.424, green: 0.639, blue: 0.910))
+    static let teal     = make("teal",     "سماوي",   Color(red: 0.055, green: 0.463, blue: 0.522), Color(red: 0.333, green: 0.741, blue: 0.808))
+    static let indigo   = make("indigo",   "نيلي",    Color(red: 0.294, green: 0.337, blue: 0.588), Color(red: 0.565, green: 0.612, blue: 0.886))
+    static let purple   = make("purple",   "بنفسجي",  Color(red: 0.431, green: 0.329, blue: 0.620), Color(red: 0.682, green: 0.584, blue: 0.871))
+    static let pink     = make("pink",     "وردي",    Color(red: 0.635, green: 0.290, blue: 0.467), Color(red: 0.878, green: 0.549, blue: 0.690))
+    static let red      = make("red",      "أحمر",    Color(red: 0.690, green: 0.267, blue: 0.267), Color(red: 0.918, green: 0.502, blue: 0.502))
+    static let orange   = make("orange",   "نحاسي",   Color(red: 0.678, green: 0.392, blue: 0.149), Color(red: 0.918, green: 0.620, blue: 0.369))
+    static let amber    = make("amber",    "ذهبي",    Color(red: 0.651, green: 0.482, blue: 0.082), Color(red: 0.878, green: 0.714, blue: 0.278))
+    static let graphite = make("graphite", "رصاصي",   Color(red: 0.275, green: 0.314, blue: 0.365), Color(red: 0.612, green: 0.659, blue: 0.729))
 
     static let all: [SpTeamPalette] = [
         .emerald, .blue, .teal, .indigo, .purple, .pink, .red, .orange, .amber, .graphite
@@ -81,9 +77,9 @@ nonisolated struct SpTeamPalette: Identifiable, Equatable {
 /// يُحدَّث من `SpAccentTheme` (MainActor) عند تبديل النادي.
 nonisolated(unsafe) var spActivePalette: SpTeamPalette = .emerald
 
-/// نمط الألوان الفعّال: true = «ألوان VARA» (بطولات ملوّنة + ذهبي التميّز، الافتراضي)،
-/// false = «لون موحّد» (اللون المحوري يصبغ كل شيء — سلوك ما قبل 2026-07-04).
-nonisolated(unsafe) var spVaraColorStyle: Bool = true
+/// نمط الألوان الفعّال: false = هوية موحّدة للواجهة، والبطولات لا تعيد صبغ التطبيق.
+/// يبقى المتغير لأجل توافق الشاشات القديمة التي تقرأه.
+nonisolated(unsafe) var spVaraColorStyle: Bool = false
 
 nonisolated enum SpTheme {
     /// مُعرّف المنتخب السعودي (api-sports) — للإبراز السعودي.
@@ -110,30 +106,18 @@ nonisolated enum SpTheme {
     // لون الخطأ/المباشر #C64840 من ألوان الحالة في دليل الهوية.
     static let crimson   = dyn(Color(red: 0.776, green: 0.282, blue: 0.251), Color(red: 0.98, green: 0.40, blue: 0.45))
 
-    // ── نمط «ألوان VARA» (الافتراضي منذ 2026-07-04) ──
-    /// هل النمط المتعدد فعّال؟ («لون موحّد» في الإعدادات يعيد سلوك اللون الواحد.)
+    // ── نمط موحّد: لون المستخدم هو المحور، والبطولات تبقى ضمن قالب هادئ ──
+    /// هل النمط المتعدد فعّال؟ القيمة الافتراضية false بعد اعتماد الهوية الموحدة.
     static var isVaraStyle: Bool { spVaraColorStyle }
 
-    /// لون «التميّز» — الهدّاف/المتصدّر/الأرقام البارزة: ذهبي في نمط ألوان VARA،
-    /// ويتوحّد على اللون المحوري في النمط الموحّد.
-    static var excellence: Color { spVaraColorStyle ? gold : green }
+    /// لون «التميّز» — الهدّاف/المتصدّر/الأرقام البارزة: ذهبي محدود، لا يغيّر
+    /// هوية الشاشة ولا يرتبط بلون البطولة.
+    static var excellence: Color { gold }
 
-    /// صبغة البطولة من هويتها الرسمية — تكسر أحادية اللون وتجعل اللون معلومة
-    /// (أين أنا؟). في النمط الموحّد ترجع اللون المحوري فيبقى السلوك القديم حرفيًّا.
+    /// صبغة البطولة داخل الواجهة. بعد التجربة، ألوان البطولات لا تصبغ التطبيق؛
+    /// نعيد لون المستخدم كي تبقى الهوية متناسقة في كل الشاشات.
     static func compAccent(_ slug: String?) -> Color {
-        guard spVaraColorStyle, let slug else { return green }
-        switch slug {
-        case "pro-league":    return dyn(Color(red: 0.00, green: 0.51, blue: 0.60), Color(red: 0.27, green: 0.75, blue: 0.83))  // سماوي روشن
-        case "division-1":    return dyn(Color(red: 0.66, green: 0.50, blue: 0.00), Color(red: 0.89, green: 0.73, blue: 0.28))  // أصفر يلو
-        case "division-2":    return dyn(Color(red: 0.73, green: 0.33, blue: 0.13), Color(red: 0.89, green: 0.53, blue: 0.31))  // برتقالي
-        case "kings-cup":     return dyn(Color(red: 0.55, green: 0.42, blue: 0.11), Color(red: 0.81, green: 0.66, blue: 0.31))  // ذهبي ملكي
-        case "super-cup":     return dyn(Color(red: 0.42, green: 0.31, blue: 0.63), Color(red: 0.66, green: 0.56, blue: 0.86))  // بنفسجي
-        case "womens-league": return dyn(Color(red: 0.65, green: 0.30, blue: 0.47), Color(red: 0.85, green: 0.53, blue: 0.68))  // وردي
-        case "world-cup":     return dyn(Color(red: 0.11, green: 0.31, blue: 0.62), Color(red: 0.44, green: 0.61, blue: 0.88))  // أزرق فيفا
-        case "gulf-cup":      return dyn(Color(red: 0.05, green: 0.42, blue: 0.55), Color(red: 0.36, green: 0.69, blue: 0.80))  // أزرق خليجي
-        case "asian-cup":     return dyn(Color(red: 0.68, green: 0.20, blue: 0.24), Color(red: 0.88, green: 0.46, blue: 0.49))  // أحمر آسيوي
-        default:              return green
-        }
+        green
     }
     // ألوان دلالية مركزية — لا تثبّت قيمها في الشاشات: الكرت الأصفر وميداليتا الفضة/البرونز (الذهب = gold أعلاه).
     static let yellowCard  = dyn(Color(red: 0.95, green: 0.76, blue: 0.22), Color(red: 0.98, green: 0.83, blue: 0.34))
@@ -157,11 +141,9 @@ nonisolated enum SpTheme {
         LinearGradient(colors: [heroTop, heroBottom], startPoint: .top, endPoint: .bottom)
     }
 
-    /// تدرّج ترويسة بصبغة البطولة (نص أبيض) — heroGradient في النمط الموحّد.
+    /// تدرّج ترويسة البطولة يتبع لون التطبيق، لا لون البطولة.
     static func compHeroGradient(_ slug: String?) -> LinearGradient {
-        guard spVaraColorStyle, let slug, slug != "" else { return heroGradient }
-        let a = compAccent(slug)
-        return LinearGradient(colors: [a, a.opacity(0.78)], startPoint: .top, endPoint: .bottom)
+        heroGradient
     }
 
     /// تدرّج الكتلة الخضراء السعودية البارزة (نص أبيض).
@@ -301,9 +283,9 @@ final class SpThemeMode {
     }
 }
 
-// MARK: - لون النادي (هوية المشجّع)
+// MARK: - لون التطبيق
 //
-// يُحقن في البيئة ويُطبَّق في `SabqSportsApp`. تبديل النادي يحدّث `spActivePalette`
+// يُحقن في البيئة ويُطبَّق في `SabqSportsApp`. تبديل اللون يحدّث `spActivePalette`
 // (الذي يقرأه SpTheme) ويُعيد بناء الواجهة لتلتقط الألوان الجديدة. الاختيار محفوظ.
 @MainActor
 @Observable
@@ -324,12 +306,11 @@ final class SpAccentTheme {
         }
     }
 
-    /// نمط الألوان: "vara" (متعدد — البطولات بألوانها والذهبي للتميّز، الافتراضي)
-    /// أو "unified" (اللون المحوري يصبغ كل شيء — سلوك ما قبل 2026-07-04).
+    /// محفوظ للتوافق مع إصدارات تجربة ألوان البطولات. الواجهة الحالية موحّدة دائمًا.
     var styleId: String {
         didSet {
-            UserDefaults.standard.set(styleId, forKey: styleKey)
-            spVaraColorStyle = styleId != "unified"
+            UserDefaults.standard.set("unified", forKey: styleKey)
+            spVaraColorStyle = false
             SpTabBarVisibility.shared.hidden = false
         }
     }
@@ -340,8 +321,8 @@ final class SpAccentTheme {
         let saved = UserDefaults.standard.string(forKey: key) ?? SpTeamPalette.emerald.id
         paletteId = saved
         spActivePalette = SpTeamPalette.by(id: saved)
-        let savedStyle = UserDefaults.standard.string(forKey: styleKey) ?? "vara"
-        styleId = savedStyle
-        spVaraColorStyle = savedStyle != "unified"
+        styleId = "unified"
+        UserDefaults.standard.set("unified", forKey: styleKey)
+        spVaraColorStyle = false
     }
 }
