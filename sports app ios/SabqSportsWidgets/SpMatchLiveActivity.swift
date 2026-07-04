@@ -141,24 +141,20 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
     return s.statusLabel.isEmpty ? "قريبًا" : s.statusLabel
 }
 
-// عرض الحالة الحيّة — يفضّل الساعة الذاتية (clockStartEpoch) التي تتقدّم على
-// الجهاز كل ثانية بلا دفعة APNs، فتُحلّ مشكلة تجمّد الدقيقة جذريًّا. المرساة
-// = «الآن − الزمن المنقضي»، فالوقت المنقضي = الآن − المرساة. نعرضه تصاعديًّا
-// عبر نطاق (المرساة ... الآن+1ثانية) مع countsDown: false — يتقدّم كل ثانية.
-// عند الاستراحة/الترجيح (clockStartEpoch=nil) نسقط على النصّ المدفوع ثابتًا.
+// عرض الحالة الحيّة على الجزيرة الديناميكية — يعرض نصّ الدقيقة **كما يظهر داخل
+// التطبيق تمامًا** («45' · الشوط الأول»، «45+2'»، «90+3'»). المصدر هو الدقيقة
+// المدفوعة من الخادم الذي يعيد حسابها ويدفعها كل ثانيتين بأولوية عالية، فتبقى
+// شاشة القفل متزامنة مع رقم المباراة داخل التطبيق.
+//
+// تخلّينا عن العدّاد الذاتي (Text(timerInterval:)): فوق الدقيقة 60 كان يعرض
+// صيغة الساعات («1:12:30» بدل «72'»)، وبإزاحة −1 كان يتأخّر دقيقةً كاملة عن
+// رقم التطبيق، ولا يستطيع تمثيل بدل الضائع («45+2'») — فكانت شاشة القفل تخالف
+// ما يراه المستخدم داخل التطبيق. النصّ المدفوع يطابقه في كل الأطوار.
 @ViewBuilder
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
-    if s.isLive, let epoch = s.clockStartEpoch {
-        let start = Date(timeIntervalSince1970: epoch)
-        // نطاق ينتهي بعد ثانية من الآن: يعيد العرض كل ثانية، فيتقدّم العدّاد.
-        // countsDown: false يجعله يبدأ من 0:00 ويتزايد — فيطابق زمن المباراة.
-        Text(timerInterval: start...Date().addingTimeInterval(1), countsDown: false)
-            .monospacedDigit()
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .center)
-    } else {
-        Text(statusText(s, kickoff: kickoff)).lineLimit(1)
-    }
+    Text(statusText(s, kickoff: kickoff))
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .center)
 }
 
 // البطاقة RTL: المضيف يمينًا والضيف يسارًا. نرسم النتيجة LTR بترتيب
@@ -272,17 +268,12 @@ private struct LockScreenView: View {
         }
     }
 
-    /// العدّاد الأوّلي: يفضّل الساعة الذاتية (clockStartEpoch) على الجهاز
-    /// فتتقدّم الدقيقة كل ثانية بلا انتظار دفعة APNs. عند غياب المرساة
-    /// (استراحة/ترجيح/قبل الانطلاق) يسقط على النصّ المدفوع ثابتًا.
+    /// السطر الأوّل من شارة الحالة: نصّ الدقيقة الحيّة **كما يظهر داخل التطبيق**
+    /// («45'»/«45+2'») أو حالة الشوط. مدفوع من الخادم (يُحدّث كل ثانيتين بأولوية
+    /// عالية) — بلا عدّاد ذاتي كي لا يختلف الرقم عمّا يراه المستخدم داخل التطبيق
+    /// ولا ينزلق لصيغة الساعات بعد الدقيقة 60.
     @ViewBuilder private var liveClockOrText: some View {
-        let s = context.state
-        if s.isLive, let epoch = s.clockStartEpoch {
-            let start = Date(timeIntervalSince1970: epoch)
-            Text(timerInterval: start...Date().addingTimeInterval(1), countsDown: false)
-        } else {
-            Text(primaryStatusLine)
-        }
+        Text(primaryStatusLine)
     }
 
     /// السطر الأول: العدّاد إن وُجد، وإلا نصّ الحالة («مباشر»/«انتهت»/«قريبًا»).
