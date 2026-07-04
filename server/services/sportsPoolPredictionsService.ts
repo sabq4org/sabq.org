@@ -24,8 +24,11 @@ import {
   sportsPoolMatches,
   sportsPoolLong,
   sportsPoolBadges,
+  sportsPoolMatchPicks,
+  sportsPoolPlayerPicks,
   notificationsInbox,
   users,
+  userPointsTotal,
 } from "@shared/schema";
 import {
   getGlobalTodayFixtures,
@@ -44,7 +47,16 @@ import {
   type GcTier,
 } from "./gulfCupPredictionScoring";
 import { awardPoints } from "./loyalty";
-import { LOYALTY_ACTIONS } from "@shared/loyalty";
+import {
+  LOYALTY_ACTIONS,
+  tierMultiplierForPoints,
+} from "@shared/loyalty";
+import {
+  ensureMatchPickRow,
+  settlePlayerPickMatches,
+  lockMatchPicksIfDue,
+} from "./sportsPoolPlayerPicksService";
+import { creditWeeklyPoints } from "./sportsPoolDivisionsService";
 
 // ---------------------------------------------------------------------------
 // Tunables + small helpers
@@ -357,6 +369,12 @@ export async function submitPrediction(
         updatedAt: new Date(),
       },
     });
+
+  // اضمن وجود صفّ بركة الهدافين للمباراة (upsert هادئ) — يُفتح التوقّع على
+  // الهداف بمجرّد أن يتوقّع المستخدم النتيجة، دون انتظار نقله لشاشة الهدافين.
+  await ensureMatchPickRow(input.fixtureId, input.kickoffTs, input.competitionSlug ?? null).catch((e) =>
+    console.warn(`[SportsPool] ensureMatchPickRow failed for ${input.fixtureId}:`, e),
+  );
 
   const pickProb = probOfPick(predHome, predAway, probs);
   const [row] = await db
@@ -860,20 +878,53 @@ export async function settleFinishedMatches(maxFixtures = 40): Promise<SpSettlem
       settled++;
       for (const w of payouts) await notifyWin(w.userId, w.points, m.homeTeamName, m.awayTeamName, m.fixtureId, w.tier);
 
+      // مضاعف طبقة الولاء: نجلب lifetimePoints لكل فائز دفعة واحدة، ثم نضرب
+      // نصيبه من البركة بالمضاعف قبل awardPoints. هذا يحفظ النصيب الأساسي
+      // في pointsAwarded (للعرض) بينما تُضاف النقاط المضروبة لرصيد الولاء.
       const winnerIds = new Set<string>();
       for (const w of payouts) {
+        if (w.points > 0) winnerIds.add(w.userId);
+      }
+      const winnerIdsList = [...winnerIds];
+      const tierRows = winnerIdsList.length > 0
+        ? await db
+            .select({ userId: userPointsTotal.userId, lifetimePoints: userPointsTotal.lifetimePoints })
+            .from(userPointsTotal)
+            .where(inArray(userPointsTotal.userId, winnerIdsList))
+        : [];
+      const lifetimeByUser = new Map<string, number>(
+        tierRows.map((r) => [r.userId, Number(r.lifetimePoints ?? 0)]),
+      );
+
+      let awardedThisMatch = 0;
+      for (const w of payouts) {
         if (w.points <= 0) continue;
-        winnerIds.add(w.userId);
+        const lifetime = lifetimeByUser.get(w.userId) ?? 0;
+        const multiplier = tierMultiplierForPoints(lifetime);
+        const boostedPoints = Math.round(w.points * multiplier);
         const outcome = await awardPoints({
           userId: w.userId,
           action: LOYALTY_ACTIONS.SPORTS_PREDICTION_WIN,
           source: String(m.fixtureId),
-          points: w.points,
-          metadata: { fixtureId: String(m.fixtureId), tier: w.tier, score: `${finalHome}-${finalAway}` },
+          points: boostedPoints,
+          metadata: {
+            fixtureId: String(m.fixtureId),
+            tier: w.tier,
+            score: `${finalHome}-${finalAway}`,
+            baseShare: w.points,
+            multiplier,
+            boostedPoints,
+          },
         });
-        if (outcome.awarded) awarded++;
+        if (outcome.awarded) awardedThisMatch++;
+        // snapshot الأسبوعي للأقسام: النصيب الأساسي (قبل المضاعف) حتى لا
+        // تتضخّم نقاط الترقية بمضاعف طبقة الولاء وتظل عادلة بين الطبقات.
+        await creditWeeklyPoints(w.userId, m.fixtureId, w.points, true).catch((e) =>
+          console.warn(`[SportsPool] weekly credit failed for ${w.userId}:`, e),
+        );
       }
-      for (const uid of winnerIds) await awardBadges(uid);
+      awarded += awardedThisMatch;
+      for (const uid of winnerIdsList) await awardBadges(uid);
     } catch (err) {
       errors++;
       console.error(`[SportsPool] settle failed for fixture ${m.fixtureId}:`, err);

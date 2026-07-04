@@ -5779,7 +5779,8 @@ router.get("/sports/predictions/me", async (req: Request, res: Response) => {
 
 // ==========================================
 // Advanced pool predictions (generalized "Khaleeji 27" engine, any competition)
-// Tiered pari-mutuel pool, leaderboard, long-term (champion/top scorer), badges.
+// Tiered pari-mutuel pool, leaderboard, long-term (champion/top scorer), badges,
+// scorer picks (match_scorer / first_scorer), and weekly divisions.
 // All under /api/v1/sports/predictions/* — Bearer (verifyMemberSession).
 //   GET  /sports/predictions/today           اليوم + إحصاءاتي + الجاكبوت (اختياري الدخول)
 //   POST /sports/predictions                  إرسال/تعديل توقّع (يتطلّب الدخول)
@@ -5788,6 +5789,11 @@ router.get("/sports/predictions/me", async (req: Request, res: Response) => {
 //   GET  /sports/predictions/match/:id        ملخّص تسوية مباراة (عام)
 //   GET  /sports/predictions/long?comp=slug   البطل/الهدّاف لبطولة (اختياري الدخول)
 //   POST /sports/predictions/long             إرسال توقّع طويل المدى (يتطلّب الدخول)
+//   GET  /sports/predictions/scorers/:fid     قائمة لاعبي المباراة لاختيار الهداف
+//   POST /sports/predictions/picks            إرسال/تعديل توقّع الهدافين (يتطلّب الدخول)
+//   GET  /sports/predictions/picks/mine       توقّعات الهدافين + إحصاءاتي
+//   GET  /sports/predictions/division         قسمي الأسبوعي + معلوماته
+//   GET  /sports/predictions/division/:d      لوحة متصدّري قسم
 // ==========================================
 const sportsPredictionsGate = (res: Response): boolean => {
   // Lazy require keeps the import graph light on the hot auth path.
@@ -5945,6 +5951,120 @@ router.post("/sports/predictions/long", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] POST /sports/predictions/long error:", error);
     res.status(502).json({ success: false, message: "تعذر حفظ توقّعك حاليًا" });
+  }
+});
+
+// ----- توقّعات الهدافين (Expansion Phase A) -----
+
+// قائمة لاعبي مباراة لاختيار الهداف (عام، لكن يستحسن الدخول لتتبّع الاختيار).
+router.get("/sports/predictions/scorers/:fixtureId", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const fixtureId = Number(req.params.fixtureId);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف المباراة غير صالح" });
+    }
+    const svc = await import("../services/sportsPoolPlayerPicksService");
+    const data = await svc.getMatchPlayersForPicks(fixtureId);
+    if (!data) return res.status(404).json({ message: "المباراة غير موجودة" });
+    res.set("Cache-Control", "public, max-age=60, s-maxage=120");
+    res.json(data);
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/scorers/:fixtureId error:", error);
+    res.status(502).json({ message: "تعذّر جلب قائمة اللاعبين حاليًا" });
+  }
+});
+
+// إرسال/تعديل توقّع الهدافين.
+router.post("/sports/predictions/picks", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { fixtureId, kind, playerId, playerName, teamId, teamName } = req.body ?? {};
+    const fid = Number(fixtureId);
+    const pid = Number(playerId);
+    const tid = Number(teamId);
+    if (!Number.isFinite(fid) || fid <= 0
+      || (kind !== "match_scorer" && kind !== "first_scorer")
+      || !Number.isFinite(pid) || pid <= 0
+      || !playerName) {
+      return res.status(400).json({ success: false, message: "بيانات التوقّع غير مكتملة" });
+    }
+    const svc = await import("../services/sportsPoolPlayerPicksService");
+    const result = await svc.submitPick(session.userId, {
+      fixtureId: fid,
+      kind,
+      playerId: pid,
+      playerName: String(playerName),
+      teamId: Number.isFinite(tid) ? tid : 0,
+      teamName: teamName ? String(teamName) : undefined,
+    });
+    if (!result.ok) {
+      const code = result.reason;
+      const msg =
+        code === "LOCKED" ? "انتهت مهلة التوقّع على هذه المباراة"
+        : code === "NOT_IN_LINEUP" ? "اللاعب ليس ضمن قائمة المباراة"
+        : code === "NOT_OPEN" ? "هذه المباراة غير متاحة للتوقّع"
+        : "بيانات التوقّع غير صالحة";
+      return res.status(409).json({ success: false, reason: code, message: msg });
+    }
+    res.json({ success: true, pick: result.pick });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/predictions/picks error:", error);
+    res.status(502).json({ success: false, message: "تعذّر حفظ توقّعك حاليًا" });
+  }
+});
+
+// توقّعات الهدافين للمستخدم الحالي.
+router.get("/sports/predictions/picks/mine", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const svc = await import("../services/sportsPoolPlayerPicksService");
+    const picks = await svc.getMyPicks(session.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, picks });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/picks/mine error:", error);
+    res.status(502).json({ message: "تعذّر جلب توقّعاتك حاليًا" });
+  }
+});
+
+// ----- الأقسام الأسبوعية (Expansion Phase B) -----
+
+// قسمي الأسبوعي + معلوماته.
+router.get("/sports/predictions/division", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const svc = await import("../services/sportsPoolDivisionsService");
+    const div = await svc.getUserDivision(session.userId);
+    res.set("Cache-Control", "private, max-age=60");
+    res.json({ success: true, division: div, meta: svc.DIVISION_META });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/division error:", error);
+    res.status(502).json({ message: "تعذّر جلب قسمك الأسبوعي" });
+  }
+});
+
+// لوحة متصدّري قسم (1-4).
+router.get("/sports/predictions/division/:division", async (req: Request, res: Response) => {
+  try {
+    if (!sportsPredictionsGate(res)) return;
+    const d = Number(req.params.division);
+    if (![1, 2, 3, 4].includes(d)) {
+      return res.status(400).json({ message: "القسم يجب أن يكون 1-4" });
+    }
+    const svc = await import("../services/sportsPoolDivisionsService");
+    const leaders = await svc.getDivisionLeaderboard(d as 1 | 2 | 3 | 4);
+    res.set("Cache-Control", "public, max-age=60, s-maxage=120");
+    res.json({ success: true, division: d, meta: svc.DIVISION_META[d as 1 | 2 | 3 | 4], leaders });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/predictions/division/:d error:", error);
+    res.status(502).json({ message: "تعذّر جلب لوحة القسم" });
   }
 });
 
