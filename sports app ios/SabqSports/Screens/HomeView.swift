@@ -717,7 +717,7 @@ struct HomeView: View {
 
     // سباق اللقب — أعلى 3 مع أشرطة نقاط.
     private var titleRaceCard: some View {
-        let top = Array(standings.prefix(5))
+        let top = Array(standings.prefix(3))
         return VStack(alignment: .leading, spacing: 11) {
             HStack {
                 sectionTitle("سباق اللقب")
@@ -776,15 +776,21 @@ struct HomeView: View {
     }
 
     private func titleRaceProgress(_ row: SpStandingRow, leaderPoints: Int) -> some View {
-        let pct = leaderPoints > 0 ? min(1, max(0.06, CGFloat(row.points) / CGFloat(leaderPoints))) : 0.06
+        let pct = leaderPoints > 0 ? min(1, max(0.08, CGFloat(row.points) / CGFloat(leaderPoints))) : 0.08
+        let isLeader = row.rank == 1
         return GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(SpTheme.chipFill)
-                Capsule().fill(row.rank == 1 ? rslAccent : rslAccent.opacity(0.55))
+                Capsule()
+                    .fill(isLeader
+                          ? LinearGradient(colors: [rslAccent, SpTheme.emeraldDeep],
+                                           startPoint: .leading, endPoint: .trailing)
+                          : LinearGradient(colors: [rslAccent.opacity(0.55), rslAccent.opacity(0.45)],
+                                           startPoint: .leading, endPoint: .trailing))
                     .frame(width: geo.size.width * pct)
             }
         }
-        .frame(height: 6)
+        .frame(height: 8)
     }
 
     // نقاط الفورمة (آخر 5): فوز أخضر، تعادل رمادي ممتلئ، خسارة حلقة رمادية. لونان فقط.
@@ -831,7 +837,7 @@ struct HomeView: View {
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.chipFill))
             }
             VStack(spacing: 0) {
-                ForEach(Array(rows.prefix(5).enumerated()), id: \.element.id) { idx, s in
+                ForEach(Array(rows.prefix(3).enumerated()), id: \.element.id) { idx, s in
                     if idx > 0 { Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 1) }
                     scorerRow(s)
                 }
