@@ -257,6 +257,34 @@ export interface KcMatchRatings {
   players: KcMatchRating[];
 }
 
+/** سجل الأبطال متعدد المواسم — /api/kings-cup/record */
+export interface KcRecordTeam {
+  id: number;
+  name: string;
+  logo: string;
+}
+
+export interface KcRecordEdition {
+  /** سنة الموسم لدى المزوّد (2026 = نسخة 2025/26) */
+  season: number;
+  champion: KcRecordTeam | null;
+  runnerUp: KcRecordTeam | null;
+  /** نتيجة النهائي بمنظور الفائز أولًا */
+  score: string | null;
+  penalties: string | null;
+}
+
+export interface KcRecord {
+  sinceSeason: number | null;
+  editions: KcRecordEdition[];
+  titles: (KcRecordTeam & { titles: number; lastSeason: number })[];
+}
+
+/** «2026» لدى المزوّد = نسخة 2025/26 (الكؤوس تُرقَّم بسنة النهاية) */
+export function kcSeasonLabel(season: number): string {
+  return `${season - 1}/${String(season).slice(2)}`;
+}
+
 /** لمحة النسخة السابقة — /api/kings-cup/history */
 export interface KcHistory {
   previousSeason: number | null;

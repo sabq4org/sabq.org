@@ -10,6 +10,7 @@ import { KcMatches } from "@/components/kingscup/KcMatches";
 import { KcBracket } from "@/components/kingscup/KcBracket";
 import { KcScorers } from "@/components/kingscup/KcScorers";
 import { KcTeams } from "@/components/kingscup/KcTeams";
+import { KcHistorySection } from "@/components/kingscup/KcHistorySection";
 import { KcPredictionsCTA } from "@/components/kingscup/KcPredictionsCTA";
 import { KcMatchDialog } from "@/components/kingscup/KcMatchDialog";
 import { KcPlayerDialog } from "@/components/kingscup/KcPlayerDialog";
@@ -80,6 +81,7 @@ export default function KingsCup() {
           onOpenPlayer={setOpenPlayerId}
         />
         <KcTeams teams={teams} isLoading={teamsLoading} />
+        <KcHistorySection />
         <div className="mx-auto max-w-6xl px-3 sm:px-4 pb-10">
           <SportsNewsBlock query="كأس الملك" title="أخبار كأس الملك" />
         </div>

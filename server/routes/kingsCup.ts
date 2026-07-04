@@ -25,6 +25,7 @@ import {
   getKcMatchRatings,
   getKcFixturePrediction,
   getKcHistory,
+  getKcChampionsRecord,
   detectKcChampion,
   manualKcChampion,
   isKingsCupConfigured,
@@ -203,6 +204,18 @@ export function registerKingsCupRoutes(app: Express) {
     } catch (error) {
       console.error("[KingsCup] history failed:", error);
       res.status(502).json({ message: "تعذر جلب سجلّ البطولة حاليًا" });
+    }
+  });
+
+  // سجل الأبطال متعدد المواسم — بيانات تاريخية شبه ثابتة فالكاش طويل
+  app.get("/api/kings-cup/record", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
+      res.json(await getKcChampionsRecord());
+    } catch (error) {
+      console.error("[KingsCup] record failed:", error);
+      res.status(502).json({ sinceSeason: null, editions: [], titles: [] });
     }
   });
 

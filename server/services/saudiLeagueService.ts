@@ -3033,6 +3033,93 @@ export async function getFixturePrediction(fixtureId: number): Promise<SplFixtur
   });
 }
 
+// ---------- سجل أبطال الكؤوس متعدد المواسم ----------
+// «سجلّ البطولة» من بيانات المزوّد الحقيقية (لا قوائم مكتوبة يدويًّا): لكل موسم
+// منتهٍ نستنتج النهائي = آخر مباراة منتهية، ومنه البطل والوصيف والنتيجة
+// والترجيح. المدى = المواسم المتاحة لدى المزوّد (كأس الملك: منذ 2016/17).
+
+export interface SplCupEdition {
+  /** سنة الموسم لدى المزوّد (2026 = نسخة 2025/26 — الكؤوس تُرقَّم بسنة النهاية) */
+  season: number;
+  champion: SplPreviousChampion | null;
+  runnerUp: SplPreviousChampion | null;
+  /** نتيجة النهائي بمنظور الفائز أولًا (مثل "2 - 1") */
+  score: string | null;
+  /** نتيجة الترجيح بمنظور الفائز أولًا إن حُسم النهائي به */
+  penalties: string | null;
+}
+
+export interface SplCupRecord {
+  sinceSeason: number | null;
+  /** النسخ المنتهية، الأحدث أولًا */
+  editions: SplCupEdition[];
+  /** جدار الألقاب ضمن المدى المتاح، الأكثر تتويجًا أولًا */
+  titles: { id: number; name: string; logo: string; titles: number; lastSeason: number }[];
+}
+
+export async function getCupChampionsRecord(comp: SaudiCompetition): Promise<SplCupRecord> {
+  return withSWR(`spl:cuprecord:${comp.id}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 4, async () => {
+    const leagueRows = await apiGet("leagues", { id: comp.id }).catch(() => []);
+    const seasons: number[] = (leagueRows[0]?.seasons ?? [])
+      .map((s: any) => s.year)
+      .filter((y: any) => typeof y === "number")
+      .sort((a: number, b: number) => b - a);
+
+    const editions: SplCupEdition[] = [];
+    // تسلسليًّا عمدًا (~10 نداءات خلف كاش LONG) — لا نضغط حصة المزوّد دفعة واحدة.
+    for (const season of seasons) {
+      const fx = await apiGet("fixtures", { league: comp.id, season }).catch(() => []);
+      const finished = fx
+        .filter((r: any) => FINISHED_STATUSES.has(r.fixture?.status?.short))
+        .sort((a: any, b: any) => (b.fixture?.timestamp ?? 0) - (a.fixture?.timestamp ?? 0));
+      // موسم بلا مباريات منتهية = جارٍ/قادم — ليس نسخة محسومة
+      if (finished.length === 0) continue;
+      const final = finished[0];
+      const home = final?.teams?.home;
+      const away = final?.teams?.away;
+      const winner = home?.winner ? home : away?.winner ? away : null;
+      const loser = winner === home ? away : winner === away ? home : null;
+      if (!winner) continue;
+      const toTeam = (t: any): SplPreviousChampion => ({
+        id: t?.id ?? 0,
+        name: localizeSplTeamName(t?.id, t?.name ?? ""),
+        logo: t?.logo ?? "",
+      });
+      const gWin = winner === home ? final?.goals?.home : final?.goals?.away;
+      const gLose = winner === home ? final?.goals?.away : final?.goals?.home;
+      const pen = final?.score?.penalty ?? {};
+      const pWin = winner === home ? pen.home : pen.away;
+      const pLose = winner === home ? pen.away : pen.home;
+      editions.push({
+        season,
+        champion: toTeam(winner),
+        runnerUp: loser ? toTeam(loser) : null,
+        score: gWin != null && gLose != null ? `${gWin} - ${gLose}` : null,
+        penalties: pWin != null && pLose != null ? `${pWin} - ${pLose}` : null,
+      });
+    }
+
+    const byTeam = new Map<number, { id: number; name: string; logo: string; titles: number; lastSeason: number }>();
+    for (const e of editions) {
+      if (!e.champion) continue;
+      const row = byTeam.get(e.champion.id);
+      if (row) {
+        row.titles += 1;
+        row.lastSeason = Math.max(row.lastSeason, e.season);
+      } else {
+        byTeam.set(e.champion.id, { ...e.champion, titles: 1, lastSeason: e.season });
+      }
+    }
+    const titles = [...byTeam.values()].sort((a, b) => b.titles - a.titles || b.lastSeason - a.lastSeason);
+
+    return {
+      sinceSeason: editions.length > 0 ? editions[editions.length - 1].season : null,
+      editions,
+      titles,
+    };
+  });
+}
+
 // ---------- إضافة: متصدّرو البطاقات (إنذارات/طرد) ----------
 
 export interface SplCardLeader {
