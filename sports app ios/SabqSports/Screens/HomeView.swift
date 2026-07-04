@@ -99,7 +99,7 @@ struct HomeView: View {
                 VStack(spacing: 0) {
                     heroSection
                         .padding(.horizontal, 16)
-                        .padding(.bottom, 2)
+                        .padding(.bottom, 18)
 
                     if loading && matches == nil && standings.isEmpty {
                         SpLoading().padding(.top, 40)
@@ -176,7 +176,7 @@ struct HomeView: View {
     // MARK: - الهيرو
 
     @ViewBuilder private var heroSection: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 16) {
             brandBar
             leagueHeader
             SpMyMatchesCard()   // أوّل بطاقة في الواجهة عند متابعة مباريات.
@@ -514,8 +514,8 @@ struct HomeView: View {
     // MARK: - لوحة دوري روشن (تدفّق واحد غنيّ بالأرقام — هادئ، أبيض + أخضر)
 
     @ViewBuilder private var dashboardContent: some View {
-        // فراغ مدمج بين بطاقات روشن؛ كافٍ للتنفس بدون فصل بصري زائد.
-        VStack(spacing: 24) {
+        // فراغ واضح بين بطاقات روشن بدون فصل بصري زائد.
+        VStack(spacing: 28) {
             if let fav = favorites.team, !heroIsFavorite {
                 favoriteCard(fav).padding(.horizontal, 16)
             }
