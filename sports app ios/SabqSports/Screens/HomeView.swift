@@ -47,6 +47,7 @@ struct HomeView: View {
     @State private var showAllScorers = false
     @State private var showSearch = false
     @State private var showForYou = false
+    @State private var showTransferCenter = false
     @State private var loading = true
     @State private var loadError: String?
 
@@ -122,6 +123,7 @@ struct HomeView: View {
             .navigationDestination(isPresented: $showAllScorers) { fullScorersPage }
             .navigationDestination(isPresented: $showSearch) { SpSearchView() }
             .navigationDestination(isPresented: $showForYou) { SpForYouView() }
+            .navigationDestination(isPresented: $showTransferCenter) { TransferCenterView() }
         }
         .task { await loadAll() }
         .task { await pollHero() }
@@ -937,10 +939,20 @@ struct HomeView: View {
     }
 
 
-    // أبرز الصفقات — أعلى الانتقالات بمبلغ معلن في أندية روشن (تفتح صفحة النادي).
+    // مركز الانتقالات — أعلى الصفقات معاينةً + مدخل للمركز الكامل (سعودي/عالمي،
+    // مؤكّد/إشاعات موثّقة المصدر). النقر على صفقة يفتح ناديها؛ «المركز الكامل» يفتح الشاشة.
     private var transfersCard: some View {
         VStack(alignment: .leading, spacing: 11) {
-            sectionTitle("أبرز الصفقات")
+            Button { showTransferCenter = true } label: {
+                HStack(spacing: 8) {
+                    Text("مركز الانتقالات").font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark)
+                    Spacer(minLength: 0)
+                    Text("المركز الكامل").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.green)
+                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(SpPressStyle())
             VStack(spacing: 0) {
                 ForEach(Array(transfers.prefix(5).enumerated()), id: \.element.id) { idx, t in
                     if idx > 0 { Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 1) }
