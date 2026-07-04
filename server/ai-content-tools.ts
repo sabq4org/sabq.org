@@ -263,7 +263,7 @@ export async function suggestImageQuery(contentText: string): Promise<{
   console.log(`🖼️ [AI Tools] Suggesting image queries`);
 
   try {
-    const model = genai.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
+    const model = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
 
     const prompt = `أنت خبير في البحث عن الصور الصحفية. قم بتحليل المحتوى التالي واقترح كلمات بحث للعثور على صور مناسبة:
 
@@ -504,7 +504,7 @@ ${context ? `السياق: ${context}` : ''}
     (async () => {
       try {
         console.log(`🤖 [Gemini] Starting analysis...`);
-        const model = genai.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
+        const model = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
         const result = await model.generateContent(prompt);
         const response = result.response;
         const text = response.text();
@@ -762,7 +762,7 @@ export async function analyzeTrends(
     // 4. تحليل بـ Gemini 2.0 Flash - الكلمات المفتاحية والتوصيات
     console.log(`🤖 [Gemini] Starting keywords and recommendations analysis...`);
     
-    const model = genai.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
+    const model = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
     const geminiPromise = model.generateContent(`أنت محلل محتوى متخصص في استخراج الكلمات المفتاحية.
 
 المهمة: استخراج أهم الكلمات المفتاحية من المحتوى التالي.

@@ -612,7 +612,7 @@ async function generateHeadlines(
 
     // Gemini headline (SEO-optimized but still follows Sabq rules)
     try {
-      const geminiModel = genai.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
+      const geminiModel = genai.getGenerativeModel({ model: "gemini-2.5-flash" });
       const geminiResponse = await geminiModel.generateContent(
         sabqHeadlineRules + `\n\nنمط هذا العنوان: محسّن لمحركات البحث (SEO) مع الالتزام بمعايير سبق`
       );
