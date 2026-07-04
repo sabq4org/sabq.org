@@ -367,6 +367,7 @@ export async function getLeaderboardMeta(slug: string, viewerUserId?: string) {
   return {
     total,
     viewer: {
+      userId: viewerUserId,
       rank: Number(ahead?.n ?? 0) + 1,
       totalPoints: Number(mine.pts),
       correctCount: Number(mine.correct),

@@ -442,8 +442,21 @@ nonisolated struct WCPredLeader: Decodable, Identifiable, Hashable {
     var id: String { userId }
 }
 
+/// صف صاحب الجلسة ورتبته الحقيقية — يصل حتى لو كان خارج الصفحة المعروضة.
+nonisolated struct WCPredViewer: Decodable, Hashable {
+    let userId: String
+    let rank: Int
+    let totalPoints: Int
+    let correctCount: Int
+    let playedCount: Int
+}
+
+/// total/viewer اختياريان — يغيبان قبل نشر توسعة الخادم فيتدهور العرض بسلاسة
+/// إلى قائمة الـ100 القديمة بلا زر «عرض المزيد».
 nonisolated struct WCLeaderboardResponse: Decodable, Hashable {
     let leaders: [WCPredLeader]
+    let total: Int?
+    let viewer: WCPredViewer?
 }
 
 nonisolated struct WCSubmittedPrediction: Decodable, Hashable {
@@ -1090,9 +1103,10 @@ extension APIClient {
                       ignoreCache: true, apiRoot: URLConstants.mobileAPI).predictions
     }
 
-    func fetchWCLeaderboard() async throws -> [WCPredLeader] {
+    func fetchWCLeaderboard(limit: Int = 100) async throws -> WCLeaderboardResponse {
         try await get(WCLeaderboardResponse.self, path: "/world-cup/predictions/leaderboard",
-                      apiRoot: URLConstants.mobileAPI).leaders
+                      query: ["limit": "\(limit)"],
+                      apiRoot: URLConstants.mobileAPI)
     }
 
     func fetchWCLongPredictions(ignoreCache: Bool = false) async throws -> WCLongData {

@@ -60,6 +60,7 @@ export type LeaderRow = {
 
 /** صف الزائر نفسه ورتبته الحقيقية — يصل حتى لو كان خارج الصفحة المعروضة. */
 export type LeaderboardViewer = {
+  userId: string;
   rank: number;
   totalPoints: number;
   correctCount: number;

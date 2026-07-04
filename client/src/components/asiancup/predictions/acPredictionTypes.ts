@@ -73,6 +73,7 @@ export interface AcLeaderRow {
 
 /** صف الزائر نفسه ورتبته الحقيقية — يصل حتى لو كان خارج الصفحة المعروضة. */
 export interface AcLeaderboardViewer {
+  userId: string;
   rank: number;
   totalPoints: number;
   correctCount: number;

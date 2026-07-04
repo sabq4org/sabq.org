@@ -68,6 +68,7 @@ import {
   submitPrediction,
   getMyPredictions,
   getLeaderboard,
+  getLeaderboardMeta as getWcLeaderboardMeta,
   getUpcomingPredictableMatches,
   getMatchPredictionsSummary,
 } from "../services/wcPredictionsService";
@@ -8517,7 +8518,16 @@ router.get("/world-cup/predictions/leaderboard", async (req: Request, res: Respo
       "Cache-Control",
       session ? "private, no-store" : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
     );
-    res.json({ leaders: await getLeaderboard(100, session?.userId) });
+    // نفس عقد نقطة الويب: ?limit= (افتراضي 100، مقصوص 10..500) + العدد الكلي
+    // + صف الزائر ورتبته الحقيقية حتى لو كان خارج الصفحة المعروضة.
+    const limitRaw = Number(req.query?.limit);
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.max(Math.trunc(limitRaw), 10), 500) : 100;
+    const [leaders, meta] = await Promise.all([
+      getLeaderboard(limit, session?.userId),
+      getWcLeaderboardMeta(session?.userId),
+    ]);
+    res.json({ leaders, total: meta.total, viewer: meta.viewer });
   } catch (error) {
     console.error("[Mobile WC Predictions] leaderboard error:", error);
     res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });
