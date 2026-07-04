@@ -21,7 +21,15 @@
 const API_BASE = "https://v3.football.api-sports.io";
 const WINDOW_MS = 60_000;
 const DEFAULT_RPM = 250;
-const RATE_LIMIT_COOLDOWN_MS = 15_000;
+/**
+ * تباعد إلزامي بين نداءين متتاليين (~12/ثانية كحد أقصى): المزوّد يرفض الرشقات
+ * اللحظية حتى تحت حدّ الدقيقة — النشر البارد كان يفتح عشرات النداءات في نفس
+ * الميلي ثانية فيرُدّ rateLimit رغم أن مجموع الدقيقة سليم (متحقَّق من سجلات
+ * 2026-07-04: 429 والعداد اليومي/الدقيقة بعيد عن السقف).
+ */
+const MIN_GAP_MS = 80;
+/** تهدئة 429: كانت 15ث فتتسلسل الطوابير خلفها إلى دقائق (team/:id بلغ 83ث) */
+const RATE_LIMIT_COOLDOWN_MS = 4_000;
 
 /** الحدّ الفعلي بالدقيقة كما رصدناه من ترويسات المزوّد (يتكيّف مع الخطة تلقائيًا). */
 let observedRpm: number | null = null;
@@ -43,6 +51,10 @@ async function acquireSlot(): Promise<void> {
   while (scheduled.length && scheduled[0] <= now - WINDOW_MS) scheduled.shift();
   const rpm = currentRpm();
   let at = Math.max(now, cooldownUntil);
+  // لا رشقات لحظية: كل نداء يبعد عن سابقه MIN_GAP_MS على الأقل
+  if (scheduled.length) {
+    at = Math.max(at, scheduled[scheduled.length - 1] + MIN_GAP_MS);
+  }
   if (scheduled.length >= rpm) {
     at = Math.max(at, scheduled[scheduled.length - rpm] + WINDOW_MS);
   }
@@ -59,7 +71,7 @@ function noteResponseHeaders(response: Response): void {
   const remaining = Number.parseInt(response.headers.get("x-ratelimit-remaining") || "", 10);
   if (Number.isFinite(remaining) && remaining <= 0) {
     // استُنفدت دقيقة المزوّد (ربما بمشاركة مستهلك آخر للمفتاح) — تريّث قليلًا.
-    cooldownUntil = Math.max(cooldownUntil, Date.now() + 5_000);
+    cooldownUntil = Math.max(cooldownUntil, Date.now() + 1_500);
   }
 }
 
@@ -101,7 +113,7 @@ export async function apiFootballGet(
     noteResponseHeaders(response);
 
     if (!response.ok) {
-      if (response.status === 429 && attempt === 0) {
+      if (response.status === 429 && attempt < 2) {
         reportRateLimited();
         continue;
       }
@@ -111,7 +123,7 @@ export async function apiFootballGet(
     const data: any = await response.json();
     const errors = data?.errors;
     if (errors && !Array.isArray(errors) && Object.keys(errors).length > 0) {
-      if (errors.rateLimit && attempt === 0) {
+      if (errors.rateLimit && attempt < 2) {
         reportRateLimited();
         continue;
       }
