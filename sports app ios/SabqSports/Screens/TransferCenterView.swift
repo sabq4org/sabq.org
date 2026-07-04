@@ -950,7 +950,12 @@ struct TransferStoryView: View {
                     .frame(width: 13, height: 13)
                     .overlay(Circle().stroke(dotColor(r.probability).opacity(0.25), lineWidth: 4))
                 if !isLast {
-                    Rectangle().fill(SpTheme.outline).frame(width: 2).frame(maxHeight: .infinity)
+                    // الخطّ الرأسي يبدأ بفجوة صغيرة أسفل النقطة ويطول ليتصل
+                    // بنقطة القصة التالية — يعطي إحساس تسلسل مع تباعد بصري واضح.
+                    Rectangle().fill(SpTheme.outline)
+                        .frame(width: 2)
+                        .padding(.top, 6)
+                        .frame(maxHeight: .infinity)
                 }
             }
             .frame(width: 13)
@@ -969,7 +974,8 @@ struct TransferStoryView: View {
                 }
                 TcSourceBadge(source: r.source)
             }
-            .padding(.bottom, isLast ? 0 : 16)
+            // تباعد أكبر بين كل قصة وأختها — 26pt بدل 16 — حتى تتنفّس القصص.
+            .padding(.bottom, isLast ? 0 : 26)
         }
     }
 

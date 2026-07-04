@@ -746,7 +746,10 @@ export type SpSettlementSummary = { settled: number; awarded: number; errors: nu
  * via the settledAt anchor + the pending guard + loyalty dedup.
  */
 export async function settleFinishedMatches(maxFixtures = 40): Promise<SpSettlementSummary> {
-  const cutoff = nowSec() - 100 * 60; // ≥100 min since kickoff (match-end safety window)
+  // نافذة أمان أوليّة لاختيار المرشّحين للتسوية: 95 دقيقة من الانطلاق (مباراة
+  // كرة القدم ≈ 90 + وقت محتسب). الحارس النهائي هو status.finished من المزوّد
+  // أدناه — لا تُسوّى مباراة قبل أن يصنّفها المزوّد «منتهية» فعلًا.
+  const cutoff = nowSec() - 95 * 60;
   const due = await db
     .select({
       fixtureId: sportsPoolMatches.fixtureId,
