@@ -159,16 +159,26 @@ export async function submitPrediction(
 // قراءات الواجهة
 // ---------------------------------------------------------------------------
 
-/** مباريات اليوم والغد (بتوقيت الرياض) + توقّع المستخدم + حالة القفل/التسوية. */
+/** مباريات اليوم/الغد + كل القادم المجدول، بتوقيت الرياض + توقّع المستخدم + حالة القفل/التسوية. */
 export async function getUpcomingPredictableMatches(
   slug: string,
   userId?: string,
 ): Promise<PredictableMatch[]> {
   const fixtures = await getFixtures(cupComp(slug));
+  // الكؤوس الإقصائية أدوارها متباعدة أسابيع — نافذة «اليوم والغد» وحدها كانت
+  // تُبقي التبويب فارغًا بينها. نعرض مباريات اليوم/الغد (بما فيها المنتهية
+  // اليوم لإظهار تسويتها) + كل القادم المجدول بفريقين معروفين: التوقّع مقبول
+  // أصلًا حتى لحظة الانطلاق (isLocked في submitPrediction) فلا أثر على النقاط.
   const days = new Set([riyadhDateKey(0), riyadhDateKey(1)]);
+  const nowSec = Date.now() / 1000;
   const today = fixtures
-    .filter((f) => days.has((f.date ?? "").slice(0, 10)))
-    .sort((a, b) => a.timestamp - b.timestamp);
+    .filter(
+      (f) =>
+        days.has((f.date ?? "").slice(0, 10)) ||
+        (f.timestamp > nowSec && !f.status.finished && !!f.home?.name && !!f.away?.name),
+    )
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .slice(0, 24);
   if (today.length === 0) return [];
 
   const ids = today.map((f) => fid(f.id));

@@ -278,9 +278,9 @@ function TodayTab({
     return (
       <div className="rounded-2xl border border-dashed border-border py-14 text-center">
         <Target className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
-        <p className="font-bold">لا مباريات اليوم أو غدًا</p>
+        <p className="font-bold">لا مباريات مجدولة حاليًا</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          تُفتح مباريات كل دور للتوقّع هنا قبل يومها — وحتى ذلك الحين توقّع البطل من تبويب «البطل والهدّاف».
+          تُفتح مباريات كل دور للتوقّع هنا فور اعتماد جدولها — وحتى ذلك الحين توقّع البطل من تبويب «البطل والهدّاف».
         </p>
       </div>
     );

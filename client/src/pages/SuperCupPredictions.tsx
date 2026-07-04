@@ -256,7 +256,7 @@ function TodayTab({
         <Target className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
         <p className="font-bold">لا مباراة متاحة للتوقّع حاليًا</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          تُفتح مباراة كأس السوبر للتوقّع هنا قبل يومها — عُد قريبًا.
+          تُفتح مباراة كأس السوبر للتوقّع هنا فور اعتماد جدولها — عُد قريبًا.
         </p>
       </div>
     );
