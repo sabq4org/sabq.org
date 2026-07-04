@@ -719,7 +719,7 @@ struct HomeView: View {
 
     // سباق اللقب — أعلى 3 مع أشرطة نقاط.
     private var titleRaceCard: some View {
-        let top = Array(standings.prefix(5))
+        let top = Array(standings.prefix(3))
         return VStack(alignment: .leading, spacing: 11) {
             HStack {
                 sectionTitle("سباق اللقب")
@@ -735,12 +735,12 @@ struct HomeView: View {
                 ForEach(Array(top.enumerated()), id: \.element.id) { idx, row in
                     if idx > 0 { Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 1) }
                     Button { selectedTeam = IDBox(id: row.team.id) } label: {
-                        HStack(spacing: 11) {
-                            Text("\(row.rank)").font(SportsFonts.app(size: 14, weight: .heavy))
-                                .foregroundStyle(zoneColor(row.rank)).frame(width: 18).monospacedDigit()
-                            SpTeamLogo(logo: row.team.logo, size: 32)
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(row.team.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                        HStack(spacing: 9) {
+                            Text("\(row.rank)").font(SportsFonts.app(size: 13, weight: .heavy))
+                                .foregroundStyle(zoneColor(row.rank)).frame(width: 16).monospacedDigit()
+                            SpTeamLogo(logo: row.team.logo, size: 28)
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(row.team.name).font(SportsFonts.app(size: 13.5, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                                 HStack(spacing: 7) {
                                     titleRaceProgress(row, leaderPoints: top.first?.points ?? row.points)
                                     formDots(row.form)
@@ -748,16 +748,16 @@ struct HomeView: View {
                             }
                             Spacer(minLength: 6)
                             VStack(alignment: .trailing, spacing: 2) {
-                                (Text("\(row.points)").font(SportsFonts.app(size: 17, weight: .heavy))
-                                    + Text(" نقطة").font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim))
+                                (Text("\(row.points)").font(SportsFonts.app(size: 15.5, weight: .heavy))
+                                    + Text(" نقطة").font(SportsFonts.app(size: 9.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim))
                                     .foregroundStyle(SpTheme.onDark).monospacedDigit()
                                 Text(titleRaceGap(row, leader: top.first))
-                                    .font(SportsFonts.app(size: 10, weight: .bold))
+                                    .font(SportsFonts.app(size: 9.5, weight: .bold))
                                     .foregroundStyle(row.rank == 1 ? rslAccent : SpTheme.onDarkFaint)
                                     .lineLimit(1)
                             }
                         }
-                        .padding(.vertical, 11)
+                        .padding(.vertical, 8)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(SpPressStyle())
@@ -833,9 +833,9 @@ struct HomeView: View {
                 .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.chipFill))
             }
             VStack(spacing: 0) {
-                ForEach(Array(rows.prefix(5).enumerated()), id: \.element.id) { idx, s in
+                ForEach(Array(rows.prefix(3).enumerated()), id: \.element.id) { idx, s in
                     if idx > 0 { Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 1) }
-                    scorerRow(s)
+                    scorerRow(s, compact: true)
                 }
             }
             .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card))
@@ -1126,35 +1126,36 @@ struct HomeView: View {
     }
 
     // صفّ لاعب — الرقم الأساسي (هدف/صناعة حسب المبدّل) أخضر، الثانوي رمادي. بلا ميداليات.
-    private func scorerRow(_ s: SpScorer) -> some View {
+    private func scorerRow(_ s: SpScorer, compact: Bool = false) -> some View {
         let primary = scorerMode == .goals ? s.goals : s.assists
         let primaryLabel = scorerMode == .goals ? "هدف" : "صناعة"
         let secondary = scorerMode == .goals ? s.assists : s.goals
         let secondaryLabel = scorerMode == .goals ? "صناعة" : "هدف"
+        let avatarSize: CGFloat = compact ? 34 : 40
         return Button { selectedPlayer = IDBox(id: s.id) } label: {
-            HStack(spacing: 11) {
-                Text("\(s.rank)").font(SportsFonts.app(size: 13, weight: .heavy))
+            HStack(spacing: compact ? 9 : 11) {
+                Text("\(s.rank)").font(SportsFonts.app(size: compact ? 12.5 : 13, weight: .heavy))
                     .foregroundStyle(s.rank <= 3 ? rslAccent : SpTheme.onDarkFaint)
-                    .monospacedDigit().frame(width: 22)
-                playerAvatar(photo: s.photo, teamLogo: s.team.logo, size: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(s.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                    Text(s.team.name).font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
+                    .monospacedDigit().frame(width: compact ? 18 : 22)
+                playerAvatar(photo: s.photo, teamLogo: s.team.logo, size: avatarSize)
+                VStack(alignment: .leading, spacing: compact ? 1 : 2) {
+                    Text(s.name).font(SportsFonts.app(size: compact ? 13.5 : 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                    Text(s.team.name).font(SportsFonts.app(size: compact ? 10.5 : 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 VStack(spacing: 1) {
-                    Text("\(primary)").font(SportsFonts.app(size: 18, weight: .heavy)).foregroundStyle(rslAccent).monospacedDigit()
-                    Text(primaryLabel).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
+                    Text("\(primary)").font(SportsFonts.app(size: compact ? 16 : 18, weight: .heavy)).foregroundStyle(rslAccent).monospacedDigit()
+                    Text(primaryLabel).font(SportsFonts.app(size: compact ? 8.5 : 9)).foregroundStyle(SpTheme.onDarkFaint)
                 }
                 if secondary > 0 {
                     VStack(spacing: 1) {
-                        Text("\(secondary)").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDarkDim).monospacedDigit()
-                        Text(secondaryLabel).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
+                        Text("\(secondary)").font(SportsFonts.app(size: compact ? 13.5 : 15, weight: .bold)).foregroundStyle(SpTheme.onDarkDim).monospacedDigit()
+                        Text(secondaryLabel).font(SportsFonts.app(size: compact ? 8.5 : 9)).foregroundStyle(SpTheme.onDarkFaint)
                     }
-                    .frame(width: 42)
+                    .frame(width: compact ? 36 : 42)
                 }
             }
-            .padding(.horizontal, 14).padding(.vertical, 11)
+            .padding(.horizontal, 14).padding(.vertical, compact ? 8 : 11)
             .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
