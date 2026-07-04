@@ -29,6 +29,7 @@ import {
   getMatchPlayerRatings as splGetMatchPlayerRatings,
   getFixturePrediction as splGetFixturePrediction,
   getCompetitionHistory as splGetCompetitionHistory,
+  getCupChampionsRecord as splGetCupChampionsRecord,
   isSaudiLeagueConfigured,
   type SaudiCompetition,
   type SplFixture,
@@ -206,6 +207,11 @@ export async function getKcFixturePrediction(fixtureId: number) {
 /** حقائق البطولة (حاملو اللقب السابقون + الهدّافون التاريخيون). */
 export async function getKcHistory() {
   return splGetCompetitionHistory(comp());
+}
+
+/** سجل الأبطال متعدد المواسم (أبطال ووصفاء ونتائج النهائيات + جدار الألقاب). */
+export async function getKcChampionsRecord() {
+  return splGetCupChampionsRecord(comp());
 }
 
 // ---------- البطل ----------

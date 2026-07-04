@@ -46,6 +46,9 @@ export const TS_COMPETITION_IDS: Record<string, string> = {
   // من دعم TheSports (2026-07-03) — ضمن الاشتراك:
   "asian-cup": "z318q66hegqo9jd",           // كأس آسيا (موسم 2027: 9vjxm8ghzkor6od)
   "gulf-cup": "gpxwrxlhkgryk0j",            // كأس الخليج «خليجي» (لا موسم 26/27 لدى المزوّد بعد)
+  // متحقَّق حيًّا من competition/additional/list (2026-07-04) — لا يُخلط مع
+  // معرّف النخبة الآسيوية القريب شكلًا (9dn1m1ghjpmoepl):
+  "kings-cup": "9dn1m1gh44wmoep",           // كأس خادم الحرمين الشريفين (كأس الملك)
 };
 
 // حالات TheSports: 1=لم تبدأ، 2=ش1، 3=استراحة، 4=ش2، 5/6=وقت إضافي، 7=ركلات،
@@ -807,8 +810,10 @@ export async function getTsCompetitionMatchPairs(
       () => tsGet("match/recent/list", { competition_id: competitionId }),
     );
     const rows: any[] = Array.isArray(data?.results) ? data.results : [];
+    // المزوّد يتجاهل معامل competition_id فعليًا (متحقَّق 2026-07-04: يرجع صفحة
+    // عامة لكل البطولات) — الفلترة المحلية عليه إلزامية وليست احتياطًا.
     return rows
-      .filter((m) => (!seasonId || m.season_id === seasonId) && m.home_team_id && m.away_team_id && m.match_time)
+      .filter((m) => m.competition_id === competitionId && (!seasonId || m.season_id === seasonId) && m.home_team_id && m.away_team_id && m.match_time)
       .map((m) => ({
         id: m.id != null ? String(m.id) : "",
         home: String(m.home_team_id),

@@ -23,7 +23,9 @@ import {
   getKcMatchDetail,
   getKcMatchTv,
   getKcMatchRatings,
+  getKcFixturePrediction,
   getKcHistory,
+  getKcChampionsRecord,
   detectKcChampion,
   manualKcChampion,
   isKingsCupConfigured,
@@ -205,6 +207,18 @@ export function registerKingsCupRoutes(app: Express) {
     }
   });
 
+  // سجل الأبطال متعدد المواسم — بيانات تاريخية شبه ثابتة فالكاش طويل
+  app.get("/api/kings-cup/record", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
+      res.json(await getKcChampionsRecord());
+    } catch (error) {
+      console.error("[KingsCup] record failed:", error);
+      res.status(502).json({ sinceSeason: null, editions: [], titles: [] });
+    }
+  });
+
   app.get("/api/kings-cup/squad/:teamId", async (req, res) => {
     if (!guard(res)) return;
     const teamId = parseInt(String(req.params.teamId), 10);
@@ -313,6 +327,24 @@ export function registerKingsCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[KingsCup] match ratings ${fixtureId} failed:`, error);
       res.status(502).json({ available: false, home: null, away: null });
+    }
+  });
+
+  // احتمالات الفوز (API-Football predictions) — المصدر الوحيد لكأس الملك
+  // (SportMonks لا يوفّر predictions للبطولة). الحارس ضدّ العنصر الوهمي
+  // 33/33/33 داخل getFixturePrediction؛ null = لا شريط احتمالات.
+  app.get("/api/kings-cup/match/:id/prediction", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = parseInt(String(req.params.id), 10);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json({ prediction: await getKcFixturePrediction(fixtureId) });
+    } catch (error) {
+      console.error(`[KingsCup] prediction ${fixtureId} failed:`, error);
+      res.status(502).json({ prediction: null });
     }
   });
 
