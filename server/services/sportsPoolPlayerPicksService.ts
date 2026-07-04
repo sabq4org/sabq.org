@@ -96,7 +96,9 @@ export type SpPickSettlementSummary = { settled: number; awarded: number; errors
  * Idempotent: حارس `settledAt` + الـ pending guard + lifetime dedup.
  */
 export async function settlePlayerPickMatches(maxFixtures = 40): Promise<SpPickSettlementSummary> {
-  const cutoff = nowSec() - 100 * 60; // ≥100 دقيقة من الانطلاق (نافذة نهاية المباراة)
+  // نافذة أمان أوليّة مطابقة لتسوية النتائج: 95 دقيقة من الانطلاق. الحارس
+  // النهائي هو status.finished من المزوّد (نتحقّق منه في الحلقة أدناه).
+  const cutoff = nowSec() - 95 * 60;
   const due = await db
     .select({
       fixtureId: sportsPoolMatchPicks.fixtureId,
