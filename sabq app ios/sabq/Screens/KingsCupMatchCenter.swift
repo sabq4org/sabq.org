@@ -13,8 +13,11 @@ struct KingsCupMatchCenter: View {
     @State private var detail: KcMatchDetail?
     @State private var loading = true
 
-    enum Tab: String, CaseIterable { case events = "الأحداث", lineups = "التشكيلات", stats = "الإحصائيات" }
+    enum Tab: String, CaseIterable {
+        case events = "الأحداث", lineups = "التشكيلات", stats = "الإحصائيات", ratings = "التقييمات"
+    }
     @State private var tab: Tab = .events
+    @State private var openPlayer: KcPlayerSelection?
 
     var body: some View {
         NavigationStack {
@@ -25,6 +28,7 @@ struct KingsCupMatchCenter: View {
                     } else if let detail {
                         header(detail.fixture)
                         if !detail.fixture.status.finished {
+                            KcFetchedPrediction(fixture: detail.fixture)
                             KcTvStrip(fixtureId: detail.fixture.id)
                         }
                         tabBar
@@ -65,6 +69,9 @@ struct KingsCupMatchCenter: View {
                 }
             }
             .refreshable { await load(force: true) }
+            .sheet(item: $openPlayer) { sel in
+                KcPlayerSheet(playerId: sel.id).presentationDetents([.large])
+            }
         }
         .sabqRTL()
     }
@@ -146,9 +153,13 @@ struct KingsCupMatchCenter: View {
         case .events: KcEventsTimeline(detail: d)
         case .lineups: KcLineupsView(detail: d)
         case .stats: KcStatsView(detail: d)
+        case .ratings: KcRatingsView(detail: d) { openPlayer = KcPlayerSelection(id: $0) }
         }
     }
 }
+
+/// غلاف Identifiable لفتح بطاقة لاعب كـ sheet.
+nonisolated struct KcPlayerSelection: Identifiable, Hashable { let id: Int }
 
 // MARK: - الأحداث
 
@@ -373,6 +384,120 @@ struct KcStatsView: View {
     }
 }
 
+// MARK: - التقييمات (رجل المباراة + تقييمات اللاعبين)
+//
+// مرآة WCRatingsView — المصدر /kings-cup/match/:id/player-stats (تقييمات
+// API-Football). جلب ذاتي مع تحديث دوري أثناء البث، وكل صف يفتح بطاقة اللاعب.
+
+struct KcRatingsView: View {
+    let detail: KcMatchDetail
+    let onOpenPlayer: (Int) -> Void
+
+    @State private var ratings: KcMatchRatings?
+    @State private var loaded = false
+
+    private var players: [KcMatchRating] {
+        (ratings?.players ?? [])
+            .filter { $0.rating != nil }
+            .sorted { ($0.rating ?? 0) > ($1.rating ?? 0) }
+    }
+
+    var body: some View {
+        Group {
+            if !loaded {
+                KcLoading()
+            } else if players.isEmpty {
+                kcEmptyText("تقييمات اللاعبين تظهر هنا بعد انطلاق المباراة")
+            } else {
+                VStack(spacing: 8) {
+                    if let motm = ratings?.motm {
+                        Button { onOpenPlayer(motm.id) } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "crown.fill").foregroundStyle(WCTheme.gold)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text("رجل المباراة").font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.gold)
+                                    Text(motm.name).font(SabqFonts.app(size: 14, weight: .black)).foregroundStyle(WCTheme.onDark)
+                                }
+                                Spacer()
+                                ratingBadge(motm.rating)
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 10)
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.gold.opacity(0.12)))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(WCTheme.gold.opacity(0.3), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    ForEach(players) { p in
+                        Button { onOpenPlayer(p.id) } label: { playerRow(p) }
+                            .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .task(id: detail.fixture.id) {
+            await load()
+            while !Task.isCancelled, detail.fixture.status.live {
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                if Task.isCancelled { return }
+                await load(force: true)
+            }
+        }
+    }
+
+    private func load(force: Bool = false) async {
+        let r = try? await APIClient.shared.fetchKingsCupMatchRatings(fixtureId: detail.fixture.id, ignoreCache: force)
+        await MainActor.run {
+            if let r { ratings = r }
+            loaded = true
+        }
+    }
+
+    private func playerRow(_ p: KcMatchRating) -> some View {
+        let teamLogo = p.teamId == detail.fixture.home.id ? detail.fixture.home.logo : detail.fixture.away.logo
+        return HStack(spacing: 10) {
+            if p.photo.isEmpty {
+                Circle().fill(WCTheme.chipFill).frame(width: 32, height: 32)
+            } else {
+                WCRemoteImage(url: p.photo, contentMode: .fill).frame(width: 32, height: 32).clipShape(Circle())
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\(p.name)\(p.captain ? " (ك)" : "")")
+                    .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                Text(subtitle(p)).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+            }
+            Spacer()
+            WCRemoteImage(url: teamLogo).frame(width: 16, height: 16)
+            ratingBadge(p.rating ?? 0)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .wcElevatedCard()
+    }
+
+    private func subtitle(_ p: KcMatchRating) -> String {
+        var parts = [p.pos]
+        if p.minutes > 0 { parts.append("\(p.minutes) د") }
+        if p.goals > 0 { parts.append("\(p.goals) ⚽") }
+        if p.assists > 0 { parts.append("\(p.assists) صناعة") }
+        return parts.filter { !$0.isEmpty }.joined(separator: " · ")
+    }
+
+    private func ratingBadge(_ rating: Double) -> some View {
+        Text(String(format: "%.1f", rating))
+            .font(SabqFonts.app(size: 13, weight: .black).monospacedDigit())
+            .foregroundStyle(.white)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 8).fill(ratingColor(rating)))
+            .environment(\.layoutDirection, .leftToRight)
+    }
+
+    private func ratingColor(_ r: Double) -> Color {
+        if r >= 8 { return WCTheme.emeraldDeep }
+        if r >= 7 { return WCTheme.leaf }
+        if r >= 6 { return WCTheme.gold }
+        return WCTheme.liveRed
+    }
+}
+
 // MARK: - قنوات البث
 
 struct KcTvStrip: View {
@@ -438,6 +563,14 @@ struct KcTeamSheet: View {
 
     @State private var profile: KcTeamProfile?
     @State private var loading = true
+    /// الإثراء الثقيل (?with=stats): إحصائيات الدوري والكأس + مسيرة المدرب +
+    /// الهدّافون + الانتقالات — غير حاجب: الأساس يرسم فورًا وبطاقاته تظهر تباعًا
+    @State private var extras: KcTeamExtras?
+    /// مباريات النادي في الكأس (الموسم الجاري + مشوار النسخة السابقة)
+    @State private var teamMatches: KcTeamMatches?
+    /// سجلّ الأبطال — منه ألقاب النادي وخزينتها
+    @State private var record: KcRecord?
+    @State private var openPlayer: KcPlayerSelection?
 
     var body: some View {
         NavigationStack {
@@ -447,9 +580,32 @@ struct KcTeamSheet: View {
                         KcLoading().padding(.top, 30)
                     } else if let p = profile {
                         teamHeader(p)
-                        if let coach = p.coach { coachRow(coach) }
-                        if !p.fixtures.isEmpty { fixturesBlock(p.fixtures) }
-                        if !p.topScorers.isEmpty { scorersBlock(p.topScorers) }
+                        if let coach = extras?.coach ?? p.coach { KcCoachCard(coach: coach) }
+                        if let cup = extras?.kcStats {
+                            KcTeamStatsCard(title: "مشوار النادي في كأس الملك",
+                                            subtitle: "نسخة \(KcFormat.seasonLabel(cup.season))",
+                                            stats: cup.stats)
+                        }
+                        if let league = extras?.stats {
+                            KcTeamStatsCard(title: "نبض الأرقام",
+                                            subtitle: p.competitionName ?? "بطولة النادي",
+                                            stats: league)
+                        }
+                        if let m = teamMatches, !m.fixtures.isEmpty || m.previous != nil {
+                            KcTeamMatchesBlock(matches: m)
+                        } else if !p.fixtures.isEmpty {
+                            fixturesBlock(p.fixtures)
+                        }
+                        if let scorers = extras?.topScorers ?? (p.topScorers.isEmpty ? nil : p.topScorers), !scorers.isEmpty {
+                            scorersBlock(scorers)
+                        }
+                        if let transfers = extras?.transfers,
+                           !transfers.arrivals.isEmpty || !transfers.departures.isEmpty {
+                            KcTransfersBlock(transfers: transfers)
+                        }
+                        if let record {
+                            KcTeamTitlesBlock(teamId: teamId, record: record)
+                        }
                         if !p.squad.isEmpty { squadBlock(p.squad) }
                     } else {
                         Text("تعذر جلب صفحة النادي")
@@ -472,11 +628,25 @@ struct KcTeamSheet: View {
                 }
             }
             .task {
-                if let r = try? await APIClient.shared.fetchKingsCupTeamProfile(teamId: teamId) {
-                    await MainActor.run { profile = r; loading = false }
-                } else {
-                    await MainActor.run { loading = false }
+                // الأساس أولًا (يرسم الصفحة فورًا)، والإثراء والمباريات والسجل
+                // بالتوازي بلا حجب — نمط صفحة نادي الويب نفسه
+                async let base = APIClient.shared.fetchKingsCupTeamProfile(teamId: teamId)
+                async let x = APIClient.shared.fetchKingsCupTeamExtras(teamId: teamId)
+                async let m = APIClient.shared.fetchKingsCupTeamMatches(teamId: teamId)
+                async let rec = APIClient.shared.fetchKingsCupRecord()
+                let baseResult = try? await base
+                await MainActor.run { profile = baseResult; loading = false }
+                let extrasResult = try? await x
+                let matchesResult = try? await m
+                let recordResult = try? await rec
+                await MainActor.run {
+                    extras = extrasResult
+                    teamMatches = matchesResult
+                    record = recordResult
                 }
+            }
+            .sheet(item: $openPlayer) { sel in
+                KcPlayerSheet(playerId: sel.id).presentationDetents([.large])
             }
         }
         .sabqRTL()
@@ -556,19 +726,22 @@ struct KcTeamSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("هدّافو النادي").font(SabqFonts.app(size: 15, weight: .heavy)).foregroundStyle(WCTheme.emeraldDeep)
             ForEach(scorers) { s in
-                HStack(spacing: 10) {
-                    if s.photo.isEmpty {
-                        Circle().fill(WCTheme.chipFill).frame(width: 32, height: 32)
-                    } else {
-                        WCRemoteImage(url: s.photo, contentMode: .fill).frame(width: 32, height: 32).clipShape(Circle())
+                Button { if s.id > 0 { openPlayer = KcPlayerSelection(id: s.id) } } label: {
+                    HStack(spacing: 10) {
+                        if s.photo.isEmpty {
+                            Circle().fill(WCTheme.chipFill).frame(width: 32, height: 32)
+                        } else {
+                            WCRemoteImage(url: s.photo, contentMode: .fill).frame(width: 32, height: 32).clipShape(Circle())
+                        }
+                        Text(s.name).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                        Spacer()
+                        Text("\(s.goals)").font(SabqFonts.app(size: 16, weight: .black)).foregroundStyle(WCTheme.emeraldDeep)
+                        Text("هدف").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                     }
-                    Text(s.name).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
-                    Spacer()
-                    Text("\(s.goals)").font(SabqFonts.app(size: 16, weight: .black)).foregroundStyle(WCTheme.emeraldDeep)
-                    Text("هدف").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .wcElevatedCard(cornerRadius: 12)
                 }
-                .padding(.horizontal, 12).padding(.vertical, 8)
-                .wcElevatedCard(cornerRadius: 12)
+                .buttonStyle(.plain)
             }
         }
     }
@@ -578,19 +751,22 @@ struct KcTeamSheet: View {
             Text("التشكيلة").font(SabqFonts.app(size: 15, weight: .heavy)).foregroundStyle(WCTheme.emeraldDeep)
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 8)], alignment: .leading, spacing: 8) {
                 ForEach(squad) { p in
-                    HStack(spacing: 8) {
-                        Text(p.number.map { "\($0)" } ?? "•")
-                            .font(SabqFonts.app(size: 11, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.emeraldDeep)
-                            .frame(width: 22, height: 22).background(Circle().fill(WCTheme.emerald.opacity(0.15)))
-                            .environment(\.layoutDirection, .leftToRight)
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(p.name).font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
-                            Text(p.position).font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                    Button { if p.id > 0 { openPlayer = KcPlayerSelection(id: p.id) } } label: {
+                        HStack(spacing: 8) {
+                            Text(p.number.map { "\($0)" } ?? "•")
+                                .font(SabqFonts.app(size: 11, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.emeraldDeep)
+                                .frame(width: 22, height: 22).background(Circle().fill(WCTheme.emerald.opacity(0.15)))
+                                .environment(\.layoutDirection, .leftToRight)
+                            VStack(alignment: .leading, spacing: 0) {
+                                Text(p.name).font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                                Text(p.position).font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
                         }
-                        Spacer(minLength: 0)
+                        .padding(.horizontal, 8).padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WCTheme.chipFill))
                     }
-                    .padding(.horizontal, 8).padding(.vertical, 6)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WCTheme.chipFill))
+                    .buttonStyle(.plain)
                 }
             }
         }
