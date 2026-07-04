@@ -58,6 +58,20 @@ export type LeaderRow = {
   playedCount: number;
 };
 
+/** صف الزائر نفسه ورتبته الحقيقية — يصل حتى لو كان خارج الصفحة المعروضة. */
+export type LeaderboardViewer = {
+  rank: number;
+  totalPoints: number;
+  correctCount: number;
+  playedCount: number;
+};
+
+export type LeaderboardResponse = {
+  leaders: LeaderRow[];
+  total?: number;
+  viewer?: LeaderboardViewer | null;
+};
+
 // ── توقّعات الموسم طويلة المدى (البطل + الهدّاف) ──
 export type RslLongTeam = { id: number; name: string; logo: string; eliminated: boolean };
 export type RslLongScorer = {

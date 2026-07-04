@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Bot, Flame, Sparkles, Target, Trophy } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -13,7 +13,7 @@ import { AcPredictionMatchCard } from "@/components/asiancup/predictions/AcPredi
 import { AcPredictionsLeaderboard } from "@/components/asiancup/predictions/AcPredictionsLeaderboard";
 import { AcMyPredictionsList } from "@/components/asiancup/predictions/AcMyPredictionsList";
 import type {
-  AcLeaderRow,
+  AcLeaderboardResponse,
   AcMeStats,
   AcMyPredictionRow,
   AcPredictableMatch,
@@ -54,16 +54,28 @@ export default function AsianCupPredictions() {
     staleTime: 30_000,
   });
 
-  const { data: leaderData, isLoading: leaderLoading } = useQuery<{ leaders: AcLeaderRow[] }>({
-    queryKey: ["/api/asian-cup/predictions/leaderboard"],
+  // «عرض المزيد» يرفع limit تدريجيًا (سقف الخادم 500) — keepPreviousData يمنع
+  // وميض الهيكل العظمي أثناء جلب الدفعة الأكبر.
+  const [leaderLimit, setLeaderLimit] = useState(100);
+  const {
+    data: leaderData,
+    isLoading: leaderLoading,
+    isFetching: leaderFetching,
+  } = useQuery<AcLeaderboardResponse>({
+    queryKey: ["/api/asian-cup/predictions/leaderboard", { limit: leaderLimit }],
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 
   const matches = Array.isArray(todayData?.matches) ? todayData.matches : [];
   const me = todayData?.me ?? null;
   const myPredictions = Array.isArray(mineData?.predictions) ? mineData.predictions : [];
   const leaders = Array.isArray(leaderData?.leaders) ? leaderData.leaders : [];
-  const myRank = user ? leaders.find((l) => l.userId === user.id) : undefined;
+  const leaderboardViewer = leaderData?.viewer ?? null;
+  // صفّي في القائمة المعروضة، وإلا صف viewer من الخادم (رتبتي الحقيقية ولو بعد الـ100)
+  const myRank = user
+    ? (leaders.find((l) => l.userId === user.id) ?? leaderboardViewer ?? undefined)
+    : undefined;
 
   const submitMutation = useMutation({
     mutationFn: (vars: { fixtureId: number; predHome: number; predAway: number }) =>
@@ -179,7 +191,17 @@ export default function AsianCupPredictions() {
             ))}
 
           {tab === "leaders" && (
-            <AcPredictionsLeaderboard leaders={leaders} currentUserId={user?.id} isLoading={leaderLoading} />
+            <AcPredictionsLeaderboard
+              leaders={leaders}
+              currentUserId={user?.id}
+              isLoading={leaderLoading}
+              total={leaderData?.total}
+              viewer={leaderboardViewer}
+              viewerName={[user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.name}
+              viewerAvatar={user?.profileImageUrl ?? null}
+              onLoadMore={() => setLeaderLimit((l) => Math.min(l + 100, 500))}
+              loadingMore={leaderFetching && !leaderLoading}
+            />
           )}
         </div>
       </main>

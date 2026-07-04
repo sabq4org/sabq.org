@@ -76,6 +76,22 @@ export interface GcLeaderRow {
   accuracy: number;
 }
 
+/** صف الزائر نفسه ورتبته الحقيقية — يصل حتى لو كان خارج الصفحة المعروضة. */
+export interface GcLeaderboardViewer {
+  rank: number;
+  totalPoints: number;
+  correctCount: number;
+  exactCount: number;
+  playedCount: number;
+  accuracy: number;
+}
+
+export interface GcLeaderboardResponse {
+  leaders: GcLeaderRow[];
+  total?: number;
+  viewer?: GcLeaderboardViewer | null;
+}
+
 export interface GcMyPredictionRow {
   fixtureId: string;
   predHome: number;

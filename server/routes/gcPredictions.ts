@@ -18,6 +18,7 @@ import {
   submitPrediction,
   getMyPredictions,
   getLeaderboard,
+  getLeaderboardMeta,
   getUpcomingPredictableMatches,
   getMatchPredictionsSummary,
   getLongPredictions,
@@ -38,6 +39,12 @@ function guard(res: any): boolean {
 }
 
 const noStore = (res: any) => res.set("Cache-Control", "private, no-store");
+
+/** limit اختياري من الاستعلام — الافتراضي 100 ويُقصّ إلى [10..500]. */
+const parseLeaderboardLimit = (raw: unknown): number => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.max(Math.trunc(n), 10), 500) : 100;
+};
 
 router.get("/api/gulf-cup/predictions/today", async (req: any, res) => {
   if (!guard(res)) return;
@@ -90,11 +97,16 @@ router.get("/api/gulf-cup/predictions/mine", requireAuth, async (req: any, res) 
   }
 });
 
-router.get("/api/gulf-cup/predictions/leaderboard", async (_req, res) => {
+router.get("/api/gulf-cup/predictions/leaderboard", async (req: any, res) => {
   if (!guard(res)) return;
   try {
-    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
-    res.json({ leaders: await getLeaderboard() });
+    const userId = req.isAuthenticated?.() && req.user ? req.user.id : undefined;
+    // رد المستخدم المسجَّل يحمل صفّه الخاص (viewer) فلا يجوز مشاركته في كاش الحافة.
+    if (userId) noStore(res);
+    else res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    const limit = parseLeaderboardLimit(req.query?.limit);
+    const [leaders, meta] = await Promise.all([getLeaderboard(limit), getLeaderboardMeta(userId)]);
+    res.json({ leaders, total: meta.total, viewer: meta.viewer });
   } catch (error) {
     console.error("[GC Predictions] leaderboard error:", error);
     res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { Award, Coins, Crown, Flame, Sparkles, Target, Trophy, Users } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -16,7 +16,7 @@ import { GcLongPredictions } from "@/components/gulfcup/predictions/GcLongPredic
 import { GcBadges } from "@/components/gulfcup/predictions/GcBadges";
 import { GcWinCelebration, type GcWin } from "@/components/gulfcup/predictions/GcWinCelebration";
 import type {
-  GcLeaderRow,
+  GcLeaderboardResponse,
   GcMeStats,
   GcMyPredictionRow,
   GcPredictableMatch,
@@ -73,9 +73,17 @@ export default function GulfCupPredictions() {
     refetchInterval: 30_000,
   });
 
-  const { data: leaderData, isLoading: leaderLoading } = useQuery<{ leaders: GcLeaderRow[] }>({
-    queryKey: ["/api/gulf-cup/predictions/leaderboard"],
+  // «عرض المزيد» يرفع limit تدريجيًا (سقف الخادم 500) — keepPreviousData يمنع
+  // وميض الهيكل العظمي أثناء جلب الدفعة الأكبر.
+  const [leaderLimit, setLeaderLimit] = useState(100);
+  const {
+    data: leaderData,
+    isLoading: leaderLoading,
+    isFetching: leaderFetching,
+  } = useQuery<GcLeaderboardResponse>({
+    queryKey: ["/api/gulf-cup/predictions/leaderboard", { limit: leaderLimit }],
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 
   const matches = Array.isArray(todayData?.matches) ? todayData.matches : [];
@@ -83,7 +91,11 @@ export default function GulfCupPredictions() {
   const jackpot = todayData?.jackpot ?? 0;
   const myPredictions = Array.isArray(mineData?.predictions) ? mineData.predictions : [];
   const leaders = Array.isArray(leaderData?.leaders) ? leaderData.leaders : [];
-  const myRank = user ? leaders.find((l) => l.userId === user.id) : undefined;
+  const leaderboardViewer = leaderData?.viewer ?? null;
+  // صفّي في القائمة المعروضة، وإلا صف viewer من الخادم (رتبتي الحقيقية ولو بعد الـ100)
+  const myRank = user
+    ? (leaders.find((l) => l.userId === user.id) ?? leaderboardViewer ?? undefined)
+    : undefined;
 
   // كشف الفوز: أول إصابة مُسوّاة لم تُعرض بعد → احتفاء.
   const firstUnseenWin = useMemo<GcWin | null>(() => {
@@ -245,7 +257,17 @@ export default function GulfCupPredictions() {
             ))}
 
           {tab === "leaders" && (
-            <GcPredictionsLeaderboard leaders={leaders} currentUserId={user?.id} isLoading={leaderLoading} />
+            <GcPredictionsLeaderboard
+              leaders={leaders}
+              currentUserId={user?.id}
+              isLoading={leaderLoading}
+              total={leaderData?.total}
+              viewer={leaderboardViewer}
+              viewerName={[user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.name}
+              viewerAvatar={user?.profileImageUrl ?? null}
+              onLoadMore={() => setLeaderLimit((l) => Math.min(l + 100, 500))}
+              loadingMore={leaderFetching && !leaderLoading}
+            />
           )}
 
           {tab === "long" && <GcLongPredictions isAuthenticated={isAuthenticated} onRequireLogin={goLogin} />}

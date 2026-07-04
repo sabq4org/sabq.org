@@ -28,6 +28,7 @@ import {
   submitPrediction,
   getMyPredictions,
   getLeaderboard,
+  getLeaderboardMeta,
   getUpcomingPredictableMatches,
   getMatchPredictionsSummary,
 } from "../services/rslPredictionsService";
@@ -68,6 +69,12 @@ function predictionsGuard(res: any): boolean {
 }
 
 const noStore = (res: any) => res.set("Cache-Control", "private, no-store");
+
+/** limit اختياري من الاستعلام — الافتراضي 100 ويُقصّ إلى [10..500]. */
+const parseLeaderboardLimit = (raw: unknown): number => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.max(Math.trunc(n), 10), 500) : 100;
+};
 
 // ── أندية الدوري ─────────────────────────────────────────────────────────────
 // قائمة {teams} موحّدة الشكل مع بقية البطولات — تغذّي خيار «تعيين البطل يدويًا»
@@ -248,7 +255,12 @@ router.get("/api/rsl/predictions/leaderboard", async (req: any, res) => {
     const userId = req.isAuthenticated?.() && req.user ? req.user.id : undefined;
     if (userId) noStore(res);
     else res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
-    res.json({ leaders: await getLeaderboard(100, userId) });
+    const limit = parseLeaderboardLimit(req.query?.limit);
+    const [leaders, meta] = await Promise.all([
+      getLeaderboard(limit, userId),
+      getLeaderboardMeta(userId),
+    ]);
+    res.json({ leaders, total: meta.total, viewer: meta.viewer });
   } catch (error) {
     console.error("[RSL Predictions] leaderboard error:", error);
     res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });

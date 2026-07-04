@@ -320,6 +320,61 @@ export async function getLeaderboard(slug: string, limit = 100, viewerUserId?: s
   }));
 }
 
+/**
+ * ميتا اللوحة (نسخة المونديال): العدد الكلي للمؤهّلين + صف الزائر ورتبته حتى
+ * لو كان خارج الصفحة المعروضة — الرتبة 1 + عدد من يسبقه (النقاط ثم الإصابات).
+ */
+export async function getLeaderboardMeta(slug: string, viewerUserId?: string) {
+  const compCond = eq(cupPredictions.competitionSlug, slug);
+  const visibility = viewerUserId
+    ? or(notInArray(users.role, [...SUPERUSER_ROLE_NAMES]), eq(cupPredictions.userId, viewerUserId))
+    : notInArray(users.role, [...SUPERUSER_ROLE_NAMES]);
+
+  const board = db
+    .select({
+      uid: cupPredictions.userId,
+      pts: sql<number>`coalesce(sum(${cupPredictions.pointsAwarded}), 0)::int`.as("pts"),
+      correct: sql<number>`count(*) filter (where ${cupPredictions.status} = 'correct')::int`.as("correct"),
+    })
+    .from(cupPredictions)
+    .innerJoin(users, eq(cupPredictions.userId, users.id))
+    .where(and(compCond, visibility))
+    .groupBy(cupPredictions.userId)
+    .having(sql`count(*) filter (where ${cupPredictions.status} <> 'pending') > 0`)
+    .as("board");
+
+  const [totals] = await db.select({ total: sql<number>`count(*)::int` }).from(board);
+  const total = Number(totals?.total ?? 0);
+  if (!viewerUserId) return { total, viewer: null };
+
+  const [mine] = await db
+    .select({
+      pts: sql<number>`coalesce(sum(${cupPredictions.pointsAwarded}), 0)::int`,
+      correct: sql<number>`count(*) filter (where ${cupPredictions.status} = 'correct')::int`,
+      played: sql<number>`count(*) filter (where ${cupPredictions.status} <> 'pending')::int`,
+    })
+    .from(cupPredictions)
+    .where(and(compCond, eq(cupPredictions.userId, viewerUserId)))
+    .groupBy(cupPredictions.userId)
+    .having(sql`count(*) filter (where ${cupPredictions.status} <> 'pending') > 0`);
+  if (!mine) return { total, viewer: null };
+
+  const [ahead] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(board)
+    .where(sql`${board.pts} > ${mine.pts} or (${board.pts} = ${mine.pts} and ${board.correct} > ${mine.correct})`);
+
+  return {
+    total,
+    viewer: {
+      rank: Number(ahead?.n ?? 0) + 1,
+      totalPoints: Number(mine.pts),
+      correctCount: Number(mine.correct),
+      playedCount: Number(mine.played),
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // محرّك التسوية — كل دقيقة عبر الكرون (نسخة المونديال/روشن حرفيًّا)
 // ---------------------------------------------------------------------------
