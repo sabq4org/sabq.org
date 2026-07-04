@@ -367,6 +367,7 @@ const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
 const GulfCupPredictions = lazy(() => retryImport(() => import("@/pages/GulfCupPredictions")));
 const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
 const KingsCupTeam = lazy(() => retryImport(() => import("@/pages/KingsCupTeam")));
+const KingsCupPlayer = lazy(() => retryImport(() => import("@/pages/KingsCupPlayer")));
 const KingsCupPredictions = lazy(() => retryImport(() => import("@/pages/KingsCupPredictions")));
 const SuperCupPredictions = lazy(() => retryImport(() => import("@/pages/SuperCupPredictions")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
@@ -901,6 +902,7 @@ function Router() {
         <Route path="/kings-cup/predictions">{() => <LazyRoute component={KingsCupPredictions} />}</Route>
         <Route path="/super-cup/predictions">{() => <LazyRoute component={SuperCupPredictions} />}</Route>
         <Route path="/kings-cup/team/:teamId">{() => <LazyRoute component={KingsCupTeam} />}</Route>
+        <Route path="/kings-cup/player/:id">{() => <LazyRoute component={KingsCupPlayer} />}</Route>
         <Route path="/kings-cup">{() => <LazyRoute component={KingsCup} />}</Route>
         {/* مركز دوري روشن السعودي بنظام تصميم المونديال — /rsl يحوّل إليه */}
         <Route path="/roshn/predictions">{() => <LazyRoute component={RoshnPredictions} />}</Route>

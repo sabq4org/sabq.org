@@ -24,6 +24,9 @@ import {
   getPlayerCard as splGetPlayerCard,
   getPlayerForm as splGetPlayerForm,
   getPlayerMarketValue as splGetPlayerMarketValue,
+  getPlayerSeasonHistory as splGetPlayerSeasonHistory,
+  getPlayerTransfers as splGetPlayerTransfers,
+  getPlayerInjuries as splGetPlayerInjuries,
   getMatchDetail as splGetMatchDetail,
   getMatchTvChannels as splGetMatchTvChannels,
   getTeamStats as splGetTeamStats,
@@ -193,7 +196,16 @@ export async function getKcTeamCupStats(teamId: number): Promise<KcTeamCupStats 
   return null;
 }
 
-export async function getKcTeamProfile(teamId: number) {
+/**
+ * ملف النادي على مرحلتين (نمط صفحة نادي البوابة): الأساس سريع (معلومات +
+ * تشكيلة + مباريات + ترتيب) يرسم الصفحة فورًا، والإثراء الثقيل (إحصائيات
+ * الدوري والكأس + مدرب + هدّافون + انتقالات) يُطلب لاحقًا عبر ?with=stats
+ * فلا يحجب الرسم الأول — كان التجميع الواحد يُبطئ الفتح عدة ثوانٍ على البرود.
+ */
+export async function getKcTeamProfile(teamId: number, opts?: { withExtras?: boolean }) {
+  if (!opts?.withExtras) {
+    return splGetTeamProfile(teamId, { withExtras: false });
+  }
   const [profile, kcStats, transfers] = await Promise.all([
     splGetTeamProfile(teamId, { withExtras: true }),
     getKcTeamCupStats(teamId).catch(() => null),
@@ -205,6 +217,16 @@ export async function getKcTeamProfile(teamId: number) {
 
 export async function getKcPlayerCard(playerId: number) {
   return splGetPlayerCard(playerId);
+}
+
+/** إثراء صفحة اللاعب (?with=extras): سلسلة المواسم + الانتقالات + الإصابات — كلها تتدهور إلى []. */
+export async function getKcPlayerExtras(playerId: number) {
+  const [history, transfers, injuries] = await Promise.all([
+    splGetPlayerSeasonHistory(playerId).catch(() => []),
+    splGetPlayerTransfers(playerId).catch(() => []),
+    splGetPlayerInjuries(playerId).catch(() => []),
+  ]);
+  return { history, transfers, injuries };
 }
 
 export async function getKcPlayerForm(playerId: number) {

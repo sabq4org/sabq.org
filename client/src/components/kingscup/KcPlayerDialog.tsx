@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
+import { ArrowLeft } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { KcPlayerCard } from "./kcTypes";
 
@@ -89,6 +91,16 @@ export function KcPlayerDialog({
                 </ul>
               </div>
             )}
+
+            {/* البطاقة عرض سريع — الملف الكامل (قيمة سوقية/فورمة/انتقالات/إصابات) في صفحة اللاعب */}
+            <Link
+              href={`/kings-cup/player/${data.id}`}
+              onClick={onClose}
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-amber-400/10 border border-amber-300/30 py-2.5 text-sm font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-400/20 transition-colors"
+            >
+              الملف الكامل للاعب
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
           </div>
         )}
       </DialogContent>

@@ -18,6 +18,7 @@ import {
   getKcSquad,
   getKcTeamProfile,
   getKcPlayerCard,
+  getKcPlayerExtras,
   getKcPlayerForm,
   getKcPlayerMarket,
   getKcMatchDetail,
@@ -243,9 +244,17 @@ export function registerKingsCupRoutes(app: Express) {
       return res.status(400).json({ message: "معرّف نادٍ غير صالح" });
     }
     try {
-      const profile = await getKcTeamProfile(teamId);
+      // ?with=stats يضمّن الإثراء الثقيل (إحصائيات/مدرب/هدّافون/انتقالات/كأس) —
+      // الصفحة تطلب الأساس أولًا فيرتسم فورًا ثم تجلب الإثراء بلا حجب
+      const withExtras = req.query.with === "stats";
+      const profile = await getKcTeamProfile(teamId, { withExtras });
       if (!profile) return res.status(404).json({ message: "النادي غير موجود" });
-      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+      res.set(
+        "Cache-Control",
+        withExtras
+          ? "public, max-age=120, s-maxage=300, stale-while-revalidate=900"
+          : "public, max-age=60, s-maxage=120, stale-while-revalidate=300",
+      );
       res.json(profile);
     } catch (error) {
       console.error(`[KingsCup] team ${teamId} failed:`, error);
@@ -263,6 +272,11 @@ export function registerKingsCupRoutes(app: Express) {
       const player = await getKcPlayerCard(playerId);
       if (!player) return res.status(404).json({ message: "ملف اللاعب غير متاح" });
       res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      // صفحة اللاعب الكاملة: ?with=extras يضمّن سلسلة المواسم + الانتقالات +
+      // الإصابات في نفس الاستجابة (نفس عقد نظيرتها في البوابة /api/sports/player)
+      if (req.query.with === "extras") {
+        return res.json({ ...player, ...(await getKcPlayerExtras(playerId)) });
+      }
       res.json(player);
     } catch (error) {
       console.error(`[KingsCup] player ${playerId} failed:`, error);
