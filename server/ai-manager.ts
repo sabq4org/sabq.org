@@ -156,5 +156,5 @@ export const AI_MODELS = {
   GEMINI_3: { provider: 'gemini' as const, model: 'gemini-3-pro-preview' }, // Alias
   // Legacy Gemini models
   GEMINI_PRO: { provider: 'gemini' as const, model: 'gemini-3-pro-preview' }, // Updated to Gemini 3
-  GEMINI_FLASH: { provider: 'gemini' as const, model: 'gemini-2.5-flash-preview-05-20' },
+  GEMINI_FLASH: { provider: 'gemini' as const, model: 'gemini-2.5-flash' },
 };
