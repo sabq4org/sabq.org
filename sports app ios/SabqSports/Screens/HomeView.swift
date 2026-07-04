@@ -809,15 +809,21 @@ struct HomeView: View {
     }
 
     private func titleRaceProgress(_ row: SpStandingRow, leaderPoints: Int) -> some View {
-        let pct = leaderPoints > 0 ? min(1, max(0.06, CGFloat(row.points) / CGFloat(leaderPoints))) : 0.06
+        let pct = leaderPoints > 0 ? min(1, max(0.08, CGFloat(row.points) / CGFloat(leaderPoints))) : 0.08
+        let isLeader = row.rank == 1
         return GeometryReader { geo in
             ZStack(alignment: .leading) {
                 Capsule().fill(SpTheme.chipFill)
-                Capsule().fill(row.rank == 1 ? rslAccent : rslAccent.opacity(0.55))
+                Capsule()
+                    .fill(isLeader
+                          ? LinearGradient(colors: [rslAccent, SpTheme.emeraldDeep],
+                                           startPoint: .leading, endPoint: .trailing)
+                          : LinearGradient(colors: [rslAccent.opacity(0.55), rslAccent.opacity(0.45)],
+                                           startPoint: .leading, endPoint: .trailing))
                     .frame(width: geo.size.width * pct)
             }
         }
-        .frame(height: 6)
+        .frame(height: 8)
     }
 
     // نقاط الفورمة (آخر 5): فوز أخضر، تعادل رمادي ممتلئ، خسارة حلقة رمادية. لونان فقط.
