@@ -309,3 +309,14 @@ extension APIClient {
                       query: ["q": query, "limit": "6"], ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 }
+
+// MARK: - adapters من نماذج دوري روشن إلى كيانات مركز الانتقالات
+
+// يسمح بإعادة استخدام مكوّنات التصميم الموحّدة (TcPartyChip وغيرها) على صفوف
+// الانتقالات السعودية (SpLeagueTransfer) في بطاقة روشن المصغّرة، بلا تكرار.
+extension TcParty {
+    init(from c: SpTransferClub) {
+        self.init(id: c.id, name: c.name, image: c.logo.isEmpty ? nil : c.logo,
+                  leagueId: nil, leagueName: nil, saudi: true)
+    }
+}
