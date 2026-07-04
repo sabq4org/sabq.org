@@ -10,7 +10,7 @@ export type ModelTier = "cheap" | "strong";
 
 function pickModel(_tier: ModelTier): AIModelConfig {
   // نستخدم gpt-5.1 لكل الطبقات. الطبقة «الرخيصة» كانت تختار Gemini Flash عند
-  // توفّر مفتاح Gemini، لكن نموذج البوابة GEMINI_FLASH (gemini-2.5-flash-preview-05-20)
+  // توفّر مفتاح Gemini، لكن نموذج البوابة GEMINI_FLASH (gemini-2.5-flash)
   // متوقّف/في cooldown على الإنتاج فيفشل التوليد بـ«no available model» (بطاقات فارغة)،
   // بينما لا يظهر محلياً لغياب مفتاح Gemini. gpt-5.1 مثبت أنه يعمل ورخيص كفايةً
   // للمطالبات القصيرة هنا. (المطالبات صغيرة؛ فرق الكلفة ضئيل.)

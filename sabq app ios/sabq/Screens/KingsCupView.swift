@@ -25,11 +25,15 @@ struct KingsCupView: View {
     @State private var racesLoading = true
 
     @State private var selectedMatch: KcMatchSelection?
+    @State private var showPredictions = false
 
     var body: some View {
         ScrollView(showsIndicators: false) {
             VStack(spacing: 22) {
                 KcHeroSection(overview: overview, isLoading: overviewLoading) { open($0) }
+
+                KcPredictCTA { showPredictions = true }
+                    .padding(.horizontal, 20)
 
                 KcHistorySection(history: history)
 
@@ -44,6 +48,8 @@ struct KingsCupView: View {
                 )
 
                 KcTeamsSection(teams: teams)
+
+                KcRecordSection()
             }
             .padding(.bottom, 36)
         }
@@ -69,12 +75,29 @@ struct KingsCupView: View {
         }
         .refreshable { await loadAll(force: true) }
         .sheet(item: $selectedMatch) { sel in
-            KingsCupMatchCenter(fixtureId: sel.id)
+            // seed = المباراة من القوائم المحمّلة أصلًا — يفتح المركز فورًا
+            KingsCupMatchCenter(fixtureId: sel.id, seed: seedFixture(sel.id))
+        }
+        .fullScreenCover(isPresented: $showPredictions) {
+            KcPredictionsView()
         }
         .sabqRTL()
     }
 
     private func open(_ fixtureId: Int) { selectedMatch = KcMatchSelection(id: fixtureId) }
+
+    /// المباراة من أي قائمة محمّلة (fixtures/overview) لبذر مركز المباراة.
+    private func seedFixture(_ id: Int) -> KcFixture? {
+        if let f = fixtures.first(where: { $0.id == id }) { return f }
+        if let o = overview {
+            for list in [o.live, o.today] {
+                if let f = list.first(where: { $0.id == id }) { return f }
+            }
+            if o.nextMatch?.id == id { return o.nextMatch }
+            if o.matchOfTheDay?.fixture.id == id { return o.matchOfTheDay?.fixture }
+        }
+        return nil
+    }
 
     private var isAnyLive: Bool {
         (overview?.live.contains { $0.status.live } ?? false) || fixtures.contains { $0.status.live }
@@ -219,6 +242,14 @@ struct KcHeroSection: View {
             }
 
             if !f.started { KcCountdownChips(timestamp: f.timestamp) }
+
+            // شريط الاحتمالات — يصل جاهزًا مع overview للمباراة المميّزة،
+            // ويختفي بعد نهاية المباراة (نفس سلوك هيرو المونديال)
+            if let pred = overview?.matchOfTheDay?.prediction,
+               f.id == overview?.matchOfTheDay?.fixture.id,
+               !f.status.finished {
+                KcProbabilityBar(fixture: f, prediction: pred)
+            }
 
             Button { onOpenMatch(f.id) } label: {
                 Text("مركز المباراة")
