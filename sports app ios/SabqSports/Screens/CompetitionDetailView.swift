@@ -5,6 +5,9 @@ import SwiftUI
 // مقتطف الترتيب، هدّاف/صانع البطولة، آخر النتائج) ثم تبويبات الترتيب/الهدّافون/
 // الصنّاع/المباريات/الانتقالات. تُخفى التبويبات الفارغة تلقائيًا.
 struct CompetitionDetailView: View {
+    /// صبغة البطولة — تصبغ الصفحة كاملة بلون بطولتها في نمط «ألوان VARA».
+    private var acc: Color { SpTheme.compAccent(comp.slug) }
+
     let comp: SpCompetition
 
     private enum Segment: String, CaseIterable {
@@ -147,7 +150,7 @@ struct CompetitionDetailView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            SpTheme.heroGradient
+            SpTheme.compHeroGradient(comp.slug)
                 .overlay(alignment: .topLeading) {
                     Circle().fill(SpTheme.gold.opacity(0.18))
                         .frame(width: 150, height: 150).blur(radius: 55).offset(x: -30, y: -50)
@@ -179,7 +182,7 @@ struct CompetitionDetailView: View {
             switch comp.status {
             case "finished": return ("منتهٍ", SpTheme.gold)
             case "ongoing": return ("جارٍ", SpTheme.leaf)
-            case "upcoming": return ("قادم", SpTheme.greenSoft)
+            case "upcoming": return ("قادم", acc)
             default: return ("", .clear)
             }
         }()
@@ -205,7 +208,7 @@ struct CompetitionDetailView: View {
                             .font(SportsFonts.app(size: 13, weight: .bold))
                             .foregroundStyle(active ? .white : SpTheme.onDarkDim)
                             .padding(.horizontal, 16).padding(.vertical, 8)
-                            .background(Capsule().fill(active ? SpTheme.green : SpTheme.chipFill))
+                            .background(Capsule().fill(active ? acc : SpTheme.chipFill))
                     }
                     .buttonStyle(.plain)
                 }
@@ -244,7 +247,7 @@ struct CompetitionDetailView: View {
         let finished = wcFixtures.filter { $0.status.finished }.count
         let upcoming = wcFixtures.filter { !$0.status.live && !$0.status.finished }.count
         HStack(spacing: 8) {
-            SpFactTile(value: "\(wcGroups.count)", label: "المجموعات", accent: SpTheme.green)
+            SpFactTile(value: "\(wcGroups.count)", label: "المجموعات", accent: acc)
             SpFactTile(value: "\(live)", label: "مباشر الآن", accent: live > 0 ? SpTheme.crimson : nil)
             SpFactTile(value: "\(finished)", label: "النتائج", accent: nil)
             SpFactTile(value: "\(upcoming)", label: "قادمة", accent: nil)
@@ -255,8 +258,8 @@ struct CompetitionDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 HStack(spacing: 6) {
-                    Image(systemName: "square.grid.2x2.fill").font(.system(size: 13)).foregroundStyle(SpTheme.green)
-                    Text("المجموعات").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.green)
+                    Image(systemName: "square.grid.2x2.fill").font(.system(size: 13)).foregroundStyle(acc)
+                    Text("المجموعات").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
                 }
                 Spacer()
                 Button { withAnimation { segment = .groups } } label: {
@@ -264,7 +267,7 @@ struct CompetitionDetailView: View {
                         Text("كل المجموعات").font(SportsFonts.app(size: 12, weight: .bold))
                         Image(systemName: "chevron.left").font(.system(size: 9, weight: .bold))
                     }
-                    .foregroundStyle(SpTheme.green)
+                    .foregroundStyle(acc)
                 }
                 .buttonStyle(.plain)
             }
@@ -279,7 +282,7 @@ struct CompetitionDetailView: View {
         let assister = wcAssists.first
         if scorer != nil || assister != nil || !wcCards.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                SpSectionHeader(icon: "chart.bar.fill", title: "أرقام اللاعبين", count: nil, tint: SpTheme.green)
+                SpSectionHeader(icon: "chart.bar.fill", title: "أرقام اللاعبين", count: nil, tint: acc)
                 HStack(spacing: 10) {
                     if let s = scorer { wcScorerCard("الهداف", s, value: "\(s.goals)", unit: "هدف") }
                     if let a = assister { wcLeaderCard("صانع اللعب", a, value: "\(a.assists)", unit: "صناعة") }
@@ -296,10 +299,10 @@ struct CompetitionDetailView: View {
         if !results.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    SpSectionHeader(icon: "checkmark.seal.fill", title: "آخر النتائج", count: min(results.count, 5), tint: SpTheme.green)
+                    SpSectionHeader(icon: "checkmark.seal.fill", title: "آخر النتائج", count: min(results.count, 5), tint: acc)
                     Spacer()
                     Button { withAnimation { segment = .matches } } label: {
-                        Text("كل المباريات").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.green)
+                        Text("كل المباريات").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(acc)
                     }
                     .buttonStyle(.plain)
                 }
@@ -336,7 +339,7 @@ struct CompetitionDetailView: View {
         let topScorer = scorers.first
         let topAssister = assists.first
         let facts: [(value: String, label: String, accent: Color?)] = [
-            seasonValue.map { (seasonLabel($0), "الموسم", SpTheme.green as Color?) },
+            seasonValue.map { (seasonLabel($0), "الموسم", acc as Color?) },
             standings.isEmpty ? nil : ("\(standings.count)", "الأندية", nil),
             topScorer.map { ("\($0.goals)", "أهداف المتصدّر", nil) },
             topAssister.map { ("\($0.assists)", "صناعة المتصدّر", nil) },
@@ -353,8 +356,8 @@ struct CompetitionDetailView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 HStack(spacing: 6) {
-                    Image(systemName: "list.number").font(.system(size: 13)).foregroundStyle(SpTheme.green)
-                    Text("الترتيب").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.green)
+                    Image(systemName: "list.number").font(.system(size: 13)).foregroundStyle(acc)
+                    Text("الترتيب").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
                 }
                 Spacer()
                 Button { withAnimation { segment = .standings } } label: {
@@ -362,7 +365,7 @@ struct CompetitionDetailView: View {
                         Text("الترتيب الكامل").font(SportsFonts.app(size: 12, weight: .bold))
                         Image(systemName: "chevron.left").font(.system(size: 9, weight: .bold))
                     }
-                    .foregroundStyle(SpTheme.green)
+                    .foregroundStyle(acc)
                 }
                 .buttonStyle(.plain)
             }
@@ -391,7 +394,7 @@ struct CompetitionDetailView: View {
     private func performerCard(_ title: String, _ p: SpScorer, value: String, unit: String) -> some View {
         Button { selectedPlayer = IDBox(id: p.id) } label: {
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(title).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(acc)
                 HStack(spacing: 10) {
                     photoCircle(p.photo, size: 44, fallback: "person.fill")
                     VStack(alignment: .leading, spacing: 2) {
@@ -401,7 +404,7 @@ struct CompetitionDetailView: View {
                     Spacer(minLength: 0)
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(value).font(SportsFonts.app(size: 24, weight: .heavy)).foregroundStyle(SpTheme.green).monospacedDigit()
+                    Text(value).font(SportsFonts.app(size: 24, weight: .heavy)).foregroundStyle(acc).monospacedDigit()
                         .environment(\.layoutDirection, .leftToRight)
                     Text(unit).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkFaint)
                 }
@@ -419,8 +422,8 @@ struct CompetitionDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     HStack(spacing: 6) {
-                        Image(systemName: "checkmark.seal.fill").font(.system(size: 13)).foregroundStyle(SpTheme.green)
-                        Text("آخر النتائج").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.green)
+                        Image(systemName: "checkmark.seal.fill").font(.system(size: 13)).foregroundStyle(acc)
+                        Text("آخر النتائج").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
                     }
                     Spacer()
                     Button { withAnimation { segment = .matches } } label: {
@@ -428,7 +431,7 @@ struct CompetitionDetailView: View {
                             Text("كل المباريات").font(SportsFonts.app(size: 12, weight: .bold))
                             Image(systemName: "chevron.left").font(.system(size: 9, weight: .bold))
                         }
-                        .foregroundStyle(SpTheme.green)
+                        .foregroundStyle(acc)
                     }
                     .buttonStyle(.plain)
                 }
@@ -455,7 +458,7 @@ struct CompetitionDetailView: View {
             HStack {
                 Text(group.group)
                     .font(SportsFonts.app(size: compact ? 13 : 16, weight: .heavy))
-                    .foregroundStyle(SpTheme.green)
+                    .foregroundStyle(acc)
                 Spacer(minLength: 0)
                 if group.rows.contains(where: { $0.live == true }) {
                     Text("مباشر")
@@ -481,7 +484,7 @@ struct CompetitionDetailView: View {
             HStack(spacing: compact ? 6 : 9) {
                 Text("\(row.rank)")
                     .font(SportsFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(row.rank <= 2 ? SpTheme.green : SpTheme.onDarkFaint)
+                    .foregroundStyle(row.rank <= 2 ? acc : SpTheme.onDarkFaint)
                     .frame(width: 18)
                 SpTeamLogo(logo: row.team.logo, size: compact ? 18 : 24)
                 Text(row.team.name)
@@ -541,7 +544,7 @@ struct CompetitionDetailView: View {
     private func wcScorerCard(_ title: String, _ p: SpWcScorer, value: String, unit: String) -> some View {
         Button { selectedPlayer = IDBox(id: p.id) } label: {
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(title).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(acc)
                 HStack(spacing: 10) {
                     photoCircle(p.photo, size: 42, fallback: "person.fill")
                     VStack(alignment: .leading, spacing: 2) {
@@ -551,7 +554,7 @@ struct CompetitionDetailView: View {
                     Spacer(minLength: 0)
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(value).font(SportsFonts.app(size: 22, weight: .heavy)).foregroundStyle(SpTheme.green).monospacedDigit()
+                    Text(value).font(SportsFonts.app(size: 22, weight: .heavy)).foregroundStyle(acc).monospacedDigit()
                     Text(unit).font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
                 }
             }
@@ -565,7 +568,7 @@ struct CompetitionDetailView: View {
     private func wcLeaderCard(_ title: String, _ p: SpWcLeader, value: String, unit: String) -> some View {
         Button { selectedPlayer = IDBox(id: p.id) } label: {
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(title).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(acc)
                 HStack(spacing: 10) {
                     photoCircle(p.photo, size: 42, fallback: "person.fill")
                     VStack(alignment: .leading, spacing: 2) {
@@ -575,7 +578,7 @@ struct CompetitionDetailView: View {
                     Spacer(minLength: 0)
                 }
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(value).font(SportsFonts.app(size: 22, weight: .heavy)).foregroundStyle(SpTheme.green).monospacedDigit()
+                    Text(value).font(SportsFonts.app(size: 22, weight: .heavy)).foregroundStyle(acc).monospacedDigit()
                     Text(unit).font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
                 }
             }
@@ -591,7 +594,7 @@ struct CompetitionDetailView: View {
             HStack(spacing: 12) {
                 Text("\(p.rank)")
                     .font(SportsFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(p.rank <= 3 ? SpTheme.green : SpTheme.onDarkFaint)
+                    .foregroundStyle(p.rank <= 3 ? acc : SpTheme.onDarkFaint)
                     .frame(width: 22)
                 photoCircle(p.photo, size: 38, fallback: "person.fill")
                 VStack(alignment: .leading, spacing: 2) {
@@ -607,7 +610,7 @@ struct CompetitionDetailView: View {
                 Spacer(minLength: 0)
                 VStack(spacing: 1) {
                     Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundStyle(SpTheme.gold)
-                    Text(value).font(SportsFonts.app(size: 17, weight: .heavy)).foregroundStyle(SpTheme.green).monospacedDigit()
+                    Text(value).font(SportsFonts.app(size: 17, weight: .heavy)).foregroundStyle(acc).monospacedDigit()
                     Text(unit).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
                 }
             }
@@ -654,7 +657,7 @@ struct CompetitionDetailView: View {
                 }
                 Text("\(row.rank)")
                     .font(SportsFonts.app(size: 12, weight: .bold))
-                    .foregroundStyle(row.rank <= 3 ? SpTheme.green : SpTheme.onDarkFaint)
+                    .foregroundStyle(row.rank <= 3 ? acc : SpTheme.onDarkFaint)
                     .monospacedDigit()
             }
             .frame(width: 30)
@@ -733,7 +736,7 @@ struct CompetitionDetailView: View {
         HStack(spacing: 12) {
             Text("\(s.rank)")
                 .font(SportsFonts.app(size: 13, weight: .bold))
-                .foregroundStyle(s.rank <= 3 ? SpTheme.green : SpTheme.onDarkFaint).frame(width: 22)
+                .foregroundStyle(s.rank <= 3 ? acc : SpTheme.onDarkFaint).frame(width: 22)
             photoCircle(s.photo, size: 38, fallback: "person.fill")
             VStack(alignment: .leading, spacing: 2) {
                 Text(s.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
@@ -744,7 +747,7 @@ struct CompetitionDetailView: View {
             }
             Spacer(minLength: 0)
             VStack(spacing: 1) {
-                Text("\(value)").font(SportsFonts.app(size: 18, weight: .heavy)).foregroundStyle(SpTheme.green).monospacedDigit()
+                Text("\(value)").font(SportsFonts.app(size: 18, weight: .heavy)).foregroundStyle(acc).monospacedDigit()
                 Text(unit).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
             }
         }
@@ -755,7 +758,7 @@ struct CompetitionDetailView: View {
         HStack(spacing: 12) {
             Text("\(s.rank)")
                 .font(SportsFonts.app(size: 13, weight: .bold))
-                .foregroundStyle(s.rank <= 3 ? SpTheme.green : SpTheme.onDarkFaint).frame(width: 22)
+                .foregroundStyle(s.rank <= 3 ? acc : SpTheme.onDarkFaint).frame(width: 22)
             photoCircle(s.photo, size: 38, fallback: "person.fill")
             VStack(alignment: .leading, spacing: 2) {
                 Text(s.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
@@ -766,7 +769,7 @@ struct CompetitionDetailView: View {
             }
             Spacer(minLength: 0)
             VStack(spacing: 1) {
-                Text("\(value)").font(SportsFonts.app(size: 18, weight: .heavy)).foregroundStyle(SpTheme.green).monospacedDigit()
+                Text("\(value)").font(SportsFonts.app(size: 18, weight: .heavy)).foregroundStyle(acc).monospacedDigit()
                 Text(unit).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
             }
         }
@@ -783,8 +786,8 @@ struct CompetitionDetailView: View {
             if hasAny {
                 VStack(alignment: .leading, spacing: 18) {
                     matchBucket("مباشر", m.live, tint: SpTheme.crimson, icon: "dot.radiowaves.left.and.right")
-                    matchBucket("اليوم", m.today, tint: SpTheme.green, icon: "calendar")
-                    matchBucket("قادمة", m.upcoming, tint: SpTheme.greenSoft, icon: "clock")
+                    matchBucket("اليوم", m.today, tint: acc, icon: "calendar")
+                    matchBucket("قادمة", m.upcoming, tint: acc, icon: "clock")
                     matchBucket("النتائج", Array(m.results.reversed()), tint: SpTheme.onDarkDim, icon: "checkmark.seal")
                 }
             } else {
@@ -807,8 +810,8 @@ struct CompetitionDetailView: View {
 
         return VStack(alignment: .leading, spacing: 18) {
             wcMatchBucket("مباشر", live, tint: SpTheme.crimson, icon: "dot.radiowaves.left.and.right")
-            wcMatchBucket("اليوم", today, tint: SpTheme.green, icon: "calendar")
-            wcMatchBucket("قادمة", upcoming, tint: SpTheme.greenSoft, icon: "clock")
+            wcMatchBucket("اليوم", today, tint: acc, icon: "calendar")
+            wcMatchBucket("قادمة", upcoming, tint: acc, icon: "clock")
             wcMatchBucket("النتائج", results, tint: SpTheme.onDarkDim, icon: "checkmark.seal")
             if wcFixtures.isEmpty {
                 SpEmptyState(icon: "sportscourt", title: "لا مباريات", subtitle: "لم تصل بيانات جدول كأس العالم بعد")
@@ -859,7 +862,7 @@ struct CompetitionDetailView: View {
                 HStack(spacing: 6) {
                     SpTeamLogo(logo: tr.from.logo, size: 16)
                     Text(tr.from.name).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
-                    Image(systemName: "arrow.left").font(.system(size: 9, weight: .bold)).foregroundStyle(SpTheme.green)
+                    Image(systemName: "arrow.left").font(.system(size: 9, weight: .bold)).foregroundStyle(acc)
                     SpTeamLogo(logo: tr.to.logo, size: 16)
                     Text(tr.to.name).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
                 }
@@ -867,7 +870,7 @@ struct CompetitionDetailView: View {
             Spacer(minLength: 0)
             if !tr.type.isEmpty {
                 Text(tr.type)
-                    .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                    .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(acc)
                     .lineLimit(1).environment(\.layoutDirection, .leftToRight)
             }
         }

@@ -157,6 +157,13 @@ nonisolated enum SpTheme {
         LinearGradient(colors: [heroTop, heroBottom], startPoint: .top, endPoint: .bottom)
     }
 
+    /// تدرّج ترويسة بصبغة البطولة (نص أبيض) — heroGradient في النمط الموحّد.
+    static func compHeroGradient(_ slug: String?) -> LinearGradient {
+        guard spVaraColorStyle, let slug, slug != "" else { return heroGradient }
+        let a = compAccent(slug)
+        return LinearGradient(colors: [a, a.opacity(0.78)], startPoint: .top, endPoint: .bottom)
+    }
+
     /// تدرّج الكتلة الخضراء السعودية البارزة (نص أبيض).
     static var saudiBlockGradient: LinearGradient {
         LinearGradient(colors: [green, greenDeep],
