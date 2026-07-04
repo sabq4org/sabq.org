@@ -78,6 +78,7 @@ export interface GcLeaderRow {
 
 /** صف الزائر نفسه ورتبته الحقيقية — يصل حتى لو كان خارج الصفحة المعروضة. */
 export interface GcLeaderboardViewer {
+  userId: string;
   rank: number;
   totalPoints: number;
   correctCount: number;

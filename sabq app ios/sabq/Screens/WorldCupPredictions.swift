@@ -1374,7 +1374,16 @@ struct WCConfettiView: View {
 
 private struct WCPredLeaderboardTab: View {
     @State private var leaders: [WCPredLeader] = []
+    /// العدد الكلي للمشاركين المؤهّلين — nil قبل نشر توسعة الخادم (تدهور سلس).
+    @State private var total: Int?
+    /// صف صاحب الجلسة ورتبته الحقيقية — يُثبَّت أسفل القائمة متى كان خارجها.
+    @State private var viewer: WCPredViewer?
+    @State private var limit = 100
     @State private var loading = true
+    @State private var loadingMore = false
+
+    /// سقف الخادم لعدد الصفوف (parseLeaderboardLimit في المسار).
+    private let serverLimitCap = 500
 
     var body: some View {
         VStack(spacing: 8) {
@@ -1383,10 +1392,27 @@ private struct WCPredLeaderboardTab: View {
             } else if leaders.isEmpty {
                 emptyText("لا متصدّرين بعد — كن أول من يصيب نتيجة مباراة!")
             } else {
+                if let total, total > 0 {
+                    Text("\(total) مشاركًا في المسابقة")
+                        .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 2)
+                }
                 ForEach(leaders) { row($0) }
+                if let viewer, !leaders.contains(where: { $0.userId == viewer.userId }) {
+                    viewerRow(viewer)
+                }
+                if canLoadMore {
+                    loadMoreButton
+                }
             }
         }
         .task { await load() }
+    }
+
+    private var canLoadMore: Bool {
+        guard let total else { return false }
+        return leaders.count < min(total, serverLimitCap)
     }
 
     private func row(_ l: WCPredLeader) -> some View {
@@ -1430,9 +1456,85 @@ private struct WCPredLeaderboardTab: View {
         }
     }
 
+    /// صف «أنت» المثبَّت — رتبة صاحب الجلسة الحقيقية وهو خارج الصفحة المعروضة.
+    private func viewerRow(_ v: WCPredViewer) -> some View {
+        VStack(spacing: 8) {
+            Rectangle().fill(WCTheme.chipFill).frame(height: 1).padding(.top, 2)
+            HStack(spacing: 12) {
+                Text("\(v.rank)")
+                    .font(SabqFonts.app(size: 13, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.gold)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().stroke(WCTheme.gold, lineWidth: 1.5))
+                    .environment(\.layoutDirection, .leftToRight)
+                Image(systemName: "person.crop.circle.fill")
+                    .font(.system(size: 30)).foregroundStyle(WCTheme.gold)
+                    .frame(width: 34, height: 34)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("أنت").font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    Text("\(v.correctCount) إصابة من \(v.playedCount)")
+                        .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
+                }
+                Spacer()
+                VStack(spacing: 1) {
+                    Text("\(v.totalPoints)")
+                        .font(SabqFonts.app(size: 16, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.gold)
+                        .environment(\.layoutDirection, .leftToRight)
+                    Text("نقطة").font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(WCTheme.card)
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.gold.opacity(0.5), lineWidth: 1))
+            )
+        }
+    }
+
+    private var loadMoreButton: some View {
+        Button {
+            Task { await loadMore() }
+        } label: {
+            HStack(spacing: 8) {
+                if loadingMore {
+                    ProgressView().tint(WCTheme.onDarkDim).scaleEffect(0.8)
+                }
+                Text(loadingMore ? "جارٍ التحميل…" : "عرض المزيد (\(leaders.count) من \(total ?? 0))")
+                    .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(WCTheme.chipFill, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(loadingMore)
+    }
+
     private func load() async {
-        if let r = try? await APIClient.shared.fetchWCLeaderboard() {
-            await MainActor.run { leaders = r; loading = false }
+        if let r = try? await APIClient.shared.fetchWCLeaderboard(limit: limit) {
+            await MainActor.run {
+                leaders = r.leaders
+                total = r.total
+                viewer = r.viewer
+                loading = false
+            }
         } else { await MainActor.run { loading = false } }
+    }
+
+    private func loadMore() async {
+        guard !loadingMore else { return }
+        let next = min(limit + 100, serverLimitCap)
+        await MainActor.run { loadingMore = true }
+        // فشل جلب الدفعة الأكبر يُبقي القائمة الحالية كما هي بلا وميض.
+        if let r = try? await APIClient.shared.fetchWCLeaderboard(limit: next) {
+            await MainActor.run {
+                leaders = r.leaders
+                total = r.total
+                viewer = r.viewer
+                limit = next
+            }
+        }
+        await MainActor.run { loadingMore = false }
     }
 }
