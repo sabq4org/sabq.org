@@ -45,8 +45,7 @@ import {
 import { type WcMomentum, type WcPressure } from "./sportmonksService";
 import pLimit from "p-limit";
 import { buildBracketModel, mergeFullKnockoutSchedule, type WcBracketModel } from "./wc2026Bracket";
-
-const API_BASE = "https://v3.football.api-sports.io";
+import { apiFootballGet } from "./apiFootballClient";
 
 // تجميع سباقات الهدّافين يحتاج أحداث كل المباريات الجارية/المنتهية دفعةً واحدة.
 // بلا حدّ تزامن كان Promise.all يطلق طلبًا (أو ثلاثة) لكل مباراة في نفس اللحظة،
@@ -74,27 +73,7 @@ export function isWorldCupConfigured(): boolean {
 }
 
 async function apiGet(path: string, params: Record<string, string | number>): Promise<any[]> {
-  const apiKey = (process.env.APIFOOTBALL_KEY || "").trim();
-  if (!apiKey) throw new Error("APIFOOTBALL_KEY is not set");
-
-  const url = new URL(`${API_BASE}/${path}`);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-
-  const response = await fetch(url, {
-    headers: { "x-apisports-key": apiKey },
-    signal: AbortSignal.timeout(15_000),
-  });
-
-  if (!response.ok) {
-    throw new Error(`[WorldCup] API-Football HTTP ${response.status} for ${path}`);
-  }
-
-  const data: any = await response.json();
-  const errors = data?.errors;
-  if (errors && !Array.isArray(errors) && Object.keys(errors).length > 0) {
-    throw new Error(`[WorldCup] API-Football error for ${path}: ${JSON.stringify(errors)}`);
-  }
-  return Array.isArray(data?.response) ? data.response : [];
+  return apiFootballGet("WorldCup", path, params);
 }
 
 // ---------- DTOs المُعرَّبة التي تستهلكها الواجهة ----------
