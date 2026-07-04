@@ -112,6 +112,12 @@ const eventSig = (e: SplMatchEvent): string => {
 const tsEventSeen = new Map<number, Set<string>>();
 let lastTsEventCleanup = 0;
 
+// حارس الإرسال الأخير: بصمة نصّ الإشعار نفسه لكل مباراة — مهما تقلّبت تواقيع
+// المزوّد أعلاه، إشعارٌ بعنوان+نصّ سبق إرسالهما حرفيًّا لنفس المباراة لا يخرج ثانيةً.
+const sentAlertSigs = new Map<number, Set<string>>();
+let lastSentSigsCleanup = 0;
+const alertSig = (a: DetectedAlert): string => `${a.kind}|${a.title}|${a.body}`;
+
 // توقيع مستقرّ ضد تذبذب دقيقة المزوّد (السبب الشائع لتكرار إشعار البطاقة، مثل ظهور
 // نفس البطاقة عند د83 ثم د84):
 //   - البطاقات: لاعب واحد ≤ بطاقة واحدة من كل نوع في المباراة → بلا دقيقة.
@@ -127,9 +133,12 @@ const tsEventSig = (e: TsEvent): string => {
     return `${e.type}|${e.team ?? ""}|${who}`;
   }
   if (e.type === "goal" || e.type === "penalty_goal" || e.type === "own_goal") {
+    // بلا لاعب في التوقيع: المزوّد يستكمل playerId/الاسم على دفعات بعد الحدث
+    // فيتقلّب التوقيع ويتكرّر الإشعار (هدف روميرو ×3 فجر 2026-07-04). الفريق +
+    // النوع + النتيجة التراكمية (أو الدقيقة عند غيابها) يميّزان كل هدف بثبات.
     const score =
       e.homeScore != null && e.awayScore != null ? `${e.homeScore}-${e.awayScore}` : String(e.minute);
-    return `${e.type}|${who}|${score}`;
+    return `${e.type}|${e.team ?? ""}|${score}`;
   }
   if (e.type === "var") {
     return `var|${e.team ?? ""}|${e.varReason ?? ""}|${e.varResult ?? ""}`;
@@ -173,7 +182,9 @@ function goalContext(m: SplLiveBoardItem): string | null {
 // v3: توقيع الفار صار بالفريق + سبب/نتيجة المراجعة (بلا دقيقة/ثانية) وأُضيف الهدف
 // العكسي — أي تغيير لاحق في صيغة التوقيع يستلزم رفع الرقم هنا وإلا أعادت الحالة
 // المحفوظة القديمة إطلاق أحداث المباراة الجارية بعد النشر.
-const STATE_KEY = "sports_alerts:baseline:v3";
+// v4: توقيع هدف TheSports بلا لاعب (استكمال playerId كان يكرّر الإشعار)، الاتحاد
+// التراكمي للتواقيع، وحارس الإرسال بنصّ الإشعار (sentAlertSigs ضمن الحالة).
+const STATE_KEY = "sports_alerts:baseline:v4";
 const STATE_TTL_SEC = 6 * 3600; // يكفي مباراة + استراحة
 let stateHydrated = false;
 
@@ -189,10 +200,12 @@ async function hydrateStateOnce(): Promise<void> {
       snapshots?: [number, MatchSnapshot][];
       eventSeen?: [number, string[]][];
       tsEventSeen?: [number, string[]][];
+      sentAlertSigs?: [number, string[]][];
     };
     for (const [id, snap] of parsed.snapshots ?? []) snapshots.set(id, snap);
     for (const [id, sigs] of parsed.eventSeen ?? []) eventSeen.set(id, new Set(sigs));
     for (const [id, sigs] of parsed.tsEventSeen ?? []) tsEventSeen.set(id, new Set(sigs));
+    for (const [id, sigs] of parsed.sentAlertSigs ?? []) sentAlertSigs.set(id, new Set(sigs));
     console.log(
       `[SportsAlerts] baseline hydrated from Redis (snapshots=${snapshots.size} ts=${tsEventSeen.size})`,
     );
@@ -209,6 +222,7 @@ async function persistState(): Promise<void> {
       snapshots: [...snapshots.entries()],
       eventSeen: [...eventSeen.entries()].map(([id, set]) => [id, [...set]]),
       tsEventSeen: [...tsEventSeen.entries()].map(([id, set]) => [id, [...set]]),
+      sentAlertSigs: [...sentAlertSigs.entries()].map(([id, set]) => [id, [...set]]),
     });
     await redis.set(STATE_KEY, payload, {
       expiration: { type: "EX", value: STATE_TTL_SEC },
@@ -331,7 +345,10 @@ async function detectEventAlerts(
     }
 
     const prev = eventSeen.get(m.id);
-    eventSeen.set(m.id, new Set(events.map(eventSig)));
+    // اتحاد تراكمي لا استبدال: اختفاء حدث مؤقتًا من بثّ المزوّد ثم عودته كان
+    // يمحو توقيعه فيُرسَل إشعاره من جديد — التوقيع المرصود يبقى حتى نهاية المباراة.
+    const curSigs = new Set(events.map(eventSig));
+    eventSeen.set(m.id, prev ? new Set([...prev, ...curSigs]) : curSigs);
     if (!prev) continue; // خطّ أساس فقط
 
     const matchName = `${m.home.name} ضد ${m.away.name}`;
@@ -581,7 +598,9 @@ async function detectTsEventAlerts(
     const matchName = `${m.home.name} ضد ${m.away.name}`;
 
     const prev = tsEventSeen.get(m.id);
-    tsEventSeen.set(m.id, new Set(ts.events.map(tsEventSig)));
+    // اتحاد تراكمي لا استبدال (نفس علّة eventSeen — الاختفاء المؤقت يعيد الإرسال).
+    const curSigs = new Set(ts.events.map(tsEventSig));
+    tsEventSeen.set(m.id, prev ? new Set([...prev, ...curSigs]) : curSigs);
     if (!prev) continue; // خطّ أساس فقط
 
     for (const e of ts.events) {
@@ -695,7 +714,23 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
 
   let recipients = 0;
   for (const alert of allAlerts) {
+    // حارس أخير: نصّ سبق إرساله حرفيًّا لنفس المباراة لا يُرسَل ثانيةً مهما
+    // تقلّبت تواقيع المزوّد (استكمال الأسماء/النتائج على دفعات).
+    const sigs = sentAlertSigs.get(alert.fixtureId) ?? new Set<string>();
+    const sig = alertSig(alert);
+    if (sigs.has(sig)) continue;
+    sigs.add(sig);
+    sentAlertSigs.set(alert.fixtureId, sigs);
     recipients += await dispatchAlert(alert);
+  }
+  // تنظيف ساعيّ لبصمات مباريات خرجت من قائمة اليوم (لا كل دورة — الاختفاء
+  // العابر للمباراة من القائمة بسبب فشل جلبٍ مؤقت يجب ألّا يمسح بصماتها).
+  const nowMs = Date.now();
+  if (nowMs - lastSentSigsCleanup > 3_600_000) {
+    lastSentSigsCleanup = nowMs;
+    for (const id of sentAlertSigs.keys()) {
+      if (!byId.has(id)) sentAlertSigs.delete(id);
+    }
   }
 
   // نحفظ خطّ الأساس المُحدَّث فيصمد لإعادة النشر التالية (أفضل جهد، لا يُعيق الدورة).

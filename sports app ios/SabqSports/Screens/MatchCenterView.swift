@@ -13,6 +13,26 @@ extension VaraTeamStrength {
     }
 }
 
+// حكم المباراة وصرامته بالأرقام — من نقطة المونديال /world-cup/match/:id/referee
+// (SportMonks). أفضل جهد: بطولات بلا حكم معلن → available=false فتختفي البطاقة.
+nonisolated struct SpRefereeStats: Decodable {
+    let matches: Int
+    let yellowAvg: Double?
+    let yellowCount: Int?
+    let redCount: Int
+    let penaltiesAvg: Double?
+    let penaltiesCount: Int?
+    let varMoments: Int?
+}
+
+nonisolated struct SpMatchReferee: Decodable {
+    let available: Bool
+    let name: String
+    let photo: String?
+    let countryName: String?
+    let stats: SpRefereeStats?
+}
+
 struct SpMatchCenter: View {
     let fixtureId: Int
     /// معاينة من بطاقة المباراة لعرض الترويسة فورًا قبل اكتمال التحميل.
@@ -50,6 +70,7 @@ struct SpMatchCenter: View {
 
     // إثراء (المرحلة 2): التعليق اللحظي المُعرَّب
     @State private var commentary: SpCommentary?
+    @State private var referee: SpMatchReferee?
     // التشكيلة المتوقعة (SportMonks) — تُجلب فقط قبل صدور الرسمية ولغير المنتهية
     @State private var expectedLineup: SpExpectedLineups?
     // قوّة الفريقين من ترتيب البطولة — تغذّي «توقّع VARA» الديناميكي (أفضل جهد).
@@ -88,9 +109,14 @@ struct SpMatchCenter: View {
 
     /// آخر هدف/بطاقة لعرضه أسفل بطاقة شاشة القفل (يطابق صياغة الخادم).
     private func lastEventText(_ events: [SpMatchEvent]) -> String? {
-        let ranked = events.sorted {
-            ($0.minute ?? 0, $0.extra ?? 0) > ($1.minute ?? 0, $1.extra ?? 0)
-        }
+        let ranked = events.enumerated()
+            .sorted { a, b in
+                let ka = (a.element.minute ?? 0, a.element.extra ?? 0)
+                let kb = (b.element.minute ?? 0, b.element.extra ?? 0)
+                if ka != kb { return ka > kb }
+                return a.offset > b.offset   // نفس الدقيقة: الأحدث بتسلسل المزوّد.
+            }
+            .map(\.element)
         let kinds = ["goal", "yellow-card", "red-card", "missed-penalty"]
         guard let ev = ranked.first(where: { kinds.contains($0.type) }) else { return nil }
         let icon = ev.type == "goal" ? "⚽" : ev.type == "yellow-card" ? "🟨"
@@ -117,6 +143,7 @@ struct SpMatchCenter: View {
             home: f.home,
             away: f.away,
             goals: f.goals,
+            penalties: f.penalties,
             competition: competition,
             competitionSlug: competitionSlug
         )
@@ -127,7 +154,11 @@ struct SpMatchCenter: View {
         guard let f = fixture else { return "مباراة عبر VARA" }
         let middle: String
         if f.started {
-            middle = "\(f.goals.home ?? 0) - \(f.goals.away ?? 0)"
+            var score = "\(f.goals.home ?? 0) - \(f.goals.away ?? 0)"
+            if let p = f.penaltyScore, let h = p.home, let a = p.away {
+                score += " (ترجيح \(max(h, a))-\(min(h, a)))"
+            }
+            middle = score
         } else {
             middle = "×"
         }
@@ -168,6 +199,7 @@ struct SpMatchCenter: View {
 
                 preMatchCard
                 matchInfoCard
+                refereeCard
                 varaModelCard
                 varaVerdictCard
 
@@ -222,6 +254,8 @@ struct SpMatchCenter: View {
             }
         }
         .task { await load() }
+        // حكم المباراة (نقطة المونديال — أفضل جهد؛ تختفي البطاقة إن لا حكم/بطولة أخرى).
+        .task(id: fixtureId) { await loadReferee() }
         // تحديث لحظي تلقائي أثناء اللعب — الأهداف/الكروت/الدقيقة/النتيجة تتجدّد
         // ذاتيًّا كما في الويب دون سحب-لتحديث يدوي. يتوقّف عند الانتهاء/البُعد.
         .task(id: detail?.fixture.id) { await pollLive() }
@@ -247,6 +281,18 @@ struct SpMatchCenter: View {
                 teamColumn(f.home)
                 centerColumn(f)
                 teamColumn(f.away)
+            }
+            // حسم الترجيح — الأرقام في Text مستقل LTR (دمجها بالجملة يقلبها بيديًّا).
+            if f.status.finished, let p = f.penaltyScore,
+               let h = p.home, let a = p.away, h != a {
+                HStack(spacing: 4) {
+                    Text("فاز \(h > a ? f.home.name : f.away.name) بركلات الترجيح")
+                    Text("\(max(h, a))-\(min(h, a))")
+                        .monospacedDigit()
+                        .environment(\.layoutDirection, .leftToRight)
+                }
+                .font(SportsFonts.app(size: 13, weight: .heavy))
+                .foregroundStyle(SpTheme.green)
             }
             let meta = headerMeta(f)
             if !meta.isEmpty {
@@ -300,6 +346,19 @@ struct SpMatchCenter: View {
                     .font(SportsFonts.app(size: 28, weight: .heavy))
                     .foregroundStyle(SpTheme.green)
                     .environment(\.layoutDirection, .leftToRight)
+            }
+            // أثناء الترجيح فقط: النتيجة الجارية ركلةً بركلة (بعد الحسم تكفي جملة
+            // الفائز أسفل الترويسة — لا نكدّس سطرين بالمعلومة نفسها).
+            if f.shootoutLive, let p = f.penaltyScore {
+                HStack(spacing: 5) {
+                    Text("\(p.away ?? 0) - \(p.home ?? 0)")
+                        .font(SportsFonts.app(size: 16, weight: .heavy))
+                        .monospacedDigit()
+                        .environment(\.layoutDirection, .leftToRight)
+                    Text("ترجيح")
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                }
+                .foregroundStyle(SpTheme.crimson)
             }
             SpStatusPill(fixture: f)
         }
@@ -393,6 +452,75 @@ struct SpMatchCenter: View {
 
     private var infoDivider: some View {
         Rectangle().fill(SpTheme.outline.opacity(0.6)).frame(height: 1).padding(.leading, 52)
+    }
+
+    // MARK: - حكم المباراة (كما في ويب المونديال — أعداد صحيحة لا متوسطات كسرية)
+
+    @ViewBuilder private var refereeCard: some View {
+        if let r = referee, r.available, !r.name.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 11) {
+                    SpAvatarImage(url: r.photo ?? "", size: 40, ring: SpTheme.cardStroke)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("حكم المباراة")
+                            .font(SportsFonts.app(size: 11, weight: .heavy))
+                            .foregroundStyle(SpTheme.green)
+                        Text(r.name)
+                            .font(SportsFonts.app(size: 15, weight: .heavy))
+                            .foregroundStyle(SpTheme.onDark)
+                            .lineLimit(1).minimumScaleFactor(0.8)
+                        if let c = r.countryName, !c.isEmpty {
+                            Text(c)
+                                .font(SportsFonts.app(size: 11, weight: .semibold))
+                                .foregroundStyle(SpTheme.onDarkDim)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                    if let s = r.stats {
+                        Text("\(s.matches) \(s.matches == 1 ? "مباراة" : "مباريات") بالبطولة")
+                            .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkDim)
+                    }
+                }
+                if let s = r.stats {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 7) {
+                            let yellow = s.yellowCount ?? s.yellowAvg.map { Int(($0 * Double(s.matches)).rounded()) }
+                            let pens = s.penaltiesCount ?? s.penaltiesAvg.map { Int(($0 * Double(s.matches)).rounded()) }
+                            if let yellow { refereeChip("🟨 \(yellow) صفراء") }
+                            refereeChip("🟥 \(s.redCount) حمراء")
+                            if let pens { refereeChip("⚽ \(pens) \(pens == 1 ? "ركلة جزاء" : "ركلات جزاء")") }
+                            if let v = s.varMoments { refereeChip("فار ×\(v)") }
+                        }
+                    }
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
+                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+            )
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private func refereeChip(_ text: String) -> some View {
+        Text(text)
+            .font(SportsFonts.app(size: 11.5, weight: .bold))
+            .foregroundStyle(SpTheme.onDark)
+            .monospacedDigit()
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(SpTheme.chipFill))
+    }
+
+    /// جلب حكم المباراة — أفضل جهد (لا يعطّل المركز إن غابت النقطة/الحكم).
+    private func loadReferee() async {
+        referee = try? await APIClient.shared.get(
+            SpMatchReferee.self,
+            path: "/world-cup/match/\(fixtureId)/referee",
+            apiRoot: URLConstants.publicAPI
+        )
     }
 
     // MARK: - توقّع VARA (نموذج ديناميكي: ترتيب + فورمة + أفضلية أرض + مواجهات)
@@ -970,7 +1098,15 @@ struct SpMatchCenter: View {
     }
 
     private func timelineItems(_ events: [SpMatchEvent], homeId: Int) -> [SpTimelineItem] {
-        let sorted = events.sorted { eff($0) > eff($1) }
+        // كسر تعادل الدقيقة بترتيب المزوّد الأصلي — بدونه تنقلب ركلات الترجيح
+        // (كلها بالدقيقة نفسها) فتظهر ركلة لاحقة قبل سابقتها.
+        let sorted = events.enumerated()
+            .sorted { a, b in
+                let ea = eff(a.element), eb = eff(b.element)
+                if ea != eb { return ea > eb }
+                return a.offset > b.offset
+            }
+            .map(\.element)
         let secondHalfReached = sorted.contains { !isFirstHalf($0) }
             || (fixture?.status.finished ?? false)
             || ((fixture?.status.elapsed ?? 0) > 45)

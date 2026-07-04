@@ -72,6 +72,7 @@ extension SpFixture {
             home: SpTeam(id: f.home.id, name: f.home.name, logo: f.home.logo, winner: f.home.winner),
             away: SpTeam(id: f.away.id, name: f.away.name, logo: f.away.logo, winner: f.away.winner),
             goals: SpScore(home: f.goals.home, away: f.goals.away),
+            penalties: f.penalties.map { SpScore(home: $0.home, away: $0.away) },
             competition: "كأس العالم",
             competitionSlug: "world-cup"
         )
@@ -1333,18 +1334,31 @@ private struct SpWcMatchRow: View {
         if fixture.status.live {
             HStack(spacing: 4) {
                 Circle().fill(SpTheme.crimson).frame(width: 5, height: 5)
-                Text(liveMinute)
+                if fixture.status.code == "P", let p = fixture.penalties,
+                   p.home != nil || p.away != nil {
+                    penaltyDigits(p)
+                } else {
+                    Text(liveMinute)
+                }
             }
             .font(SportsFonts.app(size: 10.5, weight: .bold))
             .foregroundStyle(SpTheme.crimson)
             .lineLimit(1)
-            .minimumScaleFactor(0.8)
+            .minimumScaleFactor(0.6)
         } else if fixture.status.finished {
-            Text(penaltyText ?? "انتهت")
-                .font(SportsFonts.app(size: 10.5, weight: penaltyText == nil ? .semibold : .bold))
-                .foregroundStyle(penaltyText == nil ? SpTheme.onDarkDim : SpTheme.green)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            if let p = fixture.penalties, p.home != nil || p.away != nil {
+                penaltyDigits(p)
+                    .font(SportsFonts.app(size: 10.5, weight: .bold))
+                    .foregroundStyle(SpTheme.green)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+            } else {
+                Text("انتهت")
+                    .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
         } else {
             Text("موعد")
                 .font(SportsFonts.app(size: 10.5, weight: .semibold))
@@ -1356,16 +1370,16 @@ private struct SpWcMatchRow: View {
         "\(fixture.goals.away ?? 0)-\(fixture.goals.home ?? 0)"
     }
 
-    // السطر الفرعي المضغوط (عرض ~50pt): نتيجة الترجيح بالفائز أولًا حتى لا تنقلب،
-    // واسم الفائز يظهر مظلَّلًا (heavy) في عموده. تتعادل ركلات الترجيح نادرًا جدًّا؛
-    // عندها نتراجع لإظهار النتيجة كما وردت.
-    private var penaltyText: String? {
-        guard
-            let penalties = fixture.penalties,
-            let home = penalties.home,
-            let away = penalties.away
-        else { return nil }
-        return "ترجيح \(max(home, away))-\(min(home, away))"
+    /// أرقام الترجيح محاذيةً لعمودَي الفريقين (ضيف-مضيف كسطر النتيجة) في Text
+    /// مستقل مفروض LTR — دمجها بسلسلة عربية واحدة يقلب الأرقام في التصيير (بيدي).
+    /// الفائز يظهر مظلَّلًا (heavy) في عموده عبر penWinnerHome.
+    private func penaltyDigits(_ p: SpWcScore) -> some View {
+        HStack(spacing: 3) {
+            Text("ترجيح")
+            Text("\(p.away ?? 0)-\(p.home ?? 0)")
+                .monospacedDigit()
+                .environment(\.layoutDirection, .leftToRight)
+        }
     }
 
     private var liveMinute: String {
@@ -1476,6 +1490,18 @@ struct WcMatchCenter: View {
                 centerColumn
                 teamColumn(fx.away)
             }
+            // حسم الترجيح — الأرقام في Text مستقل LTR (دمجها بالجملة يقلبها بيديًّا).
+            if fx.status.finished, let p = fx.penalties,
+               let h = p.home, let a = p.away, h != a {
+                HStack(spacing: 4) {
+                    Text("فاز \(h > a ? fx.home.name : fx.away.name) بركلات الترجيح")
+                    Text("\(max(h, a))-\(min(h, a))")
+                        .monospacedDigit()
+                        .environment(\.layoutDirection, .leftToRight)
+                }
+                .font(SportsFonts.app(size: 13, weight: .heavy))
+                .foregroundStyle(SpTheme.green)
+            }
             if !headerMeta.isEmpty {
                 Text(headerMeta)
                     .font(SportsFonts.app(size: 11))
@@ -1528,6 +1554,19 @@ struct WcMatchCenter: View {
                     .font(SportsFonts.app(size: 28, weight: .heavy))
                     .foregroundStyle(SpTheme.green)
                     .environment(\.layoutDirection, .leftToRight)
+            }
+            // أثناء الترجيح فقط: النتيجة الجارية ركلةً بركلة (بعد الحسم تكفي جملة الفائز).
+            if fx.status.code == "P", fx.status.live,
+               let p = fx.penalties, p.home != nil || p.away != nil {
+                HStack(spacing: 5) {
+                    Text("\(p.away ?? 0) - \(p.home ?? 0)")
+                        .font(SportsFonts.app(size: 16, weight: .heavy))
+                        .monospacedDigit()
+                        .environment(\.layoutDirection, .leftToRight)
+                    Text("ترجيح")
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                }
+                .foregroundStyle(SpTheme.crimson)
             }
             statusPill
         }
@@ -1862,7 +1901,14 @@ struct WcMatchCenter: View {
     }
 
     private func timelineItems(_ events: [SpWcEvent], homeId: Int) -> [WcTimelineItem] {
-        let sorted = events.sorted { eff($0) > eff($1) }
+        // كسر تعادل الدقيقة بترتيب المزوّد — يحفظ تسلسل ركلات الترجيح الفعلي.
+        let sorted = events.enumerated()
+            .sorted { a, b in
+                let ea = eff(a.element), eb = eff(b.element)
+                if ea != eb { return ea > eb }
+                return a.offset > b.offset
+            }
+            .map(\.element)
         let secondHalfReached = sorted.contains { !isFirstHalf($0) } || fx.status.finished || ((fx.status.elapsed ?? 0) > 45)
         let ht = halftimeScore(events, homeId: homeId)
         var items: [WcTimelineItem] = []
