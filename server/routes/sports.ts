@@ -1668,6 +1668,90 @@ export function registerSportsRoutes(app: Express) {
   // (sportsPoolPredictionsService). ?comp=<slug> — البطل 5000 والهدّاف 5000،
   // تُقفل عند بدء ربع النهائي. GET عام، POST يتطلّب جلسة ويب.
   // ============================================================
+  // ============================================================
+  // مجمّع المباريات (نمط المونديال) — نظائر الويب لنقاط الموبايل /v1:
+  // اللوحة (اليوم والغد، ?comp= لتصفية بطولة كصفحة كأس الملك)، الإرسال
+  // بلقطة المباراة، توقّعاتي + إحصاءاتي، والمتصدّرون. كأس الملك بملف
+  // خاص في المحرّك: 500 نقطة تقتسمها «الدقيقة» بالتساوي بلا ترحيل.
+  // ============================================================
+  app.get("/api/sports/predictions/board", async (req: any, res) => {
+    try {
+      const svc = await import("../services/sportsPoolPredictionsService");
+      const comp = typeof req.query.comp === "string" && req.query.comp.trim() ? req.query.comp.trim() : null;
+      const data = await svc.getUpcomingPredictableMatches(req.user?.id);
+      const matches = comp ? data.matches.filter((m) => m.fixture.competitionSlug === comp) : data.matches;
+      res.set("Cache-Control", req.user ? "private, no-store" : "public, max-age=30, s-maxage=60");
+      res.json({ ...data, matches });
+    } catch (error) {
+      console.error("[Sports] predictions board failed:", error);
+      res.status(502).json({ matches: [], me: null, jackpot: 0 });
+    }
+  });
+
+  app.post("/api/sports/predictions/pool", requireAuth, async (req: any, res) => {
+    try {
+      const svc = await import("../services/sportsPoolPredictionsService");
+      const b = req.body ?? {};
+      const result = await svc.submitPrediction(req.user.id, {
+        fixtureId: Number(b.fixtureId),
+        kickoffTs: Number(b.kickoffTs),
+        competitionSlug: b.competitionSlug != null ? String(b.competitionSlug) : null,
+        homeId: Number.isFinite(Number(b.homeId)) ? Number(b.homeId) : null,
+        awayId: Number.isFinite(Number(b.awayId)) ? Number(b.awayId) : null,
+        homeName: String(b.homeName ?? ""),
+        awayName: String(b.awayName ?? ""),
+        homeLogo: b.homeLogo != null ? String(b.homeLogo) : null,
+        awayLogo: b.awayLogo != null ? String(b.awayLogo) : null,
+        predHome: Number(b.predHome),
+        predAway: Number(b.predAway),
+      });
+      res.set("Cache-Control", "private, no-store");
+      if (!result.ok) {
+        const messages: Record<string, string> = {
+          LOCKED: "أُقفلت التوقّعات — اقترب موعد الانطلاق أو بدأت المباراة",
+          DRAW_NOT_ALLOWED: "لا تعادل في الأدوار الإقصائية — رجّح منتصرًا",
+          INVALID: "بيانات غير صحيحة",
+        };
+        res.status(result.reason === "LOCKED" ? 409 : 400).json({
+          reason: result.reason,
+          message: messages[result.reason] ?? "تعذر حفظ التوقّع",
+        });
+        return;
+      }
+      res.json({ success: true, prediction: result.prediction ?? null });
+    } catch (error) {
+      console.error("[Sports] submit pool prediction failed:", error);
+      res.status(502).json({ message: "تعذر حفظ توقّعك حاليًا" });
+    }
+  });
+
+  app.get("/api/sports/predictions/pool/mine", requireAuth, async (req: any, res) => {
+    try {
+      const svc = await import("../services/sportsPoolPredictionsService");
+      const [predictions, stats] = await Promise.all([
+        svc.getMyPredictions(req.user.id),
+        svc.getMeStats(req.user.id),
+      ]);
+      res.set("Cache-Control", "private, no-store");
+      res.json({ predictions, stats });
+    } catch (error) {
+      console.error("[Sports] pool mine failed:", error);
+      res.status(502).json({ predictions: [], stats: null });
+    }
+  });
+
+  app.get("/api/sports/predictions/pool/leaderboard", async (_req, res) => {
+    try {
+      const svc = await import("../services/sportsPoolPredictionsService");
+      const leaders = await svc.getLeaderboard();
+      res.set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=300");
+      res.json({ leaders });
+    } catch (error) {
+      console.error("[Sports] pool leaderboard failed:", error);
+      res.status(502).json({ leaders: [] });
+    }
+  });
+
   app.get("/api/sports/predictions/long", async (req: any, res) => {
     const comp = typeof req.query.comp === "string" ? req.query.comp.trim() : "";
     if (!comp) {
