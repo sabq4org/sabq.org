@@ -189,9 +189,19 @@ export interface KcTeamCupStats {
 
 export async function getKcTeamCupStats(teamId: number): Promise<KcTeamCupStats | null> {
   const c = comp();
-  const cur = await splGetTeamStats(teamId, c, { force: true }).catch(() => null);
-  if (cur && cur.fixtures.played.total > 0) return { season: cur.season, stats: cur };
-  const prevSeason = (cur?.season ?? new Date().getFullYear() + 1) - 1;
+  // قبل انطلاق الموسم لا معنى لنداء إحصائيات الموسم الجاري (صفر مباريات دائمًا) —
+  // نستدل من جدول الكأس المُكاش أصلًا ونوفّر نداء مزوّد في كل فتح صفحة نادٍ
+  // (كان يضخّم عاصفة ما بعد النشر — سجلات 2026-07-04).
+  const fixtures = await getKcFixtures().catch(() => [] as SplFixture[]);
+  const currentStarted = fixtures.some((f) => f.status.live || f.status.finished);
+  let season: number | null = null;
+  if (currentStarted) {
+    const cur = await splGetTeamStats(teamId, c, { force: true }).catch(() => null);
+    if (cur && cur.fixtures.played.total > 0) return { season: cur.season, stats: cur };
+    season = cur?.season ?? null;
+  }
+  if (season == null) season = await splGetCompetitionSeason(c).catch(() => null);
+  const prevSeason = (season ?? new Date().getFullYear() + 1) - 1;
   const prev = await splGetTeamStats(teamId, c, { force: true, seasonOverride: prevSeason }).catch(() => null);
   if (prev && prev.fixtures.played.total > 0) return { season: prev.season, stats: prev };
   return null;
