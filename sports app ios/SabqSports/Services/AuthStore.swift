@@ -333,6 +333,70 @@ nonisolated struct SpFavTeam: Codable, Identifiable, Hashable {
     let logo: String?
 }
 
+// MARK: - البطولات المفضّلة (تخصيص محلّي خفيف)
+
+// مثل «الفريق المفضّل» لكن متعدد: يحفظ لقطة البطولة كاملة حتى يظهر بلك
+// «بطولاتي» فورًا في تبويب البطولات، بلا تسجيل دخول وبلا انتظار شبكة.
+@MainActor
+@Observable
+final class SpCompetitionFavorites {
+    static let shared = SpCompetitionFavorites()
+
+    private(set) var items: [SpCompetition] = []
+
+    private let key = "sabqsports.favorite.competitions"
+
+    private init() {
+        if let data = UserDefaults.standard.data(forKey: key),
+           let stored = try? JSONDecoder().decode([SpCompetition].self, from: data) {
+            items = stored
+        }
+    }
+
+    func isFavorite(_ slug: String) -> Bool {
+        items.contains { $0.slug == slug }
+    }
+
+    func toggle(_ competition: SpCompetition) {
+        if isFavorite(competition.slug) {
+            remove(competition.slug)
+        } else {
+            add(competition)
+        }
+    }
+
+    func add(_ competition: SpCompetition) {
+        guard !isFavorite(competition.slug) else { return }
+        items.append(competition)
+        persist()
+    }
+
+    func remove(_ slug: String) {
+        items.removeAll { $0.slug == slug }
+        persist()
+    }
+
+    func sync(with competitions: [SpCompetition]) {
+        guard !items.isEmpty else { return }
+        let bySlug = Dictionary(uniqueKeysWithValues: competitions.map { ($0.slug, $0) })
+        var changed = false
+        items = items.map { stored in
+            if let fresh = bySlug[stored.slug], fresh != stored {
+                changed = true
+                return fresh
+            }
+            return stored
+        }
+        if changed { persist() }
+    }
+
+    private func persist() {
+        if let data = try? JSONEncoder().encode(items) {
+            UserDefaults.standard.set(data, forKey: key)
+        }
+    }
+}
+
 // «متابعة المباريات» — متابعة مباريات بعينها (روشن أساسًا، وكأس العالم تجريبيًّا).
 // تخصيص محلّي يعمل **بلا تسجيل دخول** (UserDefaults): نحفظ لقطة كاملة من المباراة
 // (`SpFixture`) لعرضها فورًا في بطاقة «مبارياتي» بالرئيسية مع عدّاد تنازلي حيّ، ونجدّد
