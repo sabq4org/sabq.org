@@ -1157,6 +1157,15 @@ enum SpDateMath {
 enum SpFormat {
     private static let riyadh = TimeZone(identifier: "Asia/Riyadh")!
 
+    // تقويم الرياض الميلادي (للمقارنات isDateInToday/...) — يطابق إعدادات
+    // formatters أعلاه: أسماء عربية + أرقام لاتينية + ميلادي + توقيت الرياض.
+    private static let riyadhCal: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = riyadh
+        c.locale = Locale(identifier: "ar-u-nu-latn")
+        return c
+    }()
+
     private static var formatters: [String: DateFormatter] = [:]
 
     private static func makeFormatter(_ pattern: String, locale: Locale = Locale(identifier: "ar-u-nu-latn")) -> DateFormatter {
@@ -1206,6 +1215,27 @@ enum SpFormat {
         let f = makeFormatter("yyyy-MM-dd", locale: Locale(identifier: "en_US_POSIX"))
         formatters[key] = f
         return f.string(from: date)
+    }
+
+    /// تاريخ رقمي «2026/07/04» بتوقيت الرياض (أرقام لاتينية) — لفواصل التجميع
+    /// في تبويب «مبارياتي». يعتمد نفس تقنية dateKey: en_US_POSIX + cache منفصل.
+    static func numericDate(_ date: Date) -> String {
+        let key = "posix:yyyy/MM/dd"
+        if let f = formatters[key] { return f.string(from: date) }
+        let f = makeFormatter("yyyy/MM/dd", locale: Locale(identifier: "en_US_POSIX"))
+        formatters[key] = f
+        return f.string(from: date)
+    }
+
+    /// فاصل اليوم لتبويب «مبارياتي»: «اليوم · 2026/07/04» (أو غدًا/أمس)، وإلا
+    /// الرقم فقط «2026/07/04». المقارنات بتقويم الرياض فلا تتأثّر بتوقيت الجهاز.
+    static func daySeparator(_ date: Date) -> String {
+        let cal = Self.riyadhCal
+        let numeric = numericDate(date)
+        if cal.isDateInToday(date) { return "اليوم · \(numeric)" }
+        if cal.isDateInTomorrow(date) { return "غدًا · \(numeric)" }
+        if cal.isDateInYesterday(date) { return "أمس · \(numeric)" }
+        return numeric
     }
 
     /// وقت نسبي بالعربية («قبل ٣ ساعات») — لبطاقات الأخبار.

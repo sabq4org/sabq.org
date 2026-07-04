@@ -487,8 +487,15 @@ struct SpMyMatchesCard: View {
                 VStack(spacing: 0) {
                     ForEach(Array(matches.enumerated()), id: \.element.id) { idx, f in
                         if idx > 0 {
-                            Rectangle().fill(SpTheme.outline).frame(height: 1)
-                                .padding(.leading, 14)
+                            // عند تغيّر اليوم بين مباراتين متتاليتين نُظهر فاصل التاريخ
+                            // بدل الفاصل الرفيع؛ المصفوفة مرتّبة تصاعدياً حسب timestamp
+                            // فمباريات نفس اليوم متجاورة دائماً (SpMatchFollows.sortAndPersist).
+                            if SpFormat.dateKey(matches[idx - 1].kickoff) != SpFormat.dateKey(f.kickoff) {
+                                dateSeparator(f.kickoff)
+                            } else {
+                                Rectangle().fill(SpTheme.outline).frame(height: 1)
+                                    .padding(.leading, 14)
+                            }
                         }
                         row(f)
                     }
@@ -544,6 +551,22 @@ struct SpMyMatchesCard: View {
         }
         .padding(.horizontal, 14)
         .padding(.top, 14)
+    }
+
+    // فاصل التاريخ بين مجموعتي يوم: خطّان رفيعان يحصران نصّ اليوم والتاريخ
+    // بالمنتصف (ــــــــ اليوم · 2026/07/04 ــــــــ). الألوان والسماكة تطابق
+    // MatchesView.dayHeader؛ fixedSize تمنع قطع التاريخ الطويل.
+    private func dateSeparator(_ date: Date) -> some View {
+        HStack(spacing: 10) {
+            Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 0.5)
+            Text(SpFormat.daySeparator(date))
+                .font(SportsFonts.app(size: 11, weight: .bold))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .fixedSize()
+            Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 0.5)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
     }
 
     // صفّ موحّد مطابق لشاشة «المباريات» عبر SpScoreRow + نجمة إلغاء المتابعة.
