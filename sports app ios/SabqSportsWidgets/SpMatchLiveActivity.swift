@@ -244,8 +244,9 @@ private struct LockScreenView: View {
         }
     }
 
-    // سطران: عدّاد الوقت (مع نقطة البث) فوق، ورقم الشوط/استراحة أسفله — يمنع
-    // انقصاص «46:00 · الشوط الث…» حين يجتمعان في سطر واحد.
+    // سطران: رقم الدقيقة (مع نقطة البث) فوق، ورقم الشوط/استراحة أسفله. كلاهما
+    // موسّط أفقيًّا تحت النتيجة (frame maxWidth: .infinity + محاذاة وسط) كي لا
+    // ينزلق النصّ لأحد الجانبين حين تتغيّر قيمة الدقيقة.
     @ViewBuilder private var statusBadge: some View {
         VStack(spacing: 3) {
             HStack(spacing: 5) {
@@ -258,14 +259,18 @@ private struct LockScreenView: View {
                     .foregroundStyle(context.state.isLive ? SpLA.liveDot : SpLA.dim)
                     .lineLimit(1)
             }
+            .frame(maxWidth: .infinity, alignment: .center)
             if let sub = secondaryStatusLine {
                 Text(sub)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(SpLA.dim)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .multilineTextAlignment(.center)
             }
         }
+        .frame(maxWidth: .infinity)
     }
 
     /// السطر الأوّل من شارة الحالة: نصّ الدقيقة الحيّة **كما يظهر داخل التطبيق**
