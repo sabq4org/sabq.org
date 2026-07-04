@@ -522,10 +522,11 @@ struct HomeView: View {
             if !(matches?.upcoming.isEmpty ?? true) || !(matches?.today.isEmpty ?? true) {
                 gameweekStrip
             }
+            // تسلسل مبارياتي متماسك: القادمة/اليوم → آخر النتائج → الترتيب (قرار 2026-07-04).
+            if !(matches?.results.isEmpty ?? true) { recentResultsCard.padding(.horizontal, 16) }
             if !standings.isEmpty { titleRaceCard.padding(.horizontal, 16) }
             if !scorers.isEmpty { scorersAssistsCard.padding(.horizontal, 16) }
             if !standings.isEmpty { statSpotlight.padding(.horizontal, 16) }
-            if !(matches?.results.isEmpty ?? true) { recentResultsCard.padding(.horizontal, 16) }
             if !transfers.isEmpty { transfersCard.padding(.horizontal, 16) }
         }
     }
@@ -960,7 +961,7 @@ struct HomeView: View {
             }
             .buttonStyle(SpPressStyle())
             VStack(spacing: 0) {
-                ForEach(Array(transfers.prefix(5).enumerated()), id: \.element.id) { idx, t in
+                ForEach(Array(transfers.prefix(3).enumerated()), id: \.element.id) { idx, t in
                     if idx > 0 { Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 1) }
                     transferRow(t)
                 }
@@ -971,24 +972,38 @@ struct HomeView: View {
         }
     }
 
+    // صفّ انتقال روشن — مطابق لنمط TcConfirmedRow في مركز الانتقالات: شارة
+    // «مؤكّدة» + chips الأندية (من ← إلى) + وسم نوع الصفقة (إعارة/انتقال حر).
+    // النقر يفتح صفحة النادي الوجهة. المبلغ غير متاح هنا (نموذج iOS بلا feeValue).
     private func transferRow(_ t: SpLeagueTransfer) -> some View {
         let toRoshn = t.inClubId != nil
-        return Button { selectedTeam = IDBox(id: toRoshn ? t.to.id : t.from.id) } label: {
+        let dest = toRoshn ? t.to : t.from
+        return Button { selectedTeam = IDBox(id: dest.id) } label: {
             HStack(spacing: 11) {
-                playerAvatar(photo: playerPhotoURL(t.player.id), teamLogo: toRoshn ? t.to.logo : t.from.logo, size: 40)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(t.player.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                    HStack(spacing: 4) {
-                        Image(systemName: toRoshn ? "arrow.down.left" : "arrow.up.right")
-                            .font(.system(size: 9, weight: .bold)).foregroundStyle(toRoshn ? rslAccent : SpTheme.onDarkDim)
-                        Text(toRoshn ? "إلى \(t.to.name)" : "من \(t.from.name)")
-                            .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
+                playerAvatar(photo: playerPhotoURL(t.player.id), teamLogo: dest.logo, size: 38)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(t.player.name).font(SportsFonts.app(size: 14, weight: .bold))
+                        .foregroundStyle(SpTheme.onDark).lineLimit(1)
+                    HStack(spacing: 6) {
+                        TcPartyChip(party: TcParty(from: t.from))
+                        Image(systemName: "arrow.left").font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(SpTheme.onDarkFaint)
+                        TcPartyChip(party: TcParty(from: t.to), emphasize: true)
                     }
                 }
                 Spacer(minLength: 0)
-                Text(t.type).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(rslAccent).lineLimit(1)
+                VStack(alignment: .trailing, spacing: 4) {
+                    TcCertaintyTag(confirmed: true)
+                    if t.kind == "loan" {
+                        Text("إعارة").font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.teal)
+                    } else if t.kind == "free" {
+                        Text("انتقال حر").font(SportsFonts.app(size: 10, weight: .bold))
+                            .foregroundStyle(SpTheme.dyn(Color(red: 0.05, green: 0.55, blue: 0.35), Color(red: 0.30, green: 0.80, blue: 0.55)))
+                    }
+                }
             }
-            .padding(.horizontal, 14).padding(.vertical, 11)
+            .padding(.horizontal, 13).padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
@@ -1180,7 +1195,7 @@ struct HomeView: View {
         self.standings = standingsRes?.standings ?? []
         self.scorers = scorersRes?.scorers ?? []
         self.assists = assistsRes?.assists ?? []
-        self.transfers = transfersRes?.topDeals ?? []
+        self.transfers = transfersRes?.transfers ?? []
 
         if matches == nil && standings.isEmpty && outlook == nil {
             self.loadError = "تعذّر الاتصال بخادم البيانات"
