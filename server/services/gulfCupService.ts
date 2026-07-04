@@ -30,8 +30,8 @@ import {
 } from "./gulfCupData";
 import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistory";
 import { resolveNames } from "./worldCupNameTranslator";
+import { apiFootballGet } from "./apiFootballClient";
 
-const API_BASE = "https://v3.football.api-sports.io";
 const LEAGUE_ID = 25; // Gulf Cup of Nations (API-Football)
 const SEASON = 2026; // خليجي 27 — السعودية 2026 (يظهر لاحقًا لدى المزوّد)
 const TIMEZONE = "Asia/Riyadh";
@@ -51,24 +51,7 @@ function apiFootballEnabled(): boolean {
 }
 
 async function apiGet(path: string, params: Record<string, string | number>): Promise<any[]> {
-  const apiKey = (process.env.APIFOOTBALL_KEY || "").trim();
-  if (!apiKey) throw new Error("APIFOOTBALL_KEY is not set");
-
-  const url = new URL(`${API_BASE}/${path}`);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
-
-  const response = await fetch(url, {
-    headers: { "x-apisports-key": apiKey },
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) throw new Error(`[GulfCup] API-Football HTTP ${response.status} for ${path}`);
-
-  const data: any = await response.json();
-  const errors = data?.errors;
-  if (errors && !Array.isArray(errors) && Object.keys(errors).length > 0) {
-    throw new Error(`[GulfCup] API-Football error for ${path}: ${JSON.stringify(errors)}`);
-  }
-  return Array.isArray(data?.response) ? data.response : [];
+  return apiFootballGet("GulfCup", path, params);
 }
 
 // ---------- DTOs المُعرَّبة (تطابق بنية كأس آسيا للواجهة) ----------
