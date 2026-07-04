@@ -31,6 +31,7 @@ import {
   getMatchTvChannels as splGetMatchTvChannels,
   getTeamStats as splGetTeamStats,
   getTeamTransfers as splGetTeamTransfers,
+  getCompetitionSeason as splGetCompetitionSeason,
   getMatchPlayerRatings as splGetMatchPlayerRatings,
   getFixturePrediction as splGetFixturePrediction,
   getCompetitionHistory as splGetCompetitionHistory,
@@ -263,6 +264,39 @@ export async function getKcHistory() {
 /** سجل الأبطال متعدد المواسم (أبطال ووصفاء ونتائج النهائيات + جدار الألقاب). */
 export async function getKcChampionsRecord() {
   return splGetCupChampionsRecord(comp());
+}
+
+// ---------- مباريات نادٍ في الكأس (الموسم الجاري + النسخة السابقة) ----------
+// أدوار الكأس المبكرة تعني أن للنادي مباراة واحدة فقط في الموسم الجديد —
+// وحدها تجعل القسم فقيرًا، فنرفق مشوار النسخة المنقضية بعنوانها (كما تفعل
+// بطاقة «مشوار النادي في كأس الملك» مع الإحصائيات).
+
+export interface KcTeamMatches {
+  /** موسم المزوّد الجاري (2027 = نسخة 2026/27) — null إن تعذّر حلّه */
+  season: number | null;
+  /** مباريات النادي في الموسم الجاري، مُركّبة بأحدث نتيجة لحظية */
+  fixtures: SplFixture[];
+  /** مشوار النادي في النسخة السابقة (يُحذف إن لم يشارك) */
+  previous: { season: number; fixtures: SplFixture[] } | null;
+}
+
+export async function getKcTeamMatches(teamId: number): Promise<KcTeamMatches> {
+  const c = comp();
+  const mine = (fx: SplFixture[]) => fx.filter((f) => f.home.id === teamId || f.away.id === teamId);
+
+  const [current, season] = await Promise.all([
+    getKcFixtures().catch(() => [] as SplFixture[]),
+    splGetCompetitionSeason(c).catch(() => null as number | null),
+  ]);
+
+  let previous: KcTeamMatches["previous"] = null;
+  if (season != null) {
+    const prevFx = await splGetFixtures(c, season - 1).catch(() => [] as SplFixture[]);
+    const prevMine = mine(prevFx);
+    if (prevMine.length > 0) previous = { season: season - 1, fixtures: prevMine };
+  }
+
+  return { season, fixtures: mine(current), previous };
 }
 
 // ---------- البطل ----------

@@ -182,6 +182,11 @@ async function seasonFor(comp: SaudiCompetition): Promise<number> {
   });
 }
 
+/** الموسم الحالي للبطولة (المُحلّ من المزوّد) — للمستهلكين خارج هذا الملف */
+export function getCompetitionSeason(comp: SaudiCompetition): Promise<number> {
+  return seasonFor(comp);
+}
+
 /** هل العلم مرفوع؟ القسم مخفي تمامًا ما لم يُفعَّل صراحةً */
 export function isSaudiLeagueEnabled(): boolean {
   return (process.env.SAUDI_LEAGUE_ENABLED || "").trim().toLowerCase() === "true";
