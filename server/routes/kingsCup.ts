@@ -17,6 +17,7 @@ import {
   getKcRedCards,
   getKcSquad,
   getKcTeamProfile,
+  getKcTeamMatches,
   getKcPlayerCard,
   getKcPlayerExtras,
   getKcPlayerForm,
@@ -259,6 +260,29 @@ export function registerKingsCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[KingsCup] team ${teamId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب صفحة النادي حاليًا" });
+    }
+  });
+
+  // مباريات نادٍ في الكأس: الموسم الجاري + مشوار النسخة السابقة (قسم مباريات صفحة النادي)
+  app.get("/api/kings-cup/team/:teamId/matches", async (req, res) => {
+    if (!guard(res)) return;
+    const teamId = parseInt(String(req.params.teamId), 10);
+    if (!Number.isFinite(teamId) || teamId <= 0) {
+      return res.status(400).json({ message: "معرّف نادٍ غير صالح" });
+    }
+    try {
+      const matches = await getKcTeamMatches(teamId);
+      const hasLive = matches.fixtures.some((f) => f.status.live);
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=15, stale-while-revalidate=60"
+          : "public, max-age=60, s-maxage=300, stale-while-revalidate=900",
+      );
+      res.json(matches);
+    } catch (error) {
+      console.error(`[KingsCup] team matches ${teamId} failed:`, error);
+      res.status(502).json({ season: null, fixtures: [], previous: null });
     }
   });
 

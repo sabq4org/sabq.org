@@ -131,9 +131,15 @@ export default function KingsCupTeam() {
     staleTime: 60 * 60_000,
   });
 
-  // مباريات النادي في الكأس (جدول البطولة كاملًا ثم نصفّي على النادي)
-  const { data: kcFixturesData } = useQuery<{ fixtures: KcFixture[] }>({
-    queryKey: ["/api/kings-cup/fixtures"],
+  // مباريات النادي في الكأس: الموسم الجاري + مشوار النسخة السابقة —
+  // أدوار الكأس المبكرة تعني مباراة واحدة فقط بالموسم الجديد، فوحدها تُفقر القسم
+  const { data: kcMatchesData } = useQuery<{
+    season: number | null;
+    fixtures: KcFixture[];
+    previous: { season: number; fixtures: KcFixture[] } | null;
+  }>({
+    queryKey: [`/api/kings-cup/team/${teamId}/matches`],
+    enabled: Number.isFinite(teamId) && teamId > 0,
     staleTime: 60_000,
   });
 
@@ -144,8 +150,8 @@ export default function KingsCupTeam() {
   }, [data?.team?.name]);
 
   const squad = Array.isArray(data?.squad) ? data.squad : [];
-  const allKcFixtures = Array.isArray(kcFixturesData?.fixtures) ? kcFixturesData.fixtures : [];
-  const clubKcFixtures = allKcFixtures.filter((f) => f.home.id === teamId || f.away.id === teamId);
+  const clubKcFixtures = Array.isArray(kcMatchesData?.fixtures) ? kcMatchesData.fixtures : [];
+  const prevRun = kcMatchesData?.previous ?? null;
   const nextKcFixture = clubKcFixtures.find((f) => !f.status.finished) ?? null;
 
   const { data: predictionData } = useQuery<{ prediction: KcPrediction | null }>({
@@ -351,14 +357,35 @@ export default function KingsCupTeam() {
               )}
 
               {/* 10) مباريات النادي — الكأس أولًا ثم بطولته */}
-              {clubKcFixtures.length > 0 && (
+              {(clubKcFixtures.length > 0 || prevRun) && (
                 <section className="mb-8">
                   <h2 className="text-lg font-black mb-4">مباريات النادي في كأس الملك</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {clubKcFixtures.map((fx) => (
-                      <KcMatchCard key={fx.id} fixture={fx} onOpen={setOpenFixtureId} />
-                    ))}
-                  </div>
+                  {clubKcFixtures.length > 0 && (
+                    <>
+                      {kcMatchesData?.season != null && (
+                        <p className="mb-2 text-xs font-bold text-muted-foreground">
+                          نسخة {kcSeasonLabel(kcMatchesData.season)}
+                        </p>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+                        {clubKcFixtures.map((fx) => (
+                          <KcMatchCard key={fx.id} fixture={fx} onOpen={setOpenFixtureId} />
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {prevRun && (
+                    <>
+                      <p className="mb-2 text-xs font-bold text-muted-foreground">
+                        مشواره في نسخة {kcSeasonLabel(prevRun.season)}
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {prevRun.fixtures.map((fx) => (
+                          <KcMatchCard key={fx.id} fixture={fx} onOpen={setOpenFixtureId} />
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </section>
               )}
             </div>
