@@ -87,12 +87,26 @@ export interface KcMatchday {
   finishedCount: number;
 }
 
+/**
+ * احتمالات الفوز (API-Football predictions) — تصل مع overview للمباراة المميّزة
+ * ومن /api/kings-cup/match/:id/prediction لأي مباراة. null = المزوّد لم يحسب
+ * بعد (الخادم يُسقط العنصر الوهمي 33/33/33 قبل توفّر بيانات الموسم).
+ */
+export interface KcPrediction {
+  homePct: number;
+  drawPct: number;
+  awayPct: number;
+  winnerId: number | null;
+  winnerName: string | null;
+  advice: string | null;
+}
+
 export interface KcOverview {
   blockHidden?: boolean;
   live: KcFixture[];
   today: KcFixture[];
   nextMatch: KcFixture | null;
-  matchOfTheDay: { fixture: KcFixture; prediction: unknown | null } | null;
+  matchOfTheDay: { fixture: KcFixture; prediction: KcPrediction | null } | null;
   matchday?: KcMatchday | null;
   started: boolean;
   champion: KcChampion | null;
@@ -213,6 +227,34 @@ export interface KcPlayerCard {
   career: { teamId: number; team: string; logo: string; seasons: number[] }[];
   trophies: { competition: string; country: string; season: string; place: string; winner: boolean }[];
   currentTeam: KcTeam | null;
+}
+
+/** قنوات بثّ المباراة (TheSports) — /api/kings-cup/match/:id/tv */
+export interface KcMatchTv {
+  available: boolean;
+  channels: { name: string; url: string | null }[];
+}
+
+/** تقييم لاعب في مباراة — /api/kings-cup/match/:id/player-stats */
+export interface KcMatchRating {
+  id: number;
+  name: string;
+  photo: string;
+  teamId: number;
+  team: string;
+  number: number | null;
+  pos: string;
+  rating: number | null;
+  minutes: number;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
+}
+
+export interface KcMatchRatings {
+  motm: { id: number; name: string; team: string; rating: number } | null;
+  players: KcMatchRating[];
 }
 
 /** لمحة النسخة السابقة — /api/kings-cup/history */

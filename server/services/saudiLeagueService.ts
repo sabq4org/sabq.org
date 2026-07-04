@@ -97,7 +97,7 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 307, slug: "pro-league", name: "دوري روشن السعودي", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "saudi" },
   { id: 308, slug: "division-1", name: "دوري يلو لأندية الدرجة الأولى", type: "league", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "saudi" },
   { id: 309, slug: "division-2", name: "دوري الدرجة الثانية السعودي", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2025, category: "saudi" },
-  { id: 504, slug: "kings-cup", name: "كأس خادم الحرمين الشريفين", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "saudi" },
+  { id: 504, slug: "kings-cup", name: "كأس خادم الحرمين الشريفين", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2027, category: "saudi" },
   { id: 826, slug: "super-cup", name: "كأس السوبر السعودي", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "saudi" },
   { id: 1227, slug: "womens-league", name: "الدوري السعودي الممتاز للسيدات", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2026, category: "saudi" },
   // بطولات قارية/عالمية تشارك فيها الأندية السعودية. الترتيب متعدّد المجموعات
@@ -3018,6 +3018,11 @@ export async function getFixturePrediction(fixtureId: number): Promise<SplFixtur
     const drawPct = pctToNum(p.percent.draw);
     const awayPct = pctToNum(p.percent.away);
     if (homePct + drawPct + awayPct === 0) return null;
+    // قبل توفّر بيانات الموسم يرجع المزوّد عنصرًا وهميًّا متساوي الأثلاث
+    // (33/33/33 مع advice «No predictions available») — نُسقطه كي لا يُعرض
+    // شريط احتمالات زائف (متحقَّق على كأس الملك 26/27 قبل انطلاقه).
+    if (/no predictions available/i.test(p.advice ?? "")) return null;
+    if (homePct === drawPct && drawPct === awayPct) return null;
     const winnerId = p.winner?.id ?? null;
     return {
       homePct, drawPct, awayPct,

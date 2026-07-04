@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import kingsCupLogo from "@assets/kings-cup-logo.png";
 import { LiveMinute } from "../worldcup/LiveMinute";
 import { PenaltyResult } from "../worldcup/PenaltyResult";
+import { KcProbabilityBar } from "./KcProbabilityBar";
 import {
   countdownTo,
   formatKickoffDay,
@@ -21,6 +22,7 @@ import {
   type KcChampion,
   type KcFixture,
   type KcOverview,
+  type KcPrediction,
 } from "./kcTypes";
 
 interface KcHeroProps {
@@ -171,10 +173,13 @@ function TodayStrip({
 
 function MatchHeroCard({
   fixture,
+  prediction = null,
   onOpenMatch,
   compact = false,
 }: {
   fixture: KcFixture;
+  /** احتمالات الفوز للمباراة المميّزة — تصل جاهزة ضمن overview */
+  prediction?: KcPrediction | null;
   onOpenMatch: (id: number) => void;
   compact?: boolean;
 }) {
@@ -253,6 +258,11 @@ function MatchHeroCard({
 
         {!fixture.status.live && !fixture.status.finished && (
           <CountdownChips timestamp={fixture.timestamp} />
+        )}
+
+        {/* شريط الاحتمالات — قبل المباراة وأثناءها؛ يختفي بعد النهاية */}
+        {prediction && !fixture.status.finished && (
+          <KcProbabilityBar fixture={fixture} prediction={prediction} tone="dark" />
         )}
 
         <div className="flex justify-center">
@@ -487,7 +497,17 @@ export function KcHero({ overview, fixtures, isLoading, onOpenMatch }: KcHeroPro
             }`}
           >
             {heroFixtures.map((f) => (
-              <MatchHeroCard key={f.id} fixture={f} onOpenMatch={onOpenMatch} compact={multiHero} />
+              <MatchHeroCard
+                key={f.id}
+                fixture={f}
+                prediction={
+                  f.id === overview?.matchOfTheDay?.fixture.id
+                    ? overview?.matchOfTheDay?.prediction ?? null
+                    : null
+                }
+                onOpenMatch={onOpenMatch}
+                compact={multiHero}
+              />
             ))}
           </motion.div>
         )}
