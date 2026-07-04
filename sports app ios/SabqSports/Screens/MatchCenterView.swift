@@ -199,9 +199,6 @@ struct SpMatchCenter: View {
 
                 preMatchCard
                 matchInfoCard
-                refereeCard
-                varaModelCard
-                varaVerdictCard
 
                 if loading && detail == nil {
                     SpLoading()
@@ -535,6 +532,8 @@ struct SpMatchCenter: View {
             neutralVenue: neutral, h2h: tuple)
     }
 
+    // بطاقتا توقّع VARA (النموذج + نتيجة التوقّعات) غير معروضتين بقرار المالك
+    // 2026-07-04 — لا تبويب توقّعات في التطبيق (الويب وحده). تُعادان عند إضافته.
     @ViewBuilder private var varaModelCard: some View {
         if let f = fixture, !f.started {
             let pick = varaPick(f)
@@ -1289,17 +1288,21 @@ struct SpMatchCenter: View {
     }
 
     /// الرسمية إن كان فيها أساسيون؛ وإلا المتوقعة بشارة تحذيرية؛ وإلا ما توفّر.
+    /// حكم المباراة هنا (قرار المالك 2026-07-04: ضمن التشكيلة لا أعلى المركز).
     @ViewBuilder
     private func lineupsSection(_ d: SpMatchDetail) -> some View {
-        if d.lineups.contains(where: { !$0.startXI.isEmpty }) {
-            lineupsView(d.lineups)
-        } else if hasExpectedLineup {
-            VStack(spacing: 12) {
-                expectedBadge
-                lineupsView(expectedAsLineups(d))
+        VStack(spacing: 14) {
+            refereeCard
+            if d.lineups.contains(where: { !$0.startXI.isEmpty }) {
+                lineupsView(d.lineups)
+            } else if hasExpectedLineup {
+                VStack(spacing: 12) {
+                    expectedBadge
+                    lineupsView(expectedAsLineups(d))
+                }
+            } else {
+                lineupsView(d.lineups)
             }
-        } else {
-            lineupsView(d.lineups)
         }
     }
 
