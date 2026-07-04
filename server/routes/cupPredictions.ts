@@ -24,6 +24,7 @@ import {
   submitPrediction,
   getMyPredictions,
   getLeaderboard,
+  getLeaderboardMeta,
   getUpcomingPredictableMatches,
   getMatchPredictionsSummary,
 } from "../services/cupPredictionsService";
@@ -50,6 +51,12 @@ const CUPS: CupConfig[] = [
 ];
 
 const noStore = (res: any) => res.set("Cache-Control", "private, no-store");
+
+/** limit اختياري من الاستعلام — الافتراضي 100 ويُقصّ إلى [10..500]. */
+const parseLeaderboardLimit = (raw: unknown): number => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.max(Math.trunc(n), 10), 500) : 100;
+};
 
 function buildCupRouter(cfg: CupConfig): Router {
   const router = Router();
@@ -129,7 +136,12 @@ function buildCupRouter(cfg: CupConfig): Router {
       const userId = req.isAuthenticated?.() && req.user ? req.user.id : undefined;
       if (userId) noStore(res);
       else res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
-      res.json({ leaders: await getLeaderboard(cfg.slug, 100, userId) });
+      const limit = parseLeaderboardLimit(req.query?.limit);
+      const [leaders, meta] = await Promise.all([
+        getLeaderboard(cfg.slug, limit, userId),
+        getLeaderboardMeta(cfg.slug, userId),
+      ]);
+      res.json({ leaders, total: meta.total, viewer: meta.viewer });
     } catch (error) {
       console.error(`[Cup Predictions:${cfg.slug}] leaderboard error:`, error);
       res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });

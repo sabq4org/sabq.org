@@ -1,6 +1,9 @@
 import { Crown, Medal, Trophy } from "lucide-react";
 import { formatNumber } from "@/lib/format";
-import type { GcLeaderRow } from "./gcPredictionTypes";
+import type { GcLeaderRow, GcLeaderboardViewer } from "./gcPredictionTypes";
+
+/** سقف الخادم لعدد الصفوف المعروضة (parseLeaderboardLimit في المسار). */
+const SERVER_LIMIT_CAP = 500;
 
 function RankBadge({ rank }: { rank: number }) {
   if (rank === 1) return <Crown className="h-5 w-5 text-amber-500" />;
@@ -13,10 +16,24 @@ export function GcPredictionsLeaderboard({
   leaders,
   currentUserId,
   isLoading,
+  total,
+  viewer,
+  viewerName,
+  viewerAvatar,
+  onLoadMore,
+  loadingMore,
 }: {
   leaders: GcLeaderRow[];
   currentUserId?: string;
   isLoading: boolean;
+  /** العدد الكلي للمشاركين المؤهّلين — لإظهار «عرض المزيد» وعداد المشاركين. */
+  total?: number;
+  /** صف الزائر ورتبته الحقيقية — يُثبَّت أسفل القائمة متى كان خارجها. */
+  viewer?: GcLeaderboardViewer | null;
+  viewerName?: string;
+  viewerAvatar?: string | null;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
 }) {
   if (isLoading) {
     return (
@@ -38,8 +55,17 @@ export function GcPredictionsLeaderboard({
     );
   }
 
+  const viewerInList = !!currentUserId && leaders.some((l) => l.userId === currentUserId);
+  const canLoadMore =
+    !!onLoadMore && typeof total === "number" && leaders.length < Math.min(total, SERVER_LIMIT_CAP);
+
   return (
     <div className="space-y-2">
+      {typeof total === "number" && total > 0 && (
+        <p className="px-1 text-[11px] text-muted-foreground">
+          {formatNumber(total)} مشاركًا في المسابقة
+        </p>
+      )}
       {leaders.map((l) => {
         const me = l.userId === currentUserId;
         return (
@@ -83,6 +109,60 @@ export function GcPredictionsLeaderboard({
           </div>
         );
       })}
+
+      {/* صف الزائر المثبَّت — رتبته الحقيقية وهو خارج الصفحة المعروضة */}
+      {viewer && currentUserId && !viewerInList && (
+        <div className="border-t border-dashed border-border pt-2">
+          <div
+            className="flex items-center gap-3 rounded-xl border border-amber-400/60 bg-amber-50/70 px-3 py-2.5 dark:border-amber-500/40 dark:bg-amber-950/30"
+            data-testid="gc-leader-viewer"
+          >
+            <div className="flex w-6 shrink-0 justify-center">
+              <span className="grid h-5 w-5 place-items-center text-xs font-black tabular-nums text-muted-foreground">
+                {viewer.rank}
+              </span>
+            </div>
+            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-muted ring-1 ring-border">
+              {viewerAvatar ? (
+                <img src={viewerAvatar} alt={viewerName || "أنت"} className="h-full w-full object-cover" loading="lazy" />
+              ) : (
+                <div className="grid h-full w-full place-items-center text-xs font-black text-muted-foreground">
+                  {(viewerName || "أ").slice(0, 1)}
+                </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">
+                {viewerName || "أنت"}
+                <span className="mr-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400"> (أنت)</span>
+              </p>
+              <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span>دقّة {viewer.accuracy}%</span>
+                <span>🎯 {formatNumber(viewer.exactCount)} مطابقة</span>
+              </p>
+            </div>
+            <div className="shrink-0 text-left">
+              <p className="text-base font-black tabular-nums text-amber-700 dark:text-amber-300">
+                {formatNumber(viewer.totalPoints)}
+              </p>
+              <p className="text-[10px] text-muted-foreground">نقطة</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canLoadMore && (
+        <button
+          onClick={onLoadMore}
+          disabled={loadingMore}
+          className="w-full rounded-xl border border-border py-2.5 text-sm font-bold text-muted-foreground transition hover:bg-muted disabled:opacity-60"
+          data-testid="gc-leaders-load-more"
+        >
+          {loadingMore
+            ? "جارٍ التحميل…"
+            : `عرض المزيد (${formatNumber(leaders.length)} من ${formatNumber(total!)})`}
+        </button>
+      )}
     </div>
   );
 }

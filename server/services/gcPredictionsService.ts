@@ -496,6 +496,66 @@ export async function getLeaderboard(limit = 100) {
   });
 }
 
+/**
+ * ميتا اللوحة: العدد الكلي للمشاركين المؤهّلين + صف الزائر ورتبته حتى لو كان
+ * خارج الصفحة المعروضة — الرتبة 1 + عدد من يسبقه بمعايير الترتيب الثلاثة
+ * (النقاط ثم الإصابات الدقيقة ثم النتائج الصحيحة).
+ */
+export async function getLeaderboardMeta(viewerUserId?: string) {
+  const board = db
+    .select({
+      uid: gcPredictions.userId,
+      pts: sql<number>`coalesce(sum(${gcPredictions.pointsAwarded}), 0)::int`.as("pts"),
+      exact: sql<number>`count(*) filter (where ${gcPredictions.exactHit})::int`.as("exact"),
+      correct: sql<number>`count(*) filter (where ${gcPredictions.outcomeHit})::int`.as("correct"),
+    })
+    .from(gcPredictions)
+    .innerJoin(users, eq(gcPredictions.userId, users.id))
+    .groupBy(gcPredictions.userId)
+    .having(sql`count(*) filter (where ${gcPredictions.status} <> 'pending') > 0`)
+    .as("board");
+
+  const [totals] = await db.select({ total: sql<number>`count(*)::int` }).from(board);
+  const total = Number(totals?.total ?? 0);
+  if (!viewerUserId) return { total, viewer: null };
+
+  const [mine] = await db
+    .select({
+      pts: sql<number>`coalesce(sum(${gcPredictions.pointsAwarded}), 0)::int`,
+      exact: sql<number>`count(*) filter (where ${gcPredictions.exactHit})::int`,
+      correct: sql<number>`count(*) filter (where ${gcPredictions.outcomeHit})::int`,
+      played: sql<number>`count(*) filter (where ${gcPredictions.status} <> 'pending')::int`,
+    })
+    .from(gcPredictions)
+    .where(eq(gcPredictions.userId, viewerUserId))
+    .groupBy(gcPredictions.userId)
+    .having(sql`count(*) filter (where ${gcPredictions.status} <> 'pending') > 0`);
+  if (!mine) return { total, viewer: null };
+
+  const [ahead] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(board)
+    .where(
+      sql`${board.pts} > ${mine.pts}
+        or (${board.pts} = ${mine.pts} and ${board.exact} > ${mine.exact})
+        or (${board.pts} = ${mine.pts} and ${board.exact} = ${mine.exact} and ${board.correct} > ${mine.correct})`,
+    );
+
+  const played = Number(mine.played);
+  const correct = Number(mine.correct);
+  return {
+    total,
+    viewer: {
+      rank: Number(ahead?.n ?? 0) + 1,
+      totalPoints: Number(mine.pts),
+      correctCount: correct,
+      exactCount: Number(mine.exact),
+      playedCount: played,
+      accuracy: played > 0 ? Math.round((correct / played) * 100) : 0,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // الشارات
 // ---------------------------------------------------------------------------

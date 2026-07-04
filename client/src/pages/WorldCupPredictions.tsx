@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import { Trophy, Target, Sparkles } from "lucide-react";
 import { Header } from "@/components/Header";
@@ -16,7 +16,7 @@ import { MyPredictionsList } from "@/components/worldcup/predictions/MyPredictio
 import { WcLongPredictions } from "@/components/worldcup/predictions/WcLongPredictions";
 import type {
   PredictableMatch,
-  LeaderRow,
+  LeaderboardResponse,
   MyPredictionRow,
   WcLongData,
 } from "@/components/worldcup/predictions/predictionsTypes";
@@ -55,9 +55,17 @@ export default function WorldCupPredictions() {
     staleTime: 30_000,
   });
 
-  const { data: leaderData, isLoading: leaderLoading } = useQuery<{ leaders: LeaderRow[] }>({
-    queryKey: ["/api/world-cup/predictions/leaderboard"],
+  // «عرض المزيد» يرفع limit تدريجيًا (سقف الخادم 500) — keepPreviousData يمنع
+  // وميض الهيكل العظمي أثناء جلب الدفعة الأكبر.
+  const [leaderLimit, setLeaderLimit] = useState(100);
+  const {
+    data: leaderData,
+    isLoading: leaderLoading,
+    isFetching: leaderFetching,
+  } = useQuery<LeaderboardResponse>({
+    queryKey: ["/api/world-cup/predictions/leaderboard", { limit: leaderLimit }],
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
 
   // توقّعات البطولة طويلة المدى — التبويب يظهر فقط متى فعّل الخادم الميزة (يُرجع 503
@@ -79,7 +87,11 @@ export default function WorldCupPredictions() {
   const matches = Array.isArray(todayData?.matches) ? todayData.matches : [];
   const myPredictions = Array.isArray(mineData?.predictions) ? mineData.predictions : [];
   const leaders = Array.isArray(leaderData?.leaders) ? leaderData.leaders : [];
-  const myRank = user ? leaders.find((l) => l.userId === user.id) : undefined;
+  const leaderboardViewer = leaderData?.viewer ?? null;
+  // صفّي في القائمة المعروضة، وإلا صف viewer من الخادم (رتبتي الحقيقية ولو بعد الـ100)
+  const myRank = user
+    ? (leaders.find((l) => l.userId === user.id) ?? leaderboardViewer ?? undefined)
+    : undefined;
 
   const submitMutation = useMutation({
     mutationFn: (vars: { fixtureId: number; predHome: number; predAway: number }) =>
@@ -202,7 +214,17 @@ export default function WorldCupPredictions() {
           )}
 
           {tab === "leaders" && (
-            <PredictionsLeaderboard leaders={leaders} currentUserId={user?.id} isLoading={leaderLoading} />
+            <PredictionsLeaderboard
+              leaders={leaders}
+              currentUserId={user?.id}
+              isLoading={leaderLoading}
+              total={leaderData?.total}
+              viewer={leaderboardViewer}
+              viewerName={[user?.firstName, user?.lastName].filter(Boolean).join(" ") || user?.name}
+              viewerAvatar={user?.profileImageUrl ?? null}
+              onLoadMore={() => setLeaderLimit((l) => Math.min(l + 100, 500))}
+              loadingMore={leaderFetching && !leaderLoading}
+            />
           )}
         </div>
       </main>

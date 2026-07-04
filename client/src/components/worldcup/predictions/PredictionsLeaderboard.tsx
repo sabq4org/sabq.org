@@ -1,6 +1,9 @@
 import { Crown, Trophy } from "lucide-react";
 import { formatNumber } from "@/lib/format";
-import type { LeaderRow } from "./predictionsTypes";
+import type { LeaderRow, LeaderboardViewer } from "./predictionsTypes";
+
+/** سقف الخادم لعدد الصفوف المعروضة (parseLeaderboardLimit في المسار). */
+const SERVER_LIMIT_CAP = 500;
 
 const RANK_STYLES: Record<number, string> = {
   1: "bg-amber-400 text-amber-950",
@@ -23,9 +26,27 @@ interface Props {
   leaders: LeaderRow[];
   currentUserId?: string;
   isLoading: boolean;
+  /** العدد الكلي للمشاركين المؤهّلين — لإظهار «عرض المزيد» وعداد المشاركين. */
+  total?: number;
+  /** صف الزائر ورتبته الحقيقية — يُثبَّت أسفل القائمة متى كان خارجها. */
+  viewer?: LeaderboardViewer | null;
+  viewerName?: string;
+  viewerAvatar?: string | null;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
 }
 
-export function PredictionsLeaderboard({ leaders, currentUserId, isLoading }: Props) {
+export function PredictionsLeaderboard({
+  leaders,
+  currentUserId,
+  isLoading,
+  total,
+  viewer,
+  viewerName,
+  viewerAvatar,
+  onLoadMore,
+  loadingMore,
+}: Props) {
   if (isLoading) {
     return (
       <div className="space-y-2">
@@ -45,8 +66,17 @@ export function PredictionsLeaderboard({ leaders, currentUserId, isLoading }: Pr
     );
   }
 
+  const viewerInList = !!currentUserId && leaders.some((l) => l.userId === currentUserId);
+  const canLoadMore =
+    !!onLoadMore && typeof total === "number" && leaders.length < Math.min(total, SERVER_LIMIT_CAP);
+
   return (
     <div className="space-y-2">
+      {typeof total === "number" && total > 0 && (
+        <p className="px-1 text-[11px] text-muted-foreground">
+          {formatNumber(total)} مشاركًا في المسابقة
+        </p>
+      )}
       {leaders.map((row) => {
         const isMe = row.userId === currentUserId;
         return (
@@ -85,6 +115,49 @@ export function PredictionsLeaderboard({ leaders, currentUserId, isLoading }: Pr
           </div>
         );
       })}
+
+      {/* صف الزائر المثبَّت — رتبته الحقيقية وهو خارج الصفحة المعروضة */}
+      {viewer && currentUserId && !viewerInList && (
+        <div className="border-t border-dashed border-border pt-2">
+          <div
+            className="flex items-center gap-3 rounded-xl bg-emerald-500/10 px-3 py-2.5 ring-1 ring-emerald-500/40"
+            data-testid="wc-leader-viewer"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-black tabular-nums text-muted-foreground">
+              {viewer.rank}
+            </div>
+            <Avatar name={viewerName || "أنت"} avatar={viewerAvatar ?? null} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold">
+                {viewerName || "أنت"}
+                <span className="mr-1 text-[11px] font-normal text-emerald-600 dark:text-emerald-400"> (أنت)</span>
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {formatNumber(viewer.correctCount)} إصابة دقيقة · {formatNumber(viewer.playedCount)} مباراة
+              </p>
+            </div>
+            <div className="shrink-0 text-left">
+              <span className="text-base font-black tabular-nums text-emerald-700 dark:text-emerald-300">
+                {formatNumber(viewer.totalPoints)}
+              </span>
+              <span className="mr-1 text-[11px] text-muted-foreground">نقطة</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canLoadMore && (
+        <button
+          onClick={onLoadMore}
+          disabled={loadingMore}
+          className="w-full rounded-xl border border-border py-2.5 text-sm font-bold text-muted-foreground transition hover:bg-muted disabled:opacity-60"
+          data-testid="wc-leaders-load-more"
+        >
+          {loadingMore
+            ? "جارٍ التحميل…"
+            : `عرض المزيد (${formatNumber(leaders.length)} من ${formatNumber(total!)})`}
+        </button>
+      )}
     </div>
   );
 }

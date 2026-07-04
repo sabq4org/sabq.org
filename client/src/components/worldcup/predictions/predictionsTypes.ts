@@ -58,6 +58,20 @@ export type LeaderRow = {
   playedCount: number;
 };
 
+/** صف الزائر نفسه ورتبته الحقيقية — يصل حتى لو كان خارج الصفحة المعروضة. */
+export type LeaderboardViewer = {
+  rank: number;
+  totalPoints: number;
+  correctCount: number;
+  playedCount: number;
+};
+
+export type LeaderboardResponse = {
+  leaders: LeaderRow[];
+  total?: number;
+  viewer?: LeaderboardViewer | null;
+};
+
 // ── توقّعات البطولة طويلة المدى (البطل + الهدّاف) ──
 // eliminated: خرج من البطولة (المنتخب نفسه، أو منتخب الهدّاف) — يبقى ظاهرًا في
 // القائمة لكن معطَّلًا (لا يُحذف)، لأنه لم يعد بإمكانه رفع الكأس أو تسجيل أهداف.
