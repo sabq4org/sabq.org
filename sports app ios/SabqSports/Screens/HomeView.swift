@@ -337,8 +337,11 @@ struct HomeView: View {
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 11)
+                // سماوي روشن في نمط «ألوان VARA»؛ التدرّج الأخضر في النمط الموحّد.
                 .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .fill(LinearGradient(colors: [SpTheme.green, SpTheme.greenDeep], startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    .fill(SpTheme.isVaraStyle
+                        ? LinearGradient(colors: [SpTheme.compAccent("pro-league"), SpTheme.compAccent("pro-league").opacity(0.82)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(colors: [SpTheme.green, SpTheme.greenDeep], startPoint: .topLeading, endPoint: .bottomTrailing)))
             }
             .padding(16)
             .background(heroBackground)
@@ -606,14 +609,17 @@ struct HomeView: View {
     }
 
     private func pulseTile(_ label: String, _ value: String, _ sub: String, logo: String?) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        // «الهدّاف» و«المتصدّر» بلغة التميّز الذهبية (نمط ألوان VARA) — لا يتساوى
+        // كل شيء بالأخضر؛ في النمط الموحّد excellence ترجع اللون المحوري نفسه.
+        let highlight = (label == "الهدّاف" || label == "المتصدّر") ? SpTheme.excellence : SpTheme.green
+        return VStack(alignment: .leading, spacing: 5) {
             Text(label).font(SportsFonts.app(size: 9.5, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
             HStack(spacing: 6) {
                 if let logo, !logo.isEmpty { SpTeamLogo(logo: logo, size: 17) }
                 Text(value).font(SportsFonts.app(size: 12.5, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                     .lineLimit(1).minimumScaleFactor(0.65)
             }
-            Text(sub).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.green)
+            Text(sub).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(highlight)
                 .lineLimit(1).minimumScaleFactor(0.7)
         }
         .frame(width: 112, alignment: .leading)

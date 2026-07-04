@@ -671,10 +671,10 @@ struct MatchesView: View {
                     } label: {
                         Text(st.short)
                             .font(SportsFonts.app(size: 12.5, weight: active ? .bold : .semibold))
-                            .foregroundStyle(active ? SpTheme.green : (hasData ? SpTheme.onDarkDim : SpTheme.onDarkFaint))
+                            .foregroundStyle(active ? SpTheme.compAccent("world-cup") : (hasData ? SpTheme.onDarkDim : SpTheme.onDarkFaint))
                             .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(Capsule().fill(active ? SpTheme.green.opacity(0.10) : Color.clear))
-                            .overlay(Capsule().stroke(active ? SpTheme.green.opacity(0.55) : SpTheme.outline, lineWidth: 1))
+                            .background(Capsule().fill(active ? SpTheme.compAccent("world-cup").opacity(0.10) : Color.clear))
+                            .overlay(Capsule().stroke(active ? SpTheme.compAccent("world-cup").opacity(0.55) : SpTheme.outline, lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .disabled(!hasData)
@@ -744,23 +744,23 @@ struct MatchesView: View {
                     }
                     Text(isToday ? "اليوم" : SpFormat.weekdayName(day.date))
                         .font(SportsFonts.app(size: 10.5, weight: .semibold))
-                        .foregroundStyle(active ? SpTheme.green : SpTheme.onDarkDim)
+                        .foregroundStyle(active ? SpTheme.compAccent("world-cup") : SpTheme.onDarkDim)
                         .lineLimit(1)
                 }
                 Text(SpFormat.dayMonthLabel(day.date))
                     .font(SportsFonts.app(size: 12, weight: .heavy))
-                    .foregroundStyle(active ? SpTheme.green : SpTheme.onDark)
+                    .foregroundStyle(active ? SpTheme.compAccent("world-cup") : SpTheme.onDark)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
             .frame(width: 78, height: 50)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(active ? SpTheme.green.opacity(0.07) : SpTheme.railChipFill)
+                    .fill(active ? SpTheme.compAccent("world-cup").opacity(0.07) : SpTheme.railChipFill)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(active ? SpTheme.green : SpTheme.outline, lineWidth: active ? 1.5 : 1)
+                    .stroke(active ? SpTheme.compAccent("world-cup") : SpTheme.outline, lineWidth: active ? 1.5 : 1)
             )
             .contentShape(Rectangle())
         }
@@ -992,9 +992,9 @@ struct MatchesView: View {
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 16).padding(.vertical, 11)
-                .background(Capsule().fill(SpTheme.green))
+                .background(Capsule().fill(SpTheme.compAccent("world-cup")))
                 .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
-                .shadow(color: SpTheme.green.opacity(0.35), radius: 10, x: 0, y: 4)
+                .shadow(color: SpTheme.compAccent("world-cup").opacity(0.35), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
             // الزرّ يحترم المنطقة الآمنة السفلية (أعلى شريط التبويب)، فهامش صغير
