@@ -384,6 +384,8 @@ const SportsPlayer = lazy(() => retryImport(() => import("@/pages/SportsPlayer")
 const SportsMatch = lazy(() => retryImport(() => import("@/pages/SportsMatch")));
 // مركز انتقالات الدوري السعودي — موجز موحّد للصفقات على /sports/transfers
 const SportsTransfers = lazy(() => retryImport(() => import("@/pages/SportsTransfers")));
+// قصة انتقال لاعب (خط زمني للإشاعات بتطوّر الاحتمال) — /sports/transfers/story/:playerId
+const TransferStory = lazy(() => retryImport(() => import("@/pages/TransferStory")));
 // هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
 const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
 const RoshnPredictions = lazy(() => retryImport(() => import("@/pages/RoshnPredictions")));
@@ -930,6 +932,7 @@ function Router() {
         <Route path="/sports/match/:id">{() => <LazyRoute component={SportsMatch} />}</Route>
         <Route path="/sports/matches">{() => <LazyRoute component={SportsMatchesBoard} />}</Route>
         <Route path="/sports/live">{() => <LazyRoute component={SportsLive} />}</Route>
+        <Route path="/sports/transfers/story/:playerId">{() => <LazyRoute component={TransferStory} />}</Route>
         <Route path="/sports/transfers">{() => <LazyRoute component={SportsTransfers} />}</Route>
         <Route path="/sports">{() => <LazyRoute component={SportsDashboard} />}</Route>
         {/* تحويلات من المسارات التجريبية القديمة (/sports2../sports5) إلى /sports */}

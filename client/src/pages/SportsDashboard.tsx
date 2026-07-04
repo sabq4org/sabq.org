@@ -664,26 +664,168 @@ function SeasonOutlookBanner({ outlook, history }: { outlook: SpSeasonOutlook; h
 }
 
 // ============================================================
-// بانر مركز الانتقالات — بطاقة فاتحة بتدرّج أزرق خفيف.
+// ودجت مركز الانتقالات — «نبض السوق» شريط متحرك بآخر 10 حركات (مؤكّد + إشاعات
+// ساخنة) + بطاقة «صفقة اليوم» + عدّاد نافذة روشن + زر المركز الكامل.
+// يتغذّى من /api/transfer-center/overview ويهبط لبانر بسيط عند غياب البيانات.
 // ============================================================
-function TransfersBanner() {
+interface TcPulseItem {
+  type: "confirmed" | "rumour";
+  playerId: number;
+  player: string;
+  playerImage: string | null;
+  from: string;
+  to: string;
+  fromLogo: string | null;
+  toLogo: string | null;
+  amount: number | null;
+  currency: string | null;
+  probability: "LOW" | "MEDIUM" | "HIGH" | "IMMINENT" | null;
+  hereWeGo: boolean;
+  date: string;
+  saudi: boolean;
+}
+interface TcWindow { label: string; opensAt: string; closesAt: string; }
+interface TcOverviewResponse {
+  configured: boolean;
+  pulse: TcPulseItem[];
+  dealOfDay: TcPulseItem | null;
+  windows: { saudi: TcWindow; europe: TcWindow } | null;
+}
+
+const PULSE_CURRENCY: Record<string, string> = { EUR: "€", GBP: "£", USD: "$" };
+function pulseMoney(n: number | null, cur: string | null): string | null {
+  if (n == null || !Number.isFinite(n) || n <= 0) return null;
+  const sym = PULSE_CURRENCY[cur ?? "EUR"] ?? "";
+  if (n >= 1_000_000) {
+    const v = n / 1_000_000;
+    return `${v % 1 ? v.toFixed(1) : v} مليون ${sym}`;
+  }
+  return `${Math.round(n / 1_000)} ألف ${sym}`;
+}
+
+const PULSE_PROB_AR: Record<string, string> = { IMMINENT: "وشيكة", HIGH: "قوية", MEDIUM: "متوسطة", LOW: "ضعيفة" };
+
+function PulseTickerItem({ p }: { p: TcPulseItem }) {
+  const money = pulseMoney(p.amount, p.currency);
   return (
-    <Link
-      href="/sports/transfers"
-      className="group relative block overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-l from-primary/[0.06] to-transparent p-5 sm:p-6"
-      data-testid="transfers-banner"
-    >
-      <div className="flex items-center gap-4">
-        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-primary/10">
-          <ArrowLeftRight className="h-7 w-7 text-primary" strokeWidth={1.8} />
+    <span className="inline-flex items-center gap-2 px-4 text-sm whitespace-nowrap">
+      <span className={`text-[10px] font-black rounded-full px-1.5 py-0.5 ${p.type === "confirmed" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-400"}`}>
+        {p.type === "confirmed" ? "مؤكّدة" : `إشاعة${p.probability ? ` · ${PULSE_PROB_AR[p.probability] ?? ""}` : ""}`}
+      </span>
+      {p.playerImage && <img src={p.playerImage} alt="" className="h-5 w-5 rounded-full object-cover" loading="lazy" />}
+      <b className="text-foreground">{p.player}</b>
+      <span className="text-muted-foreground">{p.from}</span>
+      <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
+      <span className="font-bold text-foreground">{p.to}</span>
+      {money && <span className="font-black text-amber-700 dark:text-amber-400 tabular-nums" dir="ltr">{money}</span>}
+      <span className="text-border">|</span>
+    </span>
+  );
+}
+
+function windowRemaining(win: TcWindow, now: number): { label: string; value: string } | null {
+  const opens = new Date(win.opensAt).getTime();
+  const closes = new Date(win.closesAt).getTime();
+  const fmt = (ms: number) => {
+    const days = Math.floor(ms / 86_400_000);
+    const hours = Math.floor((ms % 86_400_000) / 3_600_000);
+    return days > 0 ? `${days} يومًا و${hours} ساعة` : `${hours} ساعة`;
+  };
+  if (now < opens) return { label: "تفتح نافذة روشن بعد", value: fmt(opens - now) };
+  if (now < closes) return { label: "تُغلق نافذة روشن بعد", value: fmt(closes - now) };
+  return null;
+}
+
+function TransfersBanner() {
+  const { data } = useQuery<TcOverviewResponse>({
+    queryKey: ["/api/transfer-center/overview"],
+    staleTime: 10 * 60_000,
+  });
+  const pulse = Array.isArray(data?.pulse) ? data!.pulse : [];
+  const deal = data?.dealOfDay ?? null;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const countdown = data?.windows ? windowRemaining(data.windows.saudi, now) : null;
+  const dealMoney = deal ? pulseMoney(deal.amount, deal.currency) : null;
+
+  // لا بيانات (مفاتيح غائبة/فشل) → البانر البسيط السابق كما هو.
+  if (!pulse.length && !deal) {
+    return (
+      <Link
+        href="/sports/transfers"
+        className="group relative block overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-l from-primary/[0.06] to-transparent p-5 sm:p-6"
+        data-testid="transfers-banner"
+      >
+        <div className="flex items-center gap-4">
+          <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-primary/10">
+            <ArrowLeftRight className="h-7 w-7 text-primary" strokeWidth={1.8} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-xl font-black text-foreground sm:text-2xl">مركز الانتقالات</div>
+            <div className="mt-1 text-sm text-muted-foreground">مَن وصل ومَن غادر في دوري روشن — موجز الصفقات بالنوع والمبلغ عند توفّره</div>
+          </div>
+          <ChevronLeft className="h-6 w-6 shrink-0 text-primary transition-transform group-hover:-translate-x-1" strokeWidth={1.8} />
+        </div>
+      </Link>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-l from-primary/[0.06] to-transparent" data-testid="transfers-banner">
+      {/* الترويسة + عدّاد النافذة + CTA */}
+      <div className="flex flex-wrap items-center gap-3 p-5 pb-3 sm:px-6">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/10">
+          <ArrowLeftRight className="h-6 w-6 text-primary" strokeWidth={1.8} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-xl font-black text-foreground sm:text-2xl">مركز الانتقالات</div>
-          <div className="mt-1 text-sm text-muted-foreground">مَن وصل ومَن غادر في دوري روشن — موجز الصفقات بالنوع والمبلغ عند توفّره</div>
+          <div className="text-lg font-black text-foreground sm:text-xl">مركز الانتقالات — نبض السوق</div>
+          {countdown && (
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              {countdown.label} <b className="text-foreground tabular-nums">{countdown.value}</b>
+            </div>
+          )}
         </div>
-        <ChevronLeft className="h-6 w-6 shrink-0 text-primary transition-transform group-hover:-translate-x-1" strokeWidth={1.8} />
+        <Link
+          href="/sports/transfers"
+          className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-primary px-4 py-2 text-sm font-black text-white shadow-sm transition-transform hover:-translate-x-0.5"
+        >
+          المركز الكامل <ChevronLeft className="h-4 w-4" />
+        </Link>
       </div>
-    </Link>
+
+      {/* صفقة اليوم */}
+      {deal && (
+        <div className="mx-5 mb-3 sm:mx-6">
+          <Link
+            href={deal.type === "rumour" && deal.playerId ? `/sports/transfers/story/${deal.playerId}` : "/sports/transfers"}
+            className={`group flex items-center gap-3 rounded-2xl border p-3.5 transition-colors ${deal.hereWeGo ? "border-red-500/40 bg-red-500/[0.05]" : "border-border bg-card hover:border-primary/40"}`}
+          >
+            <span className="shrink-0 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 text-[10px] font-black text-amber-700 dark:text-amber-400">⭐ صفقة اليوم</span>
+            {deal.playerImage && <img src={deal.playerImage} alt="" className="h-9 w-9 rounded-full object-cover" loading="lazy" />}
+            <span className="min-w-0 flex-1 truncate text-sm">
+              <b className="text-foreground">{deal.player}</b>
+              <span className="text-muted-foreground"> — {deal.from} </span>
+              <ChevronLeft className="inline h-3.5 w-3.5 text-muted-foreground" />
+              <b className="text-foreground"> {deal.to}</b>
+            </span>
+            {dealMoney && <span className="shrink-0 font-black text-amber-700 dark:text-amber-400 tabular-nums text-sm" dir="ltr">{dealMoney}</span>}
+            {deal.hereWeGo && <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black text-white">!Here we go</span>}
+          </Link>
+        </div>
+      )}
+
+      {/* شريط نبض السوق المتحرك */}
+      {pulse.length > 0 && (
+        <div className="relative border-t border-border/60 bg-card/60 py-2.5 overflow-hidden" dir="ltr">
+          <div className="animate-ticker inline-flex w-max" dir="rtl">
+            {[...pulse, ...pulse].map((p, i) => <PulseTickerItem key={`${p.playerId}-${p.date}-${i}`} p={p} />)}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
