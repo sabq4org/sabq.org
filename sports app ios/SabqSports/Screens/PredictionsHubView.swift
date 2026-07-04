@@ -9,11 +9,12 @@ struct PredictionsHubView: View {
     @Environment(SpAuthStore.self) private var auth
 
     enum Tab: String, CaseIterable {
-        case matches, mine, leaders, long, badges, howto
+        case matches, mine, scorers, leaders, long, badges, howto
         var label: String {
             switch self {
             case .matches: return "المباريات"
             case .mine: return "توقّعاتي"
+            case .scorers: return "الهدافون"
             case .leaders: return "المتصدّرون"
             case .long: return "البطل والهدّاف"
             case .badges: return "الإنجازات"
@@ -36,6 +37,20 @@ struct PredictionsHubView: View {
     @State private var loadingMine = false
     @State private var mineLoaded = false
     @State private var mineError: String?
+
+    // توقّعات الهدافين — تُحمّل مع المباريات وتمرَّر لكل بطاقة.
+    @State private var scorerPicks: [Int: SpMyPickRow] = [:]
+    @State private var scorerPicksLoaded = false
+
+    // تبويب «الهدافون» — قائمة كل توقّعات الهدافين (match_scorer + first_scorer).
+    @State private var myScorerPicks: [SpMyPickRow] = []
+    @State private var loadingScorerPicks = false
+    @State private var scorerPicksLoadedTab = false
+    @State private var scorerPicksError: String?
+
+    // قسمي الأسبوعي — يظهر كـ banner فوق القائمة.
+    @State private var myDivision: SpMyDivision?
+    @State private var divisionMeta: [String: SpDivisionMeta]?
 
     // المتصدّرون
     @State private var leaders: [SpPoolLeader] = []
@@ -127,6 +142,9 @@ struct PredictionsHubView: View {
             }
 
             scoringExplainer
+            if let div = myDivision {
+                divisionBanner(div)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity)
@@ -192,6 +210,47 @@ struct PredictionsHubView: View {
         .background(RoundedRectangle(cornerRadius: SpTheme.chipRadius, style: .continuous).fill(color.opacity(0.10)))
     }
 
+    // MARK: - بانر القسم الأسبوعي
+
+    /// يعرض قسم المستخدم هذا الأسبوع: الاسم، الإيموجي، النقاط الأسبوعية،
+    /// وموسميّة. لون البانر يطابق لون القسم من الـ backend.
+    @ViewBuilder private func divisionBanner(_ div: SpMyDivision) -> some View {
+        let info = divisionInfo(div.division)
+        let colorHex = info.color
+        HStack(spacing: 10) {
+            Text(info.emoji).font(.system(size: 22))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("قسمك هذا الأسبوع: \(info.name)")
+                    .font(SportsFonts.app(size: 12.5, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                HStack(spacing: 8) {
+                    Text("\(div.weekPoints) نقطة الأسبوع")
+                        .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkDim)
+                    Text("·").foregroundStyle(SpTheme.onDarkFaint)
+                    Text("\(div.seasonPoints) للموسم")
+                        .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkDim)
+                }
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.left")
+                .font(.system(size: 11, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+            .fill(colorHex.opacity(0.10))
+            .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                .stroke(colorHex.opacity(0.35), lineWidth: 1)))
+    }
+
+    /// معلومات القسم — نُسخة iOS من DIVISION_META في الخادم.
+    private func divisionInfo(_ d: Int) -> (name: String, emoji: String, color: Color) {
+        switch d {
+        case 1: return ("النوّاحة", "🔮", Color(red: 0.486, green: 0.227, blue: 0.922))
+        case 2: return ("المحلّلون", "⭐", SpTheme.gold)
+        case 3: return ("المتابعون", "🎯", SpTheme.teal)
+        default: return ("الجمهور", "👀", SpTheme.onDarkDim)
+        }
+    }
+
     // MARK: - شريط التبويبات
 
     private var segmented: some View {
@@ -224,6 +283,7 @@ struct PredictionsHubView: View {
         switch tab {
         case .matches: matchesTab
         case .mine: mineTab
+        case .scorers: scorersTab
         case .leaders: leadersTab
         case .long: SpLongPredictionsView()
         case .badges: badgesTab
@@ -242,7 +302,11 @@ struct PredictionsHubView: View {
         } else {
             VStack(spacing: 14) {
                 ForEach(matches) { match in
-                    SpPredictionMatchCard(match: match) { await loadToday(silent: true) }
+                    SpPredictionMatchCard(
+                        match: match,
+                        scorerPick: scorerPicks[match.id],
+                        onSubmitted: { await loadToday(silent: true) }
+                    )
                 }
             }
         }
@@ -260,6 +324,21 @@ struct PredictionsHubView: View {
                          subtitle: "ابدأ من تبويب «المباريات» وستظهر توقّعاتك هنا")
         } else {
             SpMyPredictionsList(rows: mine)
+        }
+    }
+
+    @ViewBuilder private var scorersTab: some View {
+        if !auth.isLoggedIn {
+            loginPrompt
+        } else if loadingScorerPicks {
+            SpLoading()
+        } else if let scorerPicksError {
+            SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: scorerPicksError)
+        } else if myScorerPicks.isEmpty {
+            SpEmptyState(icon: "soccerball", title: "لم تتوقّع هدّافًا بعد",
+                         subtitle: "اختر هدّاف كل مباراة من بطاقتها — ستظهر توقّعاتك هنا")
+        } else {
+            SpMyScorerPicksList(rows: myScorerPicks)
         }
     }
 
@@ -293,51 +372,108 @@ struct PredictionsHubView: View {
 
     @ViewBuilder private var howToTab: some View {
         VStack(spacing: 14) {
-            // الخطوات الثلاث
+            // (1) الفكرة الجوهرية — ما هو النظام ولماذا ليس رهانًا.
             howToCard(
-                title: "الفكرة باختصار",
+                title: "الفكرة من الألف للياء",
                 rows: [
-                    ("1.circle.fill", "توقّع النتيجة", "اختر نتيجة المباراة قبل انطلاقها — لكل مباراة بركة نقاط تُقتسم بين المصيبين."),
-                    ("2.circle.fill", "تُسوّى تلقائيًا", "فور انتهاء المباراة تُوزَّع البركة على المصيبين كلٌّ حسب دقّة توقّعه."),
-                    ("3.circle.fill", "اجمع وتصدّر", "نقاطك تُضاف لرصيدك وترفعك في لوحة المتصدّرين وتفتح لك الإنجازات."),
+                    ("questionmark.circle.fill", "ما هذا؟", "لعبة توقّع مجانيّة بالكامل — لا تدفع شيئًا للمشاركة، والمكافآت كلّها نقاط ولاء قابلة للاستبدال داخل التطبيق."),
+                    ("1.circle.fill", "توقّع ثم انتظر", "اختر نتيجة كل مباراة (وهدافها) قبل انطلاقها، ثم تُسوّى تلقائيًا فور انتهائها."),
+                    ("2.circle.fill", "كلّما قلّ المصيبون زاد نصيبك", "النقاط لا تُمنح من رأس مال — بل تُقتسم بين المصيبين. فلو أصبت وحدك، أخذت البركة كاملة."),
+                    ("3.circle.fill", "ارفع طبقتك وتصدّر", "نقاطك تُضاف لرصيد ولائك وتُرقّيك بين 5 طبقات، وفي الأسبوع تُرتّب في 4 أقسام متفاوتة."),
                 ],
                 tint: SpTheme.green)
 
-            // طبقات البركة 50/30/20
+            // (2) لماذا ليس رهانًا — توضيح قانوني صريح.
             howToCard(
-                title: "توزيع النقاط — بركة 1000",
+                title: "ليست رهانًا — كيف؟",
                 rows: [
-                    ("target", "🎯 النتيجة الدقيقة — 50٪", "500 نقطة لمن أصاب النتيجة بالضبط (مثال 2-1)."),
-                    ("ruler", "📏 الفارق الصحيح — 30٪", "300 نقطة لمن أصاب فارق الأهداف واتجاه النتيجة."),
-                    ("checkmark.seal", "✅ النتيجة الصحيحة — 20٪", "200 نقطة لمن أصاب الفائز أو التعادل فقط."),
+                    ("hand.raised.fill", "دخول مجّاني", "لا تدفع مبلغًا ولا تخاطر بشيء. المشاركة مفتوحة لكل المستخدمين بلا مقابل."),
+                    ("banknote", "سبق تموّل الجوائز", "بركة كل مباراة يدفعها تطبيق سبق من ميزانيته التسويقية، لا من خسائر المستخدمين."),
+                    ("equal.circle", "توزيع عادل شفّاف", "البركة تُقسَّم بالتساوي بين المصيبين وفق قواعد معلنة — لا احتمالات يعدّلها أحد لصالحه."),
+                    ("gift.fill", "مكافآت داخل التطبيق", "النقاط تُستبدل مزايا وجوائز داخل سبق، لا يمكن سحبها نقدًا."),
                 ],
                 tint: SpTheme.teal)
 
-            // قواعد البركة المتدرّجة
+            // (3) طبقات توقّع النتيجة — تفصيل 50/30/20.
             howToCard(
-                title: "قواعد البركة المتدرّجة",
+                title: "طبقات النتيجة — بركة 1000",
                 rows: [
-                    ("person.2.fill", "كلّما قلّوا زدت", "نصيب كل طبقة يُقسَّم بالتساوي على فائزيها — فكلّما قلّ المصيبون زاد نصيبك."),
-                    ("crown.fill", "جائزة متراكمة (جاكبوت)", "إن لم يُصب أحدٌ طبقةً تراكمت نقاطها وأُضيفت لبركة المباراة التالية في البطولة."),
-                    ("arrow.triangle.2.circlepath", "النتيجة المقلوبة لا تفوز", "يُحتسب الفائز حسب اتجاه النتيجة؛ توقّع 1-2 لا يُكافأ على مباراة انتهت 2-1."),
-                ],
-                tint: SpTheme.gold)
-
-            // البطل والهدّاف
-            howToCard(
-                title: "البطل والهدّاف",
-                rows: [
-                    ("trophy.fill", "بركة منفصلة 5000", "لكل بطولة بركة مستقلّة للبطل وأخرى للهدّاف، تُقسَّم على المصيبين عند ختام البطولة."),
-                    ("lock.open.fill", "مفتوحة حتى دور الثمانية", "توقّع البطل والهدّاف يبقى متاحًا حتى انطلاق ربع النهائي (دور الثمانية) ثم يُقفل."),
+                    ("target", "🎯 النتيجة الدقيقة — 50٪", "أصبت الرقمين بالضبط (مثال 2-1). نصيبك من البركة = 500 نقطة تُقسَّم على المصيبين."),
+                    ("ruler", "📏 الفارق الصحيح — 30٪", "أصبت الفارق والاتجاه لا الرقمين (مثال توقّعت 3-1 وانتهت 2-0). نصيبك = 300 نقطة تُقسَّم."),
+                    ("checkmark.seal", "✅ النتيجة الصحيحة — 20٪", "أصبت الفائز أو التعادل فقط. نصيبك = 200 نقطة تُقسَّم على المصيبين."),
+                    ("arrow.triangle.2.circlepath", "النتيجة المقلوبة لا تفوز", "من أصاب الفائز لكن قلب الرقمين (توقّع 1-2 وانتهت 2-1) لا يُكافأ."),
                 ],
                 tint: SpTheme.greenSoft)
 
-            Text("التوقّعات للمتعة والمنافسة فقط — لا رهان ولا مقابل مادّي.")
+            // (4) الجاكبوت — كيف يتراكم ولماذا.
+            howToCard(
+                title: "الجائزة المتراكمة (الجاكبوت)",
+                rows: [
+                    ("crown.fill", "متى يتراكم؟", "عندما لا يُصب أحدٌ طبقةً (مثلاً نتيجة مفاجئة)، تترحّل نقاط تلك الطبقة للمباراة التالية في البطولة نفسها."),
+                    ("flame.fill", "لماذا يكبر؟", "كل مباراة بلا فائز تُضيف نقاطها للتي بعدها، فتتضخّم الجائزة حتى يأتي من يصيبها."),
+                    ("scope", "لكل بطولة جاكبوتها", "الجاكبوت مستقلّ لكل بطولة — كأس العالم له جاكبوت، ودوري روشن له آخر، وهكذا."),
+                ],
+                tint: SpTheme.gold)
+
+            // (5) الهدافون — طبقة جديدة فوق النتيجة.
+            howToCard(
+                title: "توقّع الهداف ⚽",
+                rows: [
+                    ("soccerball", "هداف المباراة — بركة 300", "إضافةً لتوقّع النتيجة، اختر من سيسجّل. أصبت؟ تأخذ حصّتك من بركة 300 نقطة تُقسَّم على المصيبين."),
+                    ("1.circle", "أول هدّاف — بركة 200", "اختر من سيفتتح التسجيل. بركة أصغر لكن مكافأة أعلى لأنّ التحدّي أصعب."),
+                    ("person.2.crop.square.stack", "من قائمة اللاعبين الفعليّين", "تختار من تشكيلتي الفريقين اللتين تنزلان قبل المباراة. الأساسيّون والاحتياط ظاهرون."),
+                    ("clock.fill", "قبل الانطلاق فقط", "يُقفل توقّع الهداف مع بداية المباراة تمامًا كتوقّع النتيجة."),
+                ],
+                tint: SpTheme.crimson)
+
+            // (6) مضاعف طبقة الولاء — لماذا الولاء يرفع مكافأتك.
+            howToCard(
+                title: "مضاعف الولاء 🔮",
+                rows: [
+                    ("rosette", "كلّما ارتفع ولاؤك زاد نصيبك", "حصّتك من البركة تُضرب بمضاعف حسب طبقة ولائك: من 1.0× للقارئ الجديد إلى 1.5× لسفير سبق."),
+                    ("chart.bar.fill", "مثال محسوب", "أصبت النتيجة الدقيقة ونصيبك 100 نقطة، وطبقتك «العضو الذهبي» (1.2×) → تحصل على 120 نقطة فعلية."),
+                    ("arrow.up.circle.fill", "كيف أرفع طبقتي؟", "بالقراءة والتفاعل اليومي والمشاركة المنتظمة — لا بتوقّع واحد كبير. ولاؤك تراكمي طويل المدى."),
+                ],
+                tint: SpTheme.gold)
+
+            // (7) الأقسام الأسبوعية — إحساس الدوري.
+            howToCard(
+                title: "الأقسام الأسبوعية 🏆",
+                rows: [
+                    ("person.3.sequence", "4 أقسام متفاوتة", "كل يوم سبت يُوزَّع المتنافسون على 4 أقسام حسب نقاطهم في الأسبوع: النوّاحة 🔮 · المحلّلون ⭐ · المتابعون 🎯 · الجمهور 👀."),
+                    ("arrow.up.arrow.down.circle", "ترقية وهبوط كل أسبوع", "تُحسب نقاطك يوم السبت، فإن تحسّنت صعدت قسمًا أعلى، وإن تراجعت هبطت. إشعار يصلك بالتغيّر."),
+                    ("1.lane", "أعلى 1٪ في النوّاحة", "القسم الأعلى يضمّ نخبة المتنبّئين في الأسبوع — شرفٌ ومكانة تظهر في ملفّك."),
+                    ("calendar", "في أيّ يوم؟", "تُحسب الأقسام فجر كل سبت (00:00 بتوقيت الرياض) من نقاط الأسبوع المنتهي."),
+                ],
+                tint: SpTheme.teal)
+
+            // (8) البطل والهداف طويل المدى.
+            howToCard(
+                title: "البطل والهداف — توقّعات البطولة",
+                rows: [
+                    ("trophy.fill", "بركة 5000 لكل نوع", "توقّع من سيفوز بالبطولة ومن سيكون هدّافها. بركة منفصلة 5000 لكل نوع تُسوّى عند ختام البطولة."),
+                    ("lock.open.fill", "مفتوحة حتى دور الثمانية", "تبقى هذه التوقّعات متاحة حتى انطلاق ربع النهائي ثم تُقفل نهائيًا."),
+                    ("hourglass", "مكافأة متأخّرة", "هذه التوقّعات لا تُسوّى إلا في نهاية البطولة — صبرك فيها يُكافأ بنقاط كبيرة."),
+                ],
+                tint: SpTheme.leaf)
+
+            // (9) الإنجازات والشارات.
+            howToCard(
+                title: "الإنجازات والشارات 🏅",
+                rows: [
+                    ("star.fill", "شارات دائمة", "أصبت 5 نتائج دقيقة متتالية؟ تنال شارة «نوستراداموس». هذه الشارات تظهر في ملفّك للأبد."),
+                    ("bolt.fill", "أنواع متعدّدة", "هناك شارات للدقّة، وللجرأة (توقّعت المفاجأة وأصبت)، وللاستمرار، وللهدافين — كلٌّ بقواعدها."),
+                    ("gift", "مكافأة فورية", "كلّ شارة جديدة تمنحك نقاط ولاء إضافية لحظة نيلها."),
+                ],
+                tint: SpTheme.gold)
+
+            // إخلاء المسؤولية الأخير.
+            Text("🔒 التوقّعات للمتعة والمنافسة فقط — لا رهان ولا مقابل مادّي. كل المكافآت نقاط ولاء داخل تطبيق سبق.")
                 .font(SportsFonts.app(size: 11, weight: .semibold))
                 .foregroundStyle(SpTheme.onDarkFaint)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
-                .padding(.top, 2)
+                .padding(.top, 6)
         }
     }
 
@@ -388,11 +524,55 @@ struct PredictionsHubView: View {
             todayError = nil
             featureOff = false
             detectWin()
+            if auth.isLoggedIn { await loadScorerPicks() }
+            if auth.isLoggedIn { await loadDivision() }
         } catch {
             if case APIError.server(503, _) = error { featureOff = true }
             else { todayError = (error as? APIError)?.errorDescription ?? "تعذّر التحميل" }
         }
         loadingToday = false
+    }
+
+    /// يحمّل توقّعات الهدافين ويبني خريطة fixtureId → pick لتمريرها لكل بطاقة.
+    private func loadScorerPicks() async {
+        do {
+            let r = try await APIClient.shared.fetchPoolMyPicks()
+            var map: [Int: SpMyPickRow] = [:]
+            for p in r.picks where p.kind == SpPickKind.matchScorer.rawValue {
+                map[p.fixtureId] = p
+            }
+            scorerPicks = map
+            scorerPicksLoaded = true
+        } catch {
+            // أخطاء الهدافين لا تُفشل المباريات — نُبقي القائمة تعمل.
+        }
+    }
+
+    /// يحمّل قسم المستخدم الأسبوعي + ميتاداتا الأقسام لعرض الـ banner.
+    private func loadDivision() async {
+        do {
+            let r = try await APIClient.shared.fetchMyDivision()
+            myDivision = r.division
+            divisionMeta = r.meta
+        } catch {
+            // غياب القسم ليس خطأً — المستخدم قد يكون جديداً لم يُصنَّف بعد.
+        }
+    }
+
+    /// يحمّل قائمة توقّعات الهدافين الكاملة لتبويب «الهدافون».
+    private func loadMyScorerPicks() async {
+        loadingScorerPicks = true
+        do {
+            let r = try await APIClient.shared.fetchPoolMyPicks()
+            myScorerPicks = r.picks.sorted(by: { (l, r) in
+                (l.kickoffTs ?? 0) > (r.kickoffTs ?? 0)
+            })
+            scorerPicksLoadedTab = true
+            scorerPicksError = nil
+        } catch {
+            scorerPicksError = (error as? APIError)?.errorDescription ?? "تعذّر التحميل"
+        }
+        loadingScorerPicks = false
     }
 
     private func reloadCurrent(force: Bool) async {
@@ -401,6 +581,8 @@ struct PredictionsHubView: View {
             await loadToday(silent: !force && !matches.isEmpty)
         case .mine:
             if auth.isLoggedIn && (force || !mineLoaded) { await loadMine() }
+        case .scorers:
+            if auth.isLoggedIn && (force || !scorerPicksLoadedTab) { await loadMyScorerPicks() }
         case .leaders:
             if force || !leadersLoaded { await loadLeaders() }
         case .long, .badges, .howto:

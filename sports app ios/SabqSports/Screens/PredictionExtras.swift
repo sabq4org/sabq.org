@@ -667,3 +667,376 @@ struct SpConfettiView: View {
         }
     }
 }
+
+// MARK: - توقّعاتي للهدافين (تبويب «الهدافون»)
+
+struct SpMyScorerPicksList: View {
+    let rows: [SpMyPickRow]
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ForEach(rows) { row in SpMyScorerPickCard(row: row) }
+        }
+    }
+}
+
+private struct SpMyScorerPickCard: View {
+    let row: SpMyPickRow
+
+    private var kind: SpPickKind? { row.pickKind }
+
+    var body: some View {
+        VStack(spacing: 9) {
+            HStack(spacing: 8) {
+                if let k = kind {
+                    Text("\(k.emoji) \(k.labelAr)")
+                        .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                        .foregroundStyle(SpTheme.gold)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(SpTheme.gold.opacity(0.10)))
+                }
+                Spacer(minLength: 0)
+                statusBadge
+            }
+
+            HStack(spacing: 10) {
+                Image(systemName: "figure.soccer")
+                    .font(.system(size: 18)).foregroundStyle(SpTheme.onDarkDim)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(SpTheme.chipFill))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.playerName)
+                        .font(SportsFonts.app(size: 13.5, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                        .lineLimit(1)
+                    if let home = row.homeTeamName, let away = row.awayTeamName {
+                        Text("\(home) ضد \(away)")
+                            .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+
+            if row.settled, let scorers = row.actualScorers, !scorers.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.seal").font(.system(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
+                    Text("الهداف الفعلي: " + scorers.prefix(3).map(\.name).joined(separator: "، "))
+                        .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
+                        .lineLimit(2)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+        .padding(13)
+        .background(
+            RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                .fill(SpTheme.card)
+                .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                    .stroke(row.won ? SpTheme.gold.opacity(0.45) : SpTheme.cardStroke, lineWidth: 1))
+        )
+    }
+
+    @ViewBuilder private var statusBadge: some View {
+        if row.settled {
+            let won = row.won
+            Text(won ? "+\(row.pointsAwarded) نقطة" : "لم تُصب")
+                .font(SportsFonts.app(size: 11, weight: .heavy))
+                .foregroundStyle(won ? SpTheme.leaf : SpTheme.onDarkFaint)
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(Capsule().fill((won ? SpTheme.leaf : SpTheme.onDarkFaint).opacity(0.10)))
+        } else {
+            Text("بانتظار المباراة")
+                .font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .background(Capsule().fill(SpTheme.chipFill))
+        }
+    }
+}
+
+// MARK: - اختيار الهداف (Expansion A)
+
+// قسم قابل للطيّ داخل بطاقة المباراة: يفتح sheet لاختيار لاعب من تشكيلتي
+// الفريقين. يعرض الاختيار الحالي وحالة التسوية (أصاب/أخطأ + الهداف الفعلي).
+struct SpScorerPickSection: View {
+    let fixtureId: Int
+    let kickoffTs: Int
+    let locked: Bool
+    let settled: Bool
+    /// اختيار المستخدم الحالي لهذه المباراة (إن وُجد)، من /picks/mine.
+    var existingPick: SpMyPickRow?
+
+    @Environment(SpAuthStore.self) private var auth
+    @State private var showPicker = false
+    @State private var submitting = false
+    @State private var error: String?
+
+    private var kind: SpPickKind { .matchScorer }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text("⚽").font(.system(size: 14))
+                Text("توقّع هدّاف المباراة")
+                    .font(SportsFonts.app(size: 12.5, weight: .bold))
+                    .foregroundStyle(SpTheme.onDark)
+                Spacer(minLength: 0)
+                poolChip
+            }
+
+            if settled, let pick = existingPick {
+                settledRow(pick)
+            } else if let pick = existingPick, !locked {
+                pickedRow(pick)
+            } else if locked {
+                lockedRow
+            } else {
+                pickButton
+            }
+
+            if let error {
+                Text(error).font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.crimson)
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 11)
+        .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+            .fill(SpTheme.gold.opacity(0.06)))
+        .sheet(isPresented: $showPicker) {
+            SpScorerPickerSheet(fixtureId: fixtureId, kickoffTs: kickoffTs, kind: kind) { player in
+                Task { await submitPick(player) }
+            }
+            .presentationDetents([.medium, .large])
+        }
+    }
+
+    // MARK: - مكوّنات
+
+    private var poolChip: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "banknote").font(.system(size: 9))
+            Text("بركة \(kind.pool)")
+                .font(SportsFonts.app(size: 10, weight: .semibold))
+        }
+        .foregroundStyle(SpTheme.gold)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Capsule().fill(SpTheme.gold.opacity(0.10)))
+    }
+
+    private var pickButton: some View {
+        Button { showPicker = true } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus.circle.fill").font(.system(size: 13))
+                Text("اختر هدّافًا")
+                    .font(SportsFonts.app(size: 12.5, weight: .semibold))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(SpTheme.gold)
+            .frame(maxWidth: .infinity).padding(.vertical, 6)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder private func pickedRow(_ pick: SpMyPickRow) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 12)).foregroundStyle(SpTheme.leaf)
+            Text(pick.playerName)
+                .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDark)
+                .lineLimit(1)
+            if let t = pick.teamName, !t.isEmpty {
+                Text(t).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Button("تغيير") { showPicker = true }
+                .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.gold)
+        }
+    }
+
+    private var lockedRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "lock.fill").font(.system(size: 11)).foregroundStyle(SpTheme.onDarkDim)
+            if let pick = existingPick {
+                Text("توقّعت: \(pick.playerName)")
+                    .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+                    .lineLimit(1)
+            } else {
+                Text("أُقفل التوقّع — انطلقت المباراة")
+                    .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder private func settledRow(_ pick: SpMyPickRow) -> some View {
+        let won = pick.won
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: won ? "checkmark.seal.fill" : "xmark.circle.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(won ? SpTheme.leaf : SpTheme.onDarkFaint)
+                Text(pick.playerName)
+                    .font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
+                Spacer(minLength: 0)
+                Text(won ? "+\(pick.pointsAwarded) نقطة" : "لم تُصب")
+                    .font(SportsFonts.app(size: 11.5, weight: .heavy))
+                    .foregroundStyle(won ? SpTheme.leaf : SpTheme.onDarkFaint)
+            }
+            if let scorers = pick.actualScorers, !scorers.isEmpty {
+                Text("الهداف الفعلي: " + scorers.prefix(3).map(\.name).joined(separator: "، "))
+                    .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint).lineLimit(2)
+            }
+        }
+    }
+
+    // MARK: - الإرسال
+
+    private func submitPick(_ player: SpPickPlayer) async {
+        guard auth.isLoggedIn else { return }
+        error = nil
+        submitting = true
+        let body = SpPickSubmitBody(
+            fixtureId: fixtureId, kind: kind.rawValue,
+            playerId: player.id, playerName: player.name,
+            teamId: player.teamId, teamName: player.teamName
+        )
+        do {
+            let r = try await APIClient.shared.submitPoolPick(body)
+            if r.success == true {
+                // نجاح — الـ parent view سيُحدّث القائمة عبر onSubmitted.
+            } else {
+                error = pickErrorMessage(reason: r.reason)
+            }
+        } catch let e as APIError {
+            if case .server(409, let msg) = e { error = msg ?? "تعذّر حفظ التوقّع" }
+            else { error = e.errorDescription ?? "تعذّر حفظ التوقّع" }
+        } catch {
+            self.error = "تعذّر حفظ التوقّع"
+        }
+        submitting = false
+    }
+
+    private func pickErrorMessage(reason: String?) -> String {
+        switch reason {
+        case "LOCKED": return "أُقفل التوقّع — انطلقت المباراة"
+        case "NOT_IN_LINEUP": return "هذا اللاعب ليس ضمن قائمة المباراة"
+        case "NOT_OPEN": return "هذه المباراة غير متاحة للتوقّع"
+        default: return "تعذّر حفظ التوقّع"
+        }
+    }
+}
+
+// شاشة اختيار اللاعب: تعرض لاعبي الفريقين مرتّبين (الأساسيّون أوّلًا) مع بحث.
+struct SpScorerPickerSheet: View {
+    let fixtureId: Int
+    let kickoffTs: Int
+    let kind: SpPickKind
+    var onPick: (SpPickPlayer) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var players: SpMatchPlayersResponse?
+    @State private var loading = true
+    @State private var loadError: String?
+    @State private var query = ""
+
+    private var filteredHome: [SpPickPlayer] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        let list = players?.home.players ?? []
+        return q.isEmpty ? list : list.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+    private var filteredAway: [SpPickPlayer] {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        let list = players?.away.players ?? []
+        return q.isEmpty ? list : list.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                if loading {
+                    SpLoading()
+                } else if let loadError {
+                    SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+                } else if let players, !players.lineupsReady {
+                    lineupPending
+                } else {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            if !filteredHome.isEmpty {
+                                sideSection(title: players?.home.teamName ?? "المضيف", players: filteredHome)
+                            }
+                            if !filteredAway.isEmpty {
+                                sideSection(title: players?.away.teamName ?? "الضيف", players: filteredAway)
+                            }
+                        }
+                        .padding(16)
+                    }
+                }
+            }
+            .navigationTitle("اختر \(kind.labelAr)")
+            .navigationBarTitleDisplayMode(.inline)
+            .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "ابحث عن لاعب")
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("إلغاء") { dismiss() }
+                        .font(SportsFonts.app(size: 13, weight: .semibold))
+                }
+            }
+        }
+        .task { await load() }
+    }
+
+    @ViewBuilder private func sideSection(title: String, players: [SpPickPlayer]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark)
+            ForEach(players.sorted(by: { $0.starter && !$1.starter })) { p in
+                Button {
+                    onPick(p)
+                    dismiss()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: p.starter ? "figure.soccer" : "person.crop.circle")
+                            .font(.system(size: 16)).foregroundStyle(p.starter ? SpTheme.green : SpTheme.onDarkFaint)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill((p.starter ? SpTheme.green : SpTheme.onDarkFaint).opacity(0.10)))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(p.name)
+                                .font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark)
+                                .lineLimit(1)
+                            Text(p.starter ? "أساسي" : "احتياط")
+                                .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 11, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                        .fill(SpTheme.card))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private var lineupPending: some View {
+        SpEmptyState(
+            icon: "clock",
+            title: "التشكيلات لم تُعلَن بعد",
+            subtitle: "تنزل تشكيلتا الفريقين عادةً قبل المباراة بساعة. عُد لاحقًا لاختيار الهداف."
+        )
+        .padding(20)
+    }
+
+    private func load() async {
+        loading = true
+        do {
+            players = try await APIClient.shared.fetchMatchScorers(fixtureId: fixtureId)
+            loadError = nil
+        } catch let e as APIError {
+            loadError = e.errorDescription ?? "تعذّر تحميل اللاعبين"
+        } catch {
+            loadError = "تعذّر تحميل اللاعبين"
+        }
+        loading = false
+    }
+}

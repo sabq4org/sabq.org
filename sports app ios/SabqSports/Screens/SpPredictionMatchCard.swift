@@ -5,6 +5,8 @@ import SwiftUI
 // مُقفلة (بانتظار النتيجة) / مُسوّاة (تعرض النتيجة وطبقتي ونصيبي).
 struct SpPredictionMatchCard: View {
     let match: SpPredictableMatch
+    /// توقّع الهداف الحالي لهذه المباراة (إن وُجد)، من /picks/mine.
+    var scorerPick: SpMyPickRow?
     /// يُستدعى بعد إرسال ناجح لتحديث القائمة من الخادم.
     var onSubmitted: () async -> Void
 
@@ -38,6 +40,15 @@ struct SpPredictionMatchCard: View {
             probabilityBar
             if match.crowd.total > 0 { crowdLine }
             if !settled { poolPreview }
+            if auth.isLoggedIn, !f.status.live, !f.status.finished {
+                SpScorerPickSection(
+                    fixtureId: f.id,
+                    kickoffTs: f.timestamp,
+                    locked: match.locked,
+                    settled: settled,
+                    existingPick: scorerPick
+                )
+            }
             if let error {
                 Text(error).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.crimson)
             }
