@@ -10,8 +10,8 @@ import Foundation
 // `ContentState` هو الجزء المتغيّر لحظيًا (النتيجة/الشوط/الدقيقة/آخر حدث)،
 // و`Attributes` الثابتة تُحدَّد مرة واحدة عند بدء النشاط (الفريقان والدور).
 
-public struct LiveMatchAttributes: ActivityAttributes {
-    public struct ContentState: Codable, Hashable {
+public nonisolated struct LiveMatchAttributes: ActivityAttributes {
+    public nonisolated struct ContentState: Codable, Hashable {
         /// أهداف المضيف والضيف
         public var homeScore: Int
         public var awayScore: Int

@@ -8,7 +8,7 @@ import Foundation
 // session + a platform-admin role check on the server.
 
 /// One page of news for a status tab, plus the total count behind it.
-struct AdminNewsPage {
+nonisolated struct AdminNewsPage {
     let items: [AdminNewsItem]
     let total: Int
 }
@@ -68,7 +68,7 @@ enum AdminServiceError: LocalizedError {
 
 // MARK: - Response envelopes
 
-private struct AdminNewsListResponse: Decodable {
+private nonisolated struct AdminNewsListResponse: Decodable {
     let items: [AdminNewsItem]
     let total: Int?
 }
@@ -76,29 +76,29 @@ private struct AdminNewsListResponse: Decodable {
 /// Page size for the dashboard news tabs.
 let adminNewsPageSize = 10
 
-private struct AdminNewsItemResponse: Decodable {
+private nonisolated struct AdminNewsItemResponse: Decodable {
     let item: AdminNewsItem?
 }
 
-private struct AdminArticleDetailResponse: Decodable {
+private nonisolated struct AdminArticleDetailResponse: Decodable {
     let article: AdminArticleDetail?
 }
 
-private struct AdminSummaryResponse: Decodable { let summary: String? }
-private struct AdminSEOResponse: Decodable { let seo: AdminSEO? }
-private struct AdminUploadResponse: Decodable { let url: String? }
-private struct AdminGenerationResponse: Decodable { let result: AdminGenerationResult? }
-private struct AdminProofreadResponse: Decodable { let issues: [AdminProofIssue]? }
-private struct AdminImageGenResponse: Decodable { let imageUrl: String? }
-private struct AdminUsersResponse: Decodable { let items: [AdminUser]? }
-private struct AdminCreateResponse: Decodable { let id: String? }
+private nonisolated struct AdminSummaryResponse: Decodable { let summary: String? }
+private nonisolated struct AdminSEOResponse: Decodable { let seo: AdminSEO? }
+private nonisolated struct AdminUploadResponse: Decodable { let url: String? }
+private nonisolated struct AdminGenerationResponse: Decodable { let result: AdminGenerationResult? }
+private nonisolated struct AdminProofreadResponse: Decodable { let issues: [AdminProofIssue]? }
+private nonisolated struct AdminImageGenResponse: Decodable { let imageUrl: String? }
+private nonisolated struct AdminUsersResponse: Decodable { let items: [AdminUser]? }
+private nonisolated struct AdminCreateResponse: Decodable { let id: String? }
 
-private struct AdminContentBody: Encodable { let content: String }
-private struct AdminSEOBody: Encodable { let title: String; let content: String; let excerpt: String }
-private struct AdminUploadBody: Encodable { let image: String }
+private nonisolated struct AdminContentBody: Encodable { let content: String }
+private nonisolated struct AdminSEOBody: Encodable { let title: String; let content: String; let excerpt: String }
+private nonisolated struct AdminUploadBody: Encodable { let image: String }
 
 /// Body for the one-click auto-image generation.
-private struct AdminAutoImageBody: Encodable {
+private nonisolated struct AdminAutoImageBody: Encodable {
     let articleId: String
     let title: String
     let content: String
@@ -106,8 +106,8 @@ private struct AdminAutoImageBody: Encodable {
     let category: String
     let articleType: String
 }
-private struct AdminReviewNotesBody: Encodable { let reviewNotes: String }
-private struct AdminDeletionBody: Encodable { let deletionReason: String }
+private nonisolated struct AdminReviewNotesBody: Encodable { let reviewNotes: String }
+private nonisolated struct AdminDeletionBody: Encodable { let deletionReason: String }
 
 // MARK: - Live implementation
 

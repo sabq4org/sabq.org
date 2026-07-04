@@ -146,7 +146,7 @@ final class LiveMatchActivityManager {
         pollTask?.cancel()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                guard let interval = await self?.nextPollInterval() else { return }
+                guard let interval = self?.nextPollInterval() else { return }
                 try? await Task.sleep(nanoseconds: interval)
                 if Task.isCancelled { return }
                 guard let detail = try? await APIClient.shared.fetchWorldCupMatch(

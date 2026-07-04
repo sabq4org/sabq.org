@@ -399,7 +399,7 @@ private struct WCPredTodayTab: View {
             await MainActor.run { showToast(WC_DRAW_NOT_ALLOWED_MESSAGE) }
             return
         }
-        await MainActor.run { submitting.insert(id) }
+        await MainActor.run { _ = submitting.insert(id) }
         do {
             _ = try await APIClient.shared.submitWCPrediction(fixtureId: id, predHome: input.home, predAway: input.away)
             await MainActor.run {

@@ -10,18 +10,18 @@ import SwiftUI
 enum SabqFonts {
     /// PostScript names. Verified against the IBM Plex Sans Arabic
     /// distribution shipped via @fontsource/ibm-plex-sans-arabic.
-    static let regular  = "IBMPlexSansArabic-Regular"
-    static let semibold = "IBMPlexSansArabic-SemiBold"
-    static let bold     = "IBMPlexSansArabic-Bold"
+    nonisolated static let regular  = "IBMPlexSansArabic-Regular"
+    nonisolated static let semibold = "IBMPlexSansArabic-SemiBold"
+    nonisolated static let bold     = "IBMPlexSansArabic-Bold"
 
     /// Editorial display font used for article titles, hero headings,
     /// and Smart Summary card title.
-    static func headline(size: CGFloat) -> Font {
+    nonisolated static func headline(size: CGFloat) -> Font {
         .custom(bold, size: size)
     }
 
     /// Slightly lighter weight for sub-headings inside articles.
-    static func subhead(size: CGFloat) -> Font {
+    nonisolated static func subhead(size: CGFloat) -> Font {
         .custom(semibold, size: size)
     }
 
@@ -29,7 +29,7 @@ enum SabqFonts {
     /// لوزن SwiftUI المطلوب. بديل مباشر لـ `SabqFonts.app(size: weight:)` كي يطابق
     /// كامل التطبيق الخط المعتمد في تفاصيل الخبر (3 أوزان متوفّرة، فنُسقط
     /// الأوزان النادرة على أقرب وزن).
-    static func app(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+    nonisolated static func app(size: CGFloat, weight: Font.Weight = .regular) -> Font {
         if weight == .bold || weight == .heavy || weight == .black {
             return .custom(bold, size: size)
         }

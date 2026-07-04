@@ -171,6 +171,11 @@ struct HomeFeedView: View {
                     WorldCupHomeStrip()
                         .animatedAppear(index: 1)
 
+                    // شريط كأس الملك — يظهر عند تفعيله من إعدادات النظام
+                    // (blockHidden) ويختفي كليًا خلاف ذلك أو عند غياب البيانات
+                    KingsCupHomeStrip()
+                        .animatedAppear(index: 1)
+
                     if !articlesStore.stories.isEmpty {
                         storiesSection
                             .animatedAppear(index: 2)
