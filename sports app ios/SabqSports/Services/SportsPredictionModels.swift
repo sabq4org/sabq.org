@@ -315,4 +315,164 @@ extension APIClient {
         return try await send(method: "POST", path: "/sports/predictions/long",
                               jsonBody: data, apiRoot: URLConstants.mobileAPI)
     }
+
+    // MARK: - توقّعات الهدافين (Expansion A) + الأقسام (Expansion C)
+
+    /// قائمة لاعبي مباراة لاختيار الهداف (يتطلّب تشكيلات API-Football).
+    func fetchMatchScorers(fixtureId: Int) async throws -> SpMatchPlayersResponse {
+        try await get(SpMatchPlayersResponse.self,
+                      path: "/sports/predictions/scorers/\(fixtureId)",
+                      ignoreCache: true, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// إرسال/تعديل توقّع الهدافين. يعيد الاستجابة كاملة.
+    func submitPoolPick(_ body: SpPickSubmitBody) async throws -> SpPickSubmitResponse {
+        try await post(SpPickSubmitResponse.self, path: "/sports/predictions/picks",
+                       body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// توقّعات الهدافين للمستخدم الحالي.
+    func fetchPoolMyPicks() async throws -> SpMyPicksResponse {
+        try await get(SpMyPicksResponse.self, path: "/sports/predictions/picks/mine",
+                      ignoreCache: true, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// قسمي الأسبوعي + معلومات الأقسام الأربعة.
+    func fetchMyDivision() async throws -> SpDivisionResponse {
+        try await get(SpDivisionResponse.self, path: "/sports/predictions/division",
+                      ignoreCache: true, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// لوحة متصدّري قسم معيّن (1-4).
+    func fetchDivisionLeaderboard(division: Int) async throws -> SpDivisionBoardResponse {
+        try await get(SpDivisionBoardResponse.self,
+                      path: "/sports/predictions/division/\(division)",
+                      ignoreCache: true, apiRoot: URLConstants.mobileAPI)
+    }
+}
+
+// MARK: - نماذج الهدافين
+
+nonisolated struct SpPickPlayer: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let teamId: Int
+    let teamName: String
+    let starter: Bool
+}
+
+nonisolated struct SpPickSide: Decodable, Hashable {
+    let teamId: Int
+    let teamName: String
+    let players: [SpPickPlayer]
+}
+
+nonisolated struct SpMatchPlayersResponse: Decodable, Hashable {
+    let fixtureId: Int
+    let lineupsReady: Bool
+    let kickoffTs: Int
+    let locked: Bool
+    let home: SpPickSide
+    let away: SpPickSide
+}
+
+nonisolated enum SpPickKind: String, Codable, CaseIterable {
+    case matchScorer = "match_scorer"
+    case firstScorer = "first_scorer"
+
+    var labelAr: String { self == .matchScorer ? "هداف المباراة" : "أول هدّاف" }
+    var emoji: String { self == .matchScorer ? "⚽" : "🥇" }
+    var pool: Int { self == .matchScorer ? 300 : 200 }
+}
+
+nonisolated struct SpPickSubmitBody: Encodable {
+    let fixtureId: Int
+    let kind: String
+    let playerId: Int
+    let playerName: String
+    let teamId: Int
+    let teamName: String?
+}
+
+nonisolated struct SpPickSubmitResponse: Decodable {
+    let success: Bool?
+    let reason: String?
+    let pick: SubmittedPick?
+    nonisolated struct SubmittedPick: Decodable {
+        let kind: String
+        let playerId: Int
+        let playerName: String
+        let status: String
+    }
+}
+
+nonisolated struct SpActualScorer: Decodable, Hashable {
+    let playerId: Int
+    let name: String
+    let teamId: Int
+    let minute: Int?
+}
+
+nonisolated struct SpMyPickRow: Decodable, Identifiable, Hashable {
+    let fixtureId: Int
+    let kind: String
+    let playerId: Int
+    let playerName: String
+    let teamId: Int
+    let teamName: String?
+    let status: String
+    let pointsAwarded: Int
+    let kickoffTs: Int?
+    let competitionSlug: String?
+    let homeTeamName: String?
+    let awayTeamName: String?
+    let finalHome: Int?
+    let finalAway: Int?
+    let actualScorers: [SpActualScorer]?
+    let firstScorerId: Int?
+
+    var id: String { "\(fixtureId)-\(kind)" }
+    var pickKind: SpPickKind? { SpPickKind(rawValue: kind) }
+    var settled: Bool { status == "correct" || status == "incorrect" }
+    var won: Bool { status == "correct" && pointsAwarded > 0 }
+}
+
+nonisolated struct SpMyPicksResponse: Decodable {
+    let success: Bool?
+    let picks: [SpMyPickRow]
+}
+
+// MARK: - نماذج الأقسام الأسبوعية
+
+nonisolated struct SpDivisionMeta: Decodable, Hashable {
+    let nameAr: String
+    let emoji: String
+    let color: String
+}
+
+nonisolated struct SpMyDivision: Decodable, Hashable {
+    let division: Int
+    let weekId: String
+    let weekPoints: Int
+    let seasonPoints: Int
+}
+
+nonisolated struct SpDivisionResponse: Decodable {
+    let success: Bool?
+    let division: SpMyDivision?
+    let meta: [String: SpDivisionMeta]?
+}
+
+nonisolated struct SpDivisionLeader: Decodable, Identifiable, Hashable {
+    let userId: String
+    let weekPoints: Int
+    let seasonPoints: Int
+    var id: String { userId }
+}
+
+nonisolated struct SpDivisionBoardResponse: Decodable {
+    let success: Bool?
+    let division: Int
+    let meta: SpDivisionMeta?
+    let leaders: [SpDivisionLeader]
 }
