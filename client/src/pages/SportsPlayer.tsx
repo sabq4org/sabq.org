@@ -18,29 +18,29 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface SpTeam { id: number; name: string; logo: string; winner: boolean | null; }
-interface SpPlayerSeasonStats {
+export interface SpPlayerSeasonStats {
   competition: string; team: SpTeam; matches: number; lineups: number; minutes: number;
   rating: number | null; goals: number; assists: number; yellow: number; red: number; saves: number; conceded: number;
 }
 interface SpPlayerCareerStop { teamId: number; team: string; logo: string; seasons: number[]; }
 interface SpPlayerTrophy { competition: string; country: string; season: string; place: string; winner: boolean; }
 // الموجة 2: إثراء اختياري عبر ?with=extras.
-interface SpPlayerSeasonPoint { season: number; competition: string; matches: number; goals: number; assists: number; }
-interface SpPlayerTransfer {
+export interface SpPlayerSeasonPoint { season: number; competition: string; matches: number; goals: number; assists: number; }
+export interface SpPlayerTransfer {
   date: string; type: string;
   fromId: number; from: string; fromLogo: string;
   toId: number; to: string; toLogo: string;
 }
-interface SpPlayerInjury { date: string; type: string; reason: string; team: string; competition: string; }
+export interface SpPlayerInjury { date: string; type: string; reason: string; team: string; competition: string; }
 interface SpMarketPoint { time: number; value: number; }
-interface SpPlayerMarket { available: boolean; value: number | null; currency: string; peak: number | null; history: SpMarketPoint[]; }
-interface SpFormMatch {
+export interface SpPlayerMarket { available: boolean; value: number | null; currency: string; peak: number | null; history: SpMarketPoint[]; }
+export interface SpFormMatch {
   date: string; opponent: string; opponentLogo: string;
   homeAway: "home" | "away"; result: "W" | "D" | "L";
   scoreFor: number; scoreAgainst: number; xg: number | null; goals: number; rating: number | null; league: string;
 }
-interface SpPlayerForm { available: boolean; matches: SpFormMatch[]; }
-interface SpPlayerCard {
+export interface SpPlayerForm { available: boolean; matches: SpFormMatch[]; }
+export interface SpPlayerCard {
   id: number; name: string; fullName: string | null; photo: string;
   position: string; number: number | null; age: number | null;
   birthDate: string | null; birthPlace: string | null; nationality: string | null;
@@ -71,7 +71,7 @@ function fmtShortDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? "" : shortDateFmt.format(d);
 }
 
-function BioItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+export function BioItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   if (!value) return null;
   return (
     <div className="flex items-center gap-2.5 p-3 rounded-xl bg-muted/40">
@@ -85,7 +85,7 @@ function BioItem({ icon, label, value }: { icon: React.ReactNode; label: string;
 }
 
 // الموجة 2 — البند 5: رسم تطوّر الأداء (أعمدة SVG خفيفة، بلا اعتمادية خارجية).
-function PerformanceChart({ points }: { points: SpPlayerSeasonPoint[] }) {
+export function PerformanceChart({ points }: { points: SpPlayerSeasonPoint[] }) {
   const max = Math.max(1, ...points.map((p) => p.goals + p.assists));
   return (
     <Card className="p-5">
@@ -136,7 +136,7 @@ function fmtMoney(value: number, currency: string): string {
 const marketDateFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { month: "short", year: "numeric" });
 
 // القيمة السوقية للاعب + منحنى تطوّرها (TheSports) — sparkline SVG خفيف بلا اعتمادية.
-function MarketValueCard({ market }: { market: SpPlayerMarket }) {
+export function MarketValueCard({ market }: { market: SpPlayerMarket }) {
   const pts = market.history;
   const hasTrend = pts.length > 1;
   const max = Math.max(1, ...pts.map((p) => p.value));
@@ -208,7 +208,7 @@ function fmtFormDate(iso: string): string {
   return Number.isFinite(t) ? formDateFmt.format(t) : "";
 }
 
-function RecentFormCard({ matches }: { matches: SpFormMatch[] }) {
+export function RecentFormCard({ matches }: { matches: SpFormMatch[] }) {
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2 mb-4">
@@ -247,7 +247,7 @@ function RecentFormCard({ matches }: { matches: SpFormMatch[] }) {
 }
 
 // الموجة 2 — البند 6: مسيرة انتقالات اللاعب.
-function TransfersCard({ transfers }: { transfers: SpPlayerTransfer[] }) {
+export function TransfersCard({ transfers }: { transfers: SpPlayerTransfer[] }) {
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2 mb-4">
@@ -284,7 +284,7 @@ function TeamChip({ id, name, logo }: { id: number; name: string; logo: string }
 }
 
 // الموجة 2 — البند 7: سجلّ الإصابات/الغيابات.
-function InjuriesCard({ injuries }: { injuries: SpPlayerInjury[] }) {
+export function InjuriesCard({ injuries }: { injuries: SpPlayerInjury[] }) {
   return (
     <Card className="p-5">
       <div className="flex items-center gap-2 mb-4">

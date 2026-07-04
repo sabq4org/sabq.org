@@ -54,13 +54,7 @@ type KcTeamPageData = Omit<KcTeamProfile, "coach" | "topScorers" | "standing"> &
   transfers: SpTeamTransfers;
 };
 
-function SquadSection({
-  squad,
-  onOpenPlayer,
-}: {
-  squad: KcSquadPlayer[];
-  onOpenPlayer: (id: number) => void;
-}) {
+function SquadSection({ squad }: { squad: KcSquadPlayer[] }) {
   const groups = POSITION_SECTIONS.map((sec) => ({
     ...sec,
     players: squad.filter((p) => p.positionEn === sec.en),
@@ -81,10 +75,9 @@ function SquadSection({
               <p className="mb-2 text-xs font-bold text-muted-foreground">{g.label}</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {g.players.map((p) => (
-                  <button
+                  <Link
                     key={p.id}
-                    type="button"
-                    onClick={() => p.id > 0 && onOpenPlayer(p.id)}
+                    href={p.id > 0 ? `/kings-cup/player/${p.id}` : "#"}
                     className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-right hover-elevate active-elevate-2"
                   >
                     {p.photo ? (
@@ -100,7 +93,7 @@ function SquadSection({
                         {p.age != null ? ` · ${p.age} سنة` : ""}
                       </p>
                     </div>
-                  </button>
+                  </Link>
                 ))}
               </div>
             </div>
@@ -141,7 +134,6 @@ export default function KingsCupTeam() {
       : "نادٍ — كأس خادم الحرمين الشريفين | سبق";
   }, [data?.team?.name]);
 
-  const leagueFixtures = Array.isArray(data?.fixtures) ? data.fixtures : [];
   const squad = Array.isArray(data?.squad) ? data.squad : [];
   const allKcFixtures = Array.isArray(kcFixturesData?.fixtures) ? kcFixturesData.fixtures : [];
   const clubKcFixtures = allKcFixtures.filter((f) => f.home.id === teamId || f.away.id === teamId);
@@ -292,8 +284,8 @@ export default function KingsCupTeam() {
                 </section>
               )}
 
-              {/* 6) التشكيلة مقسّمة بالمراكز */}
-              {squad.length > 0 && <SquadSection squad={squad} onOpenPlayer={setOpenPlayerId} />}
+              {/* 6) التشكيلة مقسّمة بالمراكز — كل لاعب يفتح ملفه الكامل */}
+              {squad.length > 0 && <SquadSection squad={squad} />}
 
               {/* 7) هدّافو النادي + 8) حركة الانتقالات */}
               {Array.isArray(data.topScorers) && data.topScorers.length > 0 && (
@@ -355,18 +347,6 @@ export default function KingsCupTeam() {
                   <h2 className="text-lg font-black mb-4">مباريات النادي في كأس الملك</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {clubKcFixtures.map((fx) => (
-                      <KcMatchCard key={fx.id} fixture={fx} onOpen={setOpenFixtureId} />
-                    ))}
-                  </div>
-                </section>
-              )}
-              {leagueFixtures.length > 0 && (
-                <section className="mb-8">
-                  <h2 className="text-lg font-black mb-4">
-                    مباريات النادي{data.competitionName ? ` في ${data.competitionName}` : ""}
-                  </h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {leagueFixtures.map((fx) => (
                       <KcMatchCard key={fx.id} fixture={fx} onOpen={setOpenFixtureId} />
                     ))}
                   </div>

@@ -24,6 +24,9 @@ import {
   getPlayerCard as splGetPlayerCard,
   getPlayerForm as splGetPlayerForm,
   getPlayerMarketValue as splGetPlayerMarketValue,
+  getPlayerSeasonHistory as splGetPlayerSeasonHistory,
+  getPlayerTransfers as splGetPlayerTransfers,
+  getPlayerInjuries as splGetPlayerInjuries,
   getMatchDetail as splGetMatchDetail,
   getMatchTvChannels as splGetMatchTvChannels,
   getTeamStats as splGetTeamStats,
@@ -205,6 +208,16 @@ export async function getKcTeamProfile(teamId: number) {
 
 export async function getKcPlayerCard(playerId: number) {
   return splGetPlayerCard(playerId);
+}
+
+/** إثراء صفحة اللاعب (?with=extras): سلسلة المواسم + الانتقالات + الإصابات — كلها تتدهور إلى []. */
+export async function getKcPlayerExtras(playerId: number) {
+  const [history, transfers, injuries] = await Promise.all([
+    splGetPlayerSeasonHistory(playerId).catch(() => []),
+    splGetPlayerTransfers(playerId).catch(() => []),
+    splGetPlayerInjuries(playerId).catch(() => []),
+  ]);
+  return { history, transfers, injuries };
 }
 
 export async function getKcPlayerForm(playerId: number) {

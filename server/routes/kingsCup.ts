@@ -18,6 +18,7 @@ import {
   getKcSquad,
   getKcTeamProfile,
   getKcPlayerCard,
+  getKcPlayerExtras,
   getKcPlayerForm,
   getKcPlayerMarket,
   getKcMatchDetail,
@@ -263,6 +264,11 @@ export function registerKingsCupRoutes(app: Express) {
       const player = await getKcPlayerCard(playerId);
       if (!player) return res.status(404).json({ message: "ملف اللاعب غير متاح" });
       res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      // صفحة اللاعب الكاملة: ?with=extras يضمّن سلسلة المواسم + الانتقالات +
+      // الإصابات في نفس الاستجابة (نفس عقد نظيرتها في البوابة /api/sports/player)
+      if (req.query.with === "extras") {
+        return res.json({ ...player, ...(await getKcPlayerExtras(playerId)) });
+      }
       res.json(player);
     } catch (error) {
       console.error(`[KingsCup] player ${playerId} failed:`, error);
