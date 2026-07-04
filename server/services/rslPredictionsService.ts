@@ -316,6 +316,60 @@ export async function getLeaderboard(limit = 100, viewerUserId?: string) {
   }));
 }
 
+/**
+ * ميتا اللوحة (نسخة المونديال): العدد الكلي للمؤهّلين + صف الزائر ورتبته حتى
+ * لو كان خارج الصفحة المعروضة — الرتبة 1 + عدد من يسبقه (النقاط ثم الإصابات).
+ */
+export async function getLeaderboardMeta(viewerUserId?: string) {
+  const visibility = viewerUserId
+    ? or(notInArray(users.role, [...SUPERUSER_ROLE_NAMES]), eq(rslPredictions.userId, viewerUserId))
+    : notInArray(users.role, [...SUPERUSER_ROLE_NAMES]);
+
+  const board = db
+    .select({
+      uid: rslPredictions.userId,
+      pts: sql<number>`coalesce(sum(${rslPredictions.pointsAwarded}), 0)::int`.as("pts"),
+      correct: sql<number>`count(*) filter (where ${rslPredictions.status} = 'correct')::int`.as("correct"),
+    })
+    .from(rslPredictions)
+    .innerJoin(users, eq(rslPredictions.userId, users.id))
+    .where(visibility)
+    .groupBy(rslPredictions.userId)
+    .having(sql`count(*) filter (where ${rslPredictions.status} <> 'pending') > 0`)
+    .as("board");
+
+  const [totals] = await db.select({ total: sql<number>`count(*)::int` }).from(board);
+  const total = Number(totals?.total ?? 0);
+  if (!viewerUserId) return { total, viewer: null };
+
+  const [mine] = await db
+    .select({
+      pts: sql<number>`coalesce(sum(${rslPredictions.pointsAwarded}), 0)::int`,
+      correct: sql<number>`count(*) filter (where ${rslPredictions.status} = 'correct')::int`,
+      played: sql<number>`count(*) filter (where ${rslPredictions.status} <> 'pending')::int`,
+    })
+    .from(rslPredictions)
+    .where(eq(rslPredictions.userId, viewerUserId))
+    .groupBy(rslPredictions.userId)
+    .having(sql`count(*) filter (where ${rslPredictions.status} <> 'pending') > 0`);
+  if (!mine) return { total, viewer: null };
+
+  const [ahead] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(board)
+    .where(sql`${board.pts} > ${mine.pts} or (${board.pts} = ${mine.pts} and ${board.correct} > ${mine.correct})`);
+
+  return {
+    total,
+    viewer: {
+      rank: Number(ahead?.n ?? 0) + 1,
+      totalPoints: Number(mine.pts),
+      correctCount: Number(mine.correct),
+      playedCount: Number(mine.played),
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // محرّك التسوية — كل دقيقة عبر الكرون (نسخة المونديال حرفيًّا)
 // ---------------------------------------------------------------------------

@@ -39,10 +39,10 @@ const SEO_MODEL_CONFIG = {
   },
   en: {
     primary: { provider: "openai" as const, model: "gpt-5.1" },
-    fallback: { provider: "gemini" as const, model: "gemini-2.5-flash-preview-05-20" },
+    fallback: { provider: "gemini" as const, model: "gemini-2.5-flash" },
   },
   ur: {
-    primary: { provider: "gemini" as const, model: "gemini-2.5-flash-preview-05-20" },
+    primary: { provider: "gemini" as const, model: "gemini-2.5-flash" },
     fallback: { provider: "anthropic" as const, model: SABQ_PRIMARY_EDITOR_MODEL },
   },
 };

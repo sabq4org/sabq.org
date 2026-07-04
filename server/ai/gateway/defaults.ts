@@ -35,7 +35,7 @@ export const DEFAULT_MODELS: DefaultModel[] = [
 
   // ── Google Gemini ──
   { provider: "gemini", modelId: "gemini-3-pro-preview", displayName: "Gemini 3 Pro", capabilities: ["complete"], pricingUnit: "tokens", costPer1MInput: 2, costPer1MOutput: 12, costPerUnit: 0, priority: 10 },
-  { provider: "gemini", modelId: "gemini-2.5-flash-preview-05-20", displayName: "Gemini 2.5 Flash", capabilities: ["complete"], pricingUnit: "tokens", costPer1MInput: 0.3, costPer1MOutput: 2.5, costPerUnit: 0, priority: 20 },
+  { provider: "gemini", modelId: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash", capabilities: ["complete"], pricingUnit: "tokens", costPer1MInput: 0.3, costPer1MOutput: 2.5, costPerUnit: 0, priority: 20 },
   { provider: "gemini", modelId: "gemini-2.5-flash-image", displayName: "Gemini Flash Image (نانو بنانا)", capabilities: ["image"], pricingUnit: "image", costPer1MInput: 0, costPer1MOutput: 0, costPerUnit: 0.039, priority: 30 },
 
   // ── ElevenLabs ──
@@ -49,7 +49,7 @@ const GPT_4O_MINI: ModelRef = { provider: "openai", modelId: "gpt-4o-mini" };
 const SONNET: ModelRef = { provider: "anthropic", modelId: "claude-sonnet-4-6" };
 const HAIKU: ModelRef = { provider: "anthropic", modelId: "claude-haiku-4-5" };
 const GEMINI_PRO: ModelRef = { provider: "gemini", modelId: "gemini-3-pro-preview" };
-const GEMINI_FLASH: ModelRef = { provider: "gemini", modelId: "gemini-2.5-flash-preview-05-20" };
+const GEMINI_FLASH: ModelRef = { provider: "gemini", modelId: "gemini-2.5-flash" };
 const EMBED_LARGE: ModelRef = { provider: "openai", modelId: "text-embedding-3-large" };
 const GPT_IMAGE: ModelRef = { provider: "openai", modelId: "gpt-image-1" };
 const NANO_BANANA: ModelRef = { provider: "gemini", modelId: "gemini-2.5-flash-image" };

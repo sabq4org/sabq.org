@@ -71,6 +71,22 @@ export interface AcLeaderRow {
   accuracy: number;
 }
 
+/** صف الزائر نفسه ورتبته الحقيقية — يصل حتى لو كان خارج الصفحة المعروضة. */
+export interface AcLeaderboardViewer {
+  rank: number;
+  totalPoints: number;
+  correctCount: number;
+  exactCount: number;
+  playedCount: number;
+  accuracy: number;
+}
+
+export interface AcLeaderboardResponse {
+  leaders: AcLeaderRow[];
+  total?: number;
+  viewer?: AcLeaderboardViewer | null;
+}
+
 export interface AcMyPredictionRow {
   fixtureId: string;
   predHome: number;

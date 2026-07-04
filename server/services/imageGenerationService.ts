@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import pRetry from "p-retry";
 
 const genAI = new GoogleGenerativeAI(process.env.AI_INTEGRATIONS_GEMINI_API_KEY || "");
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-05-20" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 interface GenerateImageOptions {
   prompt: string;
