@@ -199,6 +199,14 @@ struct KcFetchedPrediction: View {
     }
 }
 
+/// جلب بمحاولتين: فشل عابر (حد دقيقة المزوّد/شبكة) يعاد بعد 1.5ث تلقائيًا
+/// قبل إظهار أي خطأ — يعالج «تعذر جلب التفاصيل» الخاطف على البرود.
+func kcRetrying<T: Sendable>(_ op: @Sendable () async throws -> T) async -> T? {
+    if let r = try? await op() { return r }
+    try? await Task.sleep(nanoseconds: 1_500_000_000)
+    return try? await op()
+}
+
 /// نص حالة فارغة موحّد داخل الأقسام.
 @ViewBuilder
 func kcEmptyText(_ message: String) -> some View {

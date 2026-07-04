@@ -8,6 +8,9 @@ import SwiftUI
 
 struct KingsCupMatchCenter: View {
     let fixtureId: Int
+    /// المباراة الممرَّرة من البطاقة الفاتحة — ترسم الترويسة فورًا بلا انتظار
+    /// نداء التفاصيل (كان الفتح البارد يحجب الشاشة كلها عدة ثوانٍ)
+    var seed: KcFixture? = nil
     @Environment(\.dismiss) private var dismiss
 
     @State private var detail: KcMatchDetail?
@@ -23,20 +26,24 @@ struct KingsCupMatchCenter: View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 16) {
-                    if loading {
-                        KcLoading().padding(.top, 30)
-                    } else if let detail {
-                        header(detail.fixture)
-                        if !detail.fixture.status.finished {
-                            KcFetchedPrediction(fixture: detail.fixture)
-                            KcTvStrip(fixtureId: detail.fixture.id)
+                    if let f = detail?.fixture ?? seed {
+                        header(f)
+                        if !f.status.finished {
+                            KcFetchedPrediction(fixture: f)
+                            KcTvStrip(fixtureId: f.id)
                         }
                         tabBar
-                        content(detail)
+                        if let detail {
+                            content(detail)
+                        } else if loading {
+                            KcLoading()
+                        } else {
+                            retryBlock
+                        }
+                    } else if loading {
+                        KcLoading().padding(.top, 30)
                     } else {
-                        Text("تعذر جلب تفاصيل المباراة")
-                            .font(SabqFonts.app(size: 14)).foregroundStyle(WCTheme.onDarkDim)
-                            .padding(.top, 50)
+                        retryBlock.padding(.top, 50)
                     }
                 }
                 .padding(16)
@@ -76,11 +83,31 @@ struct KingsCupMatchCenter: View {
         .sabqRTL()
     }
 
+    private var retryBlock: some View {
+        VStack(spacing: 10) {
+            Text("تعذر جلب تفاصيل المباراة")
+                .font(SabqFonts.app(size: 14)).foregroundStyle(WCTheme.onDarkDim)
+            Button {
+                loading = true
+                Task { await load(force: true) }
+            } label: {
+                Text("إعادة المحاولة")
+                    .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 20).padding(.vertical, 8)
+                    .background(Capsule().fill(WCTheme.emeraldDeep))
+            }
+            .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+    }
+
     private func load(force: Bool = false) async {
-        if let r = try? await APIClient.shared.fetchKingsCupMatch(fixtureId: fixtureId, ignoreCache: force) {
-            await MainActor.run { detail = r; loading = false }
-        } else {
-            await MainActor.run { loading = false }
+        // محاولتان (فشل حد الدقيقة العابر يُعاد تلقائيًا) قبل إظهار زر الإعادة
+        let r = await kcRetrying { try await APIClient.shared.fetchKingsCupMatch(fixtureId: fixtureId, ignoreCache: force) }
+        await MainActor.run {
+            if let r { detail = r }
+            loading = false
         }
     }
 
@@ -634,7 +661,11 @@ struct KcTeamSheet: View {
                 async let x = APIClient.shared.fetchKingsCupTeamExtras(teamId: teamId)
                 async let m = APIClient.shared.fetchKingsCupTeamMatches(teamId: teamId)
                 async let rec = APIClient.shared.fetchKingsCupRecord()
-                let baseResult = try? await base
+                var baseResult = try? await base
+                if baseResult == nil {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    baseResult = try? await APIClient.shared.fetchKingsCupTeamProfile(teamId: teamId)
+                }
                 await MainActor.run { profile = baseResult; loading = false }
                 let extrasResult = try? await x
                 let matchesResult = try? await m

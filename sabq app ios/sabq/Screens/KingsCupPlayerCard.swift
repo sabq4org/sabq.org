@@ -65,8 +65,8 @@ struct KcPlayerSheet: View {
                 }
             }
             .task {
-                // الأساس أولًا فيرتسم فورًا، ثم الإثراء بالتوازي بلا حجب
-                let base = try? await APIClient.shared.fetchKingsCupPlayer(playerId: playerId)
+                // الأساس أولًا فيرتسم فورًا (بمحاولتين للفشل العابر)، ثم الإثراء بالتوازي بلا حجب
+                let base = await kcRetrying { try await APIClient.shared.fetchKingsCupPlayer(playerId: playerId) }
                 await MainActor.run { player = base; loading = false }
                 guard base != nil else { return }
                 async let x = APIClient.shared.fetchKingsCupPlayerExtras(playerId: playerId)
