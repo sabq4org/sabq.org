@@ -789,6 +789,9 @@ export interface SplMatchEvent {
   teamId: number;
   team: string;
   player: string;
+  /** API-Football player id (إن توفّر) — تستخدمه تسوية توقّعات الهدافين
+   *  لمطابقة اللاعب بالمعرّف الرقمي بدل الاسم المُعرَّب. */
+  playerId?: number;
   assist: string | null;
   type: string;
   label: string;
@@ -868,6 +871,7 @@ function localizeEventRow(e: any, tr: NameTranslator): SplMatchEvent {
     teamId: e.team?.id ?? 0,
     team: localizeSplTeamName(e.team?.id, e.team?.name ?? ""),
     player: tr(e.player?.name),
+    playerId: typeof e.player?.id === "number" ? e.player.id : undefined,
     assist: e.assist?.name ? tr(e.assist.name) : null,
     type: loc.type,
     label: loc.label,

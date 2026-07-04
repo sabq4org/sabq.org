@@ -2388,6 +2388,103 @@ export type SportsPoolMatch = typeof sportsPoolMatches.$inferSelect;
 export type SportsPoolLong = typeof sportsPoolLong.$inferSelect;
 export type SportsPoolBadge = typeof sportsPoolBadges.$inferSelect;
 
+// ============================================================================
+// طبقة الهدافين — توقّع من يسجّل أهداف مباراة معيّنة (Expansion Phase A).
+// مستوحاة من sports_pool_predictions لكنها بركة pari-mutuel منفصلة قائمة على
+// اللاعب لا النتيجة. لكل مباراة بركتان: «هداف المباراة» (300) و«أول هدّاف»
+// (200)، تُقسَّمان بالتساوي على المصيبين. تُسوَّى من قائمة هدّافي المباراة
+// الفعليّين المستجلَبة من API-Football.
+// ============================================================================
+
+// صفٌّ واحد لكل (fixtureId, userId, kind) — اختيار المستخدم لاعبًا واحدًا لكل
+// نوع (match_scorer | first_scorer). حارس التسوية settledAt يمنع الدفع المزدوج.
+export const sportsPoolPlayerPicks = pgTable("sports_pool_player_picks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: integer("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  kind: text("kind").notNull(), // 'match_scorer' | 'first_scorer'
+  playerId: integer("player_id").notNull(),     // API-Football player id
+  playerName: text("player_name").notNull(),     // snapshot وقت الاختيار
+  teamId: integer("team_id").notNull().default(0),
+  teamName: text("team_name"),
+  status: text("status").notNull().default("pending"), // pending | correct | incorrect
+  pointsAwarded: integer("points_awarded").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  settledAt: timestamp("settled_at"), // حارس التسوية (مثل sports_pool_predictions)
+}, (table) => [
+  uniqueIndex("uq_pool_player_pick").on(table.fixtureId, table.userId, table.kind),
+  index("idx_sp_pool_pick_user").on(table.userId),
+  index("idx_sp_pool_pick_fix").on(table.fixtureId),
+  index("idx_sp_pool_pick_settle").on(table.fixtureId, table.kind, table.settledAt),
+]);
+
+// ميتاداتا بركة الهدافين لكل مباراة: حجم البركة لكل نوع، عدد الفائزين، النصيب
+// المدفوع، وقائمة الهدافين الفعليّين (snapshot من API-Football بعد الانتهاء).
+export const sportsPoolMatchPicks = pgTable("sports_pool_match_picks", {
+  fixtureId: integer("fixture_id").primaryKey(), // = sports_pool_matches.fixture_id
+  competitionSlug: text("competition_slug"),
+  kickoffTs: integer("kickoff_ts").notNull(),
+  // بركة الهداف: 300/مباراة. بركة أول هدّاف: 200/مباراة.
+  scorerPool: integer("scorer_pool").notNull().default(300),
+  firstScorerPool: integer("first_scorer_pool").notNull().default(200),
+  paidScorer: integer("paid_scorer").notNull().default(0),
+  paidFirstScorer: integer("paid_first_scorer").notNull().default(0),
+  scorerWinners: integer("scorer_winners").notNull().default(0),
+  firstScorerWinners: integer("first_scorer_winners").notNull().default(0),
+  // قائمة الهدافين الفعليّين (snapshot): [{ playerId, name, teamId, minute }]
+  actualScorers: jsonb("actual_scorers").$type<Array<{ playerId: number; name: string; teamId: number; minute: number | null }>>(),
+  firstScorerId: integer("first_scorer_id"), // null حتى تنتهي المباراة
+  status: text("status").notNull().default("open"), // open | locked | settled
+  settledAt: timestamp("settled_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sp_pool_match_picks_status").on(table.status),
+  index("idx_sp_pool_match_picks_comp").on(table.competitionSlug, table.kickoffTs),
+]);
+
+// ============================================================================
+// الأقسام الأسبوعية (Expansion Phase B) — ترقية/هبوط بين 4 أقسام كل يوم سبت
+// 00:00 بتوقيت الرياض بناءً على نقاط الأسبوع. يعطي إحساس «الدوري» الرياضي.
+// ============================================================================
+
+// صفٌّ واحد لكل مستخدم نشط. يُعاد حسابه أسبوعيًّا (upsert) من snapshot النقاط.
+export const sportsPoolUserDivisions = pgTable("sports_pool_user_divisions", {
+  userId: varchar("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  weekId: text("week_id").notNull(), // ISO week: '2026-W27'
+  division: integer("division").notNull().default(4), // 1=النوّاحة | 2=المحلّلون | 3=المتابعون | 4=الجمهور
+  weekPoints: integer("week_points").notNull().default(0),
+  seasonPoints: integer("season_points").notNull().default(0),
+  lastPromotedTo: integer("last_promoted_to"),
+  lastRelegatedTo: integer("last_relegated_to"),
+  computedAt: timestamp("computed_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sp_pool_div_week").on(table.weekId),
+  index("idx_sp_pool_div_div").on(table.division, table.seasonPoints),
+]);
+
+// snapshot لنقاط كل مستخدم في كل أسبوع ISO. يُغذّى من settleFinishedMatches عند
+// كل تسوية (نقاط المباراة تُضاف لصف الأسبوع الجاري). أساس ترتيب الأقسام والترقية.
+export const sportsPoolWeeklyPoints = pgTable("sports_pool_weekly_points", {
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  weekId: text("week_id").notNull(), // '2026-W27'
+  points: integer("points").notNull().default(0),
+  matchesPlayed: integer("matches_played").notNull().default(0),
+  matchesWon: integer("matches_won").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_sp_pool_weekly_user").on(table.userId, table.weekId),
+  index("idx_sp_pool_weekly_week").on(table.weekId, sql`${table.points} DESC`),
+  index("idx_sp_pool_weekly_user").on(table.userId),
+]);
+
+export type SportsPoolPlayerPick = typeof sportsPoolPlayerPicks.$inferSelect;
+export type SportsPoolMatchPick = typeof sportsPoolMatchPicks.$inferSelect;
+export type SportsPoolUserDivision = typeof sportsPoolUserDivisions.$inferSelect;
+export type SportsPoolWeeklyPoints = typeof sportsPoolWeeklyPoints.$inferSelect;
+
 // Loyalty Rewards (available rewards)
 export const loyaltyRewards = pgTable("loyalty_rewards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

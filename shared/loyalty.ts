@@ -83,6 +83,15 @@ export const LOYALTY_ACTIONS = {
    *  of a competition). Source = `sp-long:<competitionSlug>:<kind>`. `points`
    *  overridden with the long-term pool share. */
   SPORTS_LONG_PREDICTION_WIN: "SPORTS_LONG_PREDICTION_WIN",
+  /** Sabq Sports scorer-prediction win (who scores / first scorer in a match).
+   *  Source = the API-Football fixtureId + ':' + kind (`<fixtureId>:match_scorer`
+   *  or `<fixtureId>:first_scorer`). `points` is ALWAYS overridden with the
+   *  user's pari-mutuel share of that match's scorer pool (300) or first-scorer
+   *  pool (200), split equally among the winners. No daily cap; the lifetime
+   *  dedup window keeps (userId, action, fixtureId:kind) at most once so the
+   *  settlement cron re-runs safely. Awarded by `settlePlayerPickMatches` in
+   *  server/services/sportsPoolPlayerPicksService.ts. */
+  SPORTS_SCORER_PREDICTION_WIN: "SPORTS_SCORER_PREDICTION_WIN",
 } as const;
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
@@ -125,6 +134,9 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   SPORTS_PREDICTION_WIN: 100,
   // Nominal default only — overridden with the long-term pool share.
   SPORTS_LONG_PREDICTION_WIN: 500,
+  // Nominal default only — overridden with the user's pari-mutuel share of the
+  // scorer pool (300) or first-scorer pool (200).
+  SPORTS_SCORER_PREDICTION_WIN: 100,
 };
 
 // Per-user-per-day cap on each action. Anti-farming guard that did NOT
@@ -162,6 +174,8 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   SPORTS_PREDICTION_WIN: null,
   // Settled once per competition; lifetime dedup keyed on source.
   SPORTS_LONG_PREDICTION_WIN: null,
+  // One settleable pick per (fixture, kind); lifetime dedup keyed on source.
+  SPORTS_SCORER_PREDICTION_WIN: null,
 };
 
 // Window during which the same (action, source) for the same user does not
@@ -205,6 +219,8 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   SPORTS_PREDICTION_WIN: 100000,
   // Lifetime, source=sp-long:<competitionSlug>:<kind> dedup.
   SPORTS_LONG_PREDICTION_WIN: 100000,
+  // Lifetime, source=fixtureId:kind dedup — a (fixture, kind) pays at most once.
+  SPORTS_SCORER_PREDICTION_WIN: 100000,
 };
 
 // ----------------------------------------------------------------------------
@@ -264,6 +280,27 @@ export function tierProgress(lifetimePoints: number) {
   const next = nextTier(current.level);
   const pointsToNext = next ? Math.max(0, next.minLifetimePoints - lifetimePoints) : 0;
   return { current, next, pointsToNext };
+}
+
+// ----------------------------------------------------------------------------
+// مضاعف طبقة الولاء لتوقّعات سبق الرياضي (Expansion Phase — multiplier).
+// يُطبَّق على نصيب المستخدم من بركة المباراة قبل awardPoints: كلّما ارتفعت
+// طبقة الولاء زادت مكافأته. الطبقة 1 (القارئ الجديد) = 1.0× (لا علاوة)؛
+// الطبقة 5 (سفير سبق) = 1.5×. القيم وسطيّة لتحفيز الترقّي دون تضخّم المكافآت.
+// مرآة iOS لهذه القيم موجودة في SportsPredictionModels.swift / SportsTheme.
+// ----------------------------------------------------------------------------
+export const LOYALTY_TIER_PREDICTION_MULTIPLIER: Record<LoyaltyTier["level"], number> = {
+  1: 1.0,
+  2: 1.1,
+  3: 1.2,
+  4: 1.3,
+  5: 1.5,
+};
+
+/** مضاعف توقّعات الولاء لعدد نقاط مدى الحياة. */
+export function tierMultiplierForPoints(lifetimePoints: number): number {
+  const tier = computeTier(lifetimePoints);
+  return LOYALTY_TIER_PREDICTION_MULTIPLIER[tier.level];
 }
 
 // Grandfather rule applied during the Phase 1 migration: anyone whose
