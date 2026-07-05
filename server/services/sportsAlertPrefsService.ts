@@ -15,8 +15,18 @@ import { inArray } from "drizzle-orm";
 import { db } from "../db";
 import { sportsAlertPrefs, type SportsAlertPref } from "@shared/schema";
 
-/** مفاتيح أنواع الأحداث القابلة للتفعيل/الكتم. */
-export type SportsAlertEventKey = "kickoff" | "goals" | "cards" | "varReview" | "fulltime";
+/**
+ * مفاتيح أنواع الأحداث القابلة للتفعيل/الكتم. أحداث المباراة تُطبَّق على الفِرق
+ * المتابَعة؛ مفاتيح الانتقالات (transfersSaudi/transfersGlobal) بثّ عام لمن فعّلها.
+ */
+export type SportsAlertEventKey =
+  | "kickoff"
+  | "goals"
+  | "cards"
+  | "varReview"
+  | "fulltime"
+  | "transfersSaudi"
+  | "transfersGlobal";
 
 export interface SportsAlertPrefsView {
   kickoff: boolean;
@@ -24,15 +34,23 @@ export interface SportsAlertPrefsView {
   cards: boolean;
   varReview: boolean;
   fulltime: boolean;
+  transfersSaudi: boolean;
+  transfersGlobal: boolean;
 }
 
-/** الافتراضي عند غياب صفّ المستخدم — كل الأنواع مفعّلة. */
+/**
+ * الافتراضي عند غياب صفّ المستخدم. أحداث المباراة كلها مفعّلة (توافق رجعي).
+ * الانتقالات السعودية مفعّلة (opt-out — «خاصة السعودية»)، والعالمية مطفأة
+ * (opt-in لتقليل ضجيج البثّ العام) — مطابقًا لافتراضات أعمدة المخطط.
+ */
 export const DEFAULT_SPORTS_ALERT_PREFS: SportsAlertPrefsView = {
   kickoff: true,
   goals: true,
   cards: true,
   varReview: true,
   fulltime: true,
+  transfersSaudi: true,
+  transfersGlobal: false,
 };
 
 function toView(row: SportsAlertPref): SportsAlertPrefsView {
@@ -42,6 +60,8 @@ function toView(row: SportsAlertPref): SportsAlertPrefsView {
     cards: row.cards,
     varReview: row.varReview,
     fulltime: row.fulltime,
+    transfersSaudi: row.transfersSaudi,
+    transfersGlobal: row.transfersGlobal,
   };
 }
 
@@ -99,8 +119,10 @@ export async function filterUsersByEventPref(
     console.error("[SportsAlertPrefs] filter failed, treating all as enabled:", err);
     return userIds;
   }
-  // خريطة: من له صفّ صريح فقط؛ الباقي افتراضي مفعّل.
+  // خريطة: من له صفّ صريح فقط؛ الباقي يأخذ افتراض هذا المفتاح. مهم للانتقالات
+  // العالمية (افتراضها مطفأ): بلا هذا يُبثّ لكل من لا صفّ له بالخطأ.
   const explicit = new Map<string, boolean>();
   for (const r of rows) explicit.set(r.userId, toView(r)[key]);
-  return userIds.filter((id) => explicit.get(id) ?? true);
+  const fallback = DEFAULT_SPORTS_ALERT_PREFS[key];
+  return userIds.filter((id) => explicit.get(id) ?? fallback);
 }

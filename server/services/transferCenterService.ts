@@ -21,7 +21,7 @@
 import { withSWR } from "../memoryCache";
 import { resolveNames } from "./worldCupNameTranslator";
 import { apiFootballGet } from "./apiFootballClient";
-import { getLeagueTransfers } from "./saudiLeagueService";
+import { getLeagueTransfers, type SplLeagueTransfer } from "./saudiLeagueService";
 
 const SM_BASE = "https://api.sportmonks.com/v3/football";
 
@@ -574,6 +574,32 @@ export async function getGlobalConfirmed(): Promise<TcConfirmed[]> {
       .filter((t) => t.id && t.date && t.player.id)
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
   });
+}
+
+// الصفقات السعودية المؤكّدة من فيد SportMonks، محوّلةً إلى شكل الانتقال السعودي
+// (SplLeagueTransfer) كي تُعرض في تبويب «سعودية». السبب: فيد API-Football
+// (getLeagueTransfers) قد يتأخّر أسابيع عن نافذة روشن، بينما يرصد SportMonks
+// الصفقة فور تأكيدها ويعلّم أطرافها السعودية بـ saudi=true. بدون هذا التحويل
+// تختفي صفقات النافذة الحالية كليًّا: تُستبعد من تبويب «عالمية» بحكم النطاق ولا
+// مصدر آخر يعرضها. player.id=0 لأنّ معرّف SportMonks لا يصلح لصفحة اللاعب
+// (فضاء معرّفات مختلف) — فيُعرض الاسم بلا رابط. أفضل جهد: غياب المفتاح = [].
+export async function getSaudiConfirmedFromGlobal(): Promise<SplLeagueTransfer[]> {
+  if (!isTransferRumoursConfigured()) return [];
+  const global = await getGlobalConfirmed();
+  return global
+    .filter((t) => t.saudi)
+    .map((t) => ({
+      id: `sm-${t.id}`,
+      date: t.date,
+      type: t.kind === "loan" ? "إعارة" : t.kind === "free" ? "انتقال حر" : "انتقال",
+      kind: t.kind === "loan" ? "loan" : t.kind === "free" ? "free" : "money",
+      feeValue: t.amount ?? null,
+      player: { id: 0, name: t.player.name },
+      from: { id: t.from.id, name: t.from.name, logo: t.from.image ?? "" },
+      to: { id: t.to.id, name: t.to.name, logo: t.to.image ?? "" },
+      inClubId: t.to.saudi ? t.to.id : null,
+      outClubId: t.from.saudi ? t.from.id : null,
+    }));
 }
 
 // ---------- 3) قصة انتقال لاعب (كل الإشاعات مرتّبة زمنيًّا) ----------

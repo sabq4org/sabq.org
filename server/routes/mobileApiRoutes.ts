@@ -5641,7 +5641,7 @@ router.put("/sports/alert-prefs", async (req: Request, res: Response) => {
     const { upsertPrefs } = await import("../services/sportsAlertPrefsService");
     const body = req.body ?? {};
     const patch: Record<string, boolean> = {};
-    for (const key of ["kickoff", "goals", "cards", "varReview", "fulltime"] as const) {
+    for (const key of ["kickoff", "goals", "cards", "varReview", "fulltime", "transfersSaudi", "transfersGlobal"] as const) {
       if (typeof body[key] === "boolean") patch[key] = body[key];
     }
     const preferences = await upsertPrefs(session.userId, patch);

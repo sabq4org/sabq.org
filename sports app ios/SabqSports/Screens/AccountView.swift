@@ -39,6 +39,7 @@ struct AccountView: View {
                     servicesSection
                     appearanceSection
                     notificationsSection
+                    transfersNotificationsSection
                     aboutSection
                     dangerZoneSection
 
@@ -405,6 +406,38 @@ struct AccountView: View {
                         HStack(spacing: 12) {
                             iconTile("bell.slash.fill", SpTheme.onDarkFaint)
                             Text("سجّل الدخول لتفعيل تنبيهات فِرقك")
+                                .font(SportsFonts.app(size: 14, weight: .semibold))
+                                .foregroundStyle(SpTheme.onDarkDim)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 14)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(true)
+                }
+            }
+        }
+    }
+
+    // MARK: - تنبيهات الانتقالات (بثّ عام — لا يتطلّب متابعة فريق)
+
+    @ViewBuilder private var transfersNotificationsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("تنبيهات الانتقالات")
+            if auth.isLoggedIn {
+                settingsCard {
+                    alertRow("انتقالات سعودية", "flag.fill", \.transfersSaudi)
+                    rowDivider
+                    alertRow("انتقالات عالمية بارزة", "globe", \.transfersGlobal)
+                }
+                hint("تصلك الصفقات المؤكّدة فور تأكيدها — تنبيهات سوق عامّة لا تتطلّب متابعة فريق.")
+            } else {
+                settingsCard {
+                    Button { /* يمرّر المستخدم لأعلى لتسجيل الدخول */ } label: {
+                        HStack(spacing: 12) {
+                            iconTile("bell.slash.fill", SpTheme.onDarkFaint)
+                            Text("سجّل الدخول لتفعيل تنبيهات الانتقالات")
                                 .font(SportsFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SpTheme.onDarkDim)
                             Spacer(minLength: 0)

@@ -1249,8 +1249,35 @@ export function registerSportsRoutes(app: Express) {
     const sinceMonths = sinceRaw != null && sinceRaw > 0 && sinceRaw <= 60 ? sinceRaw : 18;
     try {
       const result = await getLeagueTransfers(sinceMonths);
+      // ندمج الصفقات السعودية المؤكّدة من فيد SportMonks: فيد API-Football قد
+      // يتأخّر أسابيع عن نافذة روشن، فتظهر صفقات النافذة الحالية في تبويب «سعودية»
+      // بدل أن تختفي (استُبعدت من «عالمية» بحكم النطاق ولا مصدر آخر يعرضها). أفضل
+      // جهد: فشلها لا يُسقط القائمة. لا نُحوّر كائن الكاش (SWR) — نبني ردًّا جديدًا.
+      let transfers = result.transfers;
+      let stats = result.stats;
+      try {
+        const { getSaudiConfirmedFromGlobal } = await import("../services/transferCenterService");
+        const extra = await getSaudiConfirmedFromGlobal();
+        if (extra.length > 0) {
+          // إزالة التكرار عبر المصدرين: التاريخ + النادي المُطلِق + المُستقبِل (كلاهما
+          // مُعرَّب في الفيدين) مفتاحٌ كافٍ — احتمال تطابقه للاعبين مختلفين ضئيل.
+          const seen = new Set(result.transfers.map((t) => `${t.date}|${t.from.name}|${t.to.name}`));
+          const merged = [...result.transfers];
+          for (const e of extra) {
+            const key = `${e.date}|${e.from.name}|${e.to.name}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            merged.push(e);
+          }
+          merged.sort((a, b) => b.date.localeCompare(a.date));
+          transfers = merged;
+          stats = { ...result.stats, total: merged.length };
+        }
+      } catch (mergeErr) {
+        console.error("[Sports] merge SportMonks saudi confirmed failed:", mergeErr);
+      }
       res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
-      res.json({ configured: true, ...result });
+      res.json({ configured: true, ...result, transfers, stats });
     } catch (error) {
       console.error("[Sports] league transfers failed:", error);
       res.status(502).json({ message: "تعذر جلب مركز الانتقالات حاليًا" });
@@ -1505,7 +1532,7 @@ export function registerSportsRoutes(app: Express) {
       const { upsertPrefs } = await import("../services/sportsAlertPrefsService");
       const body = req.body ?? {};
       const patch: Record<string, boolean> = {};
-      for (const key of ["kickoff", "goals", "cards", "varReview", "fulltime"] as const) {
+      for (const key of ["kickoff", "goals", "cards", "varReview", "fulltime", "transfersSaudi", "transfersGlobal"] as const) {
         if (typeof body[key] === "boolean") patch[key] = body[key];
       }
       const preferences = await upsertPrefs(req.user.id, patch);

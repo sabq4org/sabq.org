@@ -679,6 +679,10 @@ struct TransferCenterView: View {
     // عالمية › مؤكّدة / إعارات مؤكّدة (من /transfer-center/global-confirmed)
     private var globalConfirmedList: some View {
         let items = globalConfirmed
+            // استبعاد الصفقات السعودية: فيد المؤكّد العالمي يعلّم صفقات أندية روشن
+            // بـ saudi=true (تُبقيها الخدمة لنبض السوق)، وهي تُعرض في تبويب «سعودية»
+            // من /sports/transfers — فلا تتسرّب هنا (مطابقةً لتصفية الإشاعات بالنطاق).
+            .filter { !$0.saudi }
             .filter { tab == .loans ? $0.kind == .loan : true }
             .filter { majorsOnly ? $0.major : true }
         return Group {

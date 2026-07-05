@@ -2016,6 +2016,18 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // تنبيهات الانتقالات (سعودية + عالمية بارزة): نفس النمط — فحص القيادة داخل الدورة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startTransferAlertsJob } = await import("./jobs/transferAlertsJob");
+            startTransferAlertsJob();
+          } catch (error) {
+            console.error("[Server] Error starting transfer alerts job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // تسوية توقّعات المباريات (المرحلة 4): نفس النمط — فحص القيادة داخل الدورة
       if (enableBackgroundWorkers) {
         setTimeout(async () => {

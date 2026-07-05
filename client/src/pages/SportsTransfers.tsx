@@ -655,7 +655,10 @@ export default function SportsTransfers() {
 
   // ---------- فلترة المؤكّد العالمي ----------
   const filteredGlobalConfirmed = useMemo(() => {
-    let list = globalConfirmed;
+    // استبعاد الصفقات السعودية: فيد المؤكّد العالمي يعلّم صفقات أندية روشن بـ
+    // saudi=true (تُبقيها الخدمة لنبض السوق)، وهي تُعرض في تبويب «سعودية» — فلا
+    // تتسرّب إلى «عالمية» (مطابقةً لتصفية الإشاعات بالنطاق).
+    let list = globalConfirmed.filter((t) => !t.saudi);
     if (tab === "loans") list = list.filter((t) => t.kind === "loan");
     if (majorsOnly) list = list.filter((t) => t.major);
     if (query) list = list.filter((t) => t.player.name.includes(query) || t.from.name.includes(query) || t.to.name.includes(query));

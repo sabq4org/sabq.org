@@ -282,6 +282,20 @@
 
 **تشغيل Production (Railway):** `SPORTS_ALERTS_ENABLED=true` · `APIFOOTBALL_KEY` · مفتاح APNs المشترك (`APNS_KEY_ID`/`APNS_TEAM_ID`/المفتاح) مع `APNS_BUNDLE_ID=com.sabq.sabqorg` (الافتراضي للأخبار؛ الرياضة تُوجَّه تلقائيًّا عبر `bundle_id` المخزّن) · `ENABLE_BACKGROUND_WORKERS` · جهاز حقيقي للاختبار (الـpush لا يعمل على المحاكي).
 
+## 19. تنبيهات الانتقالات (سعودية + عالمية بارزة)
+
+إشعارات دفعية للصفقات المؤكّدة الجديدة، **بثّ عام** لمن فعّل المفتاح (لا يقتصر على متابعي نادٍ، بخلاف تنبيهات المباريات). مفتاحان مستقلّان في «حسابي»: «انتقالات سعودية» (مفعّل افتراضيًّا — opt-out) و«انتقالات عالمية بارزة» (مطفأ افتراضيًّا — opt-in).
+
+**Backend:**
+- **السكيمة:** عمودان جديدان في `sports_alert_prefs` (`shared/schema.ts`): `transfers_saudi` (default true) و`transfers_global` (default false). طُبِّق بـ`npm run db:push`.
+- `sportsAlertPrefsService.ts`: وُسِّع العرض/الافتراضات/المفاتيح؛ و`filterUsersByEventPref` صار يرجع لافتراض المفتاح لمن لا صفّ له (لا `true` ثابت) — مهم للعالمية (المطفأة افتراضيًّا) كي لا تُبثّ للجميع.
+- `transferAlertsService.ts` + `jobs/transferAlertsJob.ts`: دورة كل ~10د على القائد فقط. **السعودية** من `getLeagueTransfers()` (روشن)، **العالمية** من `getGlobalConfirmed()` مُرشَّحة `major && !saudi`. خطّ أساس ضدّ الإغراق (أول دورة تسجّل الـids بلا إرسال، يصمد عبر Redis `transfer_alerts:baseline:v1`) + حارس حداثة (لا يُرسَل أقدم من 3 أيام). المرشّحون = أصحاب جهاز نشط بحزمة `com.sabq.sports`، ثم ترشيح بالتفضيل، ثم `inbox` + `notificationBus` + `pushToUserDevices` (المُعاد استخدامها من `sportsAlertsService`). نوع الإشعار `sports.transfer.saudi|global`، deeplink `/sports/transfers`.
+- المسارات `/api/sports/alert-prefs` (Passport) و`/api/v1/sports/alert-prefs` (Bearer) تقبل المفتاحين الجديدين.
+
+**iOS:** `SpAlertPrefs`/`SpAlertPrefsBody`/`updateAlertPrefs` (`SportsModels.swift`) + قسم «تنبيهات الانتقالات» في `AccountView.swift` (صفّا تبديل عبر `alertRow`).
+
+**تشغيل Production (Railway):** `SPORTS_TRANSFER_ALERTS_ENABLED=true` (بعد `db:push` واختبار التوصيل) · `APIFOOTBALL_KEY` (السعودية) · `SPORTMONKS_API_TOKEN` (العالمية) · نفس بنية APNs/FCM لتنبيهات المباريات. غياب أي مفتاح مصدر = تجاهل نطاقه بلا عطل.
+
 ## 20. المتابعة اللحظية على شاشة القفل (Live Activity / ActivityKit)
 
 متابعة نتيجة مباراة حيّة على **شاشة القفل والجزيرة الديناميكية** دون فتح التطبيق.
