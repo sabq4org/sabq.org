@@ -15,6 +15,7 @@ import { drizzle as drizzleNeon, type NeonDatabase } from 'drizzle-orm/neon-serv
 import { Pool as PgPool } from 'pg';
 import { drizzle as drizzlePg, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import ws from "ws";
+import { sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
@@ -313,6 +314,24 @@ export async function timedQuery<T>(
     console.error(`❌ [Query Error] ${queryName}: ${elapsed}ms`, error);
     throw error;
   }
+}
+
+// Run a read query bounded by a real Postgres statement_timeout so a slow query
+// is CANCELLED server-side (releasing its pool connection) rather than lingering.
+// The JS-side Promise.race some callers use only abandons the JS promise — the
+// underlying DB query keeps running and holds one of the 15 pool connections
+// until it finishes on its own. Under load that starves the pool and stalls
+// unrelated light writes (e.g. POST /view). Wrapping the query in a short
+// transaction with SET LOCAL statement_timeout makes PG abort it on time.
+export async function executeWithStatementTimeout<T = any>(
+  query: any,
+  timeoutMs: number,
+): Promise<T> {
+  const ms = Math.max(100, Math.floor(timeoutMs));
+  return (db as any).transaction(async (tx: any) => {
+    await tx.execute(sql.raw(`SET LOCAL statement_timeout = ${ms}`));
+    return (await tx.execute(query)) as T;
+  });
 }
 
 // Pool stats helper for debugging
