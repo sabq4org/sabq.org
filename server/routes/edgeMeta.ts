@@ -1588,6 +1588,100 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       locale: "ar_SA",
     }),
   },
+  // البوابة الرياضية — الصفحة الرئيسية: /sports (ويُقبل المسار القديم /sports2).
+  // بدونها كانت مشاركة الرابط في واتساب/تويتر تُظهر الميتا العامة للموقع
+  // («سبق الذكية» + الأيقونة) بدل هوية رياضية بصورة OG مخصّصة.
+  {
+    pattern: /^\/sports2?\/?$/,
+    handle: async () => {
+      const description =
+        "بوابة سبق الرياضية: نتائج مباشرة وجدول المباريات بتوقيت الرياض، ترتيب دوري روشن وكبرى الدوريات العالمية، مركز الانتقالات، وتوقعات الجماهير — تغطية لحظة بلحظة.";
+      const image = `${SITE_URL}/branding/sports-og-image.png`;
+      const intro = `<section style="position:absolute;left:-9999px;top:0;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><h1>رياضة سبق — تغطية الملاعب لحظة بلحظة</h1><p>${escapeHtml(description)}</p></section>`;
+      return {
+        title: "رياضة سبق — مباريات مباشرة وانتقالات وترتيب الدوريات | سبق",
+        description,
+        image,
+        imageWidth: 1200,
+        imageHeight: 630,
+        canonical: `${SITE_URL}/sports`,
+        robots: "index,follow",
+        type: "website",
+        locale: "ar_SA",
+        twitterSite: "@sabq",
+        semanticHtml: intro,
+        jsonLd: {
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "CollectionPage",
+              name: "رياضة سبق",
+              description,
+              url: `${SITE_URL}/sports`,
+              inLanguage: "ar",
+              isPartOf: {
+                "@type": "WebSite",
+                name: "صحيفة سبق الإلكترونية",
+                url: SITE_URL,
+              },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: image,
+                width: 1200,
+                height: 630,
+              },
+            },
+            {
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "الرئيسية", item: SITE_URL },
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: "الرياضة",
+                  item: `${SITE_URL}/sports`,
+                },
+              ],
+            },
+          ],
+        },
+      };
+    },
+  },
+  // جدول المباريات الموحّد متعدد البطولات: /sports/matches
+  {
+    pattern: /^\/sports\/matches\/?$/,
+    handle: async () => ({
+      title: "جدول المباريات — نتائج مباشرة بتوقيت الرياض | سبق",
+      description:
+        "مباريات اليوم وغدًا لحظة بلحظة: النتائج المباشرة ومواعيد المباريات بتوقيت الرياض عبر دوري روشن وكبرى البطولات العربية والعالمية على بوابة سبق الرياضية.",
+      image: `${SITE_URL}/branding/sports-og-image.png`,
+      imageWidth: 1200,
+      imageHeight: 630,
+      canonical: `${SITE_URL}/sports/matches`,
+      robots: "index,follow",
+      type: "website",
+      locale: "ar_SA",
+      twitterSite: "@sabq",
+    }),
+  },
+  // مركز الانتقالات: /sports/transfers
+  {
+    pattern: /^\/sports\/transfers\/?$/,
+    handle: async () => ({
+      title: "مركز الانتقالات — صفقات وإشاعات الميركاتو | سبق",
+      description:
+        "سوق الانتقالات لحظة بلحظة: الصفقات المؤكدة والإشاعات الموثّقة في دوري روشن والدوريات الأوروبية، مع نبض السوق وأبرز الصفقات على بوابة سبق الرياضية.",
+      image: `${SITE_URL}/branding/sports-og-image.png`,
+      imageWidth: 1200,
+      imageHeight: 630,
+      canonical: `${SITE_URL}/sports/transfers`,
+      robots: "index,follow",
+      type: "website",
+      locale: "ar_SA",
+      twitterSite: "@sabq",
+    }),
+  },
   // البوابة الرياضية — صفحة النادي: /sports/team/:id (ويُقبل المسار القديم /sports2/team)
   // ميتا غنية باسم النادي وترتيبه وملعبه، وصورة OG = صورة الملعب (بديل لوقو
   // سبق) مع تدرّج احتياطي إلى شعار النادي ثم علامة سبق.
