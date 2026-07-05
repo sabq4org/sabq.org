@@ -455,9 +455,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   const aiBulletsCache = new Map<string, { bullets: string[]; expiresAt: number }>();
   const aiBulletsInFlight = new Map<string, Promise<string[]>>();
 
-  // Article view counts are buffered and flushed in batches by
-  // articleViewCounterService (initArticleViewCounters below), so no view
-  // buffer/flush lives inline here.
+  // Article view counts: buffered in articleViewCounterService (init below).
 
   const behaviorLogBuffer: Array<{ userId: string; eventType: string; metadata: any }> = [];
   let behaviorFlushTimer: NodeJS.Timeout | null = null;
@@ -495,7 +493,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Per-IP article view aggregate — buffered batch UPSERT (see service).
   initArticleViewStats();
 
-  // Article view-count increments — buffered batch UPDATE (see service).
   initArticleViewCounters();
 
   process.on('SIGTERM', async () => {
@@ -13304,11 +13301,7 @@ Respond in valid JSON format only:
       }
       memoryCache.set(viewDedupKey, true, VIEW_DEDUP_WINDOW_MS);
 
-      // Buffer the 5-10 boost and flush it in a single batched UPDATE per
-      // article (see articleViewCounterService). This keeps the DB write off the
-      // request path and collapses concurrent per-view writes on the same hot
-      // row into one — the increase becomes visible on the reader's next load
-      // (bounded by the ~10s flush window) instead of synchronously here.
+      // Buffered batch write via articleViewCounterService (~10s flush window).
       const viewIncrement = Math.floor(Math.random() * 6) + 5;
       bufferArticleViewIncrement(articleId, viewIncrement);
 
@@ -35959,17 +35952,9 @@ Sitemap: https://sabq.org/sitemap-news.xml
       const searchTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> =>
         Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('search_timeout')), ms))]);
 
-      // Run each search query with a REAL Postgres statement_timeout so a slow
-      // FTS/trigram scan is cancelled server-side and its pool connection is
-      // released on time — otherwise the JS race abandons the promise while the
-      // query keeps running and starves the (max=15) pool, stalling /view etc.
-      // The outer JS race (ms + 1000) is a belt-and-suspenders latency guard.
-      const searchExec = <T>(query: any, ms: number): Promise<T> =>
-        searchTimeout(executeWithStatementTimeout<T>(query, ms), ms + 1000);
-
       // Primary FTS query (recent articles, AND-mode for precision)
       if (useFts) try {
-        const recentResults: any = await searchExec(sql`
+        const recentResults: any = await searchTimeout(executeWithStatementTimeout(sql`
           SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
             a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
             a.excerpt, a.category_id as "categoryId", a.views,
@@ -35981,7 +35966,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
             AND a.search_vector @@ to_tsquery('arabic', ${tsQueryAnd})
           ORDER BY a.published_at DESC
           LIMIT ${limit} OFFSET ${offset}
-        `, 3000);
+        `, 3000), 4000);
 
         const rows = recentResults?.rows || recentResults;
         results = (Array.isArray(rows) ? rows : []).map((r: any) => ({ ...r, matchType: 'title' }));
@@ -36002,7 +35987,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           const existingIds = results.map(r => r.id);
           const remaining = Math.min(limit - results.length, 10);
 
-          const allTimeResults: any = await searchExec(sql`
+          const allTimeResults: any = await searchTimeout(executeWithStatementTimeout(sql`
             SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
               a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
               a.excerpt, a.category_id as "categoryId", a.views,
@@ -36015,7 +36000,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
               ${existingIds.length > 0 ? sql`AND a.id != ALL(${existingIds})` : sql``}
             ORDER BY a.published_at DESC
             LIMIT ${remaining}
-          `, 2000);
+          `, 2000), 3000);
           const allRows = allTimeResults?.rows || allTimeResults;
           results = [...results, ...(Array.isArray(allRows) ? allRows : []).map((r: any) => ({ ...r, matchType: 'content' }))];
         } catch (suppErr: any) {
@@ -36032,7 +36017,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       if (results.length === 0 && page === 0) {
         try {
           const likePattern = `%${normalizedQuery.toLowerCase().replace(/[%_\\]/g, c => '\\' + c)}%`;
-          const titleResults = await searchExec(sql`
+          const titleResults = await searchTimeout(executeWithStatementTimeout(sql`
             SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
               a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
               a.excerpt, a.category_id as "categoryId", a.views,
@@ -36043,7 +36028,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
               AND lower(a.title) LIKE ${likePattern}
           ORDER BY a.published_at DESC NULLS LAST
               LIMIT ${limit}
-          `, 2500);
+          `, 2500), 3500);
           const tRows = (titleResults as any).rows || titleResults;
           results = (Array.isArray(tRows) ? tRows : []).map((r: any) => ({ ...r, matchType: 'title' }));
         } catch (likeErr: any) {
