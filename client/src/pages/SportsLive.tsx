@@ -55,6 +55,18 @@ interface CountryGroup {
   leagues: LeagueGroup[];
 }
 
+function cleanLeagueName(name: string, countryAr: string, country: string): string {
+  const escaped = [countryAr, country]
+    .filter(Boolean)
+    .map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  if (escaped.length === 0) return name;
+  const countryPattern = escaped.join("|");
+  return name
+    .replace(new RegExp(`\\s*\\((?:${countryPattern})\\)\\s*$`, "i"), "")
+    .replace(new RegExp(`\\s*[·\\-–—]\\s*(?:${countryPattern})\\s*$`, "i"), "")
+    .trim();
+}
+
 export default function SportsLive() {
   const { user } = useAuth();
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
@@ -192,7 +204,7 @@ export default function SportsLive() {
               لا توجد مباريات مباشرة الآن في البطولات العالمية القائمة — عُد عند انطلاق المباريات.
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-8 sm:space-y-7">
               {countries.map((c) => (
                 <section key={c.country}>
                   {/* رأس الدولة */}
@@ -210,18 +222,18 @@ export default function SportsLive() {
                   </div>
 
                   {/* دوريات الدولة */}
-                  <div className="space-y-3">
+                  <div className="space-y-5 sm:space-y-4">
                     {c.leagues.map((l) => (
                       <div key={l.leagueId} className="overflow-hidden rounded-2xl border border-border bg-card">
-                        <div className="flex items-center gap-2.5 border-b border-border bg-muted/60 px-3 py-2.5 sm:px-4 sm:py-3">
+                        <div className="flex items-center gap-2.5 border-b border-border bg-card px-3 py-3 sm:px-4 sm:py-3">
                           {l.slug ? (
-                            <Link href={competitionHref(l.slug)} className="group flex min-w-0 flex-1 items-center gap-2.5" title={`صفحة بطولة ${l.name}`}>
+                            <Link href={competitionHref(l.slug)} className="group flex min-w-0 flex-1 items-center gap-2.5" title={`صفحة بطولة ${cleanLeagueName(l.name, c.countryAr, c.country)}`}>
                               {l.logo ? (
                                 <img src={l.logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
                               ) : (
                                 <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} />
                               )}
-                              <span className="font-black text-foreground truncate group-hover:text-primary transition-colors">{l.name}</span>
+                              <span className="font-black text-foreground truncate group-hover:text-primary transition-colors">{cleanLeagueName(l.name, c.countryAr, c.country)}</span>
                               <ChevronLeft className="w-4 h-4 shrink-0 text-muted-foreground group-hover:text-primary transition-colors" />
                             </Link>
                           ) : (
@@ -231,15 +243,15 @@ export default function SportsLive() {
                               ) : (
                                 <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} />
                               )}
-                              <span className="font-black text-foreground truncate flex-1">{l.name}</span>
+                              <span className="font-black text-foreground truncate flex-1">{cleanLeagueName(l.name, c.countryAr, c.country)}</span>
                             </>
                           )}
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
-                            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                            {l.matches.length} مباشر
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                            {l.matches.length}
                           </span>
                         </div>
-                        <div>
+                        <div className="divide-y divide-border/80">
                           {l.matches.map((m) => (
                             <MatchRow key={m.id} f={m} expanded={expandedIds.has(m.id)} onToggle={() => toggle(m.id)} onOpen={setOpenMatch} flat />
                           ))}

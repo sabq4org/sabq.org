@@ -54,7 +54,7 @@ struct LiveView: View {
         } else {
             overviewStrip
             ForEach(worldCategorySections) { section in
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 18) {
                     categoryHeader(section)
                     ForEach(section.groups) { g in
                         worldGroupSection(g)
@@ -224,7 +224,7 @@ struct LiveView: View {
             Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 8)
             ForEach(Array(g.matches.enumerated()), id: \.element.id) { idx, item in
                 if idx > 0 {
-                    Rectangle().fill(SpTheme.outline.opacity(0.6)).frame(height: 1)
+                    Rectangle().fill(SpTheme.outline.opacity(0.78)).frame(height: 1)
                         .padding(.horizontal, 10)
                 }
                 SpFlatMatchRow(fixture: item.fixture)
@@ -252,7 +252,7 @@ struct LiveView: View {
                 }
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(g.name)
+                Text(cleanLeagueName(g.name, country: g.country))
                     .font(SportsFonts.headline(size: 16))
                     .foregroundStyle(SpTheme.onDark)
                     .lineLimit(1).minimumScaleFactor(0.8)
@@ -272,6 +272,19 @@ struct LiveView: View {
             .background(Capsule().fill(tint.opacity(0.12)))
         }
         .padding(.top, 4)
+    }
+
+    private func cleanLeagueName(_ name: String, country: String) -> String {
+        let country = country.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !country.isEmpty else { return name }
+        var cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        for suffix in [" (\(country))", " - \(country)", " – \(country)", " — \(country)", " · \(country)"] {
+            if cleaned.hasSuffix(suffix) {
+                cleaned.removeLast(suffix.count)
+                return cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return cleaned
     }
 
     private func groupSubtitle(_ g: LiveGroup) -> String {
