@@ -55,6 +55,7 @@ import mediaLibraryRouter from "./mediaLibrary";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
 import keywordRouter from "./keywordRoutes";
+import editorAlertsRouter from "./editorAlerts";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -118,4 +119,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);
   app.use(keywordRouter);
+  app.use(editorAlertsRouter);
 }

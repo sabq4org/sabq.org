@@ -35186,8 +35186,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         enabled: z.boolean().optional(),
         email: z.string().email().optional().or(z.literal("")),
         whatsappNumber: z.string().optional(),
+        whatsappNumbers: z.array(z.string()).optional(),
         emailEnabled: z.boolean().optional(),
         whatsappEnabled: z.boolean().optional(),
+        aiCriticalAlertsEnabled: z.boolean().optional(),
       });
       const parsed = updateSchema.safeParse(req.body);
       if (!parsed.success) {

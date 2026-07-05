@@ -29,6 +29,17 @@ loadBreakerStates()
     console.warn("[AI Hub] breaker hydrate skipped:", (err as Error).message);
   });
 
+// Wire critical-provider alerts (WhatsApp to the editor-in-chief) onto breaker
+// status transitions. Dynamic import keeps the notification stack out of the
+// gateway's static module graph and avoids any import cycle.
+import("../../services/aiCriticalAlerts")
+  .then(({ handleAiProviderStatusChange }) => {
+    circuitBreaker.setStatusChangeHandler(handleAiProviderStatusChange);
+  })
+  .catch((err) => {
+    console.warn("[AI Hub] critical-alert wiring skipped:", (err as Error).message);
+  });
+
 export const aiGateway = new AIGateway({
   getFeatureConfig,
   getModel,

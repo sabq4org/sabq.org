@@ -21,7 +21,9 @@ import {
   Phone,
   AlertCircle,
   Plus,
-  Trash2
+  Trash2,
+  Bot,
+  AlertTriangle
 } from "lucide-react";
 
 interface EditorAlertSettings {
@@ -31,6 +33,7 @@ interface EditorAlertSettings {
   whatsappNumbers?: string[];
   emailEnabled: boolean;
   whatsappEnabled: boolean;
+  aiCriticalAlertsEnabled?: boolean;
 }
 
 const SectionHeader = ({ title, color }: { title: string; color: string }) => (
@@ -50,6 +53,7 @@ export default function EditorAlertsSettings() {
     whatsappNumbers: [],
     emailEnabled: true,
     whatsappEnabled: true,
+    aiCriticalAlertsEnabled: true,
   });
   
   const [newNumber, setNewNumber] = useState("");
@@ -120,6 +124,37 @@ export default function EditorAlertsSettings() {
       toast({
         title: "خطأ",
         description: "فشل في إرسال رسالة التجربة",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const testAiMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest('/api/admin/editor-alerts/test-ai', {
+        method: 'POST',
+      });
+    },
+    onSuccess: (data: any) => {
+      if (data.success) {
+        toast({
+          title: "تم الإرسال",
+          description: `تم إرسال تنبيه ذكاء اصطناعي تجريبي (واتساب: ${data.sent} رسالة)`,
+        });
+      } else {
+        toast({
+          title: "تحذير",
+          description: data.skipped === "no-recipients"
+            ? "أضف رقم واتساب أولاً ثم احفظ الإعدادات"
+            : (data.message || "فشل في إرسال التنبيه التجريبي"),
+          variant: "destructive",
+        });
+      }
+    },
+    onError: () => {
+      toast({
+        title: "خطأ",
+        description: "فشل في إرسال التنبيه التجريبي",
         variant: "destructive",
       });
     }
@@ -383,6 +418,80 @@ export default function EditorAlertsSettings() {
                 <p className="text-xs text-muted-foreground">
                   الرقم بصيغة دولية مع رمز الدولة (مثال: +966564255999)
                 </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover-elevate transition-all bg-indigo-50 dark:bg-card">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between gap-3 px-1">
+              <SectionHeader title="تنبيهات الذكاء الاصطناعي الحرجة" color="bg-indigo-500" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => testAiMutation.mutate()}
+                disabled={
+                  !settings.whatsappEnabled ||
+                  (settings.whatsappNumbers?.length || 0) === 0 ||
+                  testAiMutation.isPending
+                }
+                className="gap-2 flex-shrink-0"
+                data-testid="button-test-ai-alert"
+              >
+                {testAiMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                تجربة
+              </Button>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              <div className="flex items-center justify-between p-4 rounded-lg bg-background border">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 rounded-md bg-indigo-500/20">
+                    <Bot className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <Label className="text-base font-medium">تفعيل التنبيهات الحرجة</Label>
+                    <p className="text-sm text-muted-foreground">
+                      إشعار فوري على واتساب عند مشاكل منظومة الذكاء الاصطناعي
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={settings.aiCriticalAlertsEnabled ?? true}
+                  onCheckedChange={(checked) => handleChange("aiCriticalAlertsEnabled", checked)}
+                  data-testid="switch-ai-alerts-enabled"
+                />
+              </div>
+
+              <div className="px-4">
+                <p className="text-sm text-muted-foreground mb-3">
+                  تُرسَل إلى أرقام واتساب المسجّلة أعلاه عند حدوث:
+                </p>
+                <ul className="space-y-2">
+                  <li className="flex items-center gap-2 text-sm bg-background rounded-md p-2 border">
+                    <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                    <span>فشل / توقّف نموذج</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm bg-background rounded-md p-2 border">
+                    <AlertTriangle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                    <span>نفاد رصيد المزوّد</span>
+                  </li>
+                  <li className="flex items-center gap-2 text-sm bg-background rounded-md p-2 border">
+                    <AlertTriangle className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                    <span>تدهور أداء نموذج</span>
+                  </li>
+                </ul>
+                {(!settings.whatsappEnabled || (settings.whatsappNumbers?.length || 0) === 0) && (
+                  <p className="text-xs text-orange-600 dark:text-orange-400 mt-3 flex items-center gap-1">
+                    <AlertCircle className="h-3.5 w-3.5" />
+                    فعّل قناة واتساب وأضف رقمًا واحدًا على الأقل لاستقبال هذه التنبيهات.
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>

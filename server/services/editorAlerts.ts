@@ -54,12 +54,20 @@ interface EditorAlertSettings {
   whatsappNumbers?: string[];
   emailEnabled: boolean;
   whatsappEnabled: boolean;
+  /**
+   * Critical AI-Hub alerts (model failure / credit exhausted / degradation)
+   * sent to the WhatsApp number(s) above. Independent of the publish-alert
+   * `enabled` switch so infra alerts fire even when publish alerts are off.
+   * Defaults on when a WhatsApp number is registered.
+   */
+  aiCriticalAlertsEnabled?: boolean;
 }
 
 const DEFAULT_SETTINGS: EditorAlertSettings = {
   enabled: false,
   emailEnabled: true,
   whatsappEnabled: true,
+  aiCriticalAlertsEnabled: true,
 };
 
 /**
