@@ -241,7 +241,9 @@ export interface SpSummary {
   nextMatch: { id: number; timestamp: number; round: string | null; home: SpSummaryTeam; away: SpSummaryTeam } | null;
 }
 // المرحلة 4 (المجتمع): لوحة المتصدّرين
-interface SpLeaderboardEntry { userId: string; name: string; avatar: string | null; totalPoints: number; predictions: number; exact: number; correct: number; rank: number; }
+// لوحة متصدّري «المجمّع الموحّد» (sports_pool) — نفس محرك نقاط تطبيق سبق الرياضي
+// (قرار المالك 2026-07-05: الويب يعرض نقاط التطبيق نفسها لا المحرك الكلاسيكي).
+interface SpPoolLeader { rank: number; userId: string; name: string; avatar: string | null; totalPoints: number; correctCount: number; exactCount: number; playedCount: number; accuracy: number; }
 
 // ============================================================
 // أدوات
@@ -2799,12 +2801,11 @@ export function VideoReel({ short, index }: { short: SpShort; index: number }) {
 // المرحلة 4 (المجتمع): لوحة متصدّري التوقّعات — عامة. تبديل بين كل الأوقات/الشهر/الأسبوع.
 export function LeaderboardBoard() {
   const { user } = useAuth();
-  const [period, setPeriod] = useState<"all" | "month" | "week">("all");
-  const { data, isLoading } = useQuery<{ leaderboard: SpLeaderboardEntry[] }>({
-    queryKey: ["/api/sports/leaderboard", { period }],
+  const { data, isLoading } = useQuery<{ leaders: SpPoolLeader[] }>({
+    queryKey: ["/api/sports/predictions/pool/leaderboard"],
     staleTime: 60_000,
   });
-  const entries = Array.isArray(data?.leaderboard) ? data!.leaderboard : [];
+  const entries = Array.isArray(data?.leaders) ? data!.leaders : [];
   const myEntry = user ? entries.find((e) => e.userId === (user as any).id) : undefined;
 
   const rankBadge = (rank: number) => {
@@ -2816,23 +2817,11 @@ export function LeaderboardBoard() {
 
   return (
     <div>
-      <div className="flex justify-end mb-4">
-        <PillTabs
-          layoutId="leaderboard-period"
-          active={period}
-          onChange={(k) => setPeriod(k as "all" | "month" | "week")}
-          tabs={[
-            { key: "all", label: "كل الأوقات" },
-            { key: "month", label: "هذا الشهر" },
-            { key: "week", label: "هذا الأسبوع" },
-          ]}
-        />
-      </div>
       {isLoading ? (
         <div className="space-y-2">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
       ) : entries.length === 0 ? (
         <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">
-          لا توجد توقّعات مُسوّاة بعد — كن أول المتنافسين! توقّع نتيجة أي مباراة قادمة من مركز المباريات.
+          لا توجد توقّعات مُسوّاة بعد — كن أول المتنافسين! توقّع من تبويب «التوقّعات» في أي بطولة واجمع نقاط المجمّع.
         </div>
       ) : (
         <div className="space-y-2">
@@ -2853,10 +2842,12 @@ export function LeaderboardBoard() {
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="font-bold text-sm text-foreground truncate">{e.name}{isMe && <span className={`mr-1 text-xs ${ACCENT}`}>(أنت)</span>}</div>
-                  <div className="text-[11px] text-muted-foreground tabular-nums">{e.predictions} توقّع · {e.exact} إصابة تامة</div>
+                  <div className="text-[11px] text-muted-foreground tabular-nums">
+                    {e.playedCount} لعب · {e.correctCount} صحيحة · {e.exactCount} تامة · دقة {e.accuracy}٪
+                  </div>
                 </div>
                 <div className="shrink-0 text-center">
-                  <div className={`text-lg font-black tabular-nums ${ACCENT}`}>{e.totalPoints}</div>
+                  <div className={`text-lg font-black tabular-nums ${ACCENT}`}>{e.totalPoints.toLocaleString("en")}</div>
                   <div className="text-[10px] text-muted-foreground">نقطة</div>
                 </div>
               </div>

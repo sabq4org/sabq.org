@@ -727,7 +727,8 @@ export async function getCompetitionHistory(
   // للبطولة المنتهية نمرّر موسمها المنتهي نفسه فيصير البطل/الهدّاف من ذلك الموسم لا ما قبله.
   const prev = typeof targetSeason === "number" ? targetSeason : current - 1;
 
-  return withSWR(`spl:history:v1:${comp.id}:${prev}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 4, async () => {
+  // v2: إبطال كاش الأسماء المكسورة (خلط لغوي «كارvalho») بعد إضافة حارس rejectMixedScript.
+  return withSWR(`spl:history:v2:${comp.id}:${prev}`, CACHE_TTL.LONG, CACHE_TTL.LONG * 4, async () => {
     let champion: SplPreviousChampion | null = null;
 
     if (comp.hasStandings) {

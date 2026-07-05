@@ -598,6 +598,8 @@ export const SPL_PLAYER_AR: Record<number, string> = {
   187953: "فيصل الغامدي",
   78583: "أحمد الغامدي",
   44586: "عبدالرحمن العبود",
+  // القادسية
+  415049: "جابرييل كارفالو",
 };
 
 export const SPL_COACH_AR: Record<number, string> = {
@@ -611,14 +613,23 @@ export const SPL_COACH_AR: Record<number, string> = {
 // لو لم يُمرَّر نسقط للقاموس الثابت فقط (سلوك متوافق مع النداءات القديمة).
 type NameTranslator = (name: string | null | undefined) => string;
 
+// حارس الخلط اللغوي: ترجمة ناقصة مثل «جابرييل كارvalho» (عربي ولاتيني في كلمة
+// واحدة) أسوأ من الاسم اللاتيني كاملًا — نرفضها ونعيد الأصل (شوهدت في هدّاف
+// كأس الملك 2026-07-05).
+const MIXED_SCRIPT_TOKEN = /[؀-ۿ][^\s]*[A-Za-z]|[A-Za-z][^\s]*[؀-ۿ]/;
+function rejectMixedScript(candidate: string, fallback: string): string {
+  if (!candidate) return fallback || "";
+  return MIXED_SCRIPT_TOKEN.test(candidate) ? fallback || "" : candidate;
+}
+
 export function localizeSplPlayerName(
   id: number | null | undefined,
   fallback: string,
   tr?: NameTranslator,
 ): string {
   if (id != null && SPL_PLAYER_AR[id]) return SPL_PLAYER_AR[id];
-  if (tr) return tr(fallback) || fallback || "";
-  return localizePlayerName(fallback) || fallback || "";
+  if (tr) return rejectMixedScript(tr(fallback) || "", fallback) || fallback || "";
+  return rejectMixedScript(localizePlayerName(fallback) || "", fallback) || fallback || "";
 }
 
 export function localizeSplCoachName(
@@ -627,6 +638,6 @@ export function localizeSplCoachName(
   tr?: NameTranslator,
 ): string {
   if (id != null && SPL_COACH_AR[id]) return SPL_COACH_AR[id];
-  if (tr) return tr(fallback) || fallback || "";
-  return localizePlayerName(fallback) || fallback || "";
+  if (tr) return rejectMixedScript(tr(fallback) || "", fallback) || fallback || "";
+  return rejectMixedScript(localizePlayerName(fallback) || "", fallback) || fallback || "";
 }
