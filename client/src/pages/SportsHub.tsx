@@ -368,7 +368,7 @@ function SummaryEntity({
   tone?: "muted" | "gold";
 }) {
   return (
-    <div className={`flex items-center gap-2.5 rounded-xl px-3 py-2.5 ${tone === "gold" ? "bg-amber-400/[0.06]" : "bg-muted/60"}`}>
+    <div className="flex items-center gap-2.5 rounded-lg border border-border/70 bg-background px-3 py-2.5">
       <span className="grid h-8 w-8 shrink-0 place-items-center">
         {logo ? (
           <img src={logo} alt="" className={`h-8 w-8 object-contain ${round ? "rounded-full" : ""}`} loading="lazy" />
@@ -377,7 +377,7 @@ function SummaryEntity({
         )}
       </span>
       <div className="min-w-0 flex-1">
-        <div className={`text-[10px] font-bold ${tone === "gold" ? "text-amber-600/80 dark:text-amber-400/80" : "text-muted-foreground"}`}>{label}</div>
+        <div className="text-[10px] font-bold text-muted-foreground">{label}</div>
         <div className="truncate text-[13.5px] font-bold text-foreground">{name}</div>
       </div>
       {value != null && (
@@ -405,7 +405,7 @@ function SummaryMatchStrip({ m, live }: { m: NonNullable<SpSummary["nextMatch"]>
     </span>
   );
   return (
-    <div className="rounded-xl border border-border bg-background/60 px-3 py-2">
+    <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
       <div className="mb-1.5 flex items-center justify-center gap-1.5">
         {live && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />}
         <span className={`text-[10px] font-bold tabular-nums ${live ? "text-red-500" : "text-muted-foreground"}`}>{when}</span>
@@ -518,19 +518,19 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
 
   // «قريبًا» حُذفت (زائدة مع كتلة الموعد) — البطاقة القادمة تُظهر سهم الدخول بدلها.
   const statusChip = liveCount > 0 ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold tabular-nums text-white">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {liveCount} مباشر
+    <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-background px-2 py-0.5 text-[10px] font-bold tabular-nums text-red-600">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" /> {liveCount} مباشر
     </span>
   ) : isUpcoming ? (
     <ChevronLeft className="h-4 w-4 text-muted-foreground transition-transform group-hover:-translate-x-0.5 group-hover:text-primary" strokeWidth={2} />
   ) : isFinished ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">انتهى</span>
+    <span className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-bold text-muted-foreground">انتهى</span>
   ) : summary.todayCount > 0 ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {summary.todayCount} اليوم
+    <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-background px-2 py-0.5 text-[10px] font-bold tabular-nums text-primary">
+      <span className="h-1.5 w-1.5 rounded-full bg-primary" /> {summary.todayCount} اليوم
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">جارية</span>
+    <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-primary/[0.04] px-2 py-0.5 text-[10px] font-bold text-primary">جارية</span>
   );
 
   const seasonText = summarySeasonLabel(summary.season);
@@ -538,21 +538,21 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
   return (
     <Link
       href={competitionHref(summary.slug)}
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-right transition-colors hover:border-primary/40"
+      className="group flex h-full flex-col overflow-hidden rounded-xl border border-border bg-card text-right transition-colors hover:border-primary/30"
       data-testid={`summary-card-${summary.slug}`}
     >
       {/* هوية سبق: بطاقة محايدة بلا خيوط ملوّنة — شعار البطولة يكفي للتمييز.
           الأزرق الأساسي للعناصر الوظيفية فقط (العدّاد/الدخول). */}
       {/* الترويسة: شعار البطولة + اسمها + الفئة/الموسم + شارة الحالة */}
-      <div className="flex items-center gap-3 border-b border-border bg-muted/50 px-4 py-3">
+      <div className="flex items-start gap-3 border-b border-border/70 bg-background px-4 py-3.5">
         {summary.logo ? (
           <img src={summary.logo} alt="" className="h-10 w-10 shrink-0 object-contain" loading="lazy" />
         ) : (
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10"><Trophy className="h-5 w-5 text-primary" strokeWidth={1.8} /></span>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg border border-primary/15 bg-primary/[0.04]"><Trophy className="h-5 w-5 text-primary" strokeWidth={1.8} /></span>
         )}
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-black leading-tight text-foreground">{summary.name}</div>
-          <div className="truncate text-[10px] tabular-nums text-muted-foreground">
+          <div className="mt-1 truncate text-[10.5px] font-bold tabular-nums text-muted-foreground">
             {COMP_CATEGORY_LABELS[summary.category]}{seasonText ? ` · ${seasonText}` : ""}
           </div>
         </div>
@@ -560,13 +560,13 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
       </div>
 
       {/* الجسم — يتكيّف مع الحالة */}
-      <div className="flex flex-1 flex-col gap-2.5 p-4">
+      <div className="flex flex-1 flex-col gap-2.5 bg-card p-4">
         {isUpcoming ? (
           <>
             {kickoff ? (
-              <div className="flex items-center justify-between gap-2.5 rounded-xl bg-primary/[0.06] px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2.5 rounded-lg border border-primary/10 bg-background px-3 py-2.5">
                 <div className="min-w-0">
-                  <div className="truncate text-[19px] font-black leading-tight tabular-nums text-foreground">
+                  <div className="truncate text-[17px] font-black leading-tight tabular-nums text-foreground">
                     {(kickoffSameYear ? summaryKickDayFmt : summaryKickDayYearFmt).format(kickoff.date)}
                   </div>
                   <div className="text-[11px] font-bold tabular-nums text-muted-foreground">
@@ -575,18 +575,18 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
                   </div>
                 </div>
                 {summary.daysUntilKickoff != null && (
-                  <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11.5px] font-bold tabular-nums text-primary">
+                  <span className="shrink-0 rounded-full border border-primary/15 bg-primary/[0.04] px-2.5 py-1 text-[11.5px] font-bold tabular-nums text-primary">
                     {summaryDaysPhrase(summary.daysUntilKickoff)}
                   </span>
                 )}
               </div>
             ) : (
-              <div className="rounded-xl bg-primary/[0.06] px-3 py-2.5 text-[12px] font-bold text-primary">لم تبدأ بعد — ترقّب الجدول</div>
+              <div className="rounded-lg border border-primary/10 bg-background px-3 py-2.5 text-[12px] font-bold text-primary">لم تبدأ بعد — ترقّب الجدول</div>
             )}
             {summary.champion && (
               <SummaryEntity
                 logo={summary.champion.logo}
-                fallback={<Crown className="h-6 w-6 text-amber-500" strokeWidth={1.8} />}
+                fallback={<Crown className="h-6 w-6 text-muted-foreground" strokeWidth={1.8} />}
                 label="حامل اللقب"
                 name={summary.champion.name}
               />
@@ -597,18 +597,18 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
             {summary.champion ? (
               <SummaryEntity
                 logo={summary.champion.logo}
-                fallback={<Trophy className="h-6 w-6 text-amber-500" strokeWidth={1.8} />}
-                label="بطل الموسم 🏆"
+                fallback={<Trophy className="h-6 w-6 text-muted-foreground" strokeWidth={1.8} />}
+                label="بطل الموسم"
                 name={summary.champion.name}
                 tone="gold"
               />
             ) : (
-              <div className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-[11.5px] text-muted-foreground">انتهى الموسم — تظهر تفاصيل النسخة القادمة قريبًا</div>
+              <div className="rounded-lg border border-dashed border-border bg-background px-3 py-4 text-center text-[11.5px] text-muted-foreground">انتهى الموسم — تظهر تفاصيل النسخة القادمة قريبًا</div>
             )}
             {summary.topScorer && (
               <SummaryEntity
                 round
-                fallback={<Goal className="h-6 w-6 text-emerald-500" strokeWidth={1.8} />}
+                fallback={<Goal className="h-6 w-6 text-muted-foreground" strokeWidth={1.8} />}
                 label="هدّاف النسخة"
                 name={summary.topScorer.name}
                 value={String(summary.topScorer.goals)}
@@ -621,7 +621,7 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
             {summary.leader && (
               <SummaryEntity
                 logo={summary.leader.logo}
-                fallback={<Crown className="h-6 w-6 text-amber-500" strokeWidth={1.8} />}
+                fallback={<Crown className="h-6 w-6 text-muted-foreground" strokeWidth={1.8} />}
                 label={summary.matchday ? `المتصدّر · ${summary.matchday}` : "المتصدّر"}
                 name={summary.leader.name}
                 value={String(summary.leader.points)}
@@ -631,7 +631,7 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
             {summary.topScorer && (
               <SummaryEntity
                 round
-                fallback={<Goal className="h-6 w-6 text-emerald-500" strokeWidth={1.8} />}
+                fallback={<Goal className="h-6 w-6 text-muted-foreground" strokeWidth={1.8} />}
                 label="الهدّاف"
                 name={summary.topScorer.name}
                 value={String(summary.topScorer.goals)}
@@ -640,7 +640,7 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
             )}
             {summary.nextMatch && <SummaryMatchStrip m={summary.nextMatch} live={liveCount > 0} />}
             {!summary.leader && !summary.topScorer && !summary.nextMatch && (
-              <div className="rounded-xl border border-dashed border-border px-3 py-4 text-center text-[11.5px] text-muted-foreground">تظهر التفاصيل مع انطلاق المنافسة</div>
+              <div className="rounded-lg border border-dashed border-border bg-background px-3 py-4 text-center text-[11.5px] text-muted-foreground">تظهر التفاصيل مع انطلاق المنافسة</div>
             )}
           </>
         )}
@@ -2857,4 +2857,3 @@ export function LeaderboardBoard() {
     </div>
   );
 }
-

@@ -1287,7 +1287,7 @@ export default function SportsDashboard() {
               action={moreLink("/sports/matches", "كل المباريات")}
             />
             {presentSummaryCats.length > 1 && (
-              <div className="scrollbar-hide mb-5 flex gap-2 overflow-x-auto pb-1">
+              <div className="scrollbar-hide mb-5 flex gap-2 overflow-x-auto pb-1 sm:justify-center">
                 {presentSummaryCats.map((cat) => {
                   const count = summaries.filter((c) => c.category === cat).length;
                   const liveInCat = summaries.some((c) => c.category === cat && c.liveCount > 0);
@@ -1297,12 +1297,12 @@ export default function SportsDashboard() {
                       key={cat}
                       type="button"
                       onClick={() => setSummaryCat(cat)}
-                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2.5 text-[13px] font-bold transition-colors sm:text-sm ${active ? "bg-primary text-white" : "border border-border bg-card text-muted-foreground hover:border-primary/40"}`}
+                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-2.5 text-[13px] font-bold transition-colors sm:text-sm ${active ? "border-primary/20 bg-primary/[0.08] text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/30 hover:text-foreground"}`}
                       data-testid={`summary-cat-${cat}`}
                     >
                       {liveInCat && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />}
                       {COMP_CATEGORY_LABELS[cat]}
-                      <span className={`text-[11px] tabular-nums ${active ? "text-white/80" : "text-muted-foreground"}`}>{count}</span>
+                      <span className={`text-[11px] tabular-nums ${active ? "text-primary/70" : "text-muted-foreground"}`}>{count}</span>
                     </button>
                   );
                 })}
