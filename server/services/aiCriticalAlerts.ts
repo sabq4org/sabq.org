@@ -97,12 +97,53 @@ function formatArabicDateTime(date: Date): string {
   }
 }
 
-function dashboardUrl(): string {
-  const base =
+function siteBase(): string {
+  return (
     process.env.FRONTEND_URL ||
     process.env.REPLIT_DOMAINS?.split(",")[0] ||
-    "https://sabq.org";
-  return `${base.replace(/\/$/, "")}/dashboard/ai-hub`;
+    "https://sabq.org"
+  ).replace(/\/$/, "");
+}
+
+function dashboardUrl(): string {
+  return `${siteBase()}/dashboard/ai-hub`;
+}
+
+/**
+ * Twilio status-callback URL — so we learn the REAL delivery outcome
+ * (delivered / failed 63016) asynchronously instead of trusting the
+ * synchronous `queued` acknowledgement. Same endpoint the WhatsApp
+ * aggregator already uses.
+ */
+function statusCallbackUrl(): string {
+  return `${siteBase()}/api/whatsapp/status-callback`;
+}
+
+/**
+ * Numbered variables for the approved WhatsApp template (see
+ * docs/whatsapp-ai-alert-template.md). Values MUST be single-line — WhatsApp
+ * rejects template variables containing newlines or long whitespace runs.
+ */
+function buildTemplateVariables(
+  change: BreakerStatusChange,
+  meta: AlertMeta,
+): Record<string, string> {
+  const clean = (s?: string) => (s ? s.replace(/\s+/g, " ").trim() : "");
+  const transition =
+    change.prevStatus && change.prevStatus !== change.newStatus
+      ? `${statusArabic(change.prevStatus)} ← ${statusArabic(change.newStatus)}`
+      : statusArabic(change.newStatus);
+  const detail = [change.lastErrorCode, clean(change.lastError).slice(0, 120)]
+    .filter(Boolean)
+    .join(" — ");
+  return {
+    "1": `${meta.emoji} ${meta.title}`,
+    "2": providerLabel(change.provider),
+    "3": change.modelId,
+    "4": transition,
+    "5": detail || "—",
+    "6": formatArabicDateTime(new Date()),
+  };
 }
 
 function buildMessage(change: BreakerStatusChange, meta: AlertMeta): string {
@@ -188,10 +229,21 @@ export async function sendAiCriticalAlert(
   }
 
   const body = buildMessage(change, meta);
+  // When an approved template is configured, send it so the alert is delivered
+  // even OUTSIDE the WhatsApp 24-hour window (free-form text is dropped with
+  // error 63016 outside it). Falls back to free-form when unset.
+  const contentSid = process.env.AI_ALERT_WHATSAPP_CONTENT_SID?.trim() || undefined;
+  const contentVariables = contentSid ? buildTemplateVariables(change, meta) : undefined;
+  const statusCallback = statusCallbackUrl();
+
   let sent = 0;
   for (const to of numbers) {
     try {
-      const ok = await sendWhatsAppMessage({ to, body });
+      const ok = await sendWhatsAppMessage(
+        contentSid
+          ? { to, body, contentSid, contentVariables, statusCallback }
+          : { to, body, statusCallback },
+      );
       if (ok) sent++;
     } catch (err) {
       console.warn(
@@ -201,8 +253,12 @@ export async function sendAiCriticalAlert(
     }
   }
 
+  // NOTE: `sent` counts Twilio *acceptance* (queued), not final WhatsApp
+  // delivery — the real outcome (delivered / failed 63016) arrives later on the
+  // status-callback webhook. Watch [WhatsApp Status] logs to confirm delivery.
   console.log(
-    `[AI Alerts] ${meta.title} — ${change.provider}/${change.modelId}: sent ${sent}/${numbers.length}`,
+    `[AI Alerts] ${meta.title} — ${change.provider}/${change.modelId}: accepted ${sent}/${numbers.length}` +
+      (contentSid ? " (template)" : " (free-form; only delivers inside 24h window)"),
   );
   return { sent, attempted: numbers.length, skipped: null };
 }
