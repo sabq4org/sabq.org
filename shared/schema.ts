@@ -3056,6 +3056,8 @@ export const sportsAlertPrefs = pgTable("sports_alert_prefs", {
   cards: boolean("cards").default(true).notNull(),          // البطاقات (صفراء + حمراء)
   varReview: boolean("var_review").default(true).notNull(), // حالات الفار (VAR)
   fulltime: boolean("fulltime").default(true).notNull(),    // نهاية المباراة
+  transfersSaudi: boolean("transfers_saudi").default(true).notNull(),   // إشعارات الانتقالات السعودية المؤكّدة (بثّ عام، opt-out)
+  transfersGlobal: boolean("transfers_global").default(false).notNull(), // إشعارات الانتقالات العالمية البارزة (بثّ عام، opt-in)
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

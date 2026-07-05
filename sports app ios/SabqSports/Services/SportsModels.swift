@@ -621,15 +621,21 @@ nonisolated struct SpAlertPrefs: Decodable, Hashable {
     var cards: Bool
     var varReview: Bool
     var fulltime: Bool
+    // تنبيهات الانتقالات (بثّ عام): السعودية مفعّلة افتراضيًّا (opt-out)، والعالمية مطفأة (opt-in).
+    var transfersSaudi: Bool
+    var transfersGlobal: Bool
 
-    init(kickoff: Bool = true, goals: Bool = true, cards: Bool = true, varReview: Bool = true, fulltime: Bool = true) {
+    init(kickoff: Bool = true, goals: Bool = true, cards: Bool = true, varReview: Bool = true, fulltime: Bool = true,
+         transfersSaudi: Bool = true, transfersGlobal: Bool = false) {
         self.kickoff = kickoff; self.goals = goals; self.cards = cards; self.varReview = varReview; self.fulltime = fulltime
+        self.transfersSaudi = transfersSaudi; self.transfersGlobal = transfersGlobal
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: SpFlexKey.self)
-        func b(_ k: String) -> Bool { (try? c.decode(Bool.self, forKey: SpFlexKey(k))) ?? true }
+        func b(_ k: String, _ def: Bool = true) -> Bool { (try? c.decode(Bool.self, forKey: SpFlexKey(k))) ?? def }
         kickoff = b("kickoff"); goals = b("goals"); cards = b("cards"); varReview = b("varReview"); fulltime = b("fulltime")
+        transfersSaudi = b("transfersSaudi", true); transfersGlobal = b("transfersGlobal", false)
     }
 }
 
@@ -644,6 +650,8 @@ nonisolated struct SpAlertPrefsBody: Encodable {
     let cards: Bool
     let varReview: Bool
     let fulltime: Bool
+    let transfersSaudi: Bool
+    let transfersGlobal: Bool
 }
 
 // MARK: - المجتمع — لوحة المتصدّرين (عامّة)
@@ -1439,7 +1447,8 @@ extension APIClient {
     }
     @discardableResult
     func updateAlertPrefs(_ p: SpAlertPrefs) async throws -> SpAlertPrefs {
-        let body = SpAlertPrefsBody(kickoff: p.kickoff, goals: p.goals, cards: p.cards, varReview: p.varReview, fulltime: p.fulltime)
+        let body = SpAlertPrefsBody(kickoff: p.kickoff, goals: p.goals, cards: p.cards, varReview: p.varReview, fulltime: p.fulltime,
+                                    transfersSaudi: p.transfersSaudi, transfersGlobal: p.transfersGlobal)
         return try await requestJSON(SpAlertPrefsResponse.self, method: "PUT", path: "/sports/alert-prefs", body: body, apiRoot: URLConstants.mobileAPI).preferences
     }
 
