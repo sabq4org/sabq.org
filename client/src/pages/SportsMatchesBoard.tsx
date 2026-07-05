@@ -334,7 +334,7 @@ export function MatchRow({
           flash ? "bg-emerald-500/20" : isLive && !flat ? "hover:bg-red-500/[0.10]" : "hover:bg-muted/40"
         }`}
       >
-        {/* الوقت / الحالة */}
+        {/* الحالة (المباشر فقط) — وقت الانطلاق انتقل بين الفريقين بقرار المالك 2026-07-05 */}
         <button
           type="button"
           onClick={() => onOpen(f.id)}
@@ -351,12 +351,8 @@ export function MatchRow({
                 {livePhaseLabel(f)}
               </span>
             </span>
-          ) : st === "finished" ? (
-            <span aria-label={f.status.label || "انتهت"} />
           ) : (
-            <span className="text-sm font-black text-foreground tabular-nums" dir="ltr">
-              {kickoffTime(f)}
-            </span>
+            <span aria-label={st === "finished" ? f.status.label || "انتهت" : "لم تبدأ"} />
           )}
         </button>
 
@@ -396,7 +392,12 @@ export function MatchRow({
               ) : null}
             </span>
           ) : (
-            <span className="text-xs font-bold text-muted-foreground">vs</span>
+            <span
+              className="inline-flex min-w-[3.75rem] items-center justify-center rounded-[10px] bg-muted px-2 py-1 text-sm font-black tabular-nums text-foreground"
+              dir="ltr"
+            >
+              {kickoffTime(f)}
+            </span>
           )}
         </button>
 
