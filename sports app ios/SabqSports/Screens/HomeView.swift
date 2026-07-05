@@ -57,7 +57,7 @@ struct HomeView: View {
     /// قادم/آخر نتيجة)، وإلا فمباراة الدوري الأبرز بنفس الترتيب.
     private var featured: SpFixture? {
         guard let m = matches else { return nil }
-        if let favId = favorites.team?.id, let fm = favoriteMatch(m, favId) { return fm }
+        if let favId = favorites.team?.id, let fm = favoriteLastResult(m, favId) { return fm }
         return m.live.first ?? m.today.first ?? m.upcoming.first ?? m.results.first
     }
 
@@ -67,6 +67,14 @@ struct HomeView: View {
             if let f = bucket.first(where: { $0.home.id == favId || $0.away.id == favId }) { return f }
         }
         return nil
+    }
+
+    /// بطاقة «فريقي المفضّل» الكبيرة تعرض آخر مباراة خاضها الفريق فقط.
+    private func favoriteLastResult(_ m: SpMatchesResponse, _ favId: Int) -> SpFixture? {
+        m.results
+            .filter { $0.home.id == favId || $0.away.id == favId }
+            .sorted { $0.timestamp > $1.timestamp }
+            .first
     }
 
     /// هل الهيرو الحالي مباراة الفريق المفضّل؟ (لإظهار شارة «فريقي» وإخفاء البطاقة المكرّرة)
@@ -266,10 +274,7 @@ struct HomeView: View {
     }
 
     private var metaText: String {
-        var parts: [String] = []
-        if let s = comp?.season ?? outlook?.season { parts.append("موسم \(s)/\(s + 1)") }
-        if let r = featured?.round, !r.isEmpty { parts.append(r) }
-        return parts.joined(separator: " · ")
+        "الموسم سينطلق قريبًا"
     }
 
     // بطاقة الهيرو الفاخرة (فحمي → بترولي) مع المباراة المميّزة.
@@ -551,6 +556,35 @@ struct HomeView: View {
 
     // MARK: - لوحة دوري روشن (تدفّق واحد غنيّ بالأرقام — هادئ، أبيض + أخضر)
 
+    private var favoriteTeamId: Int? { favorites.team?.id }
+    private var favoriteTeamName: String? { favorites.team?.name }
+
+    private var displayResults: [SpFixture] {
+        let rows = matches?.results ?? []
+        guard let favId = favoriteTeamId else { return Array(rows.prefix(4)) }
+        return Array(rows.filter { $0.home.id == favId || $0.away.id == favId }.prefix(4))
+    }
+
+    private var favoriteStandingRows: [SpStandingRow] {
+        guard let favId = favoriteTeamId,
+              let idx = standings.firstIndex(where: { $0.team.id == favId }) else {
+            return Array(standings.prefix(3))
+        }
+        let start = max(0, idx - 1)
+        let end = min(standings.count, idx + 2)
+        return Array(standings[start..<end])
+    }
+
+    private var hasDisplayScorers: Bool {
+        !displayScorers(for: .goals).isEmpty || !displayScorers(for: .assists).isEmpty
+    }
+
+    private func displayScorers(for mode: ScorerMode) -> [SpScorer] {
+        let rows = mode == .goals ? scorers : assists
+        guard let favId = favoriteTeamId else { return Array(rows.prefix(3)) }
+        return Array(rows.filter { $0.team.id == favId }.prefix(3))
+    }
+
     @ViewBuilder private var dashboardContent: some View {
         // فراغ واضح بين بطاقات روشن بدون فصل بصري زائد.
         // (بطاقة «فريقي المفضّل» المصغّرة حُذفت — بلوك «فريقي» أعلى الواجهة يغنيها.)
@@ -560,9 +594,9 @@ struct HomeView: View {
                 gameweekStrip
             }
             // تسلسل مبارياتي متماسك: القادمة/اليوم → آخر النتائج → الترتيب (قرار 2026-07-04).
-            if !(matches?.results.isEmpty ?? true) { recentResultsCard.padding(.horizontal, 16) }
+            if !displayResults.isEmpty { recentResultsCard.padding(.horizontal, 16) }
             if !standings.isEmpty { titleRaceCard.padding(.horizontal, 16) }
-            if !scorers.isEmpty { scorersAssistsCard.padding(.horizontal, 16) }
+            if hasDisplayScorers { scorersAssistsCard.padding(.horizontal, 16) }
             if !standings.isEmpty { statSpotlight.padding(.horizontal, 16) }
             if !transfers.isEmpty { transfersCard.padding(.horizontal, 16) }
         }
@@ -587,7 +621,8 @@ struct HomeView: View {
 
     @ViewBuilder private var leaguePulse: some View {
         let leader = standings.first
-        let topScorer = scorers.first
+        let favoriteRow = favoriteTeamId.flatMap { favId in standings.first(where: { $0.team.id == favId }) }
+        let topScorer = favoriteTeamId.flatMap { favId in scorers.first(where: { $0.team.id == favId }) } ?? scorers.first
         let bestAtk = standings.max { $0.goalsFor < $1.goalsFor }
         let bestDef = standings.min { $0.goalsAgainst < $1.goalsAgainst }
         let gap: Int? = standings.count >= 2 ? standings[0].points - standings[1].points : nil
@@ -595,18 +630,25 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 11) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    sectionTitle("نبض الدوري")
+                    sectionTitle(favoriteTeamName.map { "نبض \($0)" } ?? "نبض الدوري")
                     Spacer()
-                    if let g = gap {
+                    if let row = favoriteRow {
+                        Text("المركز \(row.rank)")
+                            .font(SportsFonts.app(size: 11, weight: .bold))
+                            .foregroundStyle(rslAccent)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(rslAccent.opacity(0.10)))
+                    } else if let g = gap {
                         Text(g == 0 ? "صدارة مشتعلة" : "الفارق \(g) نقطة")
                             .font(SportsFonts.app(size: 11, weight: .bold))
                             .foregroundStyle(rslAccent)
                             .padding(.horizontal, 9)
                             .padding(.vertical, 4)
                             .background(Capsule().fill(rslAccent.opacity(0.10)))
-                    }
+                        }
                 }
-                Text(leaguePulseSummary(leader: leader, topScorer: topScorer, gap: gap))
+                Text(favoriteRow.map { favoritePulseSummary(row: $0, topScorer: topScorer) } ?? leaguePulseSummary(leader: leader, topScorer: topScorer, gap: gap))
                     .font(SportsFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkDim)
                     .lineLimit(2)
@@ -614,7 +656,7 @@ struct HomeView: View {
             .padding(.horizontal, 16)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
-                    ForEach(Array(pulseTiles(leader: leader, topScorer: topScorer, bestAtk: bestAtk, bestDef: bestDef, gap: gap).enumerated()), id: \.offset) { idx, t in
+                    ForEach(Array(pulseTiles(favoriteRow: favoriteRow, leader: leader, topScorer: topScorer, bestAtk: bestAtk, bestDef: bestDef, gap: gap).enumerated()), id: \.offset) { idx, t in
                         if idx > 0 {
                             Rectangle().fill(SpTheme.outline).frame(width: 1, height: 38)
                         }
@@ -629,8 +671,18 @@ struct HomeView: View {
 
     private typealias PulseTile = (label: String, value: String, sub: String, logo: String?)
 
-    private func pulseTiles(leader: SpStandingRow?, topScorer: SpScorer?, bestAtk: SpStandingRow?, bestDef: SpStandingRow?, gap: Int?) -> [PulseTile] {
+    private func pulseTiles(favoriteRow: SpStandingRow?, leader: SpStandingRow?, topScorer: SpScorer?, bestAtk: SpStandingRow?, bestDef: SpStandingRow?, gap: Int?) -> [PulseTile] {
         var tiles: [PulseTile] = []
+        if let row = favoriteRow {
+            tiles.append(("المركز", "\(row.rank)", "\(row.points) نقطة", row.team.logo))
+            tiles.append(("لعب", "\(row.played)", "\(row.win) فوز", nil))
+            tiles.append(("سجّل", "\(row.goalsFor)", "هدف", nil))
+            tiles.append(("استقبل", "\(row.goalsAgainst)", "هدف", nil))
+            if let s = topScorer, s.team.id == row.team.id {
+                tiles.append(("هداف الفريق", s.name, "\(s.goals) هدف", s.team.logo))
+            }
+            return tiles
+        }
         if let l = leader { tiles.append(("المتصدّر", l.team.name, "\(l.points) نقطة", l.team.logo)) }
         if let s = topScorer { tiles.append(("الهدّاف", s.name, "\(s.goals) هدف", s.team.logo)) }
         if let a = bestAtk { tiles.append(("أقوى هجوم", a.team.name, "\(a.goalsFor) هدف", a.team.logo)) }
@@ -649,6 +701,15 @@ struct HomeView: View {
             parts.append("\(topScorer.name) يقود سباق الهدافين")
         }
         return parts.isEmpty ? "أهم مؤشرات الدوري في لقطة واحدة." : parts.joined(separator: " · ")
+    }
+
+    private func favoritePulseSummary(row: SpStandingRow, topScorer: SpScorer?) -> String {
+        var parts = ["\(row.team.name) في المركز \(row.rank) بـ\(row.points) نقطة"]
+        parts.append("سجّل \(row.goalsFor) واستقبل \(row.goalsAgainst)")
+        if let s = topScorer, s.team.id == row.team.id {
+            parts.append("هدافه \(s.name) بـ\(s.goals) هدف")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func pulseTile(_ label: String, _ value: String, _ sub: String, logo: String?) -> some View {
@@ -719,12 +780,14 @@ struct HomeView: View {
         }
     }
 
-    // سباق اللقب — أعلى 3 مع أشرطة نقاط.
+    // سباق اللقب — حول الفريق المفضّل عند اختياره، وإلا أعلى 3.
     private var titleRaceCard: some View {
-        let top = Array(standings.prefix(3))
+        let rows = favoriteStandingRows
+        let leader = standings.first
+        let favId = favoriteTeamId
         return VStack(alignment: .leading, spacing: 11) {
             HStack {
-                sectionTitle("سباق اللقب")
+                sectionTitle(favoriteTeamName.map { "ترتيب \($0)" } ?? "سباق اللقب")
                 Spacer()
                 Button { showAllStandings = true } label: {
                     HStack(spacing: 3) {
@@ -734,7 +797,8 @@ struct HomeView: View {
                 }
             }
             VStack(spacing: 0) {
-                ForEach(Array(top.enumerated()), id: \.element.id) { idx, row in
+                ForEach(Array(rows.enumerated()), id: \.element.id) { idx, row in
+                    let isFavorite = favId == row.team.id
                     if idx > 0 { Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 1) }
                     Button { selectedTeam = IDBox(id: row.team.id) } label: {
                         HStack(spacing: 9) {
@@ -744,7 +808,7 @@ struct HomeView: View {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(row.team.name).font(SportsFonts.app(size: 13.5, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                                 HStack(spacing: 7) {
-                                    titleRaceProgress(row, leaderPoints: top.first?.points ?? row.points)
+                                    titleRaceProgress(row, leaderPoints: leader?.points ?? row.points)
                                     formDots(row.form)
                                 }
                             }
@@ -753,13 +817,19 @@ struct HomeView: View {
                                 (Text("\(row.points)").font(SportsFonts.app(size: 15.5, weight: .heavy))
                                     + Text(" نقطة").font(SportsFonts.app(size: 9.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim))
                                     .foregroundStyle(SpTheme.onDark).monospacedDigit()
-                                Text(titleRaceGap(row, leader: top.first))
+                                Text(titleRaceGap(row, leader: leader))
                                     .font(SportsFonts.app(size: 9.5, weight: .bold))
-                                    .foregroundStyle(row.rank == 1 ? rslAccent : SpTheme.onDarkFaint)
+                                    .foregroundStyle(isFavorite ? rslAccent : row.rank == 1 ? rslAccent : SpTheme.onDarkFaint)
                                     .lineLimit(1)
                             }
                         }
                         .padding(.vertical, 8)
+                        .background {
+                            if isFavorite {
+                                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                                    .fill(rslAccent.opacity(0.055))
+                            }
+                        }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(SpPressStyle())
@@ -820,10 +890,13 @@ struct HomeView: View {
 
     // الهدّافون والصنّاع — مبدّل داخلي. الرقم الأساسي أخضر، الثانوي رمادي.
     private var scorersAssistsCard: some View {
-        let rows = scorerMode == .goals ? scorers : assists
+        let rows = displayScorers(for: scorerMode)
         return VStack(alignment: .leading, spacing: 11) {
             HStack {
-                sectionTitle(scorerMode == .goals ? "الهدّافون" : "صنّاع الأهداف")
+                let fav = favoriteTeamName
+                sectionTitle(scorerMode == .goals
+                             ? (fav.map { "هدّافو \($0)" } ?? "الهدّافون")
+                             : (fav.map { "صنّاع \($0)" } ?? "صنّاع الأهداف"))
                 Spacer()
                 Button { showAllScorers = true } label: {
                     HStack(spacing: 3) {
@@ -913,9 +986,9 @@ struct HomeView: View {
 
     // آخر النتائج — قائمة مدمجة لآخر المباريات المنتهية (تفتح مركز المباراة).
     private var recentResultsCard: some View {
-        let results = Array((matches?.results ?? []).prefix(4))
+        let results = displayResults
         return VStack(alignment: .leading, spacing: 11) {
-            sectionTitle("آخر النتائج")
+            sectionTitle(favoriteTeamName.map { "آخر نتائج \($0)" } ?? "آخر النتائج")
             VStack(spacing: 0) {
                 ForEach(Array(results.enumerated()), id: \.element.id) { idx, f in
                     if idx > 0 { Rectangle().fill(SpTheme.outline.opacity(0.5)).frame(height: 1) }

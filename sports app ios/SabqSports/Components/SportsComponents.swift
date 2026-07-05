@@ -452,7 +452,6 @@ struct SpFlatMatchRow: View {
             SpScoreRow(fixture: fixture)
                 .padding(.vertical, 10)
                 .padding(.horizontal, 8)
-                .background(fixture.status.live ? SpTheme.crimson.opacity(0.035) : Color.clear)
                 .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
@@ -795,31 +794,36 @@ struct SpMyTeamCard: View {
 
     @ViewBuilder private func card(_ fav: SpFavTeam) -> some View {
         let team = teamFixtures(fav.id)
-        let featured = team.featured
+        let upcoming = team.upcoming
         VStack(alignment: .leading, spacing: 0) {
             header(fav)
-            if let f = featured {
-                Button { onOpenMatch(f) } label: {
-                    VStack(spacing: 4) {
-                        SpScoreRow(fixture: f)
-                        if let comp = f.competition, !comp.isEmpty {
-                            Text(comp)
-                                .font(SportsFonts.app(size: 9.5, weight: .bold))
-                                .foregroundStyle(SpTheme.compAccent(f.competitionSlug ?? ""))
+            if !upcoming.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(Array(upcoming.enumerated()), id: \.element.id) { idx, f in
+                        if idx > 0 {
+                            Rectangle().fill(SpTheme.outline.opacity(0.55)).frame(height: 1)
+                                .padding(.horizontal, 14)
                         }
+                        Button { onOpenMatch(f) } label: {
+                            VStack(spacing: 4) {
+                                SpScoreRow(fixture: f)
+                                if let comp = f.competition, !comp.isEmpty {
+                                    Text(comp)
+                                        .font(SportsFonts.app(size: 9.5, weight: .bold))
+                                        .foregroundStyle(SpTheme.compAccent(f.competitionSlug ?? ""))
+                                }
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 11)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(SpPressStyle())
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 11)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(SpPressStyle())
             } else if loaded {
-                Text("لا مباريات مجدولة قريبًا")
+                Text("لا مباريات قادمة مجدولة حاليًا")
                     .font(SportsFonts.app(size: 11.5, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkDim)
                     .padding(.horizontal, 14).padding(.vertical, 12)
-            }
-            if !team.lastResults.isEmpty {
-                resultsStrip(team.lastResults, favId: fav.id)
             }
         }
         .background(
@@ -836,17 +840,10 @@ struct SpMyTeamCard: View {
         Button { onOpenTeam(fav.id) } label: {
             HStack(spacing: 8) {
                 SpTeamLogo(logo: fav.logo ?? "", size: 22)
-                Text("مباريات \(fav.name)")
+                Text("مباريات \(fav.name) القادمة")
                     .font(SportsFonts.app(size: 16, weight: .heavy))
                     .foregroundStyle(SpTheme.onDark)
                     .lineLimit(1).minimumScaleFactor(0.8)
-                if let row = standings.first(where: { $0.team.id == fav.id }) {
-                    Text("المركز \(row.rank)")
-                        .font(SportsFonts.app(size: 10.5, weight: .bold))
-                        .foregroundStyle(SpTheme.green)
-                        .padding(.horizontal, 8).padding(.vertical, 2)
-                        .background(Capsule().fill(SpTheme.green.opacity(0.10)))
-                }
                 Spacer(minLength: 0)
                 HStack(spacing: 3) {
                     Text("صفحة الفريق")
@@ -948,20 +945,20 @@ struct SpMyTeamCard: View {
     // MARK: البيانات
 
     private struct TeamFixtures {
-        let featured: SpFixture?
+        let upcoming: [SpFixture]
         let lastResults: [SpFixture]
     }
 
-    /// مباريات الفريق من الجدول الموحّد: الجارية أولوية، ثم الأقرب قادمةً،
-    /// وآخر 3 نتائج من الأحدث.
+    /// مباريات الفريق من الجدول الموحّد: البطاقة تعرض حتى 3 مباريات قادمة للفريق.
     private func teamFixtures(_ favId: Int) -> TeamFixtures {
         let mine = fixtures.filter { $0.home.id == favId || $0.away.id == favId }
-        let live = mine.first { $0.status.live }
-        let upcoming = mine.filter { !$0.started }.min { $0.timestamp < $1.timestamp }
+        let upcoming = mine.filter { !$0.started }
+            .sorted { $0.timestamp < $1.timestamp }
+            .prefix(3)
         let results = mine.filter { $0.status.finished }
             .sorted { $0.timestamp > $1.timestamp }
             .prefix(3)
-        return TeamFixtures(featured: live ?? upcoming, lastResults: Array(results))
+        return TeamFixtures(upcoming: Array(upcoming), lastResults: Array(results))
     }
 
     private func load() async {

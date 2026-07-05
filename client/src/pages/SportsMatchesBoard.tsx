@@ -323,7 +323,7 @@ export function MatchRow({
 
   return (
     <div
-      className={`border-b border-border last:border-b-0 ${
+      className={`${flat ? "border-b-0" : "border-b border-border last:border-b-0"} ${
         isLive && !flat
           ? "relative overflow-hidden border-r-4 border-r-red-500 bg-red-500/[0.06] shadow-[inset_0_0_0_1px_rgba(239,68,68,0.12)] dark:bg-red-500/[0.12]"
           : ""
