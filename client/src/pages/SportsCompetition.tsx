@@ -3,7 +3,7 @@
  *
  * هوية البطولة كاملة في مكان واحد: الشعار، الاسم، الفئة والحالة، الموسم الحالي،
  * عدّاد بدء الموسم (إن لم يبدأ)، ولمحة عن النسخة السابقة (حامل اللقب + هدّافها).
- * ثم تبويبات: الترتيب، الهدّافون، صنّاع الأهداف، البطاقات، والمباريات.
+ * ثم تبويبات: المباريات (الافتراضي)، الترتيب، الهدّافون، صنّاع الأهداف، والبطاقات.
  *
  * تستهلك نقاط /api/sports/* القائمة دون أي اعتماد جديد:
  *   GET /api/sports/competitions          (شعار/فئة/موسم/حالة لكل بطولة)
@@ -107,6 +107,29 @@ const timeOnlyFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
   minute: "2-digit",
   hour12: true,
 });
+
+// تجميع مباريات القائمة حسب يومها (بتوقيت الرياض — مطابق لوقت الانطلاق في صف
+// المباراة) لفواصل تاريخ واضحة بين أيام «القادمة» و«النتائج».
+const riyadhDayKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
+const dayDividerFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { timeZone: "Asia/Riyadh", weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
+function groupMatchesByDay(rows: SpLiveItem[]): { key: string; label: string; rows: SpLiveItem[] }[] {
+  const todayKey = riyadhDayKeyFmt.format(new Date());
+  const tomorrowKey = riyadhDayKeyFmt.format(new Date(Date.now() + 86_400_000));
+  const groups: { key: string; label: string; rows: SpLiveItem[] }[] = [];
+  for (const f of rows) {
+    const dt = new Date(f.timestamp * 1000);
+    const key = riyadhDayKeyFmt.format(dt);
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) {
+      last.rows.push(f);
+    } else {
+      const prefix = key === todayKey ? "اليوم · " : key === tomorrowKey ? "غدًا · " : "";
+      groups.push({ key, label: prefix + dayDividerFmt.format(dt), rows: [f] });
+    }
+  }
+  return groups;
+}
 
 const COMP_EDITORIAL_NOTES: Record<string, string[]> = {
   "kings-cup": [
@@ -406,27 +429,38 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
   if (live.length + today.length + upcoming.length + results.length === 0) {
     return <TabEmpty text="لا توجد مباريات متاحة لهذه البطولة حاليًا." />;
   }
-  const section = (title: string, rows: SpLiveItem[], accentLive = false) =>
+  const section = (title: string, rows: SpLiveItem[], opts?: { accentLive?: boolean; byDay?: boolean }) =>
     rows.length > 0 && (
       <div className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
-        <div className={`flex items-center gap-2.5 border-b border-border px-3 py-2.5 sm:px-4 sm:py-3 ${accentLive ? "bg-red-500/10" : "bg-gradient-to-l from-muted/60 to-transparent"}`}>
-          {accentLive && <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />}
+        <div className={`flex items-center gap-2.5 border-b border-border px-3 py-2.5 sm:px-4 sm:py-3 ${opts?.accentLive ? "bg-red-500/10" : "bg-gradient-to-l from-muted/60 to-transparent"}`}>
+          {opts?.accentLive && <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />}
           <span className="flex-1 truncate font-black text-foreground">{title}</span>
           <span className="text-[11px] font-bold tabular-nums text-muted-foreground">{rows.length}</span>
         </div>
         <div>
-          {rows.map((f) => (
-            <MatchRow key={f.id} f={f} expanded={expanded.has(f.id)} onToggle={() => toggle(f.id)} onOpen={onOpen} />
-          ))}
+          {opts?.byDay
+            ? groupMatchesByDay(rows).map((g) => (
+                <div key={g.key}>
+                  <div className="flex items-center gap-1.5 border-b border-border bg-muted/40 px-3 py-1.5 text-[11px] font-bold text-muted-foreground sm:px-4">
+                    <CalendarDays className="h-3.5 w-3.5 text-primary" /> {g.label}
+                  </div>
+                  {g.rows.map((f) => (
+                    <MatchRow key={f.id} f={f} expanded={expanded.has(f.id)} onToggle={() => toggle(f.id)} onOpen={onOpen} />
+                  ))}
+                </div>
+              ))
+            : rows.map((f) => (
+                <MatchRow key={f.id} f={f} expanded={expanded.has(f.id)} onToggle={() => toggle(f.id)} onOpen={onOpen} />
+              ))}
         </div>
       </div>
     );
   return (
     <div className="space-y-4">
-      {section("مباشر الآن", live, true)}
+      {section("مباشر الآن", live, { accentLive: true })}
       {section("مباريات اليوم", today.filter((t) => !live.some((l) => l.id === t.id)))}
-      {section("مباريات قادمة", upcoming.slice(0, 20))}
-      {section("أحدث النتائج", results.slice(0, 20))}
+      {section("مباريات قادمة", upcoming.slice(0, 20), { byDay: true })}
+      {section("أحدث النتائج", results.slice(0, 20), { byDay: true })}
     </div>
   );
 }
@@ -567,15 +601,16 @@ export default function SportsCompetition() {
     summaryMatches.upcoming.length +
     summaryMatches.results.length;
 
+  // «المباريات» تتصدّر دائمًا ثم «الترتيب» — قرار المالك 2026-07-05 (يعمّ كل البطولات).
   const tabs = useMemo<TabKey[]>(() => {
-    const t: TabKey[] = [];
+    const t: TabKey[] = ["matches"];
     if (!comp || comp.hasStandings) t.push("standings");
     if (!comp || comp.hasScorers) t.push("scorers", "assists", "cards");
-    t.push("matches", "news", "predictions");
+    t.push("news", "predictions");
     return t;
   }, [comp]);
 
-  const [tab, setTab] = useState<TabKey>("standings");
+  const [tab, setTab] = useState<TabKey>("matches");
   useEffect(() => {
     if (tabs.length && !tabs.includes(tab)) setTab(tabs[0]);
   }, [tabs, tab]);
