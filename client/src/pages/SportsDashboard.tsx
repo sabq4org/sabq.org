@@ -16,6 +16,7 @@ import {
   CalendarDays,
   Star,
   Clock,
+  Crown,
   Flame,
   Goal,
   Radio,
@@ -37,6 +38,7 @@ import {
   COMP_STATUS_RANK,
   CompetitionSummaryCard,
   CompetitionShelfRow,
+  compAccent,
   summaryKickoffDate,
   PillTabs,
   MatchHub,
@@ -576,87 +578,86 @@ const outlookDateFmt = new Intl.DateTimeFormat("ar", {
   timeZone: "Asia/Riyadh",
 });
 
-function SeasonOutlookBanner({ outlook, history }: { outlook: SpSeasonOutlook; history: CompHistory | null }) {
+// تصميم «سطر الهوية» (اختيار المالك 2026-07-05 من نماذج م2): بطاقة محايدة
+// بخيط لون هوية البطولة (compAccent)، التاريخ أولًا والعداد كبسولة، والإرث
+// صفّان هادئان بلا خلفيات ملوّنة — الذهبي نغمة نص لحامل اللقب فقط.
+function SeasonOutlookBanner({ outlook, history, comp }: { outlook: SpSeasonOutlook; history: CompHistory | null; comp: SpCompetition | undefined }) {
   if (outlook.phase === "in-season" || outlook.phase === "unknown") return null;
   const kickoff = outlook.firstKickoff ? outlookDateFmt.format(new Date(outlook.firstKickoff)) : null;
+  const accent = compAccent(comp?.slug ?? "");
+  const accentProps = {
+    style: { "--sp-acc-l": accent } as React.CSSProperties,
+    className: "mb-6 overflow-hidden rounded-2xl border border-border bg-card [--sp-acc:var(--sp-acc-l)] dark:[--sp-acc:color-mix(in_srgb,var(--sp-acc-l)_60%,white)]",
+  };
 
   if (outlook.phase === "off-season") {
     return (
-      <div className="mb-6 rounded-2xl border border-amber-400/30 bg-gradient-to-l from-amber-400/10 to-transparent p-5 sm:p-6">
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="shrink-0 rounded-2xl bg-amber-400/15 p-3"><Trophy className="h-7 w-7 text-amber-500" strokeWidth={1.8} /></div>
+      <div {...accentProps}>
+        <span className="block h-[3px] bg-[var(--sp-acc)]" aria-hidden="true" />
+        <div className="flex flex-wrap items-center gap-3 p-4 sm:p-5">
+          {outlook.champion?.logo ? (
+            <img src={outlook.champion.logo} alt="" className="h-10 w-10 shrink-0 object-contain" />
+          ) : (
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--sp-acc)_12%,transparent)]"><Trophy className="h-5 w-5 text-[var(--sp-acc)]" strokeWidth={1.8} /></span>
+          )}
           <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-bold tabular-nums text-amber-600 dark:text-amber-400">انتهى موسم {seasonLabel(outlook.season)}</div>
-            {outlook.champion ? (
-              <div className="mt-1 flex items-center gap-2">
-                {outlook.champion.logo && <img src={outlook.champion.logo} alt="" className="h-8 w-8 shrink-0 object-contain" />}
-                <span className="truncate text-lg font-black text-foreground sm:text-xl">{outlook.champion.name} <span className="text-amber-500">بطلاً 🏆</span></span>
-              </div>
-            ) : (
-              <div className="mt-1 text-lg font-black text-foreground">في انتظار الموسم الجديد</div>
-            )}
-            <p className="mt-1.5 text-sm text-muted-foreground">الموسم الجديد قريبًا — يظهر الجدول والعدّ التنازلي والترتيب هنا فور إعلان المواعيد.</p>
+            <div className="text-[11px] font-bold tabular-nums text-muted-foreground">انتهى موسم {seasonLabel(outlook.season)}</div>
+            <div className="truncate text-lg font-black text-foreground">
+              {outlook.champion ? (<>{outlook.champion.name} <span className="text-amber-600 dark:text-amber-400">بطلًا 🏆</span></>) : "في انتظار الموسم الجديد"}
+            </div>
           </div>
+          <p className="w-full text-sm text-muted-foreground sm:w-auto sm:max-w-[40%]">الموسم الجديد قريبًا — يظهر الجدول والعدّ التنازلي فور إعلان المواعيد.</p>
         </div>
       </div>
     );
   }
 
-  // ما قبل الموسم — عدّ تنازلي + إرث الموسم الماضي (البطل + الهدّاف). لا نكرّر
-  // افتتاحيات الجولة الأولى هنا لأنها تظهر كاملةً في «مركز المباريات» أسفله.
+  // ما قبل الموسم — التاريخ الفعلي يتقدّم والعداد كبسولة، ثم إرث الموسم الماضي.
   const hasLegacy = Boolean(history?.champion || history?.topScorer);
   return (
-    <div className="mb-6 rounded-2xl border border-primary/20 bg-primary/[0.04] p-5 sm:p-6">
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="shrink-0 rounded-2xl bg-primary/10 px-5 py-2.5 text-center">
-          <div className="text-3xl font-black leading-none tabular-nums text-primary sm:text-4xl">{outlook.daysUntilKickoff ?? "—"}</div>
-          <div className="mt-1 text-[10px] font-bold text-primary/80">يومًا</div>
-        </div>
+    <div {...accentProps}>
+      <span className="block h-[3px] bg-[var(--sp-acc)]" aria-hidden="true" />
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
+        {comp?.logo ? (
+          <img src={comp.logo} alt="" className="h-10 w-10 shrink-0 object-contain" />
+        ) : (
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--sp-acc)_12%,transparent)]"><Trophy className="h-5 w-5 text-[var(--sp-acc)]" strokeWidth={1.8} /></span>
+        )}
         <div className="min-w-0 flex-1">
-          <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary">
-            <Flame className="h-3.5 w-3.5" strokeWidth={1.8} /> ينطلق موسم {outlook.nextSeason ? seasonLabel(outlook.nextSeason) : ""}
+          <div className="truncate text-[15px] font-black text-foreground">{comp?.name || "البطولة"}</div>
+          <div className="text-[11.5px] text-muted-foreground">
+            العدّ التنازلي لموسم {outlook.nextSeason ? seasonLabel(outlook.nextSeason) : "الجديد"} — أولى المباريات:
           </div>
-          <h3 className="mt-1 text-lg font-black text-foreground sm:text-xl">العدّ التنازلي بدأ</h3>
-          {kickoff && (
-            <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground"><CalendarDays className="h-4 w-4" strokeWidth={1.8} /> أولى المباريات {kickoff}</p>
+        </div>
+        <div className="flex w-full items-baseline justify-between gap-2 border-t border-dashed border-border pt-2.5 text-left sm:w-auto sm:flex-col sm:items-end sm:border-t-0 sm:pt-0">
+          <div className="text-[17px] font-black leading-tight tabular-nums text-foreground">{kickoff ?? "قيد التحديث"}</div>
+          {outlook.daysUntilKickoff != null && (
+            <span className="rounded-full bg-[color-mix(in_srgb,var(--sp-acc)_12%,transparent)] px-2.5 py-0.5 text-[11px] font-black tabular-nums text-[var(--sp-acc)]">
+              بعد {outlook.daysUntilKickoff} {outlook.daysUntilKickoff === 1 ? "يوم" : outlook.daysUntilKickoff === 2 ? "يومين" : outlook.daysUntilKickoff <= 10 ? "أيام" : "يومًا"}
+            </span>
           )}
         </div>
       </div>
       {hasLegacy && (
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="grid border-t border-border sm:grid-cols-2">
           {history!.champion && (
-            <div className="flex items-center gap-3 rounded-xl bg-amber-400/[0.06] px-3 py-2.5">
-              <span className="grid h-10 w-10 shrink-0 place-items-center">
-                {history!.champion.logo ? (
-                  <img src={history!.champion.logo} alt="" className="h-10 w-10 object-contain" loading="lazy" />
-                ) : (
-                  <Trophy className="h-6 w-6 text-amber-500" strokeWidth={1.8} />
-                )}
-              </span>
-              <div className="min-w-0">
-                <div className="text-[10px] font-bold text-amber-600/80 dark:text-amber-400/80">
-                  حامل اللقب{history!.previousSeason ? ` · ${history!.previousSeason}` : ""}
-                </div>
-                <div className="truncate text-sm font-black text-foreground">{history!.champion.name}</div>
-              </div>
+            <div className="flex items-center gap-2.5 px-4 py-2.5 text-[12.5px] sm:px-5">
+              <Crown className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" strokeWidth={2} />
+              <span className="text-muted-foreground">حامل اللقب</span>
+              {history!.champion.logo && <img src={history!.champion.logo} alt="" className="h-6 w-6 shrink-0 object-contain" loading="lazy" />}
+              <b className="truncate font-black text-foreground">{history!.champion.name}</b>
             </div>
           )}
           {history!.topScorer && (
-            <div className="flex items-center gap-3 rounded-xl bg-emerald-400/[0.06] px-3 py-2.5">
-              <span className="grid h-10 w-10 shrink-0 place-items-center">
-                {history!.topScorer.photo ? (
-                  <img src={history!.topScorer.photo} alt="" className="h-10 w-10 rounded-full object-cover" loading="lazy" />
-                ) : (
-                  <Goal className="h-6 w-6 text-emerald-500" strokeWidth={1.8} />
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-[10px] font-bold text-emerald-600/80 dark:text-emerald-400/80">هدّاف الموسم الماضي</div>
-                <div className="truncate text-sm font-black text-foreground">
-                  {history!.topScorer.name}
-                  <span className="mr-1.5 text-xs font-bold tabular-nums text-muted-foreground">{history!.topScorer.goals} هدفًا</span>
-                </div>
-              </div>
+            <div className="flex items-center gap-2.5 border-t border-border px-4 py-2.5 text-[12.5px] sm:border-t-0 sm:border-r sm:px-5">
+              {history!.topScorer.photo ? (
+                <img src={history!.topScorer.photo} alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" loading="lazy" />
+              ) : (
+                <Goal className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
+              )}
+              <span className="text-muted-foreground">هدّاف النسخة</span>
+              <b className="truncate font-black text-foreground">{history!.topScorer.name}</b>
+              {history!.topScorer.goals > 0 && <span className="shrink-0 text-[11.5px] font-bold tabular-nums text-muted-foreground">{history!.topScorer.goals} {history!.topScorer.goals === 1 ? "هدف" : "أهداف"}</span>}
             </div>
           )}
         </div>
@@ -707,21 +708,41 @@ function pulseMoney(n: number | null, cur: string | null): string | null {
 
 const PULSE_PROB_AR: Record<string, string> = { IMMINENT: "وشيكة", HIGH: "قوية", MEDIUM: "متوسطة", LOW: "ضعيفة" };
 
-function PulseTickerItem({ p }: { p: TcPulseItem }) {
+// صف حركة ساكن — تصميم «القائمة الساكنة» (اختيار المالك 2026-07-05): لا شريط
+// متحرك؛ «مؤكّدة» كبسولة زرقاء واحدة و«إشاعة» إطار محايد والمبالغ بلون النص،
+// وصفقة اليوم صف مميز بنجمة ذهبية وصبغة ضئيلة فقط.
+function PulseRow({ p, deal = false }: { p: TcPulseItem; deal?: boolean }) {
   const money = pulseMoney(p.amount, p.currency);
-  return (
-    <span className="inline-flex items-center gap-2 px-4 text-sm whitespace-nowrap">
-      <span className={`text-[10px] font-black rounded-full px-1.5 py-0.5 ${p.type === "confirmed" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-fuchsia-500/10 text-fuchsia-700 dark:text-fuchsia-400"}`}>
-        {p.type === "confirmed" ? "مؤكّدة" : `إشاعة${p.probability ? ` · ${PULSE_PROB_AR[p.probability] ?? ""}` : ""}`}
+  const inner = (
+    <>
+      {deal && <span className="shrink-0 text-amber-600 dark:text-amber-400">⭐</span>}
+      {p.playerImage ? (
+        <img src={p.playerImage} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" loading="lazy" />
+      ) : (
+        <span className="h-7 w-7 shrink-0 rounded-full border border-border bg-muted" />
+      )}
+      <span className="min-w-0 flex-1 truncate text-[12.5px]">
+        <b className="font-black text-foreground">{p.player}</b>
+        <span className="text-muted-foreground"> {p.from} ← </span>
+        <b className="font-bold text-foreground">{p.to}</b>
       </span>
-      {p.playerImage && <img src={p.playerImage} alt="" className="h-5 w-5 rounded-full object-cover" loading="lazy" />}
-      <b className="text-foreground">{p.player}</b>
-      <span className="text-muted-foreground">{p.from}</span>
-      <ChevronLeft className="h-3.5 w-3.5 text-muted-foreground" />
-      <span className="font-bold text-foreground">{p.to}</span>
-      {money && <span className="font-black text-amber-700 dark:text-amber-400 tabular-nums" dir="ltr">{money}</span>}
-      <span className="text-border">|</span>
-    </span>
+      {p.hereWeGo ? (
+        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black text-primary">!Here we go</span>
+      ) : p.type === "confirmed" ? (
+        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black text-primary">مؤكّدة</span>
+      ) : (
+        <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+          إشاعة{p.probability ? ` · ${PULSE_PROB_AR[p.probability] ?? ""}` : ""}
+        </span>
+      )}
+      {money && <span className="shrink-0 text-[12px] font-black tabular-nums text-muted-foreground" dir="ltr">{money}</span>}
+    </>
+  );
+  const cls = `flex items-center gap-2.5 border-t border-border/70 px-4 py-2.5 sm:px-5 ${deal ? "bg-amber-500/[0.05]" : ""}`;
+  return p.type === "rumour" && p.playerId ? (
+    <Link href={`/sports/transfers/story/${p.playerId}`} className={`${cls} transition-colors hover:bg-muted/40`}>{inner}</Link>
+  ) : (
+    <div className={cls}>{inner}</div>
   );
 }
 
@@ -751,14 +772,13 @@ function TransfersBanner() {
     return () => clearInterval(t);
   }, []);
   const countdown = data?.windows ? windowRemaining(data.windows.saudi, now) : null;
-  const dealMoney = deal ? pulseMoney(deal.amount, deal.currency) : null;
 
-  // لا بيانات (مفاتيح غائبة/فشل) → البانر البسيط السابق كما هو.
+  // لا بيانات (مفاتيح غائبة/فشل) → بانر بسيط محايد.
   if (!pulse.length && !deal) {
     return (
       <Link
         href="/sports/transfers"
-        className="group relative block overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-l from-primary/[0.06] to-transparent p-5 sm:p-6"
+        className="group relative block overflow-hidden rounded-2xl border border-border bg-card p-5 sm:p-6"
         data-testid="transfers-banner"
       >
         <div className="flex items-center gap-4">
@@ -775,58 +795,47 @@ function TransfersBanner() {
     );
   }
 
+  // «القائمة الساكنة»: صفقة اليوم أولًا ثم آخر الحركات — 3 صفوف ثابتة فقط،
+  // والبقية خلف «كل الحركات». لا شريط متحرك ولا تدرجات (اختيار المالك من م2).
+  const rows: { p: TcPulseItem; deal: boolean }[] = [];
+  if (deal) rows.push({ p: deal, deal: true });
+  for (const p of pulse) {
+    if (rows.length >= 3) break;
+    if (deal && p.playerId === deal.playerId && p.date === deal.date) continue;
+    rows.push({ p, deal: false });
+  }
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-l from-primary/[0.06] to-transparent" data-testid="transfers-banner">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card" data-testid="transfers-banner">
       {/* الترويسة + عدّاد النافذة + CTA */}
-      <div className="flex flex-wrap items-center gap-3 p-5 pb-3 sm:px-6">
-        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-primary/10">
-          <ArrowLeftRight className="h-6 w-6 text-primary" strokeWidth={1.8} />
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
+        <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10">
+          <ArrowLeftRight className="h-5 w-5 text-primary" strokeWidth={1.8} />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-lg font-black text-foreground sm:text-xl">مركز الانتقالات — نبض السوق</div>
+          <div className="text-[15px] font-black text-foreground sm:text-base">مركز الانتقالات</div>
           {countdown && (
-            <div className="mt-0.5 text-xs text-muted-foreground">
+            <div className="text-[11.5px] text-muted-foreground">
               {countdown.label} <b className="text-foreground tabular-nums">{countdown.value}</b>
             </div>
           )}
         </div>
         <Link
           href="/sports/transfers"
-          className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-primary px-4 py-2 text-sm font-black text-white shadow-sm transition-transform hover:-translate-x-0.5"
+          className="inline-flex shrink-0 items-center gap-1 rounded-xl border border-primary/35 px-3.5 py-1.5 text-[12.5px] font-black text-primary transition-colors hover:bg-primary/10"
         >
           المركز الكامل <ChevronLeft className="h-4 w-4" />
         </Link>
       </div>
 
-      {/* صفقة اليوم */}
-      {deal && (
-        <div className="mx-5 mb-3 sm:mx-6">
-          <Link
-            href={deal.type === "rumour" && deal.playerId ? `/sports/transfers/story/${deal.playerId}` : "/sports/transfers"}
-            className={`group flex items-center gap-3 rounded-2xl border p-3.5 transition-colors ${deal.hereWeGo ? "border-red-500/40 bg-red-500/[0.05]" : "border-border bg-card hover:border-primary/40"}`}
-          >
-            <span className="shrink-0 rounded-full bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 text-[10px] font-black text-amber-700 dark:text-amber-400">⭐ صفقة اليوم</span>
-            {deal.playerImage && <img src={deal.playerImage} alt="" className="h-9 w-9 rounded-full object-cover" loading="lazy" />}
-            <span className="min-w-0 flex-1 truncate text-sm">
-              <b className="text-foreground">{deal.player}</b>
-              <span className="text-muted-foreground"> — {deal.from} </span>
-              <ChevronLeft className="inline h-3.5 w-3.5 text-muted-foreground" />
-              <b className="text-foreground"> {deal.to}</b>
-            </span>
-            {dealMoney && <span className="shrink-0 font-black text-amber-700 dark:text-amber-400 tabular-nums text-sm" dir="ltr">{dealMoney}</span>}
-            {deal.hereWeGo && <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-black text-white">!Here we go</span>}
-          </Link>
-        </div>
-      )}
+      {/* آخر الحركات — صفوف ساكنة (صفقة اليوم بنجمة ذهبية) */}
+      {rows.map(({ p, deal: isDeal }) => (
+        <PulseRow key={`${p.playerId}-${p.date}-${isDeal ? "d" : "p"}`} p={p} deal={isDeal} />
+      ))}
 
-      {/* شريط نبض السوق المتحرك */}
-      {pulse.length > 0 && (
-        <div className="relative border-t border-border/60 bg-card/60 py-2.5 overflow-hidden" dir="ltr">
-          <div className="animate-ticker inline-flex w-max" dir="rtl">
-            {[...pulse, ...pulse].map((p, i) => <PulseTickerItem key={`${p.playerId}-${p.date}-${i}`} p={p} />)}
-          </div>
-        </div>
-      )}
+      <Link href="/sports/transfers" className="block border-t border-border/70 px-4 py-2 text-[11.5px] font-black text-primary transition-colors hover:bg-muted/40 sm:px-5">
+        كل الحركات ←
+      </Link>
     </div>
   );
 }
@@ -1369,7 +1378,7 @@ export default function SportsDashboard() {
                   </div>
                 </div>
               )}
-              {outlook && <SeasonOutlookBanner outlook={outlook} history={compHistory} />}
+              {outlook && <SeasonOutlookBanner outlook={outlook} history={compHistory} comp={comp} />}
               <MatchHub key={compSlug} data={matches} configured={matchesConfigured} compSlug={compSlug} onOpen={setOpenMatch} />
             </div>
 
