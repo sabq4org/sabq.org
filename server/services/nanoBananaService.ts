@@ -3,7 +3,8 @@
  * Uses Google Gemini 3 Pro Image (gemini-3-pro-image-preview) for AI image generation
  */
 
-import { GoogleGenAI, Modality } from "@google/genai";
+import { Modality } from "@google/genai";
+import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
 import pRetry from "p-retry";
 
@@ -17,7 +18,7 @@ if (!apiKey) {
 }
 
 // Initialize Gemini client with custom API key
-const geminiClient = new GoogleGenAI({
+const geminiClient = createGoogleGenAI({
   apiKey: apiKey || "missing-api-key",
 });
 

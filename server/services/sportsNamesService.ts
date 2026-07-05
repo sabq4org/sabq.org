@@ -41,8 +41,20 @@ export type NameLookup = (name: string | null | undefined) => string;
 const memory = new Map<string, string>();
 // أسماء فشل الـAI فيها مؤخرًا — لا نعيد المحاولة داخل الطلبات (الكرون يعيدها)
 const recentFailures = new Set<string>();
-let dbReadCooldownUntil = 0;
-let dbReadCooldownLogged = false;
+
+// Cooldown مفصّل لكل (نوع كيان + مزوّد)، مفصول بين القراءة والكتابة.
+// سابقًا كان قيمة واحدة شاملة: خطأ واحد على city/apifootball كان يوقف كل
+// الأنواع والمزوّدات (venue, team, sportmonks, ...) لكل القراءات والكتابات
+// لمدة 60 ثانية، مما يسبب retry storm عند نقص الجدول أو انقطاع لحظي. الآن
+// كل (type,provider) يُبردوحده، وبمدة أقصر، وتُطفأ بعضوية الجدول الناقص فقط.
+const READ_COOLDOWN_MS = 15_000; // كان 60s — أقصر لتخفيف الـ retry storm
+const WRITE_COOLDOWN_MS = 30_000; // الكتابة أثقل (INSERT/UPDATE) فنمنحها نافذة أطول
+const readCooldownUntil = new Map<string, number>(); // key: `${type}:${provider}`
+const writeCooldownUntil = new Map<string, number>();
+// قيد واحد لكل مفتاح لتجنب تكرار log الرسالة نفسها خلال نافذة الـ cooldown
+const readCooldownLogged = new Set<string>();
+
+const cooldownKey = (type: SportsNameType, provider: string) => `${type}:${provider}`;
 
 const memKey = (type: SportsNameType, source: string) => `${type}:${source}`;
 
@@ -138,13 +150,15 @@ export async function resolveSportsNames(
   let still = unresolved;
   if (still.length > 0) {
     const now = Date.now();
-    if (now < dbReadCooldownUntil) {
-      if (!dbReadCooldownLogged) {
-        console.warn("[SportsNames] DB read temporarily skipped after recent failure");
-        dbReadCooldownLogged = true;
+    const ck = cooldownKey(type, provider);
+    const cooldownEnd = readCooldownUntil.get(ck) ?? 0;
+    if (now < cooldownEnd) {
+      if (!readCooldownLogged.has(ck)) {
+        console.warn(`[SportsNames] DB read temporarily skipped (${type}/${provider}) — cooling down until ${new Date(cooldownEnd).toISOString()}`);
+        readCooldownLogged.add(ck);
       }
     } else try {
-      dbReadCooldownLogged = false;
+      readCooldownLogged.delete(ck);
       const rows = await db
         .select({
           source: sportsNameTranslations.source,
@@ -188,9 +202,14 @@ export async function resolveSportsNames(
         still = still.filter((n) => !foundSet.has(n));
       }
     } catch (error) {
-      dbReadCooldownUntil = Date.now() + 60_000;
-      dbReadCooldownLogged = true;
-      console.warn("[SportsNames] DB read skipped; cooling down for 60s:", (error as Error)?.message);
+      // cooldown مفصّل لكل (type,provider) بدلglobal شامل؛ مدة أقصر لتخفيف
+      // retry storm. رسالة الخطأ تُختصر لتجنب طبع كامل الـ SQL في كل دورة.
+      readCooldownUntil.set(ck, Date.now() + READ_COOLDOWN_MS);
+      const errMsg = (error as Error)?.message ?? String(error);
+      const brief = errMsg.includes("relation")
+        ? errMsg.split("\n")[0].slice(0, 140)
+        : errMsg.slice(0, 140);
+      console.warn(`[SportsNames] DB read skipped (${type}/${provider}) — cooling down ${READ_COOLDOWN_MS}ms:`, brief);
     }
   }
 
@@ -272,7 +291,8 @@ async function persistRows(
   idBySource: Map<string, string>,
 ): Promise<void> {
   if (rows.length === 0) return;
-  if (Date.now() < dbReadCooldownUntil) return;
+  const ck = cooldownKey(type, provider);
+  if (Date.now() < (writeCooldownUntil.get(ck) ?? 0)) return;
   try {
     await db
       .insert(sportsNameTranslations)
@@ -304,8 +324,11 @@ async function persistRows(
         );
     }
   } catch (error) {
-    dbReadCooldownUntil = Date.now() + 60_000;
-    console.warn("[SportsNames] persist skipped:", (error as Error)?.message);
+    // write-cooldown مفصول عن read-cooldown (سابقًا كانا نفس القيمة الشاملة).
+    writeCooldownUntil.set(ck, Date.now() + WRITE_COOLDOWN_MS);
+    const errMsg = (error as Error)?.message ?? String(error);
+    const brief = errMsg.split("\n")[0].slice(0, 140);
+    console.warn(`[SportsNames] persist skipped (${type}/${provider}):`, brief);
   }
 }
 

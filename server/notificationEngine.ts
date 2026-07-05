@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { isUniqueViolation } from "./utils/pgError";
 import { 
   users, 
   articles,
@@ -166,8 +167,9 @@ async function sendToInbox(
       }
       return true;
     } catch (insertError: any) {
-      // If unique constraint violation, it's already queued (race condition)
-      if (insertError.code === '23505') {
+      // If unique constraint violation, it's already queued (race condition).
+      // Drizzle يلفّ خطأ PG، لذا نستخدم isUniqueViolation لفكّه.
+      if (isUniqueViolation(insertError)) {
         console.log(`🔁 Notification already queued for user ${userId}: ${type}`);
         return false;
       }

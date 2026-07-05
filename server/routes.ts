@@ -7,6 +7,7 @@ import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
 import { verifyImageMagicBytes } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
+import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
@@ -5219,14 +5220,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       res.json(updatedUser);
     } catch (error: any) {
       console.error("Error updating user:", error);
-      
-      // Handle duplicate press ID number
-      if (error.code === '23505' && error.constraint === 'users_press_id_number_idx') {
-        return res.status(400).json({ 
-          message: "رقم البطاقة الصحفية موجود مسبقاً. يرجى استخدام رقم آخر." 
-        });
+      // Drizzle يلفّ أخطاء PG؛ extractPgError يفك code/constraint.
+      const pg = extractPgError(error);
+      if (pg.code === '23505') {
+        if (pg.constraint === 'users_press_id_number_idx') return res.status(400).json({ message: "رقم البطاقة الصحفية موجود مسبقاً. يرجى استخدام رقم آخر." });
+        if (pg.constraint === 'users_email_unique' || pg.constraint === 'users_email_lower_unique') return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل" });
       }
-      
       res.status(500).json({ message: "Failed to update user" });
     }
   });
@@ -5476,7 +5475,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (!createdBy) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-
       const parsed = adminCreateUserSchema.safeParse(req.body);
 
       if (!parsed.success) {
@@ -5486,6 +5484,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         });
       }
 
+      // Pre-check lower(email) قبل الإدراج (يطابق /api/register، يقلل الضغط).
+      const normalizedEmail = parsed.data.email.trim().toLowerCase();
+      const existingUser = await storage.getUserByEmailBasic(normalizedEmail);
+      if (existingUser) {
+        console.log("ℹ️ [CREATE USER] Email already registered", { email: normalizedEmail, existingUserId: existingUser.id });
+        return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل", existingUser });
+      }
       console.log("✅ [CREATE USER] Creating new user with roles", {
         email: parsed.data.email,
         roleIds: parsed.data.roleIds,
@@ -5545,11 +5550,19 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       });
     } catch (error: any) {
       console.error("❌ [CREATE USER] Error creating user:", error);
-      
-      if (error.message?.includes("duplicate") || error.code === "23505") {
-        return res.status(409).json({ message: "User with this email already exists" });
+      // Drizzle يلفّ أخطاء PG؛ extractPgError يفك code/constraint.
+      const pg = extractPgError(error);
+      if (pg.code === "23505") {
+        const isEmailDup = pg.constraint === "users_email_unique" || pg.constraint === "users_email_lower_unique" || !pg.constraint;
+        if (isEmailDup) { // race: المستخدم أُنشئ بين pre-check والإدراج.
+          const raceUser = await storage.getUserByEmailBasic(String(req.body?.email ?? "").trim().toLowerCase());
+          return res.status(409).json({ message: "هذا البريد الإلكتروني مستخدم بالفعل", ...(raceUser ? { existingUser: raceUser } : {}) });
+        }
+        if (pg.constraint === "users_press_id_number_idx") {
+          return res.status(400).json({ message: "رقم البطاقة الصحفية موجود مسبقاً. يرجى استخدام رقم آخر." });
+        }
+        return res.status(409).json({ message: pg.constraint ? `القيد الفريد "${pg.constraint}" منتهك` : "هناك تعارض في البيانات" });
       }
-      
       res.status(500).json({ message: "Failed to create user" });
     }
   });

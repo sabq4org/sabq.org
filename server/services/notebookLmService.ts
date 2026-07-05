@@ -4,7 +4,8 @@
  * Uses Gemini 3 Pro Image for high-quality Arabic infographics
  */
 
-import { GoogleGenAI, Modality } from "@google/genai";
+import { Modality } from "@google/genai";
+import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
 import pRetry from "p-retry";
 
@@ -18,7 +19,7 @@ if (!apiKey) {
 }
 
 // Initialize Gemini client
-const geminiClient = new GoogleGenAI({
+const geminiClient = createGoogleGenAI({
   apiKey: apiKey || "missing-api-key",
 });
 
