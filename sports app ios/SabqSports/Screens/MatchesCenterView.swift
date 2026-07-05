@@ -26,27 +26,55 @@ nonisolated struct SpUnifiedFixturesResponse: Decodable {
 }
 
 extension APIClient {
-    /// الجدول الموحّد متعدد البطولات — comps بفواصل (حد الخادم 8).
-    func fetchUnifiedFixtures(comps: [String], ignoreCache: Bool = false) async throws -> SpUnifiedFixturesResponse {
+    /// الجدول الموحّد متعدد البطولات — comps بفواصل (حد الخادم 8 لكل طلب؛
+    /// الأكثر يُجزّأ في fetchUnifiedFixturesChunked) + نطاق تواريخ صريح.
+    func fetchUnifiedFixtures(comps: [String], from: String, to: String, ignoreCache: Bool = false) async throws -> SpUnifiedFixturesResponse {
         try await get(SpUnifiedFixturesResponse.self, path: "/sports/fixtures",
-                      query: ["comps": comps.joined(separator: ",")],
+                      query: ["comps": comps.joined(separator: ","), "from": from, "to": to],
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    /// يجزّئ أي عدد بطولات إلى طلبات من 8 (حد الخادم) بالتوازي ثم يدمج ويرتّب.
+    func fetchUnifiedFixturesChunked(comps: [String], from: String, to: String) async throws -> [SpFixture] {
+        guard !comps.isEmpty else { return [] }
+        var chunks: [[String]] = []
+        var i = 0
+        while i < comps.count {
+            chunks.append(Array(comps[i..<min(i + 8, comps.count)]))
+            i += 8
+        }
+        var all: [SpFixture] = []
+        try await withThrowingTaskGroup(of: [SpFixture].self) { group in
+            for chunk in chunks {
+                group.addTask {
+                    try await APIClient.shared.fetchUnifiedFixtures(comps: chunk, from: from, to: to, ignoreCache: true).fixtures
+                }
+            }
+            for try await part in group { all.append(contentsOf: part) }
+        }
+        return all.sorted { a, b in
+            if a.timestamp != b.timestamp { return a.timestamp < b.timestamp }
+            return a.id < b.id
+        }
     }
 }
 
-// MARK: - فلتر البطولات (اختيار محفوظ)
+// MARK: - فلتر البطولات (المصدر الموحّد: «بطولاتي المفضّلة»)
 
-/// اختيار فلتر البطولات: «الكل» = السلة القوية، أو بطولة واحدة بعينها.
-/// يُخزَّن كسلسلة slug (أو "all") في UserDefaults فيبقى بين الجلسات.
+/// «الكل» في المركز = بطولات SpCompetitionFavorites نفسها (بلوك «بطولاتي» في
+/// تبويب البطولات) — مصدر حقيقة واحد: ما تفضّله هناك يظهر جدوله هنا والعكس.
+/// عند أول تشغيل تُبذَر المفضّلة بالبطولات المهمة (روشن/كأس الملك/السوبر/
+/// أبطال آسيا وأوروبا/الخمسة الكبرى + المونديال والخليجي ما داما جاريين).
 nonisolated enum SpCenterFilter {
     static let storageKey = "sabqsports.matchescenter.comp"
+    static let seededKey = "sabqsports.matchescenter.seeded.v1"
 
-    /// السلة القوية الافتراضية — روشن + الدوريات الأوروبية الخمسة الكبرى.
-    /// المونديال/الخليجي يُضافان ديناميكيًّا من سجل البطولات ما داما غير منتهيين.
-    static let strongSlugs = ["pro-league", "premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1"]
-
-    /// شرائح الفلتر المعروضة (بترتيب العرض RTL): الكل ثم روشن ثم البطولات الموسمية.
-    static let chipSlugs = ["pro-league", "world-cup", "premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1", "gulf-cup"]
+    /// البطولات المهمة المفعّلة افتراضيًّا (تُبذر مرة واحدة في المفضّلة).
+    static let defaultSlugs = [
+        "pro-league", "kings-cup", "super-cup",
+        "afc-champions-league", "champions-league",
+        "premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1",
+    ]
 
     static func load() -> String {
         UserDefaults.standard.string(forKey: storageKey) ?? "all"
@@ -54,20 +82,6 @@ nonisolated enum SpCenterFilter {
 
     static func save(_ selection: String) {
         UserDefaults.standard.set(selection, forKey: storageKey)
-    }
-
-    /// الـ slugs الفعلية للطلب حسب الاختيار وحالة البطولات (المونديال يدخل
-    /// «الكل» ما دام جاريًا فقط — وبعد انتهائه يختفي من السلة والشرائح معًا).
-    static func requestSlugs(selection: String, competitions: [SpCompetition]) -> [String] {
-        if selection != "all" { return [selection] }
-        var slugs = strongSlugs
-        if let wc = competitions.first(where: { $0.slug == "world-cup" }), wc.status == "ongoing" {
-            slugs.insert("world-cup", at: 1)
-        }
-        if let gc = competitions.first(where: { $0.slug == "gulf-cup" }), gc.status == "ongoing" {
-            slugs.append("gulf-cup")
-        }
-        return slugs
     }
 }
 
@@ -151,6 +165,10 @@ struct MatchesCenterView: View {
     @State private var loadError: String?
     @State private var liveOnly = false
     @State private var selection = SpCenterFilter.load()
+    @State private var showCompsManager = false
+
+    /// «بطولاتي المفضّلة» — المصدر الموحّد مع تبويب البطولات.
+    private var favorites: SpCompetitionFavorites { SpCompetitionFavorites.shared }
 
     // محرّك التمرير المتزامن — نفس حالة MatchesView حرفيًّا.
     @State private var scrolledDayId: String?
@@ -191,8 +209,9 @@ struct MatchesCenterView: View {
                 .toolbar(.hidden, for: .navigationBar)
         }
         .task { await loadCompetitions() }
-        // إعادة التحميل تلقائيًّا مع كل تغيير فلتر (المهمة السابقة تُلغى).
-        .task(id: selection) { await load() }
+        // إعادة التحميل تلقائيًّا مع كل تغيير فلتر أو تعديل للمفضّلة (المهمة السابقة تُلغى).
+        .task(id: reloadKey) { await load() }
+        .sheet(isPresented: $showCompsManager) { compsManagerSheet }
         .task { await pollLive() }
         .onChange(of: liveOnly) { _, _ in rebuildDays(keepSelection: true) }
         .onChange(of: scenePhase) { _, phase in
@@ -245,9 +264,26 @@ struct MatchesCenterView: View {
                     .foregroundStyle(SpTheme.onDark)
             }
             Spacer(minLength: 0)
+            manageButton
             calendarButton
             liveToggle
         }
+    }
+
+    /// أيقونة ضبط البطولات — تفتح صفحة اختيار ما يظهر في الجدول الموحّد.
+    private var manageButton: some View {
+        Button {
+            showCompsManager = true
+        } label: {
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .frame(width: 38, height: 34)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpTheme.chipFill))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("اختيار البطولات")
     }
 
     private var calendarButton: some View {
@@ -285,14 +321,22 @@ struct MatchesCenterView: View {
         .buttonStyle(.plain)
     }
 
-    /// شرائح البطولات المعروضة: «الكل» + المتاح من السلة (البطولة المنتهية تسقط).
+    /// شرائح البطولات = «بطولاتي المفضّلة» مرتّبة بالفئة (السعودية أولًا) —
+    /// الكؤوس المنتهية تسقط من الشرائح تلقائيًّا (المونديال بعد النهائي).
     private var chipComps: [SpCompetition] {
-        SpCenterFilter.chipSlugs.compactMap { slug in
-            guard let comp = competitions.first(where: { $0.slug == slug }) else { return nil }
-            // الكؤوس المنتهية/غير المجدولة تختفي من الشرائح (المونديال بعد النهائي).
-            if comp.type == "cup", comp.status == "finished" { return nil }
-            return comp
-        }
+        favorites.items
+            .filter { !($0.type == "cup" && $0.status == "finished") }
+            .sorted { a, b in
+                let ra = SportsConstants.categoryRank(a.category)
+                let rb = SportsConstants.categoryRank(b.category)
+                if ra != rb { return ra < rb }
+                return a.name < b.name
+            }
+    }
+
+    /// مفتاح إعادة التحميل: الاختيار + بصمة المفضّلة (تبديل بطولة = تحديث فوري).
+    private var reloadKey: String {
+        selection + "|" + favorites.items.map(\.slug).sorted().joined(separator: ",")
     }
 
     private var compsStrip: some View {
@@ -624,13 +668,22 @@ struct MatchesCenterView: View {
         railCenterId = candidate
     }
 
-    private var emptyList: some View {
-        SpEmptyState(
-            icon: liveOnly ? "dot.radiowaves.left.and.right" : "calendar",
-            title: liveOnly ? "لا مباريات مباشرة الآن" : "لا مباريات في هذه الفترة",
-            subtitle: liveOnly ? "أوقف فلتر «مباشر» لعرض الجدول كاملًا" : "جرّب بطولة أخرى أو عد لاحقًا"
-        )
-        .padding(.top, 40)
+    @ViewBuilder private var emptyList: some View {
+        if selection == "all", favorites.items.isEmpty {
+            SpEmptyState(
+                icon: "slider.horizontal.3",
+                title: "اختر بطولاتك",
+                subtitle: "فعّل البطولات التي تهمّك من أيقونة الضبط أعلى الشاشة ليظهر جدولها الموحّد هنا"
+            )
+            .padding(.top, 40)
+        } else {
+            SpEmptyState(
+                icon: liveOnly ? "dot.radiowaves.left.and.right" : "calendar",
+                title: liveOnly ? "لا مباريات مباشرة الآن" : "لا مباريات في هذه الفترة",
+                subtitle: liveOnly ? "أوقف فلتر «مباشر» لعرض الجدول كاملًا" : "جرّب بطولة أخرى أو عد لاحقًا"
+            )
+            .padding(.top, 40)
+        }
     }
 
     private var livePinned: some View {
@@ -815,6 +868,78 @@ struct MatchesCenterView: View {
         return "\(weekday) · \(dm)"
     }
 
+    // MARK: صفحة اختيار البطولات
+
+    /// فئات السجل مرتّبة (السعودية أولًا) — لعرض مجموعات صفحة الاختيار.
+    private var registryByCategory: [(category: String, comps: [SpCompetition])] {
+        let grouped = Dictionary(grouping: competitions, by: { $0.category })
+        return grouped
+            .map { (category: $0.key, comps: $0.value.sorted { $0.name < $1.name }) }
+            .sorted { SportsConstants.categoryRank($0.category) < SportsConstants.categoryRank($1.category) }
+    }
+
+    /// وصف حالة البطولة في صف الاختيار — يطمئن المستخدم أن الجدول سيمتلئ لاحقًا.
+    private func compStatusHint(_ comp: SpCompetition) -> String? {
+        switch comp.status {
+        case "ongoing": return "جارية الآن"
+        case "upcoming": return "تنطلق قريبًا"
+        case "finished": return "انتهت"
+        default: return nil
+        }
+    }
+
+    private var compsManagerSheet: some View {
+        NavigationStack {
+            List {
+                Section {
+                    Text("ما تفعّله هنا يظهر جدوله في «الكل» وفي بلوك «بطولاتي» بتبويب البطولات — مصدر واحد للمفضّلة.")
+                        .font(SportsFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                        .listRowBackground(Color.clear)
+                }
+                ForEach(registryByCategory, id: \.category) { group in
+                    Section(SportsConstants.categoryLabel(group.category)) {
+                        ForEach(group.comps) { comp in
+                            compManagerRow(comp)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("بطولات الجدول")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("تم") { showCompsManager = false }
+                }
+            }
+        }
+        .presentationDetents([.large, .medium])
+    }
+
+    private func compManagerRow(_ comp: SpCompetition) -> some View {
+        HStack(spacing: 10) {
+            SpTeamLogo(logo: comp.logo ?? "", size: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(comp.name)
+                    .font(SportsFonts.app(size: 13.5, weight: .bold))
+                    .foregroundStyle(SpTheme.onDark)
+                    .lineLimit(1)
+                if let hint = compStatusHint(comp) {
+                    Text(hint)
+                        .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                        .foregroundStyle(comp.status == "ongoing" ? SpTheme.green : SpTheme.onDarkDim)
+                }
+            }
+            Spacer(minLength: 0)
+            Toggle("", isOn: Binding(
+                get: { favorites.isFavorite(comp.slug) },
+                set: { _ in favorites.toggle(comp) }
+            ))
+            .labelsHidden()
+            .tint(SpTheme.green)
+        }
+    }
+
     // MARK: ورقة اختيار التاريخ
 
     private var datePickerSheet: some View {
@@ -861,17 +986,58 @@ struct MatchesCenterView: View {
     private func loadCompetitions() async {
         if let resp = try? await APIClient.shared.fetchCompetitions() {
             competitions = resp.competitions
+            // مزامنة لقطات المفضّلة (شعار/حالة/موسم) ثم بذر البطولات المهمة
+            // مرة واحدة — فيصير بلوك «بطولاتي» في تبويب البطولات هو نفسه سلة الجدول.
+            favorites.sync(with: resp.competitions)
+            seedFavoritesIfNeeded(resp.competitions)
         }
+    }
+
+    /// بذر «البطولات المهمة» في المفضّلة عند أول تشغيل للمركز (مرة واحدة):
+    /// السلة الافتراضية + المونديال/الخليجي ما داما غير منتهيين. ما أضافه
+    /// المستخدم سابقًا في «بطولاتي» يبقى كما هو — نضيف فوقه ولا نحذف.
+    private func seedFavoritesIfNeeded(_ registry: [SpCompetition]) {
+        guard !UserDefaults.standard.bool(forKey: SpCenterFilter.seededKey) else { return }
+        var slugs = SpCenterFilter.defaultSlugs
+        for special in ["world-cup", "gulf-cup"] {
+            if let comp = registry.first(where: { $0.slug == special }), comp.status != "finished" {
+                slugs.append(special)
+            }
+        }
+        for slug in slugs {
+            if let comp = registry.first(where: { $0.slug == slug }) {
+                favorites.add(comp)
+            }
+        }
+        UserDefaults.standard.set(true, forKey: SpCenterFilter.seededKey)
+    }
+
+    /// نطاق الجلب: «الكل» أسبوع للخلف ← 60 يومًا (يغطي انطلاقات أغسطس كلها)،
+    /// وبطولة واحدة ← 120 يومًا (نظرة أعمق — مرحلة دوري الأبطال في سبتمبر مثلًا).
+    private func requestWindow() -> (from: String, to: String) {
+        let day: TimeInterval = 86_400
+        let from = SpFormat.dateKey(Date().addingTimeInterval(-7 * day))
+        let span: TimeInterval = selection == "all" ? 60 : 120
+        let to = SpFormat.dateKey(Date().addingTimeInterval(span * day))
+        return (from, to)
     }
 
     private func load(force: Bool = false) async {
         if !force, fixtures.isEmpty { loading = true }
-        let comps = SpCenterFilter.requestSlugs(selection: selection, competitions: competitions)
+        // اختيار يتيم (بطولة أُزيلت من المفضّلة وشريحتها اختفت) → عودة لـ«الكل».
+        if selection != "all", !favorites.items.isEmpty, !favorites.isFavorite(selection) {
+            selection = "all"
+            SpCenterFilter.save("all")
+            return // task(id: reloadKey) سيعيد التحميل بالاختيار الجديد
+        }
+        let comps = selection == "all" ? favorites.items.map(\.slug) : [selection]
+        let window = requestWindow()
         do {
-            let resp = try await APIClient.shared.fetchUnifiedFixtures(comps: comps, ignoreCache: true)
+            let merged = try await APIClient.shared.fetchUnifiedFixturesChunked(
+                comps: comps, from: window.from, to: window.to)
             if Task.isCancelled { return }
-            if visualSignature(resp.fixtures) != visualSignature(fixtures) {
-                fixtures = resp.fixtures
+            if visualSignature(merged) != visualSignature(fixtures) {
+                fixtures = merged
                 rebuildDays(keepSelection: true)
             } else if visibleDays.isEmpty {
                 rebuildDays(keepSelection: true)
