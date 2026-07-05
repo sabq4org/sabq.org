@@ -5497,7 +5497,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           email: parsed.data.email,
           firstName: parsed.data.firstName,
           lastName: parsed.data.lastName,
+          firstNameEn: parsed.data.firstNameEn,
+          lastNameEn: parsed.data.lastNameEn,
           phoneNumber: parsed.data.phoneNumber,
+          profileImageUrl: parsed.data.profileImageUrl,
           roleIds: parsed.data.roleIds,
           status: parsed.data.status,
           emailVerified: parsed.data.emailVerified,
@@ -5518,7 +5521,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // Auto-create staff record if user has reporter role
       const hasReporterRole = userRoles.some(r => r.name === 'reporter');
       if (hasReporterRole) {
-    try {
+        try {
           console.log("🔍 [AUTO-CREATE STAFF] New user has reporter role, creating staff record");
           const staffRecord = await storage.ensureReporterStaffRecord(newUser.id);
           console.log("✅ [AUTO-CREATE STAFF] Staff record created for new reporter", { 
@@ -5527,10 +5530,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           });
         } catch (staffError) {
           console.error("❌ [AUTO-CREATE STAFF] FAILED to create staff record:", staffError);
-          return res.status(500).json({ 
-            message: "تم إنشاء المستخدم لكن فشل إنشاء صفحة المراسل. يرجى المحاولة مرة أخرى.",
-            error: staffError instanceof Error ? staffError.message : "Unknown error"
-          });
+          // لا نفشل إنشاء المستخدم بعد نجاحه بسبب سجل المراسل؛ يمكن تعديل بيانات
+          // الموظف لاحقًا من نفس لوحة الإدارة، وإلا يرى المستخدم 500 رغم إنشاء الحساب.
         }
       }
 
@@ -35918,13 +35919,18 @@ Sitemap: https://sabq.org/sitemap-news.xml
       if (!words.length) return res.json({ results: [], query: q });
       const tsQueryAnd = words.join(' & ');
       const tsQueryOr  = words.length > 1 ? words.join(' | ') : tsQueryAnd;
+      const compactQuery = normalizedQuery.replace(/\s+/g, '');
 
       // Pure-numeric queries (e.g. "4220449") are the source of the 7s+ slow
       // searches in prod logs: `to_tsquery('arabic', ...)` on bare digit strings
       // matches almost nothing yet the recent→older→title ladder still runs all
       // three timeouts back-to-back. Short-circuit them straight to the trigram
       // title lookup (idx_articles_title_trgm), skipping both FTS passes.
-      const isNumericQuery = /^\d+$/.test(normalizedQuery.replace(/\s+/g, ''));
+      const isNumericQuery = /^\d+$/.test(compactQuery);
+      // Live search sends partial Arabic prefixes while the user is still typing
+      // (prod logs: "تف", "تق", "تقد", "تقدي"). FTS on these short prefixes is
+      // both low-value and expensive, so keep them on the indexed title fallback.
+      const useFts = !isNumericQuery && compactQuery.length >= 5;
 
       let results: any[] = [];
 
@@ -35935,7 +35941,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         Promise.race([promise, new Promise<T>((_, reject) => setTimeout(() => reject(new Error('search_timeout')), ms))]);
 
       // Primary FTS query (recent articles, AND-mode for precision)
-      if (!isNumericQuery) try {
+      if (useFts) try {
         const recentResults: any = await searchTimeout(db.execute(sql`
           SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
             a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
@@ -35954,7 +35960,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         results = (Array.isArray(rows) ? rows : []).map((r: any) => ({ ...r, matchType: 'title' }));
       } catch (ftsError: any) {
         if (ftsError?.message === 'search_timeout') {
-          console.warn(`[Search] Primary FTS timed out (5s) for: "${q}"`);
+          console.warn(`[Search] Primary FTS timed out (3s) for: "${q}"`);
         } else {
           console.warn(`[Search] Primary FTS error for "${q}":`, ftsError?.message);
         }
@@ -35964,7 +35970,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       // Supplemental: search older articles only if recent yielded few results.
       // Errors here MUST NOT wipe the primary results. Skipped for numeric
       // queries (handled by the trigram title fallback below).
-      if (!isNumericQuery && results.length < Math.min(limit, 5)) {
+      if (useFts && results.length < Math.min(limit, 5)) {
         try {
           const existingIds = results.map(r => r.id);
           const remaining = Math.min(limit - results.length, 10);

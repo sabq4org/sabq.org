@@ -581,7 +581,10 @@ export interface IStorage {
     email: string;
     firstName: string;
     lastName: string;
+    firstNameEn?: string;
+    lastNameEn?: string;
     phoneNumber?: string;
+    profileImageUrl?: string | null;
     roleIds: string[];
     status?: string;
     emailVerified?: boolean;
@@ -3555,7 +3558,10 @@ export class DatabaseStorage implements IStorage {
     email: string;
     firstName: string;
     lastName: string;
+    firstNameEn?: string;
+    lastNameEn?: string;
     phoneNumber?: string;
+    profileImageUrl?: string | null;
     roleIds: string[];
     status?: string;
     emailVerified?: boolean;
@@ -3569,11 +3575,14 @@ export class DatabaseStorage implements IStorage {
     const user = await db.transaction(async (tx) => {
       const [user] = await tx.insert(users).values({
         id: userId,
-        email: userData.email,
+        email: userData.email.trim().toLowerCase(),
         passwordHash,
-        firstName: userData.firstName,
-        lastName: userData.lastName,
-        phoneNumber: userData.phoneNumber,
+        firstName: userData.firstName.trim(),
+        lastName: userData.lastName.trim(),
+        firstNameEn: userData.firstNameEn?.trim() || null,
+        lastNameEn: userData.lastNameEn?.trim() || null,
+        phoneNumber: userData.phoneNumber?.trim() || null,
+        profileImageUrl: userData.profileImageUrl || null,
         status: userData.status || 'active',
         emailVerified: userData.emailVerified || false,
         phoneVerified: userData.phoneVerified || false,
@@ -3584,10 +3593,11 @@ export class DatabaseStorage implements IStorage {
 
       if (userData.roleIds && userData.roleIds.length > 0) {
         await tx.insert(userRoles).values(
-          userData.roleIds.map(roleId => ({
+          [...new Set(userData.roleIds)].map(roleId => ({
             id: nanoid(),
             userId,
             roleId,
+            assignedBy: createdBy,
           }))
         );
       }
@@ -3599,9 +3609,9 @@ export class DatabaseStorage implements IStorage {
         entityType: 'user',
         entityId: userId,
         newValue: {
-          email: userData.email,
-          firstName: userData.firstName,
-          lastName: userData.lastName,
+          email: userData.email.trim().toLowerCase(),
+          firstName: userData.firstName.trim(),
+          lastName: userData.lastName.trim(),
           roleIds: userData.roleIds,
         },
       });

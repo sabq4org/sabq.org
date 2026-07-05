@@ -41,6 +41,8 @@ export type NameLookup = (name: string | null | undefined) => string;
 const memory = new Map<string, string>();
 // أسماء فشل الـAI فيها مؤخرًا — لا نعيد المحاولة داخل الطلبات (الكرون يعيدها)
 const recentFailures = new Set<string>();
+let dbReadCooldownUntil = 0;
+let dbReadCooldownLogged = false;
 
 const memKey = (type: SportsNameType, source: string) => `${type}:${source}`;
 
@@ -135,7 +137,14 @@ export async function resolveSportsNames(
   // (3) جدول الأسماء الموحّد
   let still = unresolved;
   if (still.length > 0) {
-    try {
+    const now = Date.now();
+    if (now < dbReadCooldownUntil) {
+      if (!dbReadCooldownLogged) {
+        console.warn("[SportsNames] DB read temporarily skipped after recent failure");
+        dbReadCooldownLogged = true;
+      }
+    } else try {
+      dbReadCooldownLogged = false;
       const rows = await db
         .select({
           source: sportsNameTranslations.source,
@@ -179,7 +188,9 @@ export async function resolveSportsNames(
         still = still.filter((n) => !foundSet.has(n));
       }
     } catch (error) {
-      console.warn("[SportsNames] DB read skipped:", (error as Error)?.message);
+      dbReadCooldownUntil = Date.now() + 60_000;
+      dbReadCooldownLogged = true;
+      console.warn("[SportsNames] DB read skipped; cooling down for 60s:", (error as Error)?.message);
     }
   }
 
@@ -261,6 +272,7 @@ async function persistRows(
   idBySource: Map<string, string>,
 ): Promise<void> {
   if (rows.length === 0) return;
+  if (Date.now() < dbReadCooldownUntil) return;
   try {
     await db
       .insert(sportsNameTranslations)
@@ -292,6 +304,7 @@ async function persistRows(
         );
     }
   } catch (error) {
+    dbReadCooldownUntil = Date.now() + 60_000;
     console.warn("[SportsNames] persist skipped:", (error as Error)?.message);
   }
 }
