@@ -1559,6 +1559,15 @@ export interface WcCommentary {
 
 const EMPTY_COMMENTARY: WcCommentary = { available: false, live: false, items: [] };
 
+// أسطر التعليق التي تصحّح هدفًا (إلغاء/مراجعة فار). SportMonks لا يحذف سطر
+// «GOAL!» عند إلغائه، بل يُلحِق سطر تصحيح نصّيًّا غالبًا دون علامة is_goal/
+// is_important — فنلتقطه بالكلمات المفتاحية كي لا يختفي التصحيح من الفلتر.
+const VAR_CORRECTION_RE =
+  /\b(?:VAR|disallow(?:ed)?|ruled\s+out|overturn(?:ed)?|chalked\s+off|cancell?ed|no\s+goal|offside)\b/i;
+function isVarCorrectionComment(comment: unknown): boolean {
+  return typeof comment === "string" && VAR_CORRECTION_RE.test(comment);
+}
+
 /**
  * يبني حمولة التعليق المباشر من بيانات SportMonks الخام: يكتفي باللحظات
  * المهمة (is_goal أو is_important) كما اتُّفق مع المستخدم، ويعرّبها للعربية.
@@ -1576,8 +1585,14 @@ async function buildCommentary(smFixtureId: number): Promise<WcCommentary> {
   }
 
   // فلترة اللحظات المهمة فقط — الأهداف والأحداث البارزة (ركلات جزاء، تبديلات
-  // مهمة، بدايات الأشواط...). المزود يعلّمها بـ is_goal/is_important.
-  const notable = rawComments.filter((c) => c?.is_goal || c?.is_important);
+  // مهمة، بدايات الأشواط...). المزود يعلّمها بـ is_goal/is_important. ونُبقي
+  // دائمًا أسطر مراجعة الفار/الإلغاء ولو لم يعلّمها المزوّد: سطر «GOAL!» يأتي
+  // بـ is_goal ويُعرَض، لكن سطر التصحيح («ruled out / disallowed / VAR») يأتي
+  // غالبًا بلا علامة فيُحذف — فيبدو الهدف قائمًا رغم إلغائه. تضمينه يُظهر القصة
+  // كاملة (هدف ← أُلغي بالفار) كما في التعليق الاحترافي.
+  const notable = rawComments.filter(
+    (c) => c?.is_goal || c?.is_important || isVarCorrectionComment(c?.comment),
+  );
   // إن لم يُعلّم المزود أي لحظة (نادر، أو مباراة بلا أهداف/أحداث)، نُفرّغ الكل
   // حتى لا تظهر المباراة المنتهية كأنها بلا تعليق إطلاقًا.
   const source = notable.length > 0 ? notable : rawComments;
