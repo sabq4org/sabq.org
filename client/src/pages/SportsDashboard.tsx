@@ -38,7 +38,6 @@ import {
   COMP_STATUS_RANK,
   CompetitionSummaryCard,
   CompetitionShelfRow,
-  compAccent,
   summaryKickoffDate,
   PillTabs,
   MatchHub,
@@ -578,27 +577,22 @@ const outlookDateFmt = new Intl.DateTimeFormat("ar", {
   timeZone: "Asia/Riyadh",
 });
 
-// تصميم «سطر الهوية» (اختيار المالك 2026-07-05 من نماذج م2): بطاقة محايدة
-// بخيط لون هوية البطولة (compAccent)، التاريخ أولًا والعداد كبسولة، والإرث
-// صفّان هادئان بلا خلفيات ملوّنة — الذهبي نغمة نص لحامل اللقب فقط.
-function SeasonOutlookBanner({ outlook, history, comp }: { outlook: SpSeasonOutlook; history: CompHistory | null; comp: SpCompetition | undefined }) {
+// «سطر الهوية» بهوية سبق (تصحيح المالك 2026-07-05: خلينا على هويتنا — لا ألوان
+// بطولات): بطاقة محايدة، الأزرق الأساسي للعدّاد فقط، التاريخ أولًا، والإرث صفّان
+// هادئان — الذهبي نغمة نص لحامل اللقب فقط.
+function SeasonOutlookBanner({ outlook, history }: { outlook: SpSeasonOutlook; history: CompHistory | null }) {
   if (outlook.phase === "in-season" || outlook.phase === "unknown") return null;
   const kickoff = outlook.firstKickoff ? outlookDateFmt.format(new Date(outlook.firstKickoff)) : null;
-  const accent = compAccent(comp?.slug ?? "");
-  const accentProps = {
-    style: { "--sp-acc-l": accent } as React.CSSProperties,
-    className: "mb-6 overflow-hidden rounded-2xl border border-border bg-card [--sp-acc:var(--sp-acc-l)] dark:[--sp-acc:color-mix(in_srgb,var(--sp-acc-l)_60%,white)]",
-  };
+  const wrapClass = "mb-6 overflow-hidden rounded-2xl border border-border bg-card";
 
   if (outlook.phase === "off-season") {
     return (
-      <div {...accentProps}>
-        <span className="block h-[3px] bg-[var(--sp-acc)]" aria-hidden="true" />
+      <div className={wrapClass}>
         <div className="flex flex-wrap items-center gap-3 p-4 sm:p-5">
           {outlook.champion?.logo ? (
             <img src={outlook.champion.logo} alt="" className="h-10 w-10 shrink-0 object-contain" />
           ) : (
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--sp-acc)_12%,transparent)]"><Trophy className="h-5 w-5 text-[var(--sp-acc)]" strokeWidth={1.8} /></span>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10"><Trophy className="h-5 w-5 text-primary" strokeWidth={1.8} /></span>
           )}
           <div className="min-w-0 flex-1">
             <div className="text-[11px] font-bold tabular-nums text-muted-foreground">انتهى موسم {seasonLabel(outlook.season)}</div>
@@ -615,24 +609,21 @@ function SeasonOutlookBanner({ outlook, history, comp }: { outlook: SpSeasonOutl
   // ما قبل الموسم — التاريخ الفعلي يتقدّم والعداد كبسولة، ثم إرث الموسم الماضي.
   const hasLegacy = Boolean(history?.champion || history?.topScorer);
   return (
-    <div {...accentProps}>
-      <span className="block h-[3px] bg-[var(--sp-acc)]" aria-hidden="true" />
+    <div className={wrapClass}>
+      {/* لا نكرّر شعار/اسم/موسم البطولة — تعرضها ترويسة البطولة أعلى البطاقة مباشرة.
+          هنا العدّ التنازلي فقط (أيقونة اللهب + الموعد الفعلي + العدّاد). */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
-        {comp?.logo ? (
-          <img src={comp.logo} alt="" className="h-10 w-10 shrink-0 object-contain" />
-        ) : (
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--sp-acc)_12%,transparent)]"><Trophy className="h-5 w-5 text-[var(--sp-acc)]" strokeWidth={1.8} /></span>
-        )}
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10">
+          <Flame className="h-5 w-5 text-primary" strokeWidth={1.8} />
+        </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-black text-foreground">{comp?.name || "البطولة"}</div>
-          <div className="text-[11.5px] text-muted-foreground">
-            العدّ التنازلي لموسم {outlook.nextSeason ? seasonLabel(outlook.nextSeason) : "الجديد"} — أولى المباريات:
-          </div>
+          <div className="text-[15px] font-black text-foreground">العدّ التنازلي بدأ</div>
+          <div className="text-[11.5px] text-muted-foreground">أولى مباريات الموسم الجديد:</div>
         </div>
         <div className="flex w-full items-baseline justify-between gap-2 border-t border-dashed border-border pt-2.5 text-left sm:w-auto sm:flex-col sm:items-end sm:border-t-0 sm:pt-0">
           <div className="text-[17px] font-black leading-tight tabular-nums text-foreground">{kickoff ?? "قيد التحديث"}</div>
           {outlook.daysUntilKickoff != null && (
-            <span className="rounded-full bg-[color-mix(in_srgb,var(--sp-acc)_12%,transparent)] px-2.5 py-0.5 text-[11px] font-black tabular-nums text-[var(--sp-acc)]">
+            <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-black tabular-nums text-primary">
               بعد {outlook.daysUntilKickoff} {outlook.daysUntilKickoff === 1 ? "يوم" : outlook.daysUntilKickoff === 2 ? "يومين" : outlook.daysUntilKickoff <= 10 ? "أيام" : "يومًا"}
             </span>
           )}
@@ -715,7 +706,6 @@ function PulseRow({ p, deal = false }: { p: TcPulseItem; deal?: boolean }) {
   const money = pulseMoney(p.amount, p.currency);
   const inner = (
     <>
-      {deal && <span className="shrink-0 text-amber-600 dark:text-amber-400">⭐</span>}
       {p.playerImage ? (
         <img src={p.playerImage} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" loading="lazy" />
       ) : (
@@ -1378,7 +1368,7 @@ export default function SportsDashboard() {
                   </div>
                 </div>
               )}
-              {outlook && <SeasonOutlookBanner outlook={outlook} history={compHistory} comp={comp} />}
+              {outlook && <SeasonOutlookBanner outlook={outlook} history={compHistory} />}
               <MatchHub key={compSlug} data={matches} configured={matchesConfigured} compSlug={compSlug} onOpen={setOpenMatch} />
             </div>
 
