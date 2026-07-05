@@ -8,7 +8,7 @@
  *  - المكوّنات الثقيلة (MatchHub، الترتيب، الهدّافون، الحوار...) يُعاد استخدامها من
  *    SportsHub وتلبس ثيم الموقع الافتراضي مباشرة (كما في صفحة البطولة).
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -132,10 +132,13 @@ function sortCompetitionsForPortal(rows: SpCompetition[], selectedSlug: string):
     .map(({ c }) => c);
 }
 
+// دالة نقية لاستخراج فئة البطولة (تُستخدم في useMemo بدون أعده إنشاء كل render).
+const categoryOf = (c: SpCompetition): SpCompetitionCategory => c.category ?? "saudi";
+
 // ترويسة قسم بأسلوب /sabq-ai: عنوان مركزي بين فاصلين خطيّين + وصف + رابط اختياري تحته.
 function SectionTitle({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
   return (
-    <div className="mb-6 text-center">
+    <div className="mb-5 text-center sm:mb-6">
       <div className="flex items-center gap-4">
         <span className="h-px flex-1 bg-border" aria-hidden="true" />
         <h2 className="whitespace-nowrap text-xl font-extrabold text-foreground sm:text-2xl">{title}</h2>
@@ -157,18 +160,37 @@ const TICKER_ITEMS: { tag: string; text: string }[] = [
 ];
 
 function SportsTicker() {
+  // نُوقف الحركة خارج الشاشة لتوفير CPU/GPU على الأجهزة الضعيفة (مهم على الجوال).
+  const [visible, setVisible] = useState(true);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => setVisible(entries[0]?.isIntersecting ?? true),
+      { threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   return (
-    <div className="flex items-center overflow-hidden border-b border-[#123047] bg-[#0E2233]" aria-hidden="true">
+    <div
+      ref={wrapRef}
+      className="flex items-center overflow-hidden border-b border-border bg-muted"
+      aria-hidden="true"
+      data-ticker-visible={visible ? "1" : "0"}
+    >
       <span className="relative z-10 shrink-0 bg-primary px-4 py-2 text-xs font-bold text-primary-foreground">
         على الهواء
       </span>
       {/* غلاف overflow-hidden مستقل حتى لا ينزلق الحزام فوق التسمية */}
       <div className="flex-1 overflow-hidden">
-        <div className="sports-belt flex whitespace-nowrap">
+        <div className={`sports-belt flex whitespace-nowrap ${visible ? "" : "is-paused"}`}>
           {[0, 1].map((half) => (
             <div key={half} className="flex shrink-0">
               {TICKER_ITEMS.map((item, i) => (
-                <span key={i} className="inline-flex items-center gap-2 py-2 pe-12 text-[13px] text-slate-300">
+                <span key={i} className="inline-flex items-center gap-2 py-2 pe-12 text-[13px] text-muted-foreground">
                   <b className="font-bold text-primary">{item.tag}</b>
                   {item.text}
                 </span>
@@ -179,6 +201,7 @@ function SportsTicker() {
       </div>
       <style>{`
         .sports-belt { animation: sports-belt 55s linear infinite; }
+        .sports-belt.is-paused { animation-play-state: paused; }
         @keyframes sports-belt { from { transform: translateX(0); } to { transform: translateX(50%); } }
         @media (prefers-reduced-motion: reduce) { .sports-belt { animation: none; } }
       `}</style>
@@ -220,25 +243,25 @@ function SportsHero({
 }) {
   const today = useMemo(() => coverDateFmt.format(new Date()), []);
   return (
-    <section className="border-b border-border bg-card px-4 pt-14 pb-10 text-center sm:pt-16 sm:pb-12" data-testid="sports-hero">
-      <span className="mb-5 inline-block rounded-full border border-primary/20 bg-primary/10 px-5 py-1.5 text-xs font-bold text-primary md:text-[13px]">
+    <section className="border-b border-border bg-card px-4 pt-10 pb-7 text-center sm:px-6 sm:pt-16 sm:pb-12" data-testid="sports-hero">
+      <span className="mb-4 inline-block rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-xs font-bold text-primary sm:px-5 md:text-[13px]">
         البوابة الرياضية — كل الملاعب في شاشة واحدة
       </span>
-      <h1 className="mx-auto max-w-3xl text-balance text-3xl font-extrabold leading-[1.4] text-foreground md:text-5xl">
+      <h1 className="mx-auto max-w-3xl text-balance text-[28px] font-extrabold leading-[1.35] text-foreground sm:text-4xl md:text-5xl">
         من أرض الملعب إلى شاشتك…
         <br />
         <span className="text-primary">لحظة بلحظة</span>
       </h1>
-      <p className="mx-auto mt-4 max-w-2xl text-base text-muted-foreground md:text-lg">
+      <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground sm:mt-4 sm:text-base md:text-lg">
         أخبار ونتائج مباشرة وترتيب وأرقام كل البطولات — من المونديال إلى دوري روشن، في مكان واحد.
       </p>
 
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-3 sm:mt-6">
         {liveCount > 0 && (
           <button
             type="button"
             onClick={() => onJump("live-pulse")}
-            className="inline-flex items-center gap-2 rounded-full bg-red-500 px-4 py-1.5 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-full bg-red-500 px-4 py-2 text-[13px] font-bold text-white transition-opacity hover:opacity-90"
             data-testid="hero-live-chip"
           >
             <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveCount} مباشر الآن
@@ -250,13 +273,18 @@ function SportsHero({
       </div>
 
       {nav.length > 0 && (
-        <nav className="mt-6 flex flex-wrap justify-center gap-2">
+        /* تنقّل أفقي قابل للتمرير على الجوال (بدل flex-wrap الذي يأكل ارتفاعًا) —
+           نفس الشكل على sm+ عبر flex-wrap للتمركز. */
+        <nav
+          className="scrollbar-hide mt-5 flex gap-2 overflow-x-auto pb-1 sm:mt-6 sm:flex-wrap sm:justify-center sm:overflow-visible"
+          aria-label="تنقّل سريع بين أقسام البوابة"
+        >
           {nav.map((n) => (
             <button
               key={n.id}
               type="button"
               onClick={() => onJump(n.id)}
-              className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3.5 py-1.5 text-[13px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-4 py-2 text-[13px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary sm:shrink"
             >
               {n.label}
             </button>
@@ -305,13 +333,13 @@ function LivePulse({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: number
           </span>
           <span className="text-[11px] font-bold tabular-nums text-muted-foreground">{items.length} مباراة</span>
         </div>
-        <div className="scrollbar-hide flex gap-2.5 overflow-x-auto pb-1">
+        <div className="scrollbar-hide flex snap-x snap-mandatory gap-2.5 overflow-x-auto pb-1">
           {items.map((f) => (
             <button
               key={f.id}
               type="button"
               onClick={() => onOpen(f.id)}
-              className="w-[212px] shrink-0 rounded-2xl border border-border bg-card p-3 text-right transition-colors hover:border-primary/40"
+              className="w-[212px] shrink-0 snap-start rounded-2xl border border-border bg-card p-3 text-right transition-colors hover:border-primary/40"
               data-testid={`pulse-match-${f.id}`}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -430,7 +458,7 @@ function ScoreboardCard({ items, onOpen }: { items: SpLiveItem[]; onOpen: (id: n
       </div>
 
       {groups.length > 0 ? (
-        <div className="scrollbar-hide max-h-[480px] space-y-3 overflow-y-auto p-3">
+        <div className="scrollbar-hide space-y-3 p-3 sm:max-h-[480px] sm:overflow-y-auto">
           {groups.map((group) => (
             <div key={group.key} className="grid gap-2">
               <div className="flex items-center justify-between px-1 text-[11px] font-bold text-foreground">
@@ -756,11 +784,30 @@ function TransfersBanner() {
   });
   const pulse = Array.isArray(data?.pulse) ? data!.pulse : [];
   const deal = data?.dealOfDay ?? null;
+
+  // لا نُحدّث العدّاد كل دقيقة إلا حين يكون البانر ظاهرًا في الشاشة — تفاديًا
+  // لإعادة render غير ضرورية أثناء تصفّح بقية الصفحة على الجوال.
   const [now, setNow] = useState(() => Date.now());
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(t);
-  }, []);
+    const el = wrapRef.current;
+    // لا يوجد عدّاد بدون نوافذ → لا حاجة لـ interval أصلًا.
+    if (!data?.windows) return;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      const t = setInterval(() => setNow(Date.now()), 60_000);
+      return () => clearInterval(t);
+    }
+    let visible = true;
+    let timer: ReturnType<typeof setInterval> | null = setInterval(() => {
+      if (visible) setNow(Date.now());
+    }, 60_000);
+    const io = new IntersectionObserver(
+      (entries) => { visible = entries[0]?.isIntersecting ?? true; },
+      { threshold: 0 },
+    );
+    io.observe(el);
+    return () => { io.disconnect(); if (timer) clearInterval(timer); };
+  }, [data?.windows]);
   const countdown = data?.windows ? windowRemaining(data.windows.saudi, now) : null;
 
   // لا بيانات (مفاتيح غائبة/فشل) → بانر بسيط محايد.
@@ -796,7 +843,7 @@ function TransfersBanner() {
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card" data-testid="transfers-banner">
+    <div ref={wrapRef} className="overflow-hidden rounded-2xl border border-border bg-card" data-testid="transfers-banner">
       {/* الترويسة + عدّاد النافذة + CTA */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-5">
         <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10">
@@ -973,19 +1020,22 @@ export default function SportsDashboard() {
     if (fallback) setCompSlug(fallback.slug);
   }, [competitions, compSlug]);
 
-  const catOf = (c: SpCompetition): SpCompetitionCategory => c.category ?? "saudi";
+  const catOf = categoryOf;
   const activeCat: SpCompetitionCategory = comp ? catOf(comp) : "saudi";
   const presentCats = COMP_CATEGORY_ORDER.filter((cat) => competitions.some((c) => catOf(c) === cat));
-  const compsInActiveCat = sortCompetitionsForPortal(
-    competitions.filter((c) => catOf(c) === activeCat),
-    compSlug,
+  const compsInActiveCat = useMemo(
+    () => sortCompetitionsForPortal(
+      competitions.filter((c) => catOf(c) === activeCat),
+      compSlug,
+    ),
+    [competitions, activeCat, compSlug],
   );
 
   const { data: matchesData } = useQuery<{ configured: boolean; live: SpFixture[]; today: SpFixture[]; upcoming: SpFixture[]; results: SpFixture[] }>({
     queryKey: [`/api/sports/${compSlug}/matches`],
-    // مباراة جارية في البطولة → 8ث (نتيجة لحظية)؛ غير ذلك → 30ث
-    refetchInterval: (query) =>
-      (query.state.data?.live ?? []).some((f) => f.status.live) ? 8_000 : 30_000,
+    // النتيجة اللحظية تأتي من /api/sports/live (7ث) — نُخفّف هذا النداء إلى 30ث
+    // أثناء المباشر لتفادي تعدّد الطلبات المتزامنة كل بضع ثوانٍ على الجوال.
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -1006,22 +1056,25 @@ export default function SportsDashboard() {
   });
   const compHistory = historyData?.history ?? null;
 
-  const matches = {
+  const matches = useMemo(() => ({
     live: Array.isArray(matchesData?.live) ? matchesData!.live : [],
     today: Array.isArray(matchesData?.today) ? matchesData!.today : [],
     upcoming: Array.isArray(matchesData?.upcoming) ? matchesData!.upcoming : [],
     results: Array.isArray(matchesData?.results) ? matchesData!.results : [],
-  };
-  const firstKnownFixtureTs = [...matches.live, ...matches.today, ...matches.upcoming, ...matches.results]
-    .map((f) => f.timestamp)
-    .filter((ts) => Number.isFinite(ts))
-    .sort((a, b) => a - b)[0] ?? null;
+  }), [matchesData]);
+  const firstKnownFixtureTs = useMemo(() => {
+    const all = [...matches.live, ...matches.today, ...matches.upcoming, ...matches.results]
+      .map((f) => f.timestamp)
+      .filter((ts) => Number.isFinite(ts))
+      .sort((a, b) => a - b);
+    return all[0] ?? null;
+  }, [matches]);
 
   const { data: todayData } = useQuery<{ today: SpLiveItem[] }>({
     queryKey: ["/api/sports/today"],
-    // يوجد مباشر اليوم → 10ث؛ غير ذلك → 30ث
-    refetchInterval: (query) =>
-      (query.state.data?.today ?? []).some((f) => f.status.live) ? 10_000 : 30_000,
+    // النتيجة اللحظية يغذّيها /api/sports/live — هنا 30ث ثابتة لتفادي الاستطلاع
+    // المتزامن السريع على الجوال أثناء المباشر.
+    refetchInterval: 30_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -1064,23 +1117,31 @@ export default function SportsDashboard() {
   // وموعد المباراة القادمة للجارية) ثم الاسم.
   const summaryKickoffRank = (c: SpSummary) =>
     c.daysUntilKickoff ?? (c.nextMatch ? (c.nextMatch.timestamp * 1000 - Date.now()) / 86_400_000 : Number.POSITIVE_INFINITY);
-  const activeSummaryRows = summaries
-    .filter((c) => c.category === summaryCat)
-    .sort(
-      (a, b) =>
-        summaryStatusRank(a) - summaryStatusRank(b) ||
-        summaryKickoffRank(a) - summaryKickoffRank(b) ||
-        a.name.localeCompare(b.name, "ar"),
-    );
+  const activeSummaryRows = useMemo(
+    () => summaries
+      .filter((c) => c.category === summaryCat)
+      .sort(
+        (a, b) =>
+          summaryStatusRank(a) - summaryStatusRank(b) ||
+          summaryKickoffRank(a) - summaryKickoffRank(b) ||
+          a.name.localeCompare(b.name, "ar"),
+      ),
+    // summaryStatusRank/summaryKickoffRank تعتمدان على وقت الآن وملخّص اليوم،
+    // لذا نُحدّث cache عند تغيّر المُدخلات الجوهرية.
+    [summaries, summaryCat],
+  );
   // مزيج أ+ب (قرار المالك 2026-07-05): تجميع بطاقات الفئة زمنيًا — «جارية الآن»
   // ثم «ينطلق هذا الأسبوع» ثم الشهور، وأخيرًا المواسم المنتهية. الترتيب داخل كل
   // مجموعة محفوظ من activeSummaryRows (الأقرب انطلاقًا أولًا)، والدمج بالمفتاح
   // (لا بالتجاور) كي لا تتشظى المجموعة إن تخلّل الترتيبَ وضعٌ نادر.
-  const compStartBySlug = new Map(competitions.map((c) => [c.slug, c.start ?? null]));
+  const compStartBySlug = useMemo(
+    () => new Map(competitions.map((c) => [c.slug, c.start ?? null])),
+    [competitions],
+  );
   const summaryMonthFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { month: "long" });
   const summaryMonthYearFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { month: "long", year: "numeric" });
   type SummaryGroupIcon = "live" | "week" | "month" | "done";
-  const summaryGroups = (() => {
+  const summaryGroups = useMemo(() => {
     const groups = new Map<string, { label: string; icon: SummaryGroupIcon; items: SpSummary[] }>();
     const push = (key: string, label: string, icon: SummaryGroupIcon, c: SpSummary) => {
       const g = groups.get(key);
@@ -1100,31 +1161,48 @@ export default function SportsDashboard() {
       push("later", "بانتظار الجدول", "month", c);
     }
     return [...groups.entries()].map(([key, g]) => ({ key, ...g }));
-  })();
+    // activeSummaryRows معلّب بالفعل، ولا نعتمد هنا سوى على ترتيبه.
+  }, [activeSummaryRows]);
 
   // ترتيب المباشر بالأهمية (السعودي/المثبّتة أولًا ثم الفئات الأهم)، وتحديد ما
   // يحقّ له تصدّر الغلاف الذكي — فلا تطغى مباراة من دوري ثانوي على الواجهة.
-  const compCatBySlug = new Map(competitions.map((c) => [c.slug, catOf(c)]));
-  const liveImportance = (f: SpLiveItem): number => {
-    const slug = f.competitionSlug ?? "";
-    if (LIVE_PINNED_SLUGS.includes(slug)) return 0;
-    const cat = compCatBySlug.get(slug);
-    const idx = cat ? COMP_CATEGORY_ORDER.indexOf(cat) : -1;
-    return idx >= 0 ? idx + 1 : 99;
-  };
-  const rankedLive = [...liveMatches].sort((a, b) => liveImportance(a) - liveImportance(b) || a.timestamp - b.timestamp);
+  const compCatBySlug = useMemo(
+    () => new Map(competitions.map((c) => [c.slug, categoryOf(c)])),
+    [competitions],
+  );
+  const liveImportance = useMemo(() => {
+    const pinned = LIVE_PINNED_SLUGS;
+    return (f: SpLiveItem): number => {
+      const slug = f.competitionSlug ?? "";
+      if (pinned.includes(slug)) return 0;
+      const cat = compCatBySlug.get(slug);
+      const idx = cat ? COMP_CATEGORY_ORDER.indexOf(cat) : -1;
+      return idx >= 0 ? idx + 1 : 99;
+    };
+  }, [compCatBySlug]);
+  const rankedLive = useMemo(
+    () => [...liveMatches].sort((a, b) => liveImportance(a) - liveImportance(b) || a.timestamp - b.timestamp),
+    [liveMatches, liveImportance],
+  );
   const isMarquee = (slug: string, cat: SpCompetitionCategory | undefined) =>
     cat === "saudi" || SPOTLIGHT_MARQUEE_SLUGS.has(slug);
-  const spotlightLive = rankedLive.filter((f) => isMarquee(f.competitionSlug ?? "", compCatBySlug.get(f.competitionSlug ?? "")));
-  const spotlightSummaries = summaries.filter((c) => isMarquee(c.slug, c.category));
+  const spotlightLive = useMemo(
+    () => rankedLive.filter((f) => isMarquee(f.competitionSlug ?? "", compCatBySlug.get(f.competitionSlug ?? ""))),
+    [rankedLive, compCatBySlug],
+  );
+  const spotlightSummaries = useMemo(
+    () => summaries.filter((c) => isMarquee(c.slug, c.category)),
+    [summaries],
+  );
 
   const { data: standingsData } = useQuery<{ standings: SpStandingRow[] }>({
     queryKey: [`/api/sports/${compSlug}/standings`],
     staleTime: 5 * 60_000,
     enabled: hasStandings,
-    // ترتيب مبدئي لحظي مفعّل (صفّ live) → 8ث ليتحرّك الجدول مع المباراة
+    // الترتيب اللحظي يُحدَّث عبر إعادة الجلب عند focus + كل 30ث إن كان فيه صف live،
+    // بدل 8ث التي تُحمّل الجوال بطلبات متزامنة مع /live.
     refetchInterval: (query) =>
-      (query.state.data?.standings ?? []).some((r) => r.live) ? 8_000 : false,
+      (query.state.data?.standings ?? []).some((r) => r.live) ? 30_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -1147,12 +1225,15 @@ export default function SportsDashboard() {
   const videos = (catShorts.length > 0 ? catShorts : featShorts).slice(0, 8);
 
   // نرتّب بالأحدث: «الخبر الأبرز» يجب أن يكون أحدث خبر فعلاً لا أقدم خبر مثبّت.
-  const sortedNews = [...news].sort(byRecency);
+  const sortedNews = useMemo(() => [...news].sort(byRecency), [news]);
   const featured = sortedNews[0];
-  const latest = sortedNews.slice(1, 9);
+  const latest = useMemo(() => sortedNews.slice(1, 9), [sortedNews]);
   // معرض الصور يأخذ ما تبقّى بعد الخبر الأبرز + شبكة الأحدث (منعًا لتكرار نفس
   // المقال في الهيرو والشبكة والمعرض)، مقتصرًا على ما يملك صورة.
-  const galleryArticles = sortedNews.slice(9).filter((a) => a.imageUrl || a.thumbnailUrl);
+  const galleryArticles = useMemo(
+    () => sortedNews.slice(9).filter((a) => a.imageUrl || a.thumbnailUrl),
+    [sortedNews],
+  );
 
   // عدّاد المباشر الشامل: نبض /api/sports/live يغطي كل بطولاتنا (بما فيها
   // العالمية)، ومباريات اليوم احتياط ريثما يصل أول ردّ من نداء النبض.
@@ -1162,17 +1243,20 @@ export default function SportsDashboard() {
     (document.getElementById(id) ?? document.getElementById("matches"))?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // التنقّل السريع في الترويسة — حسب الأقسام المتاحة فعلًا.
-  const heroNav = [
-    { id: "tournaments", label: "البطولات", show: presentSummaryCats.length > 0 },
-    { id: "news", label: "الأخبار", show: true },
-    { id: "matches", label: "المباريات", show: true },
-    { id: "standings", label: "الترتيب", show: hasStandings },
-    { id: "scorers", label: "الهدّافون", show: hasScorers },
-    { id: "leaderboard", label: "التوقّعات", show: true },
-    { id: "media", label: "الوسائط", show: galleryArticles.length > 0 || videos.length > 0 },
-  ]
-    .filter((n) => n.show)
-    .map((n) => ({ id: n.id, label: n.label }));
+  const heroNav = useMemo(
+    () => [
+      { id: "tournaments", label: "البطولات", show: presentSummaryCats.length > 0 },
+      { id: "news", label: "الأخبار", show: true },
+      { id: "matches", label: "المباريات", show: true },
+      { id: "standings", label: "الترتيب", show: hasStandings },
+      { id: "scorers", label: "الهدّافون", show: hasScorers },
+      { id: "leaderboard", label: "التوقّعات", show: true },
+      { id: "media", label: "الوسائط", show: galleryArticles.length > 0 || videos.length > 0 },
+    ]
+      .filter((n) => n.show)
+      .map((n) => ({ id: n.id, label: n.label })),
+    [presentSummaryCats.length, hasStandings, hasScorers, galleryArticles.length, videos.length],
+  );
 
   return (
     <div className="flex min-h-screen flex-col bg-background" dir="rtl">
@@ -1213,7 +1297,7 @@ export default function SportsDashboard() {
                       key={cat}
                       type="button"
                       onClick={() => setSummaryCat(cat)}
-                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition-colors ${active ? "bg-primary text-white" : "border border-border bg-card text-muted-foreground hover:border-primary/40"}`}
+                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2.5 text-[13px] font-bold transition-colors sm:text-sm ${active ? "bg-primary text-white" : "border border-border bg-card text-muted-foreground hover:border-primary/40"}`}
                       data-testid={`summary-cat-${cat}`}
                     >
                       {liveInCat && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />}
@@ -1297,7 +1381,7 @@ export default function SportsDashboard() {
 
           {/* شبكة أحدث الأخبار */}
           {latest.length > 0 && (
-            <div className="mt-12">
+            <div className="mt-10 sm:mt-12">
               <SectionTitle
                 title="أحدث الأخبار"
                 subtitle="آخر مستجدّات الرياضة لحظة بلحظة"
@@ -1311,8 +1395,8 @@ export default function SportsDashboard() {
         </section>
 
         {/* ===== ٠٣ + ٠٤: مركز المباريات والترتيب — باندة فاتحة ===== */}
-        <section className="mt-14 border-y border-border bg-muted/40 sm:mt-16">
-          <div className="mx-auto max-w-[1200px] space-y-14 px-4 py-12 sm:px-6 sm:py-16">
+        <section className="mt-10 border-y border-border bg-muted/70 sm:mt-16">
+          <div className="mx-auto max-w-[1200px] space-y-10 px-4 py-10 sm:space-y-14 sm:px-6 sm:py-16">
             <div id="matches" className="scroll-mt-16">
               <SectionTitle
                 title="مركز المباريات"
@@ -1332,7 +1416,7 @@ export default function SportsDashboard() {
                             )[0];
                             if (first) setCompSlug(first.slug);
                           }}
-                          className={`shrink-0 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-bold transition-colors ${activeCat === cat ? "bg-primary text-white" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}>
+                          className={`shrink-0 whitespace-nowrap rounded-full px-4 py-2.5 text-[13px] font-bold transition-colors sm:text-sm ${activeCat === cat ? "bg-primary text-white" : "border border-border bg-card text-muted-foreground hover:text-foreground"}`}>
                           {COMP_CATEGORY_LABELS[cat]}
                         </button>
                       ))}
@@ -1342,7 +1426,7 @@ export default function SportsDashboard() {
                     {compsInActiveCat.map((c) => (
                       <button key={c.slug} onClick={() => setCompSlug(c.slug)}
                         title={c.status ? COMP_STATUS_LABELS[c.status] : undefined}
-                        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition-colors sm:px-4 sm:py-2 sm:text-sm ${compSlug === c.slug ? "bg-primary text-white" : "border border-border bg-card text-muted-foreground hover:border-primary/40"} ${c.status === "finished" && compSlug !== c.slug ? "opacity-60" : ""}`}>
+                        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2.5 text-[13px] font-bold transition-colors sm:px-4 sm:py-2 sm:text-sm ${compSlug === c.slug ? "bg-primary text-white" : "border border-border bg-card text-muted-foreground hover:border-primary/40"} ${c.status === "finished" && compSlug !== c.slug ? "opacity-60" : ""}`}>
                         {c.status === "ongoing" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />}
                         {c.name}
                       </button>
@@ -1385,7 +1469,7 @@ export default function SportsDashboard() {
           </div>
         </section>
 
-        <div className="mx-auto max-w-[1200px] space-y-14 px-4 py-12 sm:px-6 sm:py-16">
+        <div className="mx-auto max-w-[1200px] space-y-10 px-4 py-10 sm:space-y-14 sm:px-6 sm:py-16">
           {/* ٠٥ الهدّافون / صنّاع الأهداف / البطاقات */}
           {hasScorers && (
             <section id="scorers" className="scroll-mt-16">
