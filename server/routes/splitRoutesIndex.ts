@@ -44,6 +44,7 @@ import { registerSportsLiveStreamRoutes } from "./sportsLiveStream";
 import { registerRadarRoutes } from "./radar";
 import { registerSpaNewsRoutes } from "./spaNews";
 import { registerSportmonksNewsRoutes } from "./sportmonksNews";
+import { registerSportsNamesRoutes } from "./sportsNames";
 import commentReactionsRouter from "./commentReactions";
 import topicCommentsRouter from "./topicComments";
 import wcPredictionsRouter from "./wcPredictions";
@@ -108,6 +109,7 @@ export function registerSplitRoutes(app: Express) {
   registerRadarRoutes(app);
   registerSpaNewsRoutes(app);
   registerSportmonksNewsRoutes(app);
+  registerSportsNamesRoutes(app);
   app.use(commentReactionsRouter);
   app.use(topicCommentsRouter);
   app.use(wcPredictionsRouter);

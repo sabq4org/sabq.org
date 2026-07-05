@@ -20,6 +20,7 @@
  */
 import { withSWR } from "../memoryCache";
 import { resolveNames } from "./worldCupNameTranslator";
+import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
 import { apiFootballGet } from "./apiFootballClient";
 import { getLeagueTransfers, type SplLeagueTransfer } from "./saudiLeagueService";
 
@@ -262,10 +263,42 @@ const CLUB_AR: Record<string, string> = {
   "Free agent": "بدون نادٍ",
 };
 
-function arClubName(raw: string | null | undefined): string {
+function arClubName(raw: string | null | undefined, tr?: NameLookup): string {
   const s = (raw ?? "").trim();
   if (!s) return "—";
-  return CLUB_AR[s] ?? s;
+  // القاموس الثابت أولًا، ثم الطبقة الموحّدة (المعبّأة بالخلفية) للأندية غير المدرجة
+  return CLUB_AR[s] ?? (tr ? tr(s) : s);
+}
+
+/**
+ * مترجما دفعة الانتقالات: الأندية خارج CLUB_AR + المصادر الصحفية (رومانو/
+ * سكاي...). «فوري بالمتاح + ملء بالخلفية» — منطق الموثوقية (sourceTier/hereWeGo)
+ * يبقى على الاسم الخام قبل الترجمة.
+ */
+async function transferTranslators(raw: any[]): Promise<{ club: NameLookup; source: NameLookup }> {
+  const clubs: { id?: number; name: string }[] = [];
+  const sources: { name: string }[] = [];
+  for (const r of raw) {
+    for (const side of ["fromteam", "toteam"] as const) {
+      const name = String(r?.[side]?.name ?? "").trim();
+      if (name && !CLUB_AR[name]) clubs.push({ id: r?.[side]?.id ?? undefined, name });
+    }
+    const src = String(r?.source_name ?? "").trim();
+    if (src) sources.push({ name: src });
+  }
+  try {
+    const [club, source] = await Promise.all([
+      resolveSportsNames("team", clubs, { skipAi: true, provider: "sportmonks" }),
+      resolveSportsNames("source", sources, { skipAi: true }),
+    ]);
+    void Promise.all([
+      clubs.length ? resolveSportsNames("team", clubs, { provider: "sportmonks" }) : null,
+      sources.length ? resolveSportsNames("source", sources) : null,
+    ]).catch(() => {});
+    return { club, source };
+  } catch {
+    return { club: (n) => n ?? "", source: (n) => n ?? "" };
+  }
 }
 
 // ---------- مؤشر موثوقية المصدر ----------
@@ -419,12 +452,12 @@ const CONFIRMED_KIND_BY_TYPE: Record<number, TcConfirmed["kind"]> = {
   220: "free",
 };
 
-function normalizeParty(team: any, leagueId: number | null, roshnIds: Set<number>): TcParty {
+function normalizeParty(team: any, leagueId: number | null, roshnIds: Set<number>, trClub?: NameLookup): TcParty {
   const id = team?.id ?? 0;
   const saudi = leagueId === SM_SAUDI_LEAGUE_ID || roshnIds.has(id);
   return {
     id,
-    name: arClubName(team?.name),
+    name: arClubName(team?.name, trClub),
     image: team?.image_path ?? null,
     leagueId,
     leagueName: leagueId != null ? (LEAGUE_AR[leagueId] ?? null) : saudi ? LEAGUE_AR[SM_SAUDI_LEAGUE_ID] : null,
@@ -442,13 +475,19 @@ function normalizePlayer(p: any, arName: (n: string | null | undefined) => strin
   };
 }
 
-function normalizeRumour(r: any, roshnIds: Set<number>, arName: (n: string | null | undefined) => string): TcRumour {
+function normalizeRumour(
+  r: any,
+  roshnIds: Set<number>,
+  arName: (n: string | null | undefined) => string,
+  tr?: { club: NameLookup; source: NameLookup },
+): TcRumour {
   const probability: TcProbability = ["LOW", "MEDIUM", "HIGH", "IMMINENT"].includes(r?.probability)
     ? r.probability
     : "LOW";
-  const from = normalizeParty(r?.fromteam, r?.from_league_id ?? null, roshnIds);
-  const to = normalizeParty(r?.toteam, r?.to_league_id ?? null, roshnIds);
+  const from = normalizeParty(r?.fromteam, r?.from_league_id ?? null, roshnIds, tr?.club);
+  const to = normalizeParty(r?.toteam, r?.to_league_id ?? null, roshnIds, tr?.club);
   const srcName = String(r?.source_name ?? "").trim();
+  // الموثوقية وhereWeGo على الاسم الخام (الإنجليزي) — الترجمة للعرض فقط
   const tier = sourceTier(srcName);
   // المزوّد يضع إشاعة التجديد أحيانًا بنوع «انتقال» بنفس الناديين — صنّفها تجديدًا.
   const rawKind = RUMOUR_KIND_BY_TYPE[r?.type_id] ?? "transfer";
@@ -460,7 +499,7 @@ function normalizeRumour(r: any, roshnIds: Set<number>, arName: (n: string | nul
     kind,
     amount: typeof r?.amount === "number" ? r.amount : null,
     currency: r?.currency ?? null,
-    source: { name: srcName || "غير معروف", url: r?.source_url ?? null, tier },
+    source: { name: (srcName ? (tr?.source(srcName) || srcName) : "") || "غير معروف", url: r?.source_url ?? null, tier },
     hereWeGo: probability === "IMMINENT" || (probability === "HIGH" && /romano/i.test(srcName)),
     player: normalizePlayer(r?.player, arName),
     from,
@@ -508,11 +547,14 @@ export async function getTransferRumours(): Promise<TcRumoursFeed> {
     // تعريب أسماء اللاعبين: فوري بالمتاح (قاموس + كاش DB)، والناقص يُترجم
     // بالخلفية ليظهر معرَّبًا في التحديث التالي — نفس نمط انتقالات روشن.
     const names = raw.map((r) => r?.player?.display_name || r?.player?.name);
-    const arName = await resolveNames(names, { skipAi: true });
+    const [arName, tr] = await Promise.all([
+      resolveNames(names, { skipAi: true }),
+      transferTranslators(raw),
+    ]);
     void resolveNames(names).catch(() => {});
 
     const rumours = raw
-      .map((r) => normalizeRumour(r, roshnIds, arName))
+      .map((r) => normalizeRumour(r, roshnIds, arName, tr))
       .filter((r) => r.id && r.date && r.player.id)
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 
@@ -548,13 +590,16 @@ export async function getGlobalConfirmed(): Promise<TcConfirmed[]> {
     }
 
     const names = raw.map((r) => r?.player?.display_name || r?.player?.name);
-    const arName = await resolveNames(names, { skipAi: true });
+    const [arName, tr] = await Promise.all([
+      resolveNames(names, { skipAi: true }),
+      transferTranslators(raw),
+    ]);
     void resolveNames(names).catch(() => {});
 
     return raw
       .map((r): TcConfirmed => {
-        const from = normalizeParty(r?.fromteam, null, roshnIds);
-        const to = normalizeParty(r?.toteam, null, roshnIds);
+        const from = normalizeParty(r?.fromteam, null, roshnIds, tr.club);
+        const to = normalizeParty(r?.toteam, null, roshnIds, tr.club);
         const fromKnown = Boolean(CLUB_AR[String(r?.fromteam?.name ?? "").trim()]);
         const toKnown = Boolean(CLUB_AR[String(r?.toteam?.name ?? "").trim()]);
         const amount = typeof r?.amount === "number" ? r.amount : null;
@@ -622,11 +667,14 @@ export async function getRumourStory(playerId: number): Promise<TcStory> {
     if (!raw.length) return { found: false, player: null, timeline: [] };
 
     const names = raw.map((r) => r?.player?.display_name || r?.player?.name);
-    const arName = await resolveNames(names, { skipAi: true });
+    const [arName, tr] = await Promise.all([
+      resolveNames(names, { skipAi: true }),
+      transferTranslators(raw),
+    ]);
     void resolveNames(names).catch(() => {});
 
     const timeline = raw
-      .map((r) => normalizeRumour(r, roshnIds, arName))
+      .map((r) => normalizeRumour(r, roshnIds, arName, tr))
       .filter((r) => r.id && r.date)
       .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id);
 

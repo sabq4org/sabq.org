@@ -399,6 +399,100 @@ export const SPL_COUNTRY_AR: Record<string, string> = {
   Austria: "النمسا",
 };
 
+// ---------- الملاعب والمدن ----------
+
+/**
+ * تعريب الملاعب الكبرى (مفتاح اسم المزود الإنجليزي الحرفي) — طبقة جودة مضمونة
+ * فوق الترجمة الآلية؛ ما ليس هنا يعرَّب آليًا عبر sportsNamesService ويُعتمد
+ * تحريريًا من اللوحة.
+ */
+export const SPL_VENUE_AR: Record<string, string> = {
+  // السعودية
+  "Kingdom Arena": "كينغدوم أرينا",
+  "King Fahd International Stadium": "ملعب الملك فهد الدولي «الدرة»",
+  "King Abdullah Sports City": "ملعب مدينة الملك عبدالله الرياضية «الجوهرة»",
+  "King Abdullah Sports City Stadium": "ملعب مدينة الملك عبدالله الرياضية «الجوهرة»",
+  "Al-Awwal Park": "ملعب الأول بارك",
+  "King Saud University Stadium": "ملعب الأول بارك",
+  "Prince Abdullah Al-Faisal Stadium": "ملعب الأمير عبدالله الفيصل",
+  "Prince Faisal bin Fahd Stadium": "ملعب الأمير فيصل بن فهد",
+  "Prince Mohamed bin Fahd Stadium": "ملعب الأمير محمد بن فهد",
+  "Prince Saud bin Jalawi Stadium": "ملعب الأمير سعود بن جلوي",
+  "Prince Sultan bin Abdul Aziz Stadium": "ملعب الأمير سلطان بن عبدالعزيز",
+  "Prince Abdul Aziz bin Musa'ed Stadium": "ملعب الأمير عبدالعزيز بن مساعد",
+  "King Abdul Aziz Stadium": "ملعب الملك عبدالعزيز",
+  "King Khalid Sport City Stadium": "ملعب مدينة الملك خالد الرياضية",
+  "Al-Ettifaq Club Stadium": "ملعب نادي الاتفاق",
+  // الخليج والعالم (الأشهر في تغطيتنا)
+  "Lusail Stadium": "استاد لوسيل",
+  "Khalifa International Stadium": "استاد خليفة الدولي",
+  "Jaber Al-Ahmad International Stadium": "استاد جابر الأحمد الدولي",
+  "Mohammed Bin Zayed Stadium": "استاد محمد بن زايد",
+  "Hazza bin Zayed Stadium": "استاد هزاع بن زايد",
+  "Old Trafford": "أولد ترافورد",
+  "Anfield": "أنفيلد",
+  "Emirates Stadium": "ملعب الإمارات",
+  "Etihad Stadium": "ملعب الاتحاد",
+  "Tottenham Hotspur Stadium": "ملعب توتنهام هوتسبير",
+  "Stamford Bridge": "ستامفورد بريدج",
+  "Santiago Bernabéu": "سانتياغو برنابيو",
+  "Estadio Santiago Bernabéu": "سانتياغو برنابيو",
+  "Spotify Camp Nou": "كامب نو",
+  "Camp Nou": "كامب نو",
+  "San Siro": "سان سيرو",
+  "Giuseppe Meazza": "سان سيرو",
+  "Allianz Arena": "أليانز أرينا",
+  "Signal Iduna Park": "سيغنال إيدونا بارك",
+  "Parc des Princes": "حديقة الأمراء",
+};
+
+/** تعريب مدن الملاعب (الأشهر) — الباقي آليًا عبر sportsNamesService. */
+export const SPL_CITY_AR: Record<string, string> = {
+  Riyadh: "الرياض",
+  Jeddah: "جدة",
+  Jiddah: "جدة",
+  Mecca: "مكة المكرمة",
+  Makkah: "مكة المكرمة",
+  Medina: "المدينة المنورة",
+  Dammam: "الدمام",
+  "Al-Khobar": "الخبر",
+  Buraidah: "بريدة",
+  Buraydah: "بريدة",
+  Unaizah: "عنيزة",
+  Abha: "أبها",
+  "Al-Hofuf": "الهفوف",
+  Hofuf: "الهفوف",
+  Taif: "الطائف",
+  "Ha'il": "حائل",
+  Hail: "حائل",
+  Najran: "نجران",
+  Tabuk: "تبوك",
+  Jubail: "الجبيل",
+  "Al-Majma'ah": "المجمعة",
+  Dubai: "دبي",
+  "Abu Dhabi": "أبوظبي",
+  Sharjah: "الشارقة",
+  "Al-Ain": "العين",
+  Doha: "الدوحة",
+  "Al-Rayyan": "الريان",
+  Lusail: "لوسيل",
+  "Kuwait City": "مدينة الكويت",
+  Manama: "المنامة",
+  Muscat: "مسقط",
+  London: "لندن",
+  Manchester: "مانشستر",
+  Liverpool: "ليفربول",
+  Madrid: "مدريد",
+  Barcelona: "برشلونة",
+  Milan: "ميلانو",
+  Turin: "تورينو",
+  Rome: "روما",
+  Naples: "نابولي",
+  Munich: "ميونخ",
+  Dortmund: "دورتموند",
+  Paris: "باريس",
+};
+
 export function localizeSplCompetition(name: string): string {
   return SPL_COMPETITION_AR[name] ?? name;
 }

@@ -1914,6 +1914,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // الأسماء الرياضية الموحّدة: التقاط الترجمات المعلّقة كل ساعة (شبكة أمان
+      // للملء بالخلفية). تسجيل دائم وفحص القيادة داخل الدورة.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsNamesJob } = await import("./jobs/sportsNamesJob");
+            startSportsNamesJob();
+          } catch (error) {
+            console.error("[Server] Error starting sports names job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // تسوية توقّعات المونديال: نفس نمط أخبار المونديال — تسجيل دائم وفحص
       // القيادة داخل الدورة، يمنح الفائزين نقاطهم فور انتهاء المباراة.
       if (enableBackgroundWorkers) {

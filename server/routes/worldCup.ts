@@ -677,6 +677,11 @@ export function registerWorldCupRoutes(app: Express) {
     const directSmId = Number(req.query.smId) || undefined;
     try {
       const data = await getMatchFacts(fixtureId, { directSmId });
+      // تعريب أسماء المغيبين (تأتي إنجليزية من SportMonks) — نفس نمط مسار /sports
+      if (data.absentees.length > 0) {
+        const tr = await resolveNames(data.absentees.map((a) => a.name)).catch(() => null);
+        if (tr) data.absentees = data.absentees.map((a) => ({ ...a, name: tr(a.name) || a.name }));
+      }
       // الإحصائيات تسخن أثناء اللعب؛ الطقس/الغيابات أبطأ — كاش متوسط يكفي
       res.set("Cache-Control", "public, max-age=30, s-maxage=120, stale-while-revalidate=300");
       res.json(data);

@@ -13438,6 +13438,31 @@ export const wcPlayerNames = pgTable("wc_player_names", {
 
 export type WcPlayerName = typeof wcPlayerNames.$inferSelect;
 
+// ── طبقة الأسماء الرياضية الموحّدة (كل أنواع الكيانات) ──
+// تعميم wc_player_names: صفّ واحد لكل (نوع كيان، مزوّد، اسم مصدر) يُعرَّب مرة
+// واحدة (AI أو يدويًا) ثم يُخدَم للأبد. status: pending (بانتظار الترجمة —
+// يلتقطه الكرون الليلي) | auto (ترجمة آلية) | verified (اعتماد تحريري يتقدّم
+// على الآلي). hits يرتّب طابور المراجعة بالأهمية. انظر services/sportsNamesService.ts
+export const sportsNameTranslations = pgTable("sports_name_translations", {
+  id: serial("id").primaryKey(),
+  entityType: text("entity_type").notNull(), // team|league|venue|city|coach|referee|source|player
+  provider: text("provider").notNull().default("apifootball"),
+  providerId: text("provider_id"), // معرّف المزوّد إن توفّر (للوحة والتتبّع؛ المفتاح الفعلي الاسم)
+  source: text("source").notNull(), // الاسم كما يرسله المزوّد (لاتيني)
+  arabic: text("arabic").notNull(), // يساوي source للصفوف pending
+  status: text("status").notNull().default("auto"),
+  origin: text("origin").notNull().default("ai"), // ai|manual|import|thesports
+  hits: integer("hits").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_names_type_source").on(table.entityType, table.provider, table.source),
+  index("idx_sports_names_status").on(table.status),
+  index("idx_sports_names_type_status").on(table.entityType, table.status),
+]);
+
+export type SportsNameTranslation = typeof sportsNameTranslations.$inferSelect;
+
 // ============================================
 // SABQ AI HUB — central gateway for all AI usage
 // ============================================
