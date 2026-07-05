@@ -457,6 +457,48 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
   });
 }
 
+// ---------- الجدول الموحّد متعدد البطولات (مركز المباريات في التطبيق) ----------
+
+/** يوم رياض (YYYY-MM-DD) لطابع زمني بالثواني. */
+function riyadhKeyOf(timestamp: number): string {
+  return riyadhDayFmt.format(new Date(timestamp * 1000));
+}
+
+/**
+ * جدول موحّد لعدة بطولات في نطاق زمني — عماد «مركز المباريات» في تطبيق
+ * سبق الرياضي. يركّب من كاشات getFixtures القائمة لكل بطولة (صفر نداءات
+ * إضافية للمزوّد) ويرشّح بمفاتيح أيام الرياض [fromKey..toKey] ثم يدمج
+ * ويرتّب تصاعديًا. البطولة تُلحق بكل مباراة (competition/competitionSlug)
+ * لأن الجدول مختلط. المونديال مدعوم كأحد الـ slugs (id=1 في السجل).
+ */
+export async function getUnifiedFixtures(
+  slugs: string[],
+  fromKey: string,
+  toKey: string,
+): Promise<SplLiveBoardItem[]> {
+  const bySlug = new Map(SAUDI_COMPETITIONS.map((c) => [c.slug, c]));
+  const comps = slugs
+    .map((s) => bySlug.get(s))
+    .filter((c): c is SaudiCompetition => Boolean(c));
+  const lists = await Promise.all(
+    comps.map((comp) =>
+      getFixtures(comp)
+        .then((fixtures) =>
+          fixtures
+            .filter((fx) => {
+              const key = riyadhKeyOf(fx.timestamp);
+              return key >= fromKey && key <= toKey;
+            })
+            .map(
+              (fx): SplLiveBoardItem => ({ ...fx, competition: comp.name, competitionSlug: comp.slug }),
+            ),
+        )
+        .catch(() => [] as SplLiveBoardItem[]), // بطولة متعثرة لا تُسقط الجدول
+    ),
+  );
+  return lists.flat().sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
+}
+
 // ---------- البث المباشر العالمي (الدوريات العالمية التي موسمها قائم الآن) ----------
 
 export interface SplWorldLiveItem extends SplLiveBoardItem {

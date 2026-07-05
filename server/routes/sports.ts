@@ -51,6 +51,7 @@ import {
   getTopRedCards,
   getTopScorers,
   getTopYellowCards,
+  getUnifiedFixtures,
   isSaudiLeagueConfigured,
   listCompetitions,
   listCompetitionsWithMeta,
@@ -315,6 +316,50 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] global today failed:", error);
       res.status(502).json({ message: "تعذر جلب مباريات اليوم حاليًا" });
+    }
+  });
+
+  // الجدول الموحّد متعدد البطولات — عماد «مركز المباريات» في التطبيق.
+  // ?comps=slugs مفصولة بفواصل (إلزامي، حد 8) + ?from/?to بصيغة YYYY-MM-DD
+  // (الافتراضي: أسبوع للخلف حتى 45 يومًا للأمام — نافذة شريط التواريخ).
+  app.get("/api/sports/fixtures", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.set("Cache-Control", "public, max-age=30, s-maxage=60");
+      res.json({ configured: false, fixtures: [] });
+      return;
+    }
+    const known = new Set(listCompetitions().map((c) => c.slug));
+    const comps = String(req.query.comps ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => known.has(s));
+    if (comps.length === 0) {
+      return res.status(400).json({ message: "حدّد بطولة واحدة على الأقل عبر ?comps=" });
+    }
+    if (comps.length > 8) {
+      return res.status(400).json({ message: "الحد الأقصى 8 بطولات في الطلب الواحد" });
+    }
+    const dayKey = (v: unknown): string | null =>
+      typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : null;
+    const riyadhDay = (offsetDays: number) =>
+      new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh" }).format(
+        new Date(Date.now() + offsetDays * 86_400_000),
+      );
+    const from = dayKey(req.query.from) ?? riyadhDay(-7);
+    const to = dayKey(req.query.to) ?? riyadhDay(45);
+    if (from > to) return res.status(400).json({ message: "نطاق تواريخ غير صالح" });
+    try {
+      const fixtures = await overlayLiveBoardList(await getUnifiedFixtures(comps, from, to));
+      res.set(
+        "Cache-Control",
+        fixtures.some((f) => f.status.live)
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+      );
+      res.json({ configured: true, from, to, fixtures });
+    } catch (error) {
+      console.error("[Sports] unified fixtures failed:", error);
+      res.status(502).json({ message: "تعذر جلب الجدول الموحّد حاليًا" });
     }
   });
 

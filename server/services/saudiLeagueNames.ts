@@ -242,12 +242,24 @@ const SPL_ROUND_AR: Record<string, string> = {
   "3rd Place Final": "تحديد المركز الثالث",
 };
 
-/** "Regular Season - 12" → "الجولة 12"؛ وأدوار الكؤوس → عربي */
+/** جولات دور مجموعات البطولات (المونديال وأشباهه) — نفس صيغة worldCupNames */
+const SPL_GROUP_ROUND_AR: Record<string, string> = {
+  "Group Stage - 1": "الجولة الأولى",
+  "Group Stage - 2": "الجولة الثانية",
+  "Group Stage - 3": "الجولة الثالثة",
+};
+
+/** "Regular Season - 12" → "الجولة 12"؛ وأدوار الكؤوس والمجموعات → عربي */
 export function localizeSplRound(round: string): string {
   const r = round ?? "";
   const league = r.match(/Regular Season\s*-\s*(\d+)/i);
   if (league) return `الجولة ${league[1]}`;
   if (SPL_ROUND_AR[r]) return SPL_ROUND_AR[r];
+  if (SPL_GROUP_ROUND_AR[r]) return SPL_GROUP_ROUND_AR[r];
+  const group = r.match(/Group Stage\s*-\s*(\d+)/i);
+  if (group) return `الجولة ${group[1]} — دور المجموعات`;
+  const knockoutLeg = r.match(/^(League Stage|League Phase)\s*-\s*(\d+)/i);
+  if (knockoutLeg) return `الجولة ${knockoutLeg[2]} — مرحلة الدوري`;
   const ro = r.match(/Round of\s*(\d+)/i);
   if (ro) return `دور الـ${ro[1]}`;
   return r;
