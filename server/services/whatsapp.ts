@@ -18,9 +18,18 @@ export const twilioClient = accountSid && authToken
 
 export interface SendWhatsAppMessageOptions {
   to: string;
-  body: string;
+  /** Free-form text. Delivered only inside the 24h session window unless a template is used. */
+  body?: string;
   mediaUrl?: string;
   statusCallback?: string;
+  /**
+   * Approved WhatsApp template (Twilio Content API `HX...` SID). When set, the
+   * message is sent as a template and IS delivered outside the 24h window —
+   * `body`/`mediaUrl` are ignored. Register the template in the Twilio console.
+   */
+  contentSid?: string;
+  /** Numbered template variables, e.g. `{ "1": "...", "2": "..." }`. Values must be single-line. */
+  contentVariables?: Record<string, string>;
 }
 
 export interface SendMessageResult {
@@ -164,26 +173,43 @@ export async function sendWhatsAppMessage(options: SendWhatsAppMessageOptions): 
 
   const startTime = Date.now();
   const toNumber = options.to.replace(/^whatsapp:/i, '');
-  
-  // Check 24-hour window
-  if (!isWithin24HourWindow(toNumber)) {
-    console.warn(`[WhatsApp Service] ⚠️ Outside 24-hour window for ${toNumber.substring(0, 8)}... - message may be rejected`);
+  const usingTemplate = !!options.contentSid;
+
+  // Free-form messages are only delivered INSIDE the 24-hour session window;
+  // outside it WhatsApp rejects them with error 63016 (the send still returns
+  // `queued` synchronously — the failure arrives later via the status callback).
+  // Approved templates (contentSid) are exempt, so only warn for free-form.
+  if (!usingTemplate && !isWithin24HourWindow(toNumber)) {
+    console.warn(`[WhatsApp Service] ⚠️ Outside 24-hour window for ${toNumber.substring(0, 8)}... - free-form message will likely be rejected (63016). Use an approved template (contentSid).`);
   }
-  
+
   try {
-    console.log(`[WhatsApp Service] 📨 Sending WhatsApp message...`);
+    console.log(`[WhatsApp Service] 📨 Sending WhatsApp message${usingTemplate ? ' (template)' : ''}...`);
     console.log(`[WhatsApp Service]   - From: whatsapp:${whatsappNumber}`);
     console.log(`[WhatsApp Service]   - To: whatsapp:${toNumber}`);
-    console.log(`[WhatsApp Service]   - Body length: ${options.body.length} chars`);
-    console.log(`[WhatsApp Service]   - Body preview: ${options.body.substring(0, 100)}...`);
-    
+    if (usingTemplate) {
+      console.log(`[WhatsApp Service]   - Content SID: ${options.contentSid}`);
+    } else {
+      const body = options.body ?? '';
+      console.log(`[WhatsApp Service]   - Body length: ${body.length} chars`);
+      console.log(`[WhatsApp Service]   - Body preview: ${body.substring(0, 100)}...`);
+    }
+
     const messageOptions: any = {
       from: `whatsapp:${whatsappNumber}`,
       to: `whatsapp:${toNumber}`,
-      body: options.body,
     };
 
-    if (options.mediaUrl) {
+    if (usingTemplate) {
+      messageOptions.contentSid = options.contentSid;
+      if (options.contentVariables && Object.keys(options.contentVariables).length > 0) {
+        messageOptions.contentVariables = JSON.stringify(options.contentVariables);
+      }
+    } else {
+      messageOptions.body = options.body ?? '';
+    }
+
+    if (options.mediaUrl && !usingTemplate) {
       messageOptions.mediaUrl = [options.mediaUrl];
       console.log(`[WhatsApp Service]   - Media URL: ${options.mediaUrl}`);
     }
@@ -239,11 +265,18 @@ export async function sendWhatsAppMessageWithDetails(options: SendWhatsAppMessag
   const messageOptions: any = {
     from: `whatsapp:${whatsappNumber}`,
     to: `whatsapp:${toNumber}`,
-    body: options.body,
   };
 
-  if (options.mediaUrl) {
-    messageOptions.mediaUrl = [options.mediaUrl];
+  if (options.contentSid) {
+    messageOptions.contentSid = options.contentSid;
+    if (options.contentVariables && Object.keys(options.contentVariables).length > 0) {
+      messageOptions.contentVariables = JSON.stringify(options.contentVariables);
+    }
+  } else {
+    messageOptions.body = options.body ?? '';
+    if (options.mediaUrl) {
+      messageOptions.mediaUrl = [options.mediaUrl];
+    }
   }
 
   if (options.statusCallback) {
