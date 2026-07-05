@@ -102,12 +102,6 @@ function seasonLabelFromStart(season: number | null | undefined, timestamp?: num
   return seasonLabel(season);
 }
 
-const timeOnlyFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: true,
-});
-
 // تجميع مباريات القائمة حسب يومها (بتوقيت الرياض — مطابق لوقت الانطلاق في صف
 // المباراة) لفواصل تاريخ واضحة بين أيام «القادمة» و«النتائج».
 const riyadhDayKeyFmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
@@ -208,23 +202,21 @@ function PreviousEdition({ history }: { history: CompHistory }) {
 
 function CompetitionBrief({
   comp,
-  history,
   nextMatch,
   matchCount,
-  onOpenMatch,
 }: {
   comp: SpCompetition;
-  history: CompHistory | null;
+  // للاستدلال على موسم البطولة فقط — بطاقة «المباراة القادمة» حُذفت بقرار المالك
+  // 2026-07-05 (تكرار لأول صف في تبويب المباريات)، ومعها بطاقة «من السجل الأخير»
+  // (تكرار لبطاقتي حامل اللقب/الهدّاف أسفل الملف).
   nextMatch: SpLiveItem | null;
   matchCount: number;
-  onOpenMatch: (id: number) => void;
 }) {
   const notes = COMP_EDITORIAL_NOTES[comp.slug] ?? [
     comp.type === "cup"
       ? "بطولة خروج مغلوب؛ تتغير مراحلها حسب جدول كل نسخة."
       : "بطولة دوري؛ يتحدد المسار عبر الجولات وجدول الترتيب.",
   ];
-  const startDays = daysUntil(comp.start);
   const info = [
     {
       label: "النظام",
@@ -250,73 +242,22 @@ function CompetitionBrief({
         <div className="text-[11px] font-black uppercase tracking-wide text-primary">ملف البطولة</div>
         <h2 className="mt-1 text-lg font-black text-foreground">{comp.name}</h2>
       </div>
-      <div className="grid gap-4 p-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {info.map((item) => (
-              <div key={item.label} className="rounded-xl bg-muted/60 px-3 py-3">
-                <div className="text-[11px] font-bold text-muted-foreground">{item.label}</div>
-                <div className="mt-1 text-sm font-black text-foreground">{item.value}</div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 grid gap-2 text-sm leading-7 text-muted-foreground">
-            {notes.map((note) => (
-              <div key={note} className="flex gap-2">
-                <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
-                <span>{note}</span>
-              </div>
-            ))}
-          </div>
+      <div className="p-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {info.map((item) => (
+            <div key={item.label} className="rounded-xl bg-muted/60 px-3 py-3">
+              <div className="text-[11px] font-bold text-muted-foreground">{item.label}</div>
+              <div className="mt-1 text-sm font-black text-foreground">{item.value}</div>
+            </div>
+          ))}
         </div>
-
-        <div className="space-y-2">
-          {nextMatch ? (
-            <button
-              type="button"
-              className="w-full rounded-xl border border-border bg-background px-3 py-3 text-right transition-colors hover:border-primary/40"
-              onClick={() => onOpenMatch(nextMatch.id)}
-            >
-              <div className="mb-2 text-[11px] font-bold text-primary">المباراة القادمة</div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="min-w-0 flex-1 truncate text-sm font-black text-foreground">{nextMatch.home.name}</span>
-                <span className="shrink-0 text-xs font-bold text-muted-foreground">×</span>
-                <span className="min-w-0 flex-1 truncate text-left text-sm font-black text-foreground">{nextMatch.away.name}</span>
-              </div>
-              <div className="mt-2 text-xs font-bold text-muted-foreground">
-                {fmtDate(nextMatch.date)} · {timeOnlyFmt.format(new Date(nextMatch.timestamp * 1000))}
-                {nextMatch.round ? ` · ${nextMatch.round}` : ""}
-              </div>
-            </button>
-          ) : startDays != null && startDays > 0 ? (
-            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-3">
-              <div className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">موعد الانطلاق</div>
-              <div className="mt-1 text-sm font-black text-foreground">
-                بعد {startDays} {startDays === 1 ? "يوم" : "يومًا"}
-              </div>
-              <div className="mt-1 text-xs text-muted-foreground">{fmtDate(comp.start)}</div>
+        <div className="mt-4 grid gap-2 text-sm leading-7 text-muted-foreground">
+          {notes.map((note) => (
+            <div key={note} className="flex gap-2">
+              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+              <span>{note}</span>
             </div>
-          ) : null}
-
-          {(history?.champion || history?.topScorer) && (
-            <div className="rounded-xl border border-border bg-background px-3 py-3">
-              <div className="mb-2 text-[11px] font-bold text-muted-foreground">من السجل الأخير</div>
-              {history.champion && (
-                <div className="flex items-center gap-2 text-sm">
-                  {history.champion.logo && <img src={history.champion.logo} alt="" className="h-6 w-6 object-contain" loading="lazy" />}
-                  <span className="font-bold text-foreground">حامل اللقب: {history.champion.name}</span>
-                </div>
-              )}
-              {history.topScorer && (
-                <div className="mt-2 flex items-center gap-2 text-sm">
-                  {history.topScorer.photo && <img src={history.topScorer.photo} alt="" className="h-6 w-6 rounded-full object-cover" loading="lazy" />}
-                  <span className="font-bold text-foreground">
-                    الهدّاف السابق: {history.topScorer.name} ({history.topScorer.goals})
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+          ))}
         </div>
       </div>
     </section>
@@ -695,10 +636,8 @@ export default function SportsCompetition() {
           {comp && (
             <CompetitionBrief
               comp={comp}
-              history={history}
               nextMatch={nextMatch}
               matchCount={summaryMatchCount}
-              onOpenMatch={setOpenMatch}
             />
           )}
 
