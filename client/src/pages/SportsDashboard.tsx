@@ -36,6 +36,7 @@ import {
   COMP_STATUS_LABELS,
   COMP_STATUS_RANK,
   CompetitionSummaryCard,
+  summaryKickoffDate,
   PillTabs,
   MatchHub,
   StandingsTable,
@@ -1071,6 +1072,35 @@ export default function SportsDashboard() {
         summaryKickoffRank(a) - summaryKickoffRank(b) ||
         a.name.localeCompare(b.name, "ar"),
     );
+  // مزيج أ+ب (قرار المالك 2026-07-05): تجميع بطاقات الفئة زمنيًا — «جارية الآن»
+  // ثم «ينطلق هذا الأسبوع» ثم الشهور، وأخيرًا المواسم المنتهية. الترتيب داخل كل
+  // مجموعة محفوظ من activeSummaryRows (الأقرب انطلاقًا أولًا)، والدمج بالمفتاح
+  // (لا بالتجاور) كي لا تتشظى المجموعة إن تخلّل الترتيبَ وضعٌ نادر.
+  const compStartBySlug = new Map(competitions.map((c) => [c.slug, c.start ?? null]));
+  const summaryMonthFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { month: "long" });
+  const summaryMonthYearFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { month: "long", year: "numeric" });
+  type SummaryGroupIcon = "live" | "week" | "month" | "done";
+  const summaryGroups = (() => {
+    const groups = new Map<string, { label: string; icon: SummaryGroupIcon; items: SpSummary[] }>();
+    const push = (key: string, label: string, icon: SummaryGroupIcon, c: SpSummary) => {
+      const g = groups.get(key);
+      if (g) g.items.push(c);
+      else groups.set(key, { label, icon, items: [c] });
+    };
+    for (const c of activeSummaryRows) {
+      if (c.status === "finished") { push("done", "مواسم منتهية", "done", c); continue; }
+      if (c.status !== "upcoming" && c.status !== "unknown") { push("now", "جارية الآن", "live", c); continue; }
+      if (c.daysUntilKickoff != null && c.daysUntilKickoff <= 7) { push("week", "ينطلق هذا الأسبوع", "week", c); continue; }
+      const kick = summaryKickoffDate(c, compStartBySlug.get(c.slug) ?? null);
+      if (kick) {
+        const sameYear = kick.date.getFullYear() === new Date().getFullYear();
+        push(`m-${kick.date.getFullYear()}-${kick.date.getMonth()}`, (sameYear ? summaryMonthFmt : summaryMonthYearFmt).format(kick.date), "month", c);
+        continue;
+      }
+      push("later", "بانتظار الجدول", "month", c);
+    }
+    return [...groups.entries()].map(([key, g]) => ({ key, ...g }));
+  })();
 
   // ترتيب المباشر بالأهمية (السعودي/المثبّتة أولًا ثم الفئات الأهم)، وتحديد ما
   // يحقّ له تصدّر الغلاف الذكي — فلا تطغى مباراة من دوري ثانوي على الواجهة.
@@ -1194,9 +1224,30 @@ export default function SportsDashboard() {
                 })}
               </div>
             )}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {activeSummaryRows.map((c) => (
-                <CompetitionSummaryCard key={c.slug} summary={c} />
+            <div className="space-y-6">
+              {summaryGroups.map((g) => (
+                <div key={g.key}>
+                  {summaryGroups.length > 1 && (
+                    <div className={`mb-3 flex items-center gap-2 text-[13px] font-black ${g.icon === "live" || g.icon === "week" ? "text-primary" : "text-muted-foreground"}`}>
+                      {g.icon === "live" ? (
+                        <Radio className="h-4 w-4" strokeWidth={2} />
+                      ) : g.icon === "week" ? (
+                        <Flame className="h-4 w-4" strokeWidth={2} />
+                      ) : g.icon === "done" ? (
+                        <Trophy className="h-4 w-4" strokeWidth={2} />
+                      ) : (
+                        <CalendarDays className="h-4 w-4" strokeWidth={2} />
+                      )}
+                      {g.label}
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-muted-foreground">{g.items.length}</span>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {g.items.map((c) => (
+                      <CompetitionSummaryCard key={c.slug} summary={c} startIso={compStartBySlug.get(c.slug) ?? null} />
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </section>

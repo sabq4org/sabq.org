@@ -169,6 +169,59 @@ export const COMP_CATEGORY_ORDER: SpCompetitionCategory[] = ["saudi", "gulf", "a
 export const COMP_STATUS_LABELS: Record<SpCompetitionStatus, string> = { ongoing: "", upcoming: "لم تبدأ بعد", finished: "انتهى الموسم", unknown: "" };
 // ترتيب الأولوية داخل الفئة: الجارية أولًا ثم القادمة ثم المنتهية.
 export const COMP_STATUS_RANK: Record<SpCompetitionStatus, number> = { ongoing: 0, upcoming: 1, unknown: 2, finished: 3 };
+
+// لون هوية لكل بطولة (نمط compAccent في VARA) — يصبغ بطاقة الموجز (خيط علوي +
+// صبغات ضئيلة) بدل «الحيطة الزرقاء» الموحّدة. قرار المالك 2026-07-05 (مزيج أ+ب).
+// النغمة الليلية تُشتق آليًا (color-mix مع الأبيض) فلا خريطة ثانية تُصان.
+export const COMP_ACCENTS: Record<string, string> = {
+  // سعودي
+  "pro-league": "#0e8a4d",
+  "division-1": "#c99000",
+  "division-2": "#7a5cc4",
+  "kings-cup": "#b07a10",
+  "super-cup": "#8332c9",
+  "womens-league": "#d6427d",
+  // عالمي
+  "world-cup": "#0e7c4a",
+  "afc-champions-league": "#1258a8",
+  "club-world-cup": "#0f766e",
+  // أوروبي
+  "premier-league": "#5b2d8f",
+  "la-liga": "#c22f2f",
+  "serie-a": "#0a63b5",
+  bundesliga: "#b3231b",
+  "ligue-1": "#12275e",
+  "champions-league": "#2b4bc4",
+  "europa-league": "#d96a1e",
+  "conference-league": "#0e8f74",
+  "segunda-division": "#0e8f8f",
+  "primera-rfef-1": "#8f2d5f",
+  "primera-rfef-2": "#b0437a",
+  // خليجي
+  "gulf-cup": "#0d8577",
+  "uae-pro-league": "#b01e3c",
+  "qatar-stars-league": "#722545",
+  "kuwait-premier-league": "#1274b8",
+  "bahrain-premier-league": "#d33131",
+  "oman-pro-league": "#1a8f4a",
+  "gulf-club-champions": "#6d4fc4",
+  // عربي
+  "egypt-premier-league": "#c9302c",
+  "morocco-botola": "#0e8a4d",
+  "tunisia-ligue-1": "#d97b16",
+  "algeria-ligue-1": "#0f7490",
+  "iraq-stars-league": "#6d4fc4",
+  "jordan-league": "#1258a8",
+  "lebanon-premier-league": "#d6427d",
+  "syria-premier-league": "#64748b",
+};
+const ACCENT_FALLBACKS = ["#2b4bc4", "#d96a1e", "#0e8f74", "#c22f2f", "#5b2d8f", "#0a63b5", "#b07a10", "#0d8577"];
+export function compAccent(slug: string): string {
+  if (COMP_ACCENTS[slug]) return COMP_ACCENTS[slug];
+  let h = 0;
+  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) >>> 0;
+  return ACCENT_FALLBACKS[h % ACCENT_FALLBACKS.length];
+}
 export interface SpCardLeader { rank: number; id: number; name: string; photo: string; team: string; teamLogo: string; yellow: number; red: number; matches: number; }
 interface SpPrediction { homePct: number; drawPct: number; awayPct: number; winnerId: number | null; winnerName: string | null; advice: string | null; }
 interface SpH2HMeeting { id: number; timestamp: number; date: string; competition: string; home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string }; goals: { home: number | null; away: number | null }; }
@@ -263,6 +316,22 @@ const summaryFixtureDayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn
 const summaryRiyadhKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Riyadh", year: "numeric", month: "2-digit", day: "2-digit" });
 const summarySeasonLabel = (season: number | null | undefined): string =>
   season == null ? "" : `${season}/${String((season + 1) % 100).padStart(2, "0")}`;
+// موعد الانطلاق: التاريخ الفعلي يتقدّم والعداد كبسولة ثانوية (امتداد «التواريخ ظاهرة دائمًا»).
+const summaryKickDayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "long" });
+const summaryKickDayYearFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "long", year: "numeric" });
+const summaryWeekdayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { weekday: "long" });
+const summaryDaysPhrase = (d: number): string =>
+  d <= 0 ? "ينطلق اليوم" : d === 1 ? "بعد يوم" : d === 2 ? "بعد يومين" : d <= 10 ? `بعد ${d} أيام` : `بعد ${d} يومًا`;
+// موعد انطلاق البطولة القادمة: أول مباراة معتمدة، ثم تاريخ بداية الموسم، ثم العدّاد.
+export function summaryKickoffDate(summary: SpSummary, startIso?: string | null): { date: Date; hasTime: boolean } | null {
+  if (summary.nextMatch) return { date: new Date(summary.nextMatch.timestamp * 1000), hasTime: true };
+  if (startIso) {
+    const dt = new Date(startIso);
+    if (Number.isFinite(dt.getTime())) return { date: dt, hasTime: false };
+  }
+  if (summary.daysUntilKickoff != null) return { date: new Date(Date.now() + summary.daysUntilKickoff * 86_400_000), hasTime: false };
+  return null;
+}
 
 // الهاب الفاخر المخصّص لكل بطولة كبرى — يُعتمد في الروابط بدل القالب العام
 // /sports/competition/:slug. البطولات غير المذكورة تبقى على القالب العام.
@@ -348,19 +417,21 @@ function SummaryMatchStrip({ m, live }: { m: NonNullable<SpSummary["nextMatch"]>
   );
 }
 
-export function CompetitionSummaryCard({ summary }: { summary: SpSummary }) {
+export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSummary; startIso?: string | null }) {
   const { status, liveCount } = summary;
   const isFinished = status === "finished";
   const isUpcoming = status === "upcoming";
+  const accent = compAccent(summary.slug);
+  const kickoff = isUpcoming ? summaryKickoffDate(summary, startIso) : null;
+  const kickoffSameYear = kickoff ? kickoff.date.getFullYear() === new Date().getFullYear() : true;
 
+  // «قريبًا» حُذفت (زائدة مع كتلة الموعد) — البطاقة القادمة تُظهر سهم الدخول بدلها.
   const statusChip = liveCount > 0 ? (
     <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold tabular-nums text-white">
       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {liveCount} مباشر
     </span>
   ) : isUpcoming ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-      <Clock className="h-3 w-3" strokeWidth={1.8} /> قريبًا
-    </span>
+    <ChevronLeft className="h-4 w-4 text-muted-foreground transition-transform group-hover:-translate-x-0.5 group-hover:text-[var(--sp-acc)]" strokeWidth={2} />
   ) : isFinished ? (
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">انتهى</span>
   ) : summary.todayCount > 0 ? (
@@ -376,15 +447,18 @@ export function CompetitionSummaryCard({ summary }: { summary: SpSummary }) {
   return (
     <Link
       href={competitionHref(summary.slug)}
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-right transition-colors hover:border-primary/40"
+      style={{ "--sp-acc-l": accent } as React.CSSProperties}
+      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-right transition-colors [--sp-acc:var(--sp-acc-l)] dark:[--sp-acc:color-mix(in_srgb,var(--sp-acc-l)_60%,white)] hover:border-[color-mix(in_srgb,var(--sp-acc)_55%,transparent)]"
       data-testid={`summary-card-${summary.slug}`}
     >
+      {/* خيط الهوية العلوي بلون البطولة */}
+      <span className="h-[3px] shrink-0 bg-[var(--sp-acc)]" aria-hidden="true" />
       {/* الترويسة: شعار البطولة + اسمها + الفئة/الموسم + شارة الحالة */}
       <div className="flex items-center gap-3 border-b border-border bg-muted/50 px-4 py-3">
         {summary.logo ? (
           <img src={summary.logo} alt="" className="h-10 w-10 shrink-0 object-contain" loading="lazy" />
         ) : (
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10"><Trophy className="h-5 w-5 text-primary" strokeWidth={1.8} /></span>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--sp-acc)_12%,transparent)]"><Trophy className="h-5 w-5 text-[var(--sp-acc)]" strokeWidth={1.8} /></span>
         )}
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-black leading-tight text-foreground">{summary.name}</div>
@@ -399,13 +473,25 @@ export function CompetitionSummaryCard({ summary }: { summary: SpSummary }) {
       <div className="flex flex-1 flex-col gap-2.5 p-4">
         {isUpcoming ? (
           <>
-            {summary.daysUntilKickoff != null ? (
-              <div className="flex items-center gap-3 rounded-xl bg-primary/[0.06] px-3 py-2.5">
-                <span className="text-4xl font-black leading-none tabular-nums text-primary">{summary.daysUntilKickoff}</span>
-                <span className="text-[12px] font-bold leading-tight text-primary/80">يومًا حتى<br />انطلاق الموسم</span>
+            {kickoff ? (
+              <div className="flex items-center justify-between gap-2.5 rounded-xl bg-[color-mix(in_srgb,var(--sp-acc)_7%,transparent)] px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-[19px] font-black leading-tight tabular-nums text-foreground">
+                    {(kickoffSameYear ? summaryKickDayFmt : summaryKickDayYearFmt).format(kickoff.date)}
+                  </div>
+                  <div className="text-[11px] font-bold tabular-nums text-muted-foreground">
+                    {summaryWeekdayFmt.format(kickoff.date)}
+                    {kickoff.hasTime ? ` · ${fmtTime(kickoff.date.getTime() / 1000)}` : ""}
+                  </div>
+                </div>
+                {summary.daysUntilKickoff != null && (
+                  <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--sp-acc)_13%,transparent)] px-2.5 py-1 text-[11.5px] font-bold tabular-nums text-[var(--sp-acc)]">
+                    {summaryDaysPhrase(summary.daysUntilKickoff)}
+                  </span>
+                )}
               </div>
             ) : (
-              <div className="rounded-xl bg-primary/[0.06] px-3 py-2.5 text-[12px] font-bold text-primary">لم تبدأ بعد — ترقّب الجدول</div>
+              <div className="rounded-xl bg-[color-mix(in_srgb,var(--sp-acc)_7%,transparent)] px-3 py-2.5 text-[12px] font-bold text-[var(--sp-acc)]">لم تبدأ بعد — ترقّب الجدول</div>
             )}
             {summary.champion && (
               <SummaryEntity
@@ -470,11 +556,7 @@ export function CompetitionSummaryCard({ summary }: { summary: SpSummary }) {
         )}
       </div>
 
-      {/* التذييل — دعوة الدخول للبطولة الكاملة */}
-      <div className="mt-auto flex items-center justify-between border-t border-border px-4 py-2.5">
-        <span className="text-[11.5px] font-bold text-primary">كل تفاصيل البطولة</span>
-        <ChevronLeft className="h-4 w-4 text-primary transition-transform group-hover:-translate-x-1" strokeWidth={2} />
-      </div>
+      {/* لا تذييل — البطاقة كلها رابط، والسهم في الترويسة (حذف «كل تفاصيل البطولة» المكرّر) */}
     </Link>
   );
 }
