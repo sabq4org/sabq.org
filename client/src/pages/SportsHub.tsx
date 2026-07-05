@@ -417,6 +417,97 @@ function SummaryMatchStrip({ m, live }: { m: NonNullable<SpSummary["nextMatch"]>
   );
 }
 
+// صفّ «رفّ الانطلاق» المدمج (النموذج ب) — نسخة الجوال من موجز البطولات:
+// شعار + اسم وسطر سياق + الموعد بالتاريخ أولًا. صفّ واحد لكل بطولة، فالفئة
+// كاملة تُمسح بلا تمرير طويل، واللون الساخن محصور في مجموعة «هذا الأسبوع».
+export function CompetitionShelfRow({
+  summary,
+  startIso,
+  hot = false,
+}: {
+  summary: SpSummary;
+  startIso?: string | null;
+  hot?: boolean;
+}) {
+  const isFinished = summary.status === "finished";
+  const isUpcoming = summary.status === "upcoming";
+  const live = summary.liveCount > 0;
+  const accent = compAccent(summary.slug);
+  const kickoff = isUpcoming ? summaryKickoffDate(summary, startIso) : null;
+  const kickoffSameYear = kickoff ? kickoff.date.getFullYear() === new Date().getFullYear() : true;
+
+  const subline = isUpcoming
+    ? summary.champion
+      ? `حامل اللقب: ${summary.champion.name}`
+      : summarySeasonLabel(summary.season)
+        ? `موسم ${summarySeasonLabel(summary.season)}`
+        : "موسم جديد"
+    : isFinished
+      ? summary.champion
+        ? `البطل: ${summary.champion.name}`
+        : "انتهى الموسم"
+      : summary.leader
+        ? `المتصدّر: ${summary.leader.name}`
+        : summary.matchday || "الموسم جارٍ";
+
+  const nextTs = summary.nextMatch?.timestamp ?? null;
+  const nextIsToday = nextTs != null && summaryRiyadhKey.format(new Date(nextTs * 1000)) === summaryRiyadhKey.format(new Date());
+
+  return (
+    <Link
+      href={competitionHref(summary.slug)}
+      className="flex items-center gap-3 border-b border-border/60 px-3.5 py-2.5 transition-colors last:border-b-0 active:bg-muted/40"
+      data-testid={`summary-row-${summary.slug}`}
+    >
+      {summary.logo ? (
+        <img src={summary.logo} alt="" className="h-9 w-9 shrink-0 object-contain" loading="lazy" />
+      ) : (
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: `${accent}1f`, color: accent }}>
+          <Trophy className="h-5 w-5" strokeWidth={1.8} />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-[13.5px] font-black leading-snug text-foreground">{summary.name}</div>
+        <div className="truncate text-[11px] text-muted-foreground">{subline}</div>
+      </div>
+      <div className="shrink-0 text-left">
+        {live ? (
+          <>
+            <div className="flex items-center justify-end gap-1.5 text-[12.5px] font-black text-red-500">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" /> مباشر الآن
+            </div>
+            <div className="text-[10.5px] tabular-nums text-muted-foreground">{summary.liveCount} مباراة</div>
+          </>
+        ) : isUpcoming && kickoff ? (
+          <>
+            <div className={`text-[12.5px] font-black tabular-nums ${hot ? "text-primary" : "text-foreground"}`}>
+              {summaryWeekdayFmt.format(kickoff.date)} {(kickoffSameYear ? summaryKickDayFmt : summaryKickDayYearFmt).format(kickoff.date)}
+            </div>
+            <div className="text-[10.5px] tabular-nums text-muted-foreground">
+              {summary.daysUntilKickoff != null
+                ? summaryDaysPhrase(summary.daysUntilKickoff)
+                : kickoff.hasTime
+                  ? fmtTime(kickoff.date.getTime() / 1000)
+                  : ""}
+            </div>
+          </>
+        ) : isFinished ? (
+          <div className="text-[11px] font-bold text-muted-foreground">انتهى الموسم</div>
+        ) : nextTs != null ? (
+          <>
+            <div className="text-[12.5px] font-black tabular-nums text-foreground">
+              {nextIsToday ? "اليوم" : summaryFixtureDayFmt.format(new Date(nextTs * 1000))}
+            </div>
+            <div className="text-[10.5px] tabular-nums text-muted-foreground">{fmtTime(nextTs)}</div>
+          </>
+        ) : (
+          <div className="text-[11px] font-bold text-primary">جارية</div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
 export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSummary; startIso?: string | null }) {
   const { status, liveCount } = summary;
   const isFinished = status === "finished";
