@@ -41,11 +41,13 @@ import {
   type TsTeamStatSide,
 } from "./theSportsService";
 import {
+  SPL_CITY_AR,
   SPL_POSITION_AR,
   SPL_POSITION_ORDER,
   SPL_STAT_AR,
   SPL_STAT_ORDER,
   SPL_TROPHY_PLACE_AR,
+  SPL_VENUE_AR,
   localizeSplCoachName,
   localizeSplCompetition,
   localizeSplCountry,
@@ -56,6 +58,7 @@ import {
   localizeSplTeamName,
   localizeSplTransferType,
 } from "./saudiLeagueNames";
+import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
 
 const TIMEZONE = "Asia/Riyadh";
 
@@ -232,16 +235,77 @@ export interface SplFixture {
   penalties?: { home: number | null; away: number | null } | null;
 }
 
-function localizeTeam(raw: any): SplTeam {
+/**
+ * حزمة مترجمات المباراة: تعريب الملعب/المدينة (قاموس ثابت ثم الطبقة الموحّدة)
+ * والفرق خارج القواميس الثابتة. تُبنى مرة لكل دفعة صفوف داخل كولباك SWR —
+ * «فوري بالمتاح + ملء بالخلفية» فلا تُبطئ اللوحات الحيّة (نمط مركز الانتقالات).
+ */
+interface FxTranslators {
+  venue: NameLookup;
+  city: NameLookup;
+  team: NameLookup;
+}
+
+// الافتراضي (بلا حزمة): القواميس الثابتة وحدها — يغطي النداءات التي لا تمرّر حزمة
+const FX_NOOP_TR: FxTranslators = {
+  venue: (n) => (n ? SPL_VENUE_AR[n] ?? n : ""),
+  city: (n) => (n ? SPL_CITY_AR[n] ?? n : ""),
+  team: (n) => n ?? "",
+};
+
+async function fixtureTranslators(rows: any[]): Promise<FxTranslators> {
+  const venues: { id?: number; name: string }[] = [];
+  const cities: { name: string }[] = [];
+  const teams: { id?: number; name: string }[] = [];
+  for (const r of rows) {
+    const v = r?.fixture?.venue ?? {};
+    if (v.name && !SPL_VENUE_AR[v.name]) venues.push({ id: v.id ?? undefined, name: v.name });
+    if (v.city && !SPL_CITY_AR[v.city]) cities.push({ name: v.city });
+    for (const side of ["home", "away"] as const) {
+      const t = r?.teams?.[side];
+      // فريق خارج كل القواميس الثابتة → مرشّح للطبقة الموحّدة
+      if (t?.name && localizeSplTeamName(t.id, t.name) === t.name && /[A-Za-z]/.test(t.name)) {
+        teams.push({ id: t.id ?? undefined, name: t.name });
+      }
+    }
+  }
+  try {
+    const [venueTr, cityTr, teamTr] = await Promise.all([
+      resolveSportsNames("venue", venues, { skipAi: true }),
+      resolveSportsNames("city", cities, { skipAi: true }),
+      resolveSportsNames("team", teams, { skipAi: true }),
+    ]);
+    // الناقص يُترجم بالخلفية فيظهر معرَّبًا في تحديث الكاش التالي
+    void Promise.all([
+      venues.length ? resolveSportsNames("venue", venues) : null,
+      cities.length ? resolveSportsNames("city", cities) : null,
+      teams.length ? resolveSportsNames("team", teams) : null,
+    ]).catch(() => {});
+    return {
+      venue: (n) => (n ? SPL_VENUE_AR[n] ?? venueTr(n) : ""),
+      city: (n) => (n ? SPL_CITY_AR[n] ?? cityTr(n) : ""),
+      team: teamTr,
+    };
+  } catch {
+    return {
+      venue: (n) => (n ? SPL_VENUE_AR[n] ?? n : ""),
+      city: (n) => (n ? SPL_CITY_AR[n] ?? n : ""),
+      team: (n) => n ?? "",
+    };
+  }
+}
+
+function localizeTeam(raw: any, tr?: FxTranslators): SplTeam {
+  const fromDict = localizeSplTeamName(raw?.id, raw?.name ?? "");
   return {
     id: raw?.id ?? 0,
-    name: localizeSplTeamName(raw?.id, raw?.name ?? ""),
+    name: fromDict === (raw?.name ?? "") && tr ? tr.team(raw?.name) : fromDict,
     logo: raw?.logo ?? "",
     winner: raw?.winner ?? null,
   };
 }
 
-function localizeFixture(item: any): SplFixture {
+function localizeFixture(item: any, tr: FxTranslators = FX_NOOP_TR): SplFixture {
   const fx = item.fixture ?? {};
   const statusCode: string = fx.status?.short ?? "TBD";
   return {
@@ -257,9 +321,9 @@ function localizeFixture(item: any): SplFixture {
       finished: WC_FINISHED_STATUSES.has(statusCode),
     },
     round: localizeSplRound(item.league?.round ?? ""),
-    venue: { name: fx.venue?.name ?? "", city: fx.venue?.city ?? "" },
-    home: localizeTeam(item.teams?.home),
-    away: localizeTeam(item.teams?.away),
+    venue: { name: tr.venue(fx.venue?.name), city: tr.city(fx.venue?.city) },
+    home: localizeTeam(item.teams?.home, tr),
+    away: localizeTeam(item.teams?.away, tr),
     goals: { home: item.goals?.home ?? null, away: item.goals?.away ?? null },
     penalties:
       item.score?.penalty?.home != null || item.score?.penalty?.away != null
@@ -274,7 +338,8 @@ export async function getFixtures(comp: SaudiCompetition, seasonOverride?: numbe
   const season = seasonOverride ?? await seasonFor(comp);
   return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
-    return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
+    const tr = await fixtureTranslators(rows);
+    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
   });
 }
 
@@ -287,7 +352,8 @@ export async function getLiveFixtures(comp: SaudiCompetition): Promise<SplFixtur
       live: "all",
       timezone: TIMEZONE,
     });
-    return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
+    const tr = await fixtureTranslators(rows);
+    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
   });
 }
 
@@ -325,7 +391,8 @@ export async function getFixturesByRound(comp: SaudiCompetition, round: string, 
   const season = seasonOverride ?? await seasonFor(comp);
   return withSWR(`spl:roundfx:${comp.id}:${season}:${round}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, round, timezone: TIMEZONE });
-    return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
+    const tr = await fixtureTranslators(rows);
+    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
   });
 }
 
@@ -345,13 +412,14 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
   return withSWR(`spl:live:all`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { live: "all", timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
-    return rows
-      .filter((r: any) => byId.has(r.league?.id))
+    const ours = rows.filter((r: any) => byId.has(r.league?.id));
+    const tr = await fixtureTranslators(ours);
+    return ours
       .map((r: any): SplLiveBoardItem => {
         const comp = byId.get(r.league.id)!;
-        return { ...localizeFixture(r), competition: comp.name, competitionSlug: comp.slug };
+        return { ...localizeFixture(r, tr), competition: comp.name, competitionSlug: comp.slug };
       })
-      .sort((a, b) => a.timestamp - b.timestamp);
+      .sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => a.timestamp - b.timestamp);
   });
 }
 
@@ -375,13 +443,14 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
   return withSWR(`spl:today:${dateKey}`, TODAY_TTL, TODAY_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { date: dateKey, timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
-    return rows
-      .filter((r: any) => byId.has(r.league?.id))
+    const ours = rows.filter((r: any) => byId.has(r.league?.id));
+    const tr = await fixtureTranslators(ours);
+    return ours
       .map((r: any): SplLiveBoardItem => {
         const comp = byId.get(r.league.id)!;
-        return { ...localizeFixture(r), competition: comp.name, competitionSlug: comp.slug };
+        return { ...localizeFixture(r, tr), competition: comp.name, competitionSlug: comp.slug };
       })
-      .sort((a, b) => {
+      .sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => {
         if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
         return a.timestamp - b.timestamp;
       });
@@ -432,7 +501,17 @@ export async function getOngoingLeagueIds(): Promise<Set<number>> {
 // أنماط ضجيج لا نريدها في «البطولات العالمية القائمة»: ودّيات، فئات سنّية، احتياط.
 const NOISE_LEAGUE_RE = /friendl|\bu-?1[5-9]\b|\bu-?2[0-3]\b|youth|reserve|amateur/i;
 
-function localizeWorldLeagueName(name: string, country: string): string {
+/**
+ * مفتاح ترجمة الدوري العالمي: أسماء مثل "Premier League" تتكرر عبر دول كثيرة،
+ * فنركّب «الاسم (الدولة)» ليعرّبه الـAI تعريبًا صحيحًا لكل دولة على حدة
+ * ("Premier League (Russia)" → «الدوري الروسي الممتاز») ويُخزَّن مفتاحًا فريدًا.
+ */
+function worldLeagueKey(name: string, country: string): string {
+  const c = (country || "").trim();
+  return c && c.toLowerCase() !== "world" ? `${name} (${c})` : name;
+}
+
+function localizeWorldLeagueName(name: string, country: string, tr?: NameLookup): string {
   const trimmed = (name || "").trim();
   const countryName = (country || "").trim().toLowerCase();
   if (!trimmed) return "";
@@ -440,10 +519,18 @@ function localizeWorldLeagueName(name: string, country: string): string {
   // Names like "Premier League" are reused in many countries. The generic
   // SPL dictionary maps it to England, which is only safe with country context.
   if (trimmed === "Premier League" && !["england", "world"].includes(countryName)) {
+    if (tr) {
+      const viaAi = tr(worldLeagueKey(trimmed, country));
+      return viaAi === worldLeagueKey(trimmed, country) ? trimmed : viaAi;
+    }
     return trimmed;
   }
 
-  return localizeSplCompetition(trimmed);
+  const fromDict = localizeSplCompetition(trimmed);
+  if (fromDict !== trimmed || !tr) return fromDict;
+  const key = worldLeagueKey(trimmed, country);
+  const viaAi = tr(key);
+  return viaAi === key ? trimmed : viaAi;
 }
 
 /**
@@ -460,22 +547,37 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
       getOngoingLeagueIds().catch(() => new Set<number>()),
     ]);
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
-    return rows
-      .filter((r: any) => {
+    const visible = rows.filter((r: any) => {
+      const lg = r.league ?? {};
+      const id = lg.id;
+      if (!id) return false;
+      if (byId.has(id)) return true; // بطولاتنا المنتقاة تظهر دائمًا
+      if (NOISE_LEAGUE_RE.test(String(lg.name ?? ""))) return false; // ودّيات/فئات سنّية
+      if (ongoing.size === 0) return true; // تعذّر تحديد المواسم → لا نُفرّغ الصفحة
+      return ongoing.has(id); // دوري عالمي موسمه قائم فقط
+    });
+    // فرق وملاعب + دوريات خارج القواميس → الطبقة الموحّدة (فوري بالمتاح، ملء بالخلفية)
+    const tr = await fixtureTranslators(visible);
+    const leagueItems = visible
+      .map((r: any) => {
         const lg = r.league ?? {};
-        const id = lg.id;
-        if (!id) return false;
-        if (byId.has(id)) return true; // بطولاتنا المنتقاة تظهر دائمًا
-        if (NOISE_LEAGUE_RE.test(String(lg.name ?? ""))) return false; // ودّيات/فئات سنّية
-        if (ongoing.size === 0) return true; // تعذّر تحديد المواسم → لا نُفرّغ الصفحة
-        return ongoing.has(id); // دوري عالمي موسمه قائم فقط
+        if (byId.has(lg.id) || !lg.name) return null;
+        const plain = localizeSplCompetition(String(lg.name).trim());
+        const reusedGeneric = String(lg.name).trim() === "Premier League" &&
+          !["england", "world"].includes(String(lg.country ?? "").trim().toLowerCase());
+        if (plain !== String(lg.name).trim() && !reusedGeneric) return null; // القاموس غطّاه
+        return { id: lg.id, name: worldLeagueKey(String(lg.name).trim(), lg.country ?? "") };
       })
+      .filter(Boolean) as { id: number; name: string }[];
+    const leagueTr = await resolveSportsNames("league", leagueItems, { skipAi: true });
+    if (leagueItems.length > 0) void resolveSportsNames("league", leagueItems).catch(() => {});
+    return visible
       .map((r: any): SplWorldLiveItem => {
         const lg = r.league ?? {};
         const known = byId.get(lg.id);
         return {
-          ...localizeFixture(r),
-          competition: known?.name ?? localizeWorldLeagueName(lg.name ?? "", lg.country ?? ""),
+          ...localizeFixture(r, tr),
+          competition: known?.name ?? localizeWorldLeagueName(lg.name ?? "", lg.country ?? "", leagueTr),
           competitionSlug: known?.slug ?? null,
           country: lg.country ?? "",
           countryAr: localizeSplCountry(lg.country ?? ""),
@@ -484,7 +586,7 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
           leagueLogo: lg.logo ?? null,
         };
       })
-      .sort((a, b) => {
+      .sort((a: SplWorldLiveItem, b: SplWorldLiveItem) => {
         // الأبكر بدءًا (الأكثر دقائق) أولًا داخل نفس الدوري لاحقًا في الواجهة؛
         // هنا ترتيب عام بالوقت يكفي قبل التجميع.
         return a.timestamp - b.timestamp;
@@ -503,17 +605,18 @@ export async function getTeamRecentResults(teamId: number, last = 5): Promise<Sp
   return withSWR(`spl:team:${teamId}:recent:${last}`, TEAM_RECENT_TTL, TEAM_RECENT_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { team: String(teamId), last: String(last), timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
+    const tr = await fixtureTranslators(rows);
     return rows
       .map((r: any): SplLiveBoardItem => {
         const comp = byId.get(r.league?.id);
         return {
-          ...localizeFixture(r),
-          competition: comp?.name ?? (r.league?.name ?? ""),
+          ...localizeFixture(r, tr),
+          competition: comp?.name ?? localizeSplCompetition(r.league?.name ?? ""),
           competitionSlug: comp?.slug ?? null,
         };
       })
-      .filter((fx) => fx.status.finished)
-      .sort((a, b) => b.timestamp - a.timestamp);
+      .filter((fx: SplLiveBoardItem) => fx.status.finished)
+      .sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => b.timestamp - a.timestamp);
   });
 }
 
@@ -858,7 +961,8 @@ function localizeLineups(rows: any[], tr: NameTranslator): SplLineup[] {
       logo: t.team?.logo ?? "",
     },
     formation: t.formation ?? null,
-    coach: t.coach?.name ?? null,
+    // المدرب كان يمرّ خامًا (تسريب إنجليزي في تبويب التشكيلة) — قاموس ثم AI
+    coach: t.coach?.name ? localizeSplCoachName(t.coach?.id, t.coach.name, tr) : null,
     startXI: (t.startXI ?? []).map((p: any) => localizeLineupPlayer(p, tr)),
     substitutes: (t.substitutes ?? []).map((p: any) => localizeLineupPlayer(p, tr)),
   }));
@@ -978,7 +1082,8 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
     const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
     const item = rows[0];
     if (!item) return null;
-    const fixture = localizeFixture(item);
+    const fxTr = await fixtureTranslators(rows);
+    const fixture = localizeFixture(item, fxTr);
     const [eventsRaw, statsRaw, lineupsRaw] = await Promise.all([
       apiGet("fixtures/events", { fixture: fixtureId }).catch(() => []),
       apiGet("fixtures/statistics", { fixture: fixtureId }).catch(() => []),
@@ -987,6 +1092,7 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
     const rawNames: (string | null | undefined)[] = [];
     for (const e of eventsRaw) rawNames.push(e.player?.name, e.assist?.name);
     for (const t of lineupsRaw) {
+      rawNames.push(t.coach?.name);
       for (const p of t.startXI ?? []) rawNames.push(p.player?.name);
       for (const p of t.substitutes ?? []) rawNames.push(p.player?.name);
     }
@@ -1492,7 +1598,8 @@ export async function getMatchSeoMeta(fixtureId: number): Promise<SplMatchSeoMet
     const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
     const item = rows[0];
     if (!item) return null;
-    const fx = localizeFixture(item);
+    const fxTr = await fixtureTranslators(rows);
+    const fx = localizeFixture(item, fxTr);
     const comp = item.league?.id != null ? getCompetitionByLeagueId(item.league.id) : undefined;
     return {
       id: fixtureId,
@@ -1543,6 +1650,26 @@ async function getTeamInfo(teamId: number): Promise<SplTeamInfo | null> {
     const rows = await apiGet("teams", { id: teamId });
     const entry = rows[0];
     if (!entry?.team?.id) return null;
+    // الملعب والمدينة كانا يمرّان خامين (تسريب إنجليزي في بطاقة النادي) —
+    // قاموس ثابت ثم الطبقة الموحّدة (فوري بالمتاح + ملء بالخلفية)
+    let venueName: string = entry.venue?.name ?? "";
+    let venueCity: string = entry.venue?.city ?? "";
+    if (venueName && !SPL_VENUE_AR[venueName]) {
+      const items = [{ id: entry.venue?.id ?? undefined, name: venueName }];
+      const vTr = await resolveSportsNames("venue", items, { skipAi: true });
+      void resolveSportsNames("venue", items).catch(() => {});
+      venueName = vTr(venueName);
+    } else if (venueName) {
+      venueName = SPL_VENUE_AR[venueName];
+    }
+    if (venueCity && !SPL_CITY_AR[venueCity]) {
+      const items = [{ name: venueCity }];
+      const cTr = await resolveSportsNames("city", items, { skipAi: true });
+      void resolveSportsNames("city", items).catch(() => {});
+      venueCity = cTr(venueCity);
+    } else if (venueCity) {
+      venueCity = SPL_CITY_AR[venueCity];
+    }
     return {
       id: entry.team.id,
       name: localizeSplTeamName(entry.team.id, entry.team.name ?? ""),
@@ -1551,8 +1678,8 @@ async function getTeamInfo(teamId: number): Promise<SplTeamInfo | null> {
       founded: entry.team.founded ?? null,
       venue: entry.venue
         ? {
-            name: entry.venue.name ?? "",
-            city: entry.venue.city ?? "",
+            name: venueName,
+            city: venueCity,
             capacity: entry.venue.capacity ?? null,
             image: entry.venue.image ?? "",
           }
@@ -2546,7 +2673,8 @@ const OUTLOOK_TTL = 30 * 60 * 1000;
 async function getFixturesForSeason(comp: SaudiCompetition, season: number): Promise<SplFixture[]> {
   return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL * 5, FIXTURES_TTL * 10, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
-    return rows.map(localizeFixture).sort((a, b) => a.timestamp - b.timestamp);
+    const tr = await fixtureTranslators(rows);
+    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
   });
 }
 

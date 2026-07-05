@@ -96,6 +96,7 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "smart-insights", displayName: "الرؤى الذكية", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "geo-extraction", displayName: "استخراج المواقع الجغرافية", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
   { featureKey: "smart-links", displayName: "الروابط الذكية", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
+  { featureKey: "sports-names", displayName: "تعريب الأسماء الرياضية", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
   { featureKey: "story-cards", displayName: "بطاقات القصص", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "calendar-ai", displayName: "ذكاء التقويم", category: "analysis", primary: GPT_5_1, fallbackChain: CHAIN_AFTER_GPT },
   { featureKey: "media-caption", displayName: "أوصاف الوسائط", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
