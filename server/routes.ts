@@ -35929,8 +35929,8 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       const words = normalizedQuery.trim().split(/\s+/).filter(w => w.length > 1);
       if (!words.length) return res.json({ results: [], query: q });
-      const tsQueryAnd = words.join(' & ');
-      const tsQueryOr  = words.length > 1 ? words.join(' | ') : tsQueryAnd;
+      // plainto_tsquery يبني tsquery تلقائياً من نص خام (آمن مع أي input، لا
+      // syntax errors كما كان يحصل مع to_tsquery على الكلمات العربية المفردة).
       const compactQuery = normalizedQuery.replace(/\s+/g, '');
 
       // Pure-numeric queries (e.g. "4220449") are the source of the 7s+ slow
@@ -35963,7 +35963,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
           LEFT JOIN categories c ON c.id = a.category_id
           WHERE a.status = 'published'
             AND a.published_at >= ${recentCut.toISOString()}
-            AND a.search_vector @@ to_tsquery('arabic', ${tsQueryAnd})
+            AND a.search_vector @@ plainto_tsquery('arabic', ${normalizedQuery})
           ORDER BY a.published_at DESC
           LIMIT ${limit} OFFSET ${offset}
         `, 3000), 4000);
@@ -35974,11 +35974,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
         if (ftsError?.message === 'search_timeout') {
           console.warn(`[Search] Primary FTS timed out (3s) for: "${q}"`);
         } else {
-          console.warn(`[Search] Primary FTS error for "${q}":`, ftsError?.message);
+          // Drizzle يلفّ خطأ PG؛ السبب الفعلي على cause (code/message).
+          const c = (ftsError as any)?.cause;
+          console.warn(`[Search] Primary FTS error for "${q}":`, ftsError?.message, c?.code ? { pgCode: c.code, pgMessage: c.message } : '');
         }
         // Don't wipe results — they were already empty.
       }
-
       // Supplemental: search older articles only if recent yielded few results.
       // Errors here MUST NOT wipe the primary results. Skipped for numeric
       // queries (handled by the trigram title fallback below).
@@ -35996,7 +35997,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
             LEFT JOIN categories c ON c.id = a.category_id
             WHERE a.status = 'published'
               AND a.published_at < ${recentCut.toISOString()}
-              AND a.search_vector @@ to_tsquery('arabic', ${tsQueryOr})
+              AND a.search_vector @@ plainto_tsquery('arabic', ${normalizedQuery})
               ${existingIds.length > 0 ? sql`AND a.id != ALL(${existingIds})` : sql``}
             ORDER BY a.published_at DESC
             LIMIT ${remaining}
