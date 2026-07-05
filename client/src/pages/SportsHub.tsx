@@ -434,7 +434,6 @@ export function CompetitionShelfRow({
   const isFinished = summary.status === "finished";
   const isUpcoming = summary.status === "upcoming";
   const live = summary.liveCount > 0;
-  const accent = compAccent(summary.slug);
   const kickoff = isUpcoming ? summaryKickoffDate(summary, startIso) : null;
   const kickoffSameYear = kickoff ? kickoff.date.getFullYear() === new Date().getFullYear() : true;
 
@@ -464,7 +463,7 @@ export function CompetitionShelfRow({
       {summary.logo ? (
         <img src={summary.logo} alt="" className="h-9 w-9 shrink-0 object-contain" loading="lazy" />
       ) : (
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg" style={{ background: `${accent}1f`, color: accent }}>
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
           <Trophy className="h-5 w-5" strokeWidth={1.8} />
         </span>
       )}
@@ -514,7 +513,6 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
   const { status, liveCount } = summary;
   const isFinished = status === "finished";
   const isUpcoming = status === "upcoming";
-  const accent = compAccent(summary.slug);
   const kickoff = isUpcoming ? summaryKickoffDate(summary, startIso) : null;
   const kickoffSameYear = kickoff ? kickoff.date.getFullYear() === new Date().getFullYear() : true;
 
@@ -524,7 +522,7 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" /> {liveCount} مباشر
     </span>
   ) : isUpcoming ? (
-    <ChevronLeft className="h-4 w-4 text-muted-foreground transition-transform group-hover:-translate-x-0.5 group-hover:text-[var(--sp-acc)]" strokeWidth={2} />
+    <ChevronLeft className="h-4 w-4 text-muted-foreground transition-transform group-hover:-translate-x-0.5 group-hover:text-primary" strokeWidth={2} />
   ) : isFinished ? (
     <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">انتهى</span>
   ) : summary.todayCount > 0 ? (
@@ -540,18 +538,17 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
   return (
     <Link
       href={competitionHref(summary.slug)}
-      style={{ "--sp-acc-l": accent } as React.CSSProperties}
-      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-right transition-colors [--sp-acc:var(--sp-acc-l)] dark:[--sp-acc:color-mix(in_srgb,var(--sp-acc-l)_60%,white)] hover:border-[color-mix(in_srgb,var(--sp-acc)_55%,transparent)]"
+      className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-card text-right transition-colors hover:border-primary/40"
       data-testid={`summary-card-${summary.slug}`}
     >
-      {/* خيط الهوية العلوي بلون البطولة */}
-      <span className="h-[3px] shrink-0 bg-[var(--sp-acc)]" aria-hidden="true" />
+      {/* هوية سبق: بطاقة محايدة بلا خيوط ملوّنة — شعار البطولة يكفي للتمييز.
+          الأزرق الأساسي للعناصر الوظيفية فقط (العدّاد/الدخول). */}
       {/* الترويسة: شعار البطولة + اسمها + الفئة/الموسم + شارة الحالة */}
       <div className="flex items-center gap-3 border-b border-border bg-muted/50 px-4 py-3">
         {summary.logo ? (
           <img src={summary.logo} alt="" className="h-10 w-10 shrink-0 object-contain" loading="lazy" />
         ) : (
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-[color-mix(in_srgb,var(--sp-acc)_12%,transparent)]"><Trophy className="h-5 w-5 text-[var(--sp-acc)]" strokeWidth={1.8} /></span>
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10"><Trophy className="h-5 w-5 text-primary" strokeWidth={1.8} /></span>
         )}
         <div className="min-w-0 flex-1">
           <div className="truncate text-[15px] font-black leading-tight text-foreground">{summary.name}</div>
@@ -567,7 +564,7 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
         {isUpcoming ? (
           <>
             {kickoff ? (
-              <div className="flex items-center justify-between gap-2.5 rounded-xl bg-[color-mix(in_srgb,var(--sp-acc)_7%,transparent)] px-3 py-2.5">
+              <div className="flex items-center justify-between gap-2.5 rounded-xl bg-primary/[0.06] px-3 py-2.5">
                 <div className="min-w-0">
                   <div className="truncate text-[19px] font-black leading-tight tabular-nums text-foreground">
                     {(kickoffSameYear ? summaryKickDayFmt : summaryKickDayYearFmt).format(kickoff.date)}
@@ -578,13 +575,13 @@ export function CompetitionSummaryCard({ summary, startIso }: { summary: SpSumma
                   </div>
                 </div>
                 {summary.daysUntilKickoff != null && (
-                  <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--sp-acc)_13%,transparent)] px-2.5 py-1 text-[11.5px] font-bold tabular-nums text-[var(--sp-acc)]">
+                  <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-[11.5px] font-bold tabular-nums text-primary">
                     {summaryDaysPhrase(summary.daysUntilKickoff)}
                   </span>
                 )}
               </div>
             ) : (
-              <div className="rounded-xl bg-[color-mix(in_srgb,var(--sp-acc)_7%,transparent)] px-3 py-2.5 text-[12px] font-bold text-[var(--sp-acc)]">لم تبدأ بعد — ترقّب الجدول</div>
+              <div className="rounded-xl bg-primary/[0.06] px-3 py-2.5 text-[12px] font-bold text-primary">لم تبدأ بعد — ترقّب الجدول</div>
             )}
             {summary.champion && (
               <SummaryEntity
