@@ -1296,7 +1296,7 @@ export function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] border-separate border-spacing-0 text-[13px] sm:text-sm">
             <thead>
-              <tr className="bg-muted/45 text-[11px] font-black text-muted-foreground sm:text-xs">
+              <tr className="bg-muted/80 text-[11px] font-black text-muted-foreground sm:text-xs">
                 <th className="py-2 px-1.5 sm:px-2 text-center w-10">#</th>
                 <th className="py-2 px-3 text-right">النادي</th>
                 <th className="py-2 px-2 text-center">لعب</th>
@@ -1320,7 +1320,9 @@ export function StandingsTable({ rows }: { rows: SpStandingRow[] }) {
                       ? "bg-rose-500/10 text-rose-600 ring-1 ring-rose-500/15 dark:text-rose-400"
                       : "bg-muted/70 text-muted-foreground"
                   : "bg-muted/70 text-muted-foreground";
-                const rowTone = idx % 2 === 0 ? "bg-background/35" : "bg-card";
+                // zebra أوضح من الخلفية: الصف الزوجي بدرجة رمادية محسوسة (muted/40)
+                // بدل background/35 الذي يكاد لا يُرى فوق بطاقة bg-card الفاتحة.
+                const rowTone = idx % 2 === 0 ? "bg-muted/40" : "bg-card";
                 return (
                   <tr key={r.team.id} className={`${rowTone} transition-colors hover:bg-primary/[0.045]`}>
                     <td className="border-b border-border/35 py-1.5 px-1.5 text-center sm:py-2 sm:px-2">
