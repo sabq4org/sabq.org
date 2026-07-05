@@ -1,15 +1,16 @@
 import Foundation
 import WidgetKit
 
-// جسر ودجت الشاشة الرئيسية — يختار «المباراة القادمة» (مباراة المفضّل أولًا ثم
-// أبرز مباريات روشن)، يكيّش الشعارين في حاوية App Group، يكتب اللقطة المشتركة،
-// ثم يطلب تحديث خطوط الودجت. يُستدعى بعد تحميل الرئيسية — أفضل جهد، لا يرمي.
+// جسر ودجت الشاشة الرئيسية — يختار «المباراة القادمة» (مباراة المفضّل أولًا،
+// ثم أقرب متابَعة من «مبارياتي» عبر البطولات، ثم أبرز مباريات روشن)، يكيّش
+// الشعارين في حاوية App Group، يكتب اللقطة المشتركة، ثم يطلب تحديث خطوط
+// الودجت. يُستدعى بعد تحميل الرئيسية — أفضل جهد، لا يرمي.
 enum SpWidgetBridge {
     static let widgetKind = "SpNextMatchWidget"
 
-    static func sync(matches m: SpMatchesResponse?, favoriteId: Int?) async {
+    static func sync(matches m: SpMatchesResponse?, follows: [SpFixture] = [], favoriteId: Int?) async {
         guard let m else { return }
-        guard let f = pick(m, favoriteId: favoriteId) else {
+        guard let f = pick(m, follows: follows, favoriteId: favoriteId) else {
             SpWidgetSnapshot.clear()
             WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
             return
@@ -34,15 +35,19 @@ enum SpWidgetBridge {
         WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
     }
 
-    /// مباراة الودجت: مباراة المفضّل غير المنتهية أولًا، ثم مباشر/اليوم/قادمة.
-    private static func pick(_ m: SpMatchesResponse, favoriteId: Int?) -> SpFixture? {
+    /// مباراة الودجت: مباراة المفضّل غير المنتهية أولًا (من روشن أو المتابَعات)،
+    /// ثم أقرب متابَعة من «مبارياتي» عبر البطولات، ثم مباشر/اليوم/قادمة من روشن.
+    private static func pick(_ m: SpMatchesResponse, follows: [SpFixture], favoriteId: Int?) -> SpFixture? {
+        let liveFollows = follows.filter { !$0.status.finished }.sorted { $0.timestamp < $1.timestamp }
         if let fav = favoriteId {
             for bucket in [m.live, m.today, m.upcoming] {
                 if let f = bucket.first(where: { !$0.status.finished && ($0.home.id == fav || $0.away.id == fav) }) {
                     return f
                 }
             }
+            if let f = liveFollows.first(where: { $0.home.id == fav || $0.away.id == fav }) { return f }
         }
+        if let f = liveFollows.first { return f }
         for bucket in [m.live, m.today, m.upcoming] {
             if let f = bucket.first(where: { !$0.status.finished }) { return f }
         }

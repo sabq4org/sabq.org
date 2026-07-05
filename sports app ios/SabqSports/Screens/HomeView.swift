@@ -179,7 +179,14 @@ struct HomeView: View {
         VStack(spacing: 16) {
             brandBar
             leagueHeader
-            SpMyMatchesCard()   // أوّل بطاقة في الواجهة عند متابعة مباريات.
+            // بلوك «فريقي» — مباريات الفريق المفضّل عبر البطولات (خلَف «مبارياتي»
+            // الذي انتقل لمركز المباريات). البلوك مكمّل للهيرو لا بديل عنه.
+            SpMyTeamCard(
+                standings: standings,
+                onOpenMatch: { selectedMatch = $0 },
+                onOpenTeam: { selectedTeam = IDBox(id: $0) },
+                onPickTeam: { showAllStandings = true }
+            )
             if let f = featured {
                 heroMatch(f)
                     .transition(.opacity)
@@ -546,10 +553,8 @@ struct HomeView: View {
 
     @ViewBuilder private var dashboardContent: some View {
         // فراغ واضح بين بطاقات روشن بدون فصل بصري زائد.
+        // (بطاقة «فريقي المفضّل» المصغّرة حُذفت — بلوك «فريقي» أعلى الواجهة يغنيها.)
         VStack(spacing: 28) {
-            if let fav = favorites.team, !heroIsFavorite {
-                favoriteCard(fav).padding(.horizontal, 16)
-            }
             if !standings.isEmpty || !scorers.isEmpty { leaguePulse }
             if !(matches?.upcoming.isEmpty ?? true) || !(matches?.today.isEmpty ?? true) {
                 gameweekStrip
@@ -661,40 +666,6 @@ struct HomeView: View {
         }
         .frame(width: 112, alignment: .leading)
         .padding(.horizontal, 13).padding(.vertical, 11)
-    }
-
-    private func favoriteCard(_ fav: SpFavTeam) -> some View {
-        let favMatch = (matches.map { $0.live + $0.today + $0.upcoming } ?? [])
-            .first { $0.home.id == fav.id || $0.away.id == fav.id }
-        return Button {
-            if let m = favMatch { selectedMatch = m } else { selectedTeam = IDBox(id: fav.id) }
-        } label: {
-            HStack(spacing: 13) {
-                SpTeamLogo(logo: fav.logo ?? "", size: 48)
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(rslAccent)
-                        Text("فريقي المفضّل").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(rslAccent)
-                    }
-                    Text(fav.name).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                    Text(favLabel(favMatch)).font(SportsFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.compact.left").font(.system(size: 20, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
-            }
-            .padding(13).frame(maxWidth: .infinity)
-            .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card))
-            .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
-            .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
-        }
-        .buttonStyle(SpPressStyle())
-    }
-
-    private func favLabel(_ f: SpFixture?) -> String {
-        guard let f else { return "افتح صفحة النادي" }
-        if f.status.live { return "تجري الآن — للمتابعة المباشرة" }
-        if f.status.finished { return "آخر مباراة · انتهت" }
-        return "\(SpFormat.kickoffDay(f.date)) · \(SpFormat.kickoffTime(f.date))"
     }
 
     // جولة هذا الأسبوع — تمرير أفقي للمباريات القادمة/اليوم.
@@ -1272,7 +1243,7 @@ struct HomeView: View {
         }
 
         // مزامنة ودجت الشاشة الرئيسية «المباراة القادمة» (أفضل جهد — يكيّش الشعارين).
-        await SpWidgetBridge.sync(matches: matchesRes, favoriteId: favorites.team?.id)
+        await SpWidgetBridge.sync(matches: matchesRes, follows: SpMatchFollows.shared.visibleItems, favoriteId: favorites.team?.id)
     }
 }
 
