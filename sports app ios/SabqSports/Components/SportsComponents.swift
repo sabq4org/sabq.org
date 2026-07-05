@@ -403,10 +403,13 @@ struct SpScoreRow: View {
                     .foregroundStyle(SpTheme.onDarkDim)
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
-        } else {
-            Text("موعد")
+        } else if !["NS", "TBD"].contains(fixture.status.code) {
+            // القادمة العادية بلا سطر حالة — الوقت (بنقطتيه) يغني عن «موعد»؛
+            // تبقى الخانة للاستثنائي فقط حيث المعلومة مهمة (مؤجلة/ملغاة…).
+            Text(fixture.status.label)
                 .font(SportsFonts.app(size: 10.5, weight: .semibold))
                 .foregroundStyle(SpTheme.onDarkFaint)
+                .lineLimit(1).minimumScaleFactor(0.6)
         }
     }
 
