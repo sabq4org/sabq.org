@@ -342,7 +342,9 @@ export function MatchRow({
           title="تفاصيل المباراة"
         >
           {isLive ? (
-            <span className="inline-flex flex-col items-center gap-0.5 text-red-500">
+            // الجوال: العمود الجانبي أضيق من «الدقيقة + الشوط» فيزاحم اسم النادي —
+            // تُعرض الدقيقة داخل كبسولة النتيجة بدلًا منه (sm فأوسع يبقيان هنا).
+            <span className="hidden sm:inline-flex flex-col items-center gap-0.5 text-red-500">
               <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                 {liveClockLabel(f)}
@@ -388,6 +390,12 @@ export function MatchRow({
               ) : st === "finished" ? (
                 <span className="mt-1 text-[9px] font-black leading-none text-muted-foreground" dir="rtl">
                   {f.status.label || "انتهت"}
+                </span>
+              ) : isLive ? (
+                // دقيقة اللعب داخل الكبسولة — للجوال فقط (الساعة الجانبية تظهر من sm)
+                <span className={`mt-1 inline-flex items-center gap-1 text-[9px] font-black leading-none sm:hidden ${flat ? "text-red-500" : "text-white/90"}`}>
+                  <span className={`h-1 w-1 animate-pulse rounded-full ${flat ? "bg-red-500" : "bg-white"}`} />
+                  <span dir="ltr">{liveClockLabel(f)}</span>
                 </span>
               ) : null}
             </span>
