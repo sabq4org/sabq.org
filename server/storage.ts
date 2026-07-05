@@ -1,6 +1,7 @@
 // Reference: javascript_database blueprint + javascript_log_in_with_replit blueprint
 import { db } from "./db";
 import { log } from "./utils/logger";
+import { isUniqueViolation } from "./utils/pgError";
 import { memoryCache, CACHE_TTL, withCache } from "./memoryCache";
 import { articleCardSelect, articleListSelect, categoryBasicSelect, userPublicSelect } from "./selectHelpers";
 import { eq, desc, asc, sql, and, or, not, inArray, ne, gte, lt, lte, isNull, isNotNull, ilike, count, getTableColumns, type SQL } from "drizzle-orm";
@@ -590,6 +591,8 @@ export interface IStorage {
     emailVerified?: boolean;
     phoneVerified?: boolean;
   }, createdBy: string): Promise<{ user: User; temporaryPassword: string }>;
+  /** lookup مستخدم بالإيميل (case-insensitive) — لـ pre-check ومعالجة race. */
+  getUserByEmailBasic(email: string): Promise<{ id: string; email: string; firstName: string | null; lastName: string | null; status: string; role: string } | undefined>;
   getUserRoles(userId: string): Promise<Array<{ id: string; name: string; nameAr: string }>>;
   updateUserRoles(userId: string, roleIds: string[], updatedBy: string, reason?: string): Promise<void>;
   getAllRoles(): Promise<Array<{ id: string; name: string; nameAr: string; description: string | null; isSystem: boolean }>>;
@@ -3620,6 +3623,16 @@ export class DatabaseStorage implements IStorage {
     });
 
     return { user, temporaryPassword: randomPassword };
+  }
+
+  /** lookup مستخدم بالإيميل (case-insensitive) — لـ pre-check ومعالجة race. */
+  async getUserByEmailBasic(email: string): Promise<{ id: string; email: string; firstName: string | null; lastName: string | null; status: string; role: string } | undefined> {
+    const [u] = await db
+      .select({ id: users.id, email: users.email, firstName: users.firstName, lastName: users.lastName, status: users.status, role: users.role })
+      .from(users)
+      .where(sql`lower(${users.email}) = ${email}`)
+      .limit(1);
+    return u;
   }
 
   async getUserRoles(userId: string): Promise<Array<{ id: string; name: string; nameAr: string }>> {
@@ -14948,7 +14961,9 @@ export class DatabaseStorage implements IStorage {
         console.log(`✅ Short link created: ${shortCode} -> ${data.originalUrl}`);
         return created;
       } catch (error: any) {
-        if (error.code === '23505' && error.constraint === 'short_links_short_code_unique') {
+        // Drizzle يلفّ خطأ PG داخل DrizzleQueryError؛ isUniqueViolation يفك
+        // التغليف ويتحقق من code + constraint بشكل موحّد.
+        if (isUniqueViolation(error, 'short_links_short_code_unique')) {
           attempts++;
           console.log(`⚠️  Short code collision (attempt ${attempts}/${maxRetries}), retrying...`);
           if (attempts >= maxRetries) {

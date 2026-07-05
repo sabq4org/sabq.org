@@ -7,7 +7,7 @@
  * - Smart visual recommendations
  */
 
-import { GoogleGenAI } from "@google/genai";
+import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
 import pRetry from "p-retry";
 import https from "https";
@@ -21,7 +21,7 @@ if (!apiKey) {
   console.log("[Visual AI] API key configured successfully");
 }
 
-const geminiClient = new GoogleGenAI({
+const geminiClient = createGoogleGenAI({
   apiKey: apiKey || "missing-api-key",
 });
 

@@ -69,6 +69,11 @@ export function registerTransferCenterRoutes(app: Express): void {
 
   // نظرة السوق — تُغذّي ودجت البوابة وقمة صفحة المركز.
   app.get("/api/transfer-center/overview", async (_req: Request, res: Response) => {
+    // سابقًا لم يُضبط Cache-Control، فكان الـ edge لا يخزّن هذا الـ endpoint
+    // رغم أنه يجمع ~42 استدعاءً خارجيًا (SportMonks + API-Football) عند cold
+    // cache. الـ SWR الداخلي 30 دقيقة للإشاعات، فعلى الـ edge نمنح 15 دقيقة
+    // مع stale-while-revalidate لنخفّف الضغط دون فقدان الحداثة.
+    res.set("Cache-Control", "public, max-age=120, s-maxage=900, stale-while-revalidate=1800");
     try {
       const overview = await getMarketOverview();
       res.json({ configured: true, ...overview });

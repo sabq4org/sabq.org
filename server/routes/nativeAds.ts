@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { db } from "../db";
 import { eq, and, or, desc, gte, lte, isNull, sql, sum, inArray } from "drizzle-orm";
 import { nativeAds, nativeAdImpressions, nativeAdClicks, nativeAdDailySpend, insertNativeAdSchema, categories } from "@shared/schema";
+import { isUniqueViolation } from "../utils/pgError";
 import { requireAuth, requireRole } from "../rbac";
 import { z } from "zod";
 import multer from "multer";
@@ -211,8 +212,9 @@ async function checkAndUpdateDailySpend(adId: string, eventType: 'impression' | 
         spendDate: today,
       }).returning();
     } catch (e: any) {
-      // Handle race condition on insert - record may have been created by another request
-      if (e.code === '23505') {
+      // Handle race condition on insert - record may have been created by another request.
+      // Drizzle يلفّ خطأ PG، لذا نستخدم isUniqueViolation لفكّه.
+      if (isUniqueViolation(e)) {
         [spendRecord] = await db.select().from(nativeAdDailySpend)
           .where(and(
             eq(nativeAdDailySpend.nativeAdId, adId),

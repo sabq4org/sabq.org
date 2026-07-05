@@ -4,7 +4,8 @@
  * الصور تُحفظ بشكل دائم في Object Storage
  */
 
-import { GoogleGenAI, Modality } from '@google/genai';
+import { Modality } from '@google/genai';
+import { createGoogleGenAI } from '../utils/googleGenAi';
 import pRetry from 'p-retry';
 import { db } from '../db';
 import { articles } from '@shared/schema';
@@ -18,7 +19,7 @@ if (!GEMINI_API_KEY) {
   console.error('[AI Smart Thumbnail] ⚠️ GEMINI_API_KEY not configured');
 }
 
-const geminiClient = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+const geminiClient = createGoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 interface SmartThumbnailOptions {
   imageUrl: string;

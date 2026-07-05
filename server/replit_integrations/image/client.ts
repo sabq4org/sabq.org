@@ -1,4 +1,5 @@
-import { GoogleGenAI, Modality } from "@google/genai";
+import { Modality } from "@google/genai";
+import { createGoogleGenAI } from "../../utils/googleGenAi";
 
 // On Replit: AI_INTEGRATIONS_GEMINI_API_KEY + AI_INTEGRATIONS_GEMINI_BASE_URL
 // hit Replit's AI Integrations proxy. Off Replit (e.g. Railway): use a real
@@ -9,7 +10,7 @@ const apiKey =
   process.env.AI_INTEGRATIONS_GEMINI_API_KEY ||
   process.env.GEMINI_API_KEY;
 
-export const ai = new GoogleGenAI({
+export const ai = createGoogleGenAI({
   apiKey,
   ...(replitProxyUrl
     ? {
