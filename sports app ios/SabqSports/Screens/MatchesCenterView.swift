@@ -1113,12 +1113,18 @@ private struct SpCenterMatchRow: View {
         .contentShape(Rectangle())
     }
 
+    // اسم البطولة على نفس هندسة صفّ النتيجة (فراغ النجمة 24pt + توسيط) —
+    // فيتمركز تحت عمود الوقت/الموعد تمامًا لا تحت منتصف الصف الكامل.
     @ViewBuilder private var compBadge: some View {
         if showCompetition, let comp = fixture.competition, !comp.isEmpty {
-            Text(comp)
-                .font(SportsFonts.app(size: 9.5, weight: .bold))
-                .foregroundStyle(SpTheme.compAccent(fixture.competitionSlug ?? ""))
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                Color.clear.frame(width: 24, height: 0)
+                Text(comp)
+                    .font(SportsFonts.app(size: 9.5, weight: .bold))
+                    .foregroundStyle(SpTheme.compAccent(fixture.competitionSlug ?? ""))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
         }
     }
 
