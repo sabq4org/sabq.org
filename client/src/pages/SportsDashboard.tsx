@@ -1059,9 +1059,18 @@ export default function SportsDashboard() {
     const hot = presentSummaryCats.find((cat) => summaries.some((c) => c.category === cat && (c.liveCount > 0 || c.todayCount > 0)));
     setSummaryCat(hot ?? presentSummaryCats[0]);
   }, [presentSummaryCats.join(","), summaries.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ضمن نفس الحالة: الأقرب انطلاقًا أولًا (عدّاد بدء الموسم تصاعديًا للقادمة،
+  // وموعد المباراة القادمة للجارية) ثم الاسم.
+  const summaryKickoffRank = (c: SpSummary) =>
+    c.daysUntilKickoff ?? (c.nextMatch ? (c.nextMatch.timestamp * 1000 - Date.now()) / 86_400_000 : Number.POSITIVE_INFINITY);
   const activeSummaryRows = summaries
     .filter((c) => c.category === summaryCat)
-    .sort((a, b) => summaryStatusRank(a) - summaryStatusRank(b) || a.name.localeCompare(b.name, "ar"));
+    .sort(
+      (a, b) =>
+        summaryStatusRank(a) - summaryStatusRank(b) ||
+        summaryKickoffRank(a) - summaryKickoffRank(b) ||
+        a.name.localeCompare(b.name, "ar"),
+    );
 
   // ترتيب المباشر بالأهمية (السعودي/المثبّتة أولًا ثم الفئات الأهم)، وتحديد ما
   // يحقّ له تصدّر الغلاف الذكي — فلا تطغى مباراة من دوري ثانوي على الواجهة.

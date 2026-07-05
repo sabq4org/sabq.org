@@ -196,8 +196,11 @@ interface SpLeaderboardEntry { userId: string; name: string; avatar: string | nu
 // نستخدم التقويم الميلادي والأرقام اللاتينية في كل تواريخ البوابة الرياضية.
 const dayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { weekday: "short", day: "numeric", month: "long" });
 const timeFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { hour: "2-digit", minute: "2-digit", hour12: true });
+// تاريخ كامل (يوم الأسبوع + السنة) لترويسة مركز المباراة — التاريخ إلزامي بقرار المالك.
+const fullDayFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 const fmtDay = (ts: number) => dayFmt.format(new Date(ts * 1000));
 const fmtTime = (ts: number) => timeFmt.format(new Date(ts * 1000));
+const fmtFullDay = (ts: number) => fullDayFmt.format(new Date(ts * 1000));
 
 function fmtDuration(sec: number | null): string {
   if (!sec || sec <= 0) return "";
@@ -2153,8 +2156,13 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
                   <TeamFollowControls refId={fx.away.id} refName={fx.away.name} refLogo={fx.away.logo} />
                 </div>
               </div>
+              {/* تاريخ ووقت المباراة — يظهران دائمًا (قادمة/جارية/منتهية) */}
+              <p className="mt-2 flex items-center justify-center gap-1 text-[11px] font-bold text-muted-foreground">
+                <CalendarDays className="h-3 w-3" />
+                {fmtFullDay(fx.timestamp)} · {fmtTime(fx.timestamp)}
+              </p>
               {(fx.round || fx.venue.name) && (
-                <p className="mt-2 flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 flex items-center justify-center gap-1 text-[11px] text-muted-foreground">
                   <MapPin className="h-3 w-3" />
                   {[fx.round, fx.venue.name].filter(Boolean).join(" · ")}
                 </p>
