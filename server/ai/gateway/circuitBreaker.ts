@@ -19,6 +19,16 @@ export interface BreakerPersistPayload extends BreakerState {
   modelId: string;
 }
 
+/** Emitted when a model's health status actually changes (not on every failure). */
+export interface BreakerStatusChange {
+  provider: AIHubProvider;
+  modelId: string;
+  prevStatus: BreakerStatus;
+  newStatus: BreakerStatus;
+  lastError?: string;
+  lastErrorCode?: string;
+}
+
 export interface CircuitBreakerOptions {
   /** Consecutive generic failures before the circuit opens. Default 3. */
   failureThreshold?: number;
@@ -26,6 +36,11 @@ export interface CircuitBreakerOptions {
   cooldownMs?: number;
   /** Fire-and-forget persistence hook (writes to ai_provider_health). */
   persist?: (payload: BreakerPersistPayload) => void;
+  /**
+   * Fire-and-forget hook invoked only when a model's status transitions
+   * (e.g. healthy → quota_exceeded). Used for critical operational alerts.
+   */
+  onStatusChange?: (change: BreakerStatusChange) => void;
   now?: () => number;
 }
 
@@ -41,13 +56,37 @@ export class CircuitBreaker {
   private readonly failureThreshold: number;
   private readonly cooldownMs: number;
   private readonly persist?: (payload: BreakerPersistPayload) => void;
+  private onStatusChange?: (change: BreakerStatusChange) => void;
   private readonly now: () => number;
 
   constructor(opts: CircuitBreakerOptions = {}) {
     this.failureThreshold = opts.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD;
     this.cooldownMs = opts.cooldownMs ?? DEFAULT_COOLDOWN_MS;
     this.persist = opts.persist;
+    this.onStatusChange = opts.onStatusChange;
     this.now = opts.now ?? Date.now;
+  }
+
+  /** Wire (or re-wire) the status-transition alert hook after construction. */
+  setStatusChangeHandler(fn: (change: BreakerStatusChange) => void): void {
+    this.onStatusChange = fn;
+  }
+
+  /** Emit a status transition to the alert hook — guarded so alerting never breaks the breaker. */
+  private emitStatusChange(m: ModelRef, prevStatus: BreakerStatus, state: BreakerState): void {
+    if (!this.onStatusChange || state.status === prevStatus) return;
+    try {
+      this.onStatusChange({
+        provider: m.provider,
+        modelId: m.modelId,
+        prevStatus,
+        newStatus: state.status,
+        lastError: state.lastError,
+        lastErrorCode: state.lastErrorCode,
+      });
+    } catch (err) {
+      console.warn("[AI Hub] status-change handler threw:", (err as Error).message);
+    }
   }
 
   /** Warm the in-memory map from persisted rows at boot. */
@@ -84,9 +123,11 @@ export class CircuitBreaker {
   recordSuccess(m: ModelRef): void {
     const existing = this.states.get(key(m));
     if (!existing || (existing.status === "healthy" && existing.failCount === 0)) return;
+    const prevStatus = existing.status;
     const state: BreakerState = { status: "healthy", failCount: 0, cooldownUntil: null };
     this.states.set(key(m), state);
     this.persist?.({ ...state, provider: m.provider, modelId: m.modelId });
+    this.emitStatusChange(m, prevStatus, state);
   }
 
   recordFailure(m: ModelRef, err: AIGatewayError): void {
@@ -95,6 +136,7 @@ export class CircuitBreaker {
       failCount: 0,
       cooldownUntil: null,
     };
+    const prevStatus = existing.status;
 
     let state: BreakerState;
     if (err.code === "QUOTA_EXCEEDED") {
@@ -119,6 +161,7 @@ export class CircuitBreaker {
 
     this.states.set(key(m), state);
     this.persist?.({ ...state, provider: m.provider, modelId: m.modelId });
+    this.emitStatusChange(m, prevStatus, state);
   }
 
   snapshot(): BreakerPersistPayload[] {
