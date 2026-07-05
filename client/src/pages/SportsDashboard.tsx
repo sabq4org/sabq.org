@@ -36,6 +36,7 @@ import {
   COMP_STATUS_LABELS,
   COMP_STATUS_RANK,
   CompetitionSummaryCard,
+  CompetitionShelfRow,
   summaryKickoffDate,
   PillTabs,
   MatchHub,
@@ -1224,31 +1225,48 @@ export default function SportsDashboard() {
                 })}
               </div>
             )}
-            <div className="space-y-6">
-              {summaryGroups.map((g) => (
-                <div key={g.key}>
-                  {summaryGroups.length > 1 && (
-                    <div className={`mb-3 flex items-center gap-2 text-[13px] font-black ${g.icon === "live" || g.icon === "week" ? "text-primary" : "text-muted-foreground"}`}>
-                      {g.icon === "live" ? (
-                        <Radio className="h-4 w-4" strokeWidth={2} />
-                      ) : g.icon === "week" ? (
-                        <Flame className="h-4 w-4" strokeWidth={2} />
-                      ) : g.icon === "done" ? (
-                        <Trophy className="h-4 w-4" strokeWidth={2} />
-                      ) : (
-                        <CalendarDays className="h-4 w-4" strokeWidth={2} />
-                      )}
-                      {g.label}
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-muted-foreground">{g.items.length}</span>
+            <div className="space-y-4 sm:space-y-6">
+              {summaryGroups.map((g) => {
+                const hotGroup = g.icon === "live" || g.icon === "week";
+                const groupIcon =
+                  g.icon === "live" ? (
+                    <Radio className="h-4 w-4" strokeWidth={2} />
+                  ) : g.icon === "week" ? (
+                    <Flame className="h-4 w-4" strokeWidth={2} />
+                  ) : g.icon === "done" ? (
+                    <Trophy className="h-4 w-4" strokeWidth={2} />
+                  ) : (
+                    <CalendarDays className="h-4 w-4" strokeWidth={2} />
+                  );
+                return (
+                  <div key={g.key}>
+                    {summaryGroups.length > 1 && (
+                      <div className={`mb-3 hidden items-center gap-2 text-[13px] font-black sm:flex ${hotGroup ? "text-primary" : "text-muted-foreground"}`}>
+                        {groupIcon}
+                        {g.label}
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-muted-foreground">{g.items.length}</span>
+                      </div>
+                    )}
+                    {/* الجوال: رفّ الانطلاق المدمج (النموذج ب) — رأس مصبوغ داخل الرف + صف لكل بطولة */}
+                    <div className="overflow-hidden rounded-2xl border border-border bg-card sm:hidden">
+                      <div className={`flex items-center gap-2 border-b border-border px-3.5 py-2 text-[12px] font-black ${hotGroup ? "bg-primary/[0.07] text-primary" : "bg-muted/50 text-muted-foreground"}`}>
+                        {groupIcon}
+                        {g.label}
+                        <span className="mr-auto text-[10.5px] font-bold tabular-nums text-muted-foreground">{g.items.length}</span>
+                      </div>
+                      {g.items.map((c) => (
+                        <CompetitionShelfRow key={c.slug} summary={c} startIso={compStartBySlug.get(c.slug) ?? null} hot={hotGroup} />
+                      ))}
                     </div>
-                  )}
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {g.items.map((c) => (
-                      <CompetitionSummaryCard key={c.slug} summary={c} startIso={compStartBySlug.get(c.slug) ?? null} />
-                    ))}
+                    {/* سطح المكتب: شبكة البطاقات الملوّنة (مزيج أ) */}
+                    <div className="hidden gap-4 sm:grid sm:grid-cols-2 lg:grid-cols-3">
+                      {g.items.map((c) => (
+                        <CompetitionSummaryCard key={c.slug} summary={c} startIso={compStartBySlug.get(c.slug) ?? null} />
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
