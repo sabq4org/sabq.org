@@ -963,7 +963,12 @@ struct SpMyTeamCard: View {
 
     private func load() async {
         guard favorites.team != nil else { return }
-        if let resp = try? await APIClient.shared.fetchUnifiedFixtures(comps: Self.teamComps, ignoreCache: true) {
+        // أسبوعان للخلف (آخر النتائج) ← 60 يومًا للأمام (المباراة القادمة ولو بعيدة).
+        let day: TimeInterval = 86_400
+        let from = SpFormat.dateKey(Date().addingTimeInterval(-14 * day))
+        let to = SpFormat.dateKey(Date().addingTimeInterval(60 * day))
+        if let resp = try? await APIClient.shared.fetchUnifiedFixtures(
+            comps: Self.teamComps, from: from, to: to, ignoreCache: true) {
             fixtures = resp.fixtures
         }
         loaded = true
