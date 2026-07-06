@@ -26,7 +26,8 @@ export type SportsAlertEventKey =
   | "varReview"
   | "fulltime"
   | "transfersSaudi"
-  | "transfersGlobal";
+  | "transfersGlobal"
+  | "smartSnaps";
 
 export interface SportsAlertPrefsView {
   kickoff: boolean;
@@ -36,6 +37,7 @@ export interface SportsAlertPrefsView {
   fulltime: boolean;
   transfersSaudi: boolean;
   transfersGlobal: boolean;
+  smartSnaps: boolean;
 }
 
 /**
@@ -51,6 +53,7 @@ export const DEFAULT_SPORTS_ALERT_PREFS: SportsAlertPrefsView = {
   fulltime: true,
   transfersSaudi: true,
   transfersGlobal: false,
+  smartSnaps: true,
 };
 
 function toView(row: SportsAlertPref): SportsAlertPrefsView {
@@ -62,6 +65,7 @@ function toView(row: SportsAlertPref): SportsAlertPrefsView {
     fulltime: row.fulltime,
     transfersSaudi: row.transfersSaudi,
     transfersGlobal: row.transfersGlobal,
+    smartSnaps: row.smartSnaps,
   };
 }
 

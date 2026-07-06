@@ -58,6 +58,7 @@ struct RootTabView: View {
             SpOnboardingView { onboardingSeen = true; showOnboarding = false }
         }
         .onAppear { if !onboardingSeen { showOnboarding = true } }
+        .onOpenURL { router.handle(url: $0) }
     }
 }
 

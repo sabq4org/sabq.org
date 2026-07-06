@@ -624,11 +624,13 @@ nonisolated struct SpAlertPrefs: Decodable, Hashable {
     // تنبيهات الانتقالات (بثّ عام): السعودية مفعّلة افتراضيًّا (opt-out)، والعالمية مطفأة (opt-in).
     var transfersSaudi: Bool
     var transfersGlobal: Bool
+    var smartSnaps: Bool
 
     init(kickoff: Bool = true, goals: Bool = true, cards: Bool = true, varReview: Bool = true, fulltime: Bool = true,
-         transfersSaudi: Bool = true, transfersGlobal: Bool = false) {
+         transfersSaudi: Bool = true, transfersGlobal: Bool = false, smartSnaps: Bool = true) {
         self.kickoff = kickoff; self.goals = goals; self.cards = cards; self.varReview = varReview; self.fulltime = fulltime
         self.transfersSaudi = transfersSaudi; self.transfersGlobal = transfersGlobal
+        self.smartSnaps = smartSnaps
     }
 
     init(from decoder: Decoder) throws {
@@ -636,6 +638,7 @@ nonisolated struct SpAlertPrefs: Decodable, Hashable {
         func b(_ k: String, _ def: Bool = true) -> Bool { (try? c.decode(Bool.self, forKey: SpFlexKey(k))) ?? def }
         kickoff = b("kickoff"); goals = b("goals"); cards = b("cards"); varReview = b("varReview"); fulltime = b("fulltime")
         transfersSaudi = b("transfersSaudi", true); transfersGlobal = b("transfersGlobal", false)
+        smartSnaps = b("smartSnaps", true)
     }
 }
 
@@ -652,6 +655,39 @@ nonisolated struct SpAlertPrefsBody: Encodable {
     let fulltime: Bool
     let transfersSaudi: Bool
     let transfersGlobal: Bool
+    let smartSnaps: Bool
+}
+
+// MARK: - لقطات VARA الذكية
+
+nonisolated struct SpSnap: Decodable, Identifiable, Hashable {
+    let id: String
+    let kind: String
+    let icon: String
+    let headline: String
+    let body: String
+    let accent: String
+    let fixtureId: Int?
+    let teamId: Int?
+    let competitionSlug: String?
+    let kickoff: String?
+    let deeplink: String
+    let generatedAt: String?
+    let ttlAt: String?
+}
+
+nonisolated struct SpSnapsResponse: Decodable {
+    let success: Bool?
+    let configured: Bool?
+    let snaps: [SpSnap]
+}
+
+nonisolated struct SpEngagementBody: Encodable {
+    let kind: String
+    let fixtureId: Int
+    let homeId: Int
+    let awayId: Int
+    let competitionSlug: String?
 }
 
 // MARK: - المجتمع — لوحة المتصدّرين (عامّة)
@@ -1448,8 +1484,30 @@ extension APIClient {
     @discardableResult
     func updateAlertPrefs(_ p: SpAlertPrefs) async throws -> SpAlertPrefs {
         let body = SpAlertPrefsBody(kickoff: p.kickoff, goals: p.goals, cards: p.cards, varReview: p.varReview, fulltime: p.fulltime,
-                                    transfersSaudi: p.transfersSaudi, transfersGlobal: p.transfersGlobal)
+                                    transfersSaudi: p.transfersSaudi, transfersGlobal: p.transfersGlobal, smartSnaps: p.smartSnaps)
         return try await requestJSON(SpAlertPrefsResponse.self, method: "PUT", path: "/sports/alert-prefs", body: body, apiRoot: URLConstants.mobileAPI).preferences
+    }
+
+    func fetchTeamSnaps(teamId: Int, ignoreCache: Bool = false) async throws -> [SpSnap] {
+        try await get(SpSnapsResponse.self, path: "/sports/snaps/team/\(teamId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).snaps
+    }
+
+    func fetchMySnaps(ignoreCache: Bool = true) async throws -> [SpSnap] {
+        try await get(SpSnapsResponse.self, path: "/sports/snaps",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).snaps
+    }
+
+    func recordMatchView(_ fixture: SpFixture) async throws {
+        let body = SpEngagementBody(
+            kind: "match_view",
+            fixtureId: fixture.id,
+            homeId: fixture.home.id,
+            awayId: fixture.away.id,
+            competitionSlug: fixture.competitionSlug
+        )
+        try await send(method: "POST", path: "/sports/engagement",
+                       jsonBody: JSONEncoder().encode(body), apiRoot: URLConstants.mobileAPI)
     }
 
     /// دخول بحساب سبق بالبريد/الجوال + كلمة المرور. يكتشف البريد بوجود «@».

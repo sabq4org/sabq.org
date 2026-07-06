@@ -23,6 +23,7 @@ struct HomeView: View {
     @Environment(SpMatchFollows.self) private var matchFollows
     @Environment(SpAuthStore.self) private var auth
     @Environment(SpAppRouter.self) private var router
+    @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
 
     @State private var comp: SpCompetition?
     @State private var outlook: SpOutlook?
@@ -49,6 +50,7 @@ struct HomeView: View {
     @State private var showTransferCenter = false
     @State private var loading = true
     @State private var loadError: String?
+    @State private var serverSnaps: [SpSnap] = []
 
     enum ScorerMode { case goals, assists }
 
@@ -96,7 +98,8 @@ struct HomeView: View {
             activeAlerts: activeAlerts,
             favoriteNextTitle: favMatch.map { "\($0.home.name) × \($0.away.name)" },
             favoriteNextKickoff: upcoming ? favMatch?.kickoff : nil,
-            favoriteIsLive: favMatch?.status.live ?? false
+            favoriteIsLive: favMatch?.status.live ?? false,
+            serverSnaps: showSmartSnaps ? serverSnaps : []
         )
     }
 
@@ -538,6 +541,10 @@ struct HomeView: View {
         // فراغ واضح بين بطاقات روشن بدون فصل بصري زائد.
         // (بطاقة «فريقي المفضّل» المصغّرة حُذفت — بلوك «فريقي» أعلى الواجهة يغنيها.)
         VStack(spacing: 28) {
+            if showSmartSnaps {
+                VaraInsightCard(context: varaInsightContext)
+                    .padding(.horizontal, 16)
+            }
             if !standings.isEmpty || !scorers.isEmpty { leaguePulse }
             if !(matches?.upcoming.isEmpty ?? true) || !(matches?.today.isEmpty ?? true) {
                 gameweekStrip
@@ -1126,6 +1133,7 @@ struct HomeView: View {
 
         // تحديث حالة/نتيجة المباريات المتابَعة (بطاقة «مبارياتي») من الخادم.
         await matchFollows.refresh()
+        await loadSmartSnaps(force: force)
 
         // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + آخر مجريات.
         if let f = featured, f.started {
@@ -1143,6 +1151,20 @@ struct HomeView: View {
 
         // مزامنة ودجت الشاشة الرئيسية «المباراة القادمة» (أفضل جهد — يكيّش الشعارين).
         await SpWidgetBridge.sync(matches: matchesRes, follows: SpMatchFollows.shared.visibleItems, favoriteId: favorites.team?.id)
+    }
+
+    private func loadSmartSnaps(force: Bool = false) async {
+        guard showSmartSnaps else {
+            serverSnaps = []
+            return
+        }
+        if auth.isLoggedIn {
+            serverSnaps = (try? await APIClient.shared.fetchMySnaps(ignoreCache: force)) ?? []
+        } else if let favId = favorites.team?.id {
+            serverSnaps = (try? await APIClient.shared.fetchTeamSnaps(teamId: favId, ignoreCache: force)) ?? []
+        } else {
+            serverSnaps = []
+        }
     }
 }
 
@@ -1213,4 +1235,5 @@ struct NewsView: View {
         }
         self.loading = false
     }
+
 }

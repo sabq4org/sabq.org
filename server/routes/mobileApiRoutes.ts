@@ -4043,24 +4043,21 @@ router.post("/contact", async (req: Request, res: Response) => {
       })
       .returning();
 
-    // Email notification to info@sabq.org — best-effort, never fails the
-    // request. Same MailerSend template the web route uses (kept inline so
-    // a future template tweak only happens in one place: that file).
+    // Email notification to info@sabq.org — best-effort, never fails the request.
     try {
-      const { MailerSend, EmailParams, Sender, Recipient } = await import("mailersend");
-      const mailerSend = new MailerSend({ apiKey: process.env.MAILERSEND_API_KEY || "" });
       const attachmentsList = validated.attachments.length > 0
         ? `<div style="margin-top:16px;padding:12px;background:#f5f5f5;border-radius:8px;"><strong>المرفقات:</strong><ul style="margin:8px 0 0 0;padding-right:20px;">${validated.attachments.map(a => `<li><a href="https://sabq.org${a.url}">${a.name}</a></li>`).join("")}</ul></div>`
         : "";
       const html = `<div dir="rtl" style="font-family:Segoe UI,Tahoma,Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;"><div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:24px;border-radius:12px 12px 0 0;"><h1 style="color:#fff;margin:0;font-size:24px;">📩 رسالة جديدة من نموذج التواصل (تطبيق الجوال)</h1></div><div style="background:#fff;padding:24px;border:1px solid #e0e0e0;border-top:none;border-radius:0 0 12px 12px;"><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;width:120px;"><strong>الاسم:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;">${validated.name}</td></tr><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;"><strong>البريد:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;"><a href="mailto:${validated.email}">${validated.email}</a></td></tr><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;"><strong>الهاتف:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;" dir="ltr">${validated.phone}</td></tr><tr><td style="padding:12px 0;border-bottom:1px solid #eee;color:#666;"><strong>الموضوع:</strong></td><td style="padding:12px 0;border-bottom:1px solid #eee;">${validated.subject}</td></tr></table><div style="margin-top:20px;"><strong style="color:#666;">نص الرسالة:</strong><div style="margin-top:12px;padding:16px;background:#f8f9fa;border-radius:8px;border-right:4px solid #0d6efd;white-space:pre-wrap;">${validated.message}</div></div>${attachmentsList}<div style="margin-top:24px;padding-top:16px;border-top:1px solid #eee;text-align:center;color:#999;font-size:12px;"><a href="https://sabq.org/dashboard/contact-messages" style="color:#0d6efd;">عرض في لوحة التحكم</a></div></div></div>`;
 
-      const params = new EmailParams()
-        .setFrom(new Sender("sabqai@sabq.org", "نموذج التواصل - سبق"))
-        .setTo([new Recipient("info@sabq.org", "فريق سبق")])
-        .setSubject(`رسالة جديدة (تطبيق): ${validated.subject} - من ${validated.name}`)
-        .setHtml(html);
-
-      await mailerSend.email.send(params);
+      const result = await sendEmailNotification({
+        to: "info@sabq.org",
+        subject: `رسالة جديدة (تطبيق): ${validated.subject} - من ${validated.name}`,
+        html,
+      });
+      if (!result.success) {
+        throw new Error(result.error || "Failed to send contact notification");
+      }
       console.log("[Mobile API] /contact email notification sent");
     } catch (emailError) {
       console.error("[Mobile API] /contact email notify failed:", emailError);
@@ -5641,7 +5638,7 @@ router.put("/sports/alert-prefs", async (req: Request, res: Response) => {
     const { upsertPrefs } = await import("../services/sportsAlertPrefsService");
     const body = req.body ?? {};
     const patch: Record<string, boolean> = {};
-    for (const key of ["kickoff", "goals", "cards", "varReview", "fulltime", "transfersSaudi", "transfersGlobal"] as const) {
+    for (const key of ["kickoff", "goals", "cards", "varReview", "fulltime", "transfersSaudi", "transfersGlobal", "smartSnaps"] as const) {
       if (typeof body[key] === "boolean") patch[key] = body[key];
     }
     const preferences = await upsertPrefs(session.userId, patch);
@@ -5650,6 +5647,49 @@ router.put("/sports/alert-prefs", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] PUT /sports/alert-prefs error:", error);
     res.status(502).json({ success: false, message: "تعذر حفظ تفضيلات الإشعارات" });
+  }
+});
+
+router.get("/sports/snaps", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const { isSportsSnapsEnabled } = await import("../services/sportsSnaps/config");
+    if (!isSportsSnapsEnabled()) return res.status(404).json({ success: false, message: "غير متاح" });
+    const { getUserFeed } = await import("../services/sportsSnaps/feed");
+    const snaps = await getUserFeed(session.userId);
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true, snaps });
+  } catch (error) {
+    console.error("[Mobile API] GET /sports/snaps error:", error);
+    res.status(502).json({ success: false, message: "تعذر جلب اللقطات الذكية", snaps: [] });
+  }
+});
+
+router.post("/sports/engagement", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    const body = req.body ?? {};
+    if (body.kind !== "match_view") {
+      return res.status(400).json({ success: false, message: "نوع التفاعل غير مدعوم" });
+    }
+    const fixtureId = Number(body.fixtureId);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ success: false, message: "معرّف المباراة غير صالح" });
+    }
+    const { recordMatchView } = await import("../services/sportsSnaps/engagement");
+    await recordMatchView(session.userId, {
+      fixtureId,
+      homeId: body.homeId == null ? null : Number(body.homeId),
+      awayId: body.awayId == null ? null : Number(body.awayId),
+      competitionSlug: body.competitionSlug ? String(body.competitionSlug) : null,
+    });
+    res.set("Cache-Control", "private, no-store");
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] POST /sports/engagement error:", error);
+    res.status(502).json({ success: false, message: "تعذر حفظ التفاعل" });
   }
 });
 
