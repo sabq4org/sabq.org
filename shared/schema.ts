@@ -3045,6 +3045,30 @@ export const sportsFollows = pgTable("sports_follows", {
 export type SportsFollow = typeof sportsFollows.$inferSelect;
 export type InsertSportsFollow = typeof sportsFollows.$inferInsert;
 
+// مشاهدات مراكز المباريات داخل VARA — للمستخدمين المسجّلين فقط.
+// صف واحد لكل (مستخدم، مباراة) مع عدّاد تكرار؛ تُقلّم الصفوف القديمة دورياً.
+export const sportsMatchViews = pgTable("sports_match_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  fixtureId: integer("fixture_id").notNull(),
+  homeId: integer("home_id"),
+  awayId: integer("away_id"),
+  competitionSlug: text("competition_slug"),
+  viewsCount: integer("views_count").default(1).notNull(),
+  lastViewedAt: timestamp("last_viewed_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_sports_match_views_unique").on(table.userId, table.fixtureId),
+  index("idx_sports_match_views_user").on(table.userId, table.lastViewedAt.desc()),
+  index("idx_sports_match_views_fixture").on(table.fixtureId),
+  index("idx_sports_match_views_home").on(table.homeId, table.lastViewedAt.desc()),
+  index("idx_sports_match_views_away").on(table.awayId, table.lastViewedAt.desc()),
+  index("idx_sports_match_views_last").on(table.lastViewedAt),
+]);
+
+export type SportsMatchView = typeof sportsMatchViews.$inferSelect;
+export type InsertSportsMatchView = typeof sportsMatchViews.$inferInsert;
+
 // تفضيلات تنبيهات المباريات (عامّة لكل مستخدم) — أيّ أنواع الأحداث تصله دفعيًّا
 // عن مباريات الفِرق التي يتابعها (sportsFollows). صفّ واحد لكل مستخدم؛ غياب الصفّ
 // يعني «كل الأنواع مفعّلة» (سلوك متوافق رجعيًّا مع متابعين سابقين بلا صفّ).
@@ -3058,6 +3082,7 @@ export const sportsAlertPrefs = pgTable("sports_alert_prefs", {
   fulltime: boolean("fulltime").default(true).notNull(),    // نهاية المباراة
   transfersSaudi: boolean("transfers_saudi").default(true).notNull(),   // إشعارات الانتقالات السعودية المؤكّدة (بثّ عام، opt-out)
   transfersGlobal: boolean("transfers_global").default(false).notNull(), // إشعارات الانتقالات العالمية البارزة (بثّ عام، opt-in)
+  smartSnaps: boolean("smart_snaps").default(true).notNull(), // لقطات VARA الذكية (دفع فقط؛ العرض داخل التطبيق مفتاحه محلي)
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

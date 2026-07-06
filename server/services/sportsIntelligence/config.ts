@@ -14,7 +14,7 @@ export function isSportsIntelEnabled(): boolean {
 }
 
 /** نطاق اللقطة داخل الجدول. */
-export type InsightScope = "global" | "competition" | "match" | "user";
+export type InsightScope = "global" | "competition" | "match" | "user" | "team";
 
 /**
  * أنواع اللقطات — تُعرَض/تُرتَّب حسبها في الواجهة.
@@ -35,7 +35,14 @@ export type InsightKind =
   | "trend"
   | "anomaly"
   | "prediction"
-  | "digest";
+  | "digest"
+  | "upcoming_match"
+  | "behavioral_big_match"
+  | "post_match_recap"
+  | "streak_note"
+  | "h2h_context"
+  | "schedule_congestion"
+  | "standings_stake";
 
 /** الأهمية الأساسية لكل فئة بطولة (0-100 قبل تعديلات المباراة). */
 const CATEGORY_BASE: Record<CompetitionCategory, number> = {

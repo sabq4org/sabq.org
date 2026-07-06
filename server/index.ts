@@ -1439,6 +1439,22 @@ if (!(globalThis as any).__sabqServer) {
           } catch (error) {
             console.error("[Server] Error starting push worker after failover:", error);
           }
+          try {
+            const { initializeAudioNewsletterJobs } = await import("./jobs/audioNewsletterJob");
+            initializeAudioNewsletterJobs();
+            console.log("[Server] ✅ Audio newsletter jobs started after failover");
+          } catch (error) {
+            console.error("[Server] Error starting audio newsletter jobs after failover:", error);
+          }
+          try {
+            if (process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false') {
+              const { newsletterScheduler } = await import("./services/newsletterScheduler");
+              newsletterScheduler.start();
+              console.log("[Server] Newsletter scheduler started after failover");
+            }
+          } catch (error) {
+            console.error("[Server] Error starting newsletter scheduler after failover:", error);
+          }
         });
       }
       
@@ -1949,6 +1965,19 @@ if (!(globalThis as any).__sabqServer) {
             startSportsSceneJob();
           } catch (error) {
             console.error("[Server] Error starting sports intelligence job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
+      // لقطات VARA الذكية: توليد لقطات قصيرة للفرق النشطة. خلف
+      // SPORTS_SNAPS_ENABLED + مفتاح API، وفحص القيادة داخل كل دورة.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsSnapsJob } = await import("./jobs/sportsSnapsJob");
+            startSportsSnapsJob();
+          } catch (error) {
+            console.error("[Server] Error starting sports snaps job:", error);
           }
         }, BACKGROUND_JOB_DELAY);
       }

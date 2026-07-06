@@ -11,8 +11,17 @@ nonisolated struct VaraInsight: Identifiable, Equatable {
     let icon: String
     let text: String
     let accent: InsightAccent
+    let deeplink: String?
 
     nonisolated enum InsightAccent { case green, gold, crimson }
+
+    init(id: String, icon: String, text: String, accent: InsightAccent, deeplink: String? = nil) {
+        self.id = id
+        self.icon = icon
+        self.text = text
+        self.accent = accent
+        self.deeplink = deeplink
+    }
 }
 
 nonisolated struct VaraInsightContext {
@@ -25,12 +34,15 @@ nonisolated struct VaraInsightContext {
     /// موعد انطلاق مباراة المفضّل القادمة — للصياغة الزمنية.
     var favoriteNextKickoff: Date? = nil
     var favoriteIsLive: Bool = false
+    var serverSnaps: [SpSnap] = []
 }
 
 nonisolated enum VaraInsightsEngine {
     /// يولّد عبارات ذكية مرتّبة حسب الأولوية (الأهمّ أولًا). `now` للصياغة الزمنية.
     static func generate(_ c: VaraInsightContext, now: Date) -> [VaraInsight] {
         var out: [VaraInsight] = []
+
+        out.append(contentsOf: c.serverSnaps.prefix(4).map(serverInsight))
 
         // 1) مباراة المفضّل جارية الآن — الأعلى أولوية.
         if c.favoriteIsLive, let fav = c.favoriteName {
@@ -90,6 +102,35 @@ nonisolated enum VaraInsightsEngine {
         return out
     }
 
+    private static func serverInsight(_ snap: SpSnap) -> VaraInsight {
+        .init(
+            id: "server-\(snap.id)",
+            icon: systemIcon(snap.icon),
+            text: snap.body.isEmpty ? snap.headline : snap.body,
+            accent: accent(snap.accent),
+            deeplink: snap.deeplink
+        )
+    }
+
+    private static func accent(_ raw: String) -> VaraInsight.InsightAccent {
+        switch raw {
+        case "gold": return .gold
+        case "crimson": return .crimson
+        default: return .green
+        }
+    }
+
+    private static func systemIcon(_ raw: String) -> String {
+        switch raw {
+        case "calendar": return "calendar.badge.clock"
+        case "flag": return "flag.checkered"
+        case "history": return "clock.arrow.circlepath"
+        case "timer": return "timer"
+        case "table": return "tablecells"
+        default: return "sparkles"
+        }
+    }
+
     private static func relative(_ secs: TimeInterval) -> String {
         let h = Int(secs / 3600)
         if h >= 24 { return "بعد \(h / 24) يوم" }
@@ -116,6 +157,7 @@ extension VaraInsight.InsightAccent {
 struct VaraInsightCard: View {
     let context: VaraInsightContext
     @State private var index = 0
+    @Environment(\.openURL) private var openURL
 
     var body: some View {
         TimelineView(.everyMinute) { tl in
@@ -153,6 +195,11 @@ struct VaraInsightCard: View {
     }
 
     private func insightRow(_ ins: VaraInsight) -> some View {
+        Button {
+            if let deeplink = ins.deeplink, let url = URL(string: deeplink) {
+                openURL(url)
+            }
+        } label: {
         HStack(spacing: 12) {
             Image(systemName: ins.icon)
                 .font(.system(size: 16, weight: .bold))
@@ -167,5 +214,8 @@ struct VaraInsightCard: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.plain)
+        .disabled(ins.deeplink == nil)
     }
 }

@@ -186,6 +186,7 @@ struct MatchesCenterView: View {
     @State private var headerHidden = false
     @State private var headerArmed = false
     @State private var headerHeight: CGFloat = 0
+    @State private var deepLinkedMatch: IDBox?
 
     private static let riyadhCal: Calendar = {
         var c = Calendar(identifier: .gregorian)
@@ -229,6 +230,14 @@ struct MatchesCenterView: View {
         }
         .refreshable { await load(force: true) }
         .sheet(isPresented: $showDatePicker) { datePickerSheet }
+        .navigationDestination(item: $deepLinkedMatch) { box in
+            SpMatchCenter(fixtureId: box.id, preview: nil)
+        }
+        .onChange(of: router.pendingMatchId) { _, id in
+            guard let id else { return }
+            deepLinkedMatch = IDBox(id: id)
+            router.pendingMatchId = nil
+        }
         // تعافي شريط الأيام بعد طيّ/بسط الترويسة — نفس علاج MatchesView الموثّق.
         .onChange(of: headerHidden) { _, _ in
             let target = railCenterId ?? scrolledDayId
