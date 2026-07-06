@@ -480,9 +480,13 @@ struct SpFlatMatchList: View {
 struct SpMyMatchesCard: View {
     @Environment(SpMatchFollows.self) private var follows
     @Environment(SpAuthStore.self) private var auth
+    var latestFixtures: [SpFixture] = []
 
     var body: some View {
-        let matches = follows.visibleItems.sorted(by: matchOrder)
+        let latestById = Dictionary(uniqueKeysWithValues: latestFixtures.map { ($0.id, $0) })
+        let matches = follows.visibleItems
+            .map { latestById[$0.id] ?? $0 }
+            .sorted(by: matchOrder)
         let groups = dayGroups(matches)
         if !matches.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
@@ -514,7 +518,11 @@ struct SpMyMatchesCard: View {
             )
             .task {
                 follows.pruneExpiredFinishedMatches()
-                await follows.refresh()
+                if latestFixtures.isEmpty {
+                    await follows.refresh()
+                } else {
+                    follows.updateFromFixtures(latestFixtures)
+                }
             }
         }
     }
