@@ -939,7 +939,7 @@ function SmartSpotlight({
           <SpotTeam name={topLive.home.name} logo={topLive.home.logo} />
           <div className="flex shrink-0 flex-col items-center gap-1">
             <div className="text-4xl font-black leading-none tabular-nums text-foreground sm:text-5xl" dir="ltr">
-              {topLive.goals.home ?? 0} - {topLive.goals.away ?? 0}
+              {topLive.goals.away ?? 0} - {topLive.goals.home ?? 0}
             </div>
             <span className="inline-flex items-center gap-1 text-[12px] font-bold tabular-nums text-red-500">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" /> {liveMinute(topLive)}
