@@ -176,7 +176,7 @@ async function dispatchTransfer(
   const deeplink = "/sports/transfers";
   const pushData: Record<string, string> = {
     type,
-    deeplink: "sabq://transfers",
+    deeplink: "sabqsports://transfers",
     priority: "time-sensitive",
   };
 

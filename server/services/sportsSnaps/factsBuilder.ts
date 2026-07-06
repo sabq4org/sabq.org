@@ -49,6 +49,7 @@ export interface SnapFixtureFact {
   importance: number;
   targetStanding?: SnapStandingFact | null;
   opponentStanding?: SnapStandingFact | null;
+  pointsGap?: number | null;
 }
 
 export interface SnapStandingFact {
@@ -216,6 +217,7 @@ async function attachStandings(fixture: SnapFixtureFact, teamId: number): Promis
     ...fixture,
     targetStanding: compact(target),
     opponentStanding: compact(opponent),
+    pointsGap: target && opponent ? Math.abs(target.points - opponent.points) : null,
   };
 }
 
