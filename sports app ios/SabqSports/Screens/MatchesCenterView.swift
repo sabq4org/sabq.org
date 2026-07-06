@@ -623,7 +623,6 @@ struct MatchesCenterView: View {
                     if visibleDays.isEmpty {
                         emptyList
                     } else {
-                        if !liveOnly && !liveFixtures.isEmpty { livePinned }
                         ForEach(daysForList) { day in
                             daySection(day)
                                 .background(
@@ -769,24 +768,6 @@ struct MatchesCenterView: View {
         }
     }
 
-    private var livePinned: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 9) {
-                Circle().fill(SpTheme.crimson).frame(width: 8, height: 8)
-                Text("مباشر الآن")
-                    .font(SportsFonts.headline(size: 18))
-                    .foregroundStyle(SpTheme.onDark)
-                Spacer(minLength: 0)
-                Text("\(liveFixtures.count)")
-                    .font(SportsFonts.app(size: 13, weight: .heavy))
-                    .foregroundStyle(SpTheme.crimson)
-                    .monospacedDigit()
-            }
-            matchGroup(liveFixtures.sorted { $0.timestamp < $1.timestamp })
-        }
-        .padding(.bottom, 2)
-    }
-
     private func daySection(_ day: SpCenterDay) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             dayHeader(day)
@@ -876,6 +857,9 @@ struct MatchesCenterView: View {
         for (key, list) in buckets {
             guard let date = dates[key] else { continue }
             let fxs = list.sorted { a, b in
+                let ra = daySortRank(a)
+                let rb = daySortRank(b)
+                if ra != rb { return ra < rb }
                 if a.timestamp != b.timestamp { return a.timestamp < b.timestamp }
                 return a.id < b.id
             }
@@ -886,6 +870,12 @@ struct MatchesCenterView: View {
 
     private var visibleDaySignature: String {
         visibleDays.map(\.id).joined(separator: "|")
+    }
+
+    private func daySortRank(_ f: SpFixture) -> Int {
+        if f.status.live { return 0 }
+        if f.status.finished { return 2 }
+        return 1
     }
 
     private var daysForList: [SpCenterDay] {
@@ -1124,6 +1114,7 @@ struct MatchesCenterView: View {
             let bracket = await bracketTask
             let merged = mergeWorldCupBracketFixtures(from: bracket, into: unified)
             if Task.isCancelled { return }
+            follows.updateFromFixtures(merged)
             if visualSignature(merged) != visualSignature(fixtures) {
                 fixtures = merged
                 rebuildDays(keepSelection: true)

@@ -582,6 +582,16 @@ final class SpMatchFollows {
         else { cancelReminders(for: fixture.id) }
         // حدّث نشاط شاشة القفل إن كان قائمًا لهذه المباراة (no-op إن لم يوجد).
         SpLiveActivityManager.shared.update(with: fixture)
+        Task { await SpWidgetBridge.sync(follows: visibleItems, favoriteId: SpFavorites.shared.team?.id) }
+    }
+
+    /// يحقن نسخ الجدول الأحدث داخل «مبارياتي» عند تحميل أي شاشة للمباريات.
+    /// هذا يمنع أن تبقى البطاقة/Live Activity على لقطة ما قبل الانطلاق بينما
+    /// نفس المباراة صارت مباشرة في الجدول العام.
+    func updateFromFixtures(_ fixtures: [SpFixture]) {
+        for fixture in fixtures where isFollowing(fixture.id) {
+            update(fixture)
+        }
     }
 
     // MARK: - الاستطلاع الدوري المستقل (يُبقي «مبارياتي» + الويدجت متحدّثَين)
