@@ -612,7 +612,7 @@ struct MatchesCenterView: View {
 
                     // بلوك «مبارياتي» — المتابَعات عبر كل البطولات؛ يختفي كليًّا بلا متابعات.
                     if !follows.visibleItems.isEmpty {
-                        SpMyMatchesCard()
+                        SpMyMatchesCard(latestFixtures: fixtures)
                             .padding(.top, 2)
                     }
 
