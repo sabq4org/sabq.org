@@ -17,8 +17,11 @@ struct AccountView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 22) {
+                    // مرساة أعلى الصفحة — للقفز إليها بعد تسجيل الخروج فتظهر بطاقة الدخول.
+                    Color.clear.frame(height: 0).id(Self.accountTopId)
                     if auth.isLoggedIn {
                         profileHeader
                     } else {
@@ -61,14 +64,26 @@ struct AccountView: View {
             .navigationTitle("حسابي")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
-            .confirmationDialog("تسجيل الخروج", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
+            .alert("تسجيل الخروج", isPresented: $showSignOutConfirm) {
                 Button("تسجيل الخروج", role: .destructive) { auth.signOut() }
                 Button("إلغاء", role: .cancel) {}
             } message: {
-                Text("سيتم إنهاء جلستك ومسح اختياراتك المحلية مثل الفريق المفضّل ومبارياتي على هذا الجهاز.")
+                Text("سيتم إنهاء جلستك على هذا الجهاز. يبقى فريقك المفضّل ومبارياتك المتابَعة كما هي.")
+            }
+            // بعد تسجيل الخروج: اقفز لأعلى الصفحة فتظهر بطاقة الدخول فورًا بدل
+            // البقاء عند موضع زر الخروج بالأسفل.
+            .onChange(of: auth.isLoggedIn) { _, loggedIn in
+                if !loggedIn {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(Self.accountTopId, anchor: .top)
+                    }
+                }
+            }
             }
         }
     }
+
+    private static let accountTopId = "account-top"
 
     // MARK: - الملف الشخصي (ترويسة مدمجة)
 
@@ -711,6 +726,17 @@ struct SpMembershipLogin: View {
                     .foregroundStyle(SpTheme.onDark)
                 SpWordmark(size: 20)
             }
+            // ختم «من سبق» أسفل الترحيب مباشرةً — الرعاية الخفيفة أعلى البطاقة.
+            HStack(spacing: 7) {
+                Text("أحد منتجات")
+                    .font(SportsFonts.app(size: 11, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkFaint)
+                Rectangle().fill(SpTheme.outline).frame(width: 1, height: 11)
+                Text("صحيفة سبق")
+                    .font(SportsFonts.app(size: 11, weight: .heavy))
+                    .foregroundStyle(SpTheme.green)
+            }
+            .padding(.top, -4)
             Text("سجّل بعضويتك في سبق لتحفظ فريقك، وترسل توقّعاتك، وتصلك تنبيهات المباريات على كل أجهزتك.")
                 .font(SportsFonts.app(size: 13))
                 .foregroundStyle(SpTheme.onDarkDim)
@@ -765,18 +791,6 @@ struct SpMembershipLogin: View {
 
             // خطأ دخول Apple — تحت زر Apple.
             errorText(for: .apple)
-
-            // ختم «من سبق» — الرعاية الخفيفة (الموضع الثاني)، بمسافة تفصله عن الأزرار.
-            HStack(spacing: 7) {
-                Text("أحد منتجات")
-                    .font(SportsFonts.app(size: 11, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDarkFaint)
-                Rectangle().fill(SpTheme.outline).frame(width: 1, height: 11)
-                Text("صحيفة سبق")
-                    .font(SportsFonts.app(size: 11, weight: .heavy))
-                    .foregroundStyle(SpTheme.green)
-            }
-            .padding(.top, 12)
         }
     }
 
