@@ -254,11 +254,15 @@ final class SpAuthStore {
         }
         token = nil
         member = nil
+        // نمسح فقط ما هو مرتبط بالحساب: المتابعات وتفضيلات التنبيهات المُحمَّلة من
+        // الخادم بعد الدخول. أمّا التخصيص المحلّي (الفريق المفضّل + متابعة المباريات
+        // + البطولات المفضّلة) فيعمل بلا تسجيل دخول ويجب أن يبقى بعد الخروج —
+        // مسحه كان يُفقد المستخدم فريقه ومبارياته المتابَعة عند كل خروج.
         followedKeys = []
         follows = []
         alertPrefs = SpAlertPrefs()
-        SpFavorites.shared.clear()
-        SpMatchFollows.shared.clearAll()
+        // تنبيهات الخادم تتوقّف أصلًا بإلغاء تسجيل رمز الدفع أعلاه؛ نُنهي الأنشطة
+        // الحيّة فقط لأنها مرتبطة بدفع APNs للجلسة.
         SpLiveActivityManager.shared.endAll()
         SpKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
