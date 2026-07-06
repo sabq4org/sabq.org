@@ -19,6 +19,7 @@ import {
   localizeEvent,
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
+import { getFixtures as getWorldCupMergedFixtures } from "./worldCupService";
 import { getPlayerForm as smGetPlayerForm, isSportmonksConfigured } from "./sportmonksService";
 import {
   getTheSportsFastScore,
@@ -335,6 +336,13 @@ function localizeFixture(item: any, tr: FxTranslators = FX_NOOP_TR): SplFixture 
 // ---------- المباريات ----------
 
 export async function getFixtures(comp: SaudiCompetition, seasonOverride?: number): Promise<SplFixture[]> {
+  // المونديال: جدول worldCupService المُكمّل (mergeFullKnockoutSchedule) بدل جدول
+  // المزوّد الخام — يُرقّي المتأهلين للأدوار الإقصائية فور حسمهم ويُبقي الخانات
+  // غير المحسومة برموز FIFA (W97، 2A، …) كما تعرضها صفحة المونديال على الويب.
+  // بذلك يرى الجدول الموحّد (/api/sports/fixtures) وشجرة التطبيق المصدر نفسه.
+  if (comp.slug === "world-cup" && seasonOverride == null) {
+    return getWorldCupMergedFixtures();
+  }
   const season = seasonOverride ?? await seasonFor(comp);
   return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
