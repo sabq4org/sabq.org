@@ -109,6 +109,10 @@ const THIRD_PLACE_ROUND_EN = "3rd Place Final";
 /** معرّفات اصطناعية للمباريات غير المنشورة بعد في API-Football (90000000 + رقم المباراة). */
 export const syntheticFixtureId = (matchNo: number): number => 90_000_000 + matchNo;
 
+/** هل المعرّف اصطناعي؟ نطاق المباريات الرسمية 73–104 ⇒ 90000073–90000104. */
+export const isSyntheticFixtureId = (id: number): boolean =>
+  id >= 90_000_073 && id <= 90_000_104;
+
 export const winnerSlotCode = (matchNo: number): string => `W${matchNo}`;
 export const loserSlotCode = (matchNo: number): string => `L${matchNo}`;
 

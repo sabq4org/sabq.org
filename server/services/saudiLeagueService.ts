@@ -20,6 +20,7 @@ import {
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
 import { getFixtures as getWorldCupMergedFixtures } from "./worldCupService";
+import { isSyntheticFixtureId } from "./wc2026Bracket";
 import { getPlayerForm as smGetPlayerForm, isSportmonksConfigured } from "./sportmonksService";
 import {
   getTheSportsFastScore,
@@ -1146,6 +1147,14 @@ function localizeStats(rows: any[]): SplMatchDetail["statistics"] {
 }
 
 export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail | null> {
+  // مباراة مونديال اصطناعية (خانة إقصائية قبل نشر المزوّد): لا وجود لها عنده —
+  // نخدم بطاقتها الأساسية من الجدول المُكمّل بلا أحداث/إحصاءات/تشكيلات، فيفتح
+  // مركز المباراة على الويب والتطبيق بدل «المباراة غير موجودة».
+  if (isSyntheticFixtureId(fixtureId)) {
+    const fx = (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId);
+    if (!fx) return null;
+    return { fixture: fx, events: [], statistics: null, lineups: [], leagueId: 1 };
+  }
   return withSWR(`spl:match:${fixtureId}`, MATCH_DETAIL_TTL, MATCH_DETAIL_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
     const item = rows[0];

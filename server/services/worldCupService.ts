@@ -44,7 +44,7 @@ import {
 } from "./theSportsService";
 import { type WcMomentum, type WcPressure } from "./sportmonksService";
 import pLimit from "p-limit";
-import { buildBracketModel, mergeFullKnockoutSchedule, type WcBracketModel } from "./wc2026Bracket";
+import { buildBracketModel, isSyntheticFixtureId, mergeFullKnockoutSchedule, type WcBracketModel } from "./wc2026Bracket";
 import { apiFootballGet } from "./apiFootballClient";
 
 // تجميع سباقات الهدّافين يحتاج أحداث كل المباريات الجارية/المنتهية دفعةً واحدة.
@@ -2698,6 +2698,22 @@ export async function getMatchDetail(
   // مباراة حية تُحدَّث كل 20 ثانية، وقبيل الانطلاق كل دقيقة (لالتقاط التشكيلات فور نشرها)،
   // والمنتهية/البعيدة كل 5 دقائق
   const known = (await getFixtures()).find((f) => f.id === fixtureId);
+  // خانة إقصائية اصطناعية لم ينشرها المزوّد بعد: لا تفاصيل عنده أصلًا — نعيد
+  // بطاقتها الأساسية من الجدول المُكمّل (الطرفان المُرقّيان/رمزاهما + الموعد
+  // والملعب والدور) بلا أحداث/تشكيلات، فيفتح مركز المباراة بدل 404.
+  if (isSyntheticFixtureId(fixtureId)) {
+    if (!known) return null;
+    return {
+      fixture: known,
+      events: [],
+      lineups: [],
+      statistics: [],
+      prediction: null,
+      ratings: [],
+      manOfTheMatch: null,
+      headToHead: [],
+    };
+  }
   let ttl = CACHE_TTL.MEDIUM;
   if (known?.status.live) {
     ttl = MATCH_DETAIL_LIVE_TTL;
