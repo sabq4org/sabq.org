@@ -51,13 +51,38 @@ function postMatchTtl(result: SnapRecentResultFact): Date {
   return new Date((result.kickoffTs + 48 * 60 * 60) * 1000);
 }
 
-function scoreText(result: SnapRecentResultFact): string {
-  return `${result.goals.home}-${result.goals.away}`;
+function targetScoreText(result: SnapRecentResultFact): string {
+  return result.targetSide === "home"
+    ? `${result.goals.home}-${result.goals.away}`
+    : `${result.goals.away}-${result.goals.home}`;
+}
+
+function outcomeText(result: SnapRecentResultFact, teamName: string): string {
+  const score = targetScoreText(result);
+  if (result.outcome === "win") return `آخر نتيجة: فوز ${teamName} ${score} على ${result.opponent.name}.`;
+  if (result.outcome === "loss") return `آخر نتيجة: خسارة ${teamName} ${score} أمام ${result.opponent.name}.`;
+  return `آخر نتيجة: تعادل ${teamName} ${score} مع ${result.opponent.name}.`;
+}
+
+function standingsAngle(fx: SnapFixtureFact, teamName: string): string | null {
+  if (!fx.targetStanding || !fx.opponentStanding) return null;
+  if (fx.pointsGap != null && fx.pointsGap <= 6) {
+    return `الفارق بينهما ${fx.pointsGap} نقاط في الجدول.`;
+  }
+  return `${teamName} في المركز ${fx.targetStanding.rank} بـ${fx.targetStanding.points} نقطة، و${fx.opponent.name} في المركز ${fx.opponentStanding.rank} بـ${fx.opponentStanding.points}.`;
+}
+
+function matchAngle(fx: SnapFixtureFact, facts: TeamSnapFacts): string {
+  const standing = standingsAngle(fx, facts.teamName);
+  if (standing) return standing;
+  if (facts.latestResult) return outcomeText(facts.latestResult, facts.teamName);
+  if (fx.round) return `المباراة ضمن ${fx.round}.`;
+  return "افتح مركز المباراة لمتابعة التفاصيل.";
 }
 
 function nextMatchSuffix(next: SnapFixtureFact | null, latestFixtureId: number): string {
   if (!next || next.fixtureId === latestFixtureId) return "";
-  return ` المباراة القادمة ${next.relativeDay} أمام ${next.opponent.name}.`;
+  return ` التالية ${next.relativeDay} أمام ${next.opponent.name}.`;
 }
 
 function upcomingTemplate(facts: TeamSnapFacts): TemplateSnap | null {
@@ -65,8 +90,8 @@ function upcomingTemplate(facts: TeamSnapFacts): TemplateSnap | null {
   if (!fx) return null;
   return {
     kind: "upcoming_match",
-    headline: headline("موعد قريب"),
-    body: body(`${fx.relativeDay} ${fx.kickoffLocalTime}: ${facts.teamName} يواجه ${fx.opponent.name} في ${fx.competition}`),
+    headline: headline(`${facts.teamName} × ${fx.opponent.name}`),
+    body: body(`${fx.relativeDay} ${fx.kickoffLocalTime}: ${facts.teamName} أمام ${fx.opponent.name}. ${matchAngle(fx, facts)}`),
     accent: "green",
     importance: 90,
     entities: {
@@ -85,13 +110,11 @@ function behavioralBigMatchTemplate(facts: TeamSnapFacts): TemplateSnap | null {
   const fx = facts.bigMatch;
   if (!fx) return null;
   const standings =
-    fx.targetStanding && fx.opponentStanding
-      ? ` الفريقان في المركزين ${fx.targetStanding.rank} و${fx.opponentStanding.rank}.`
-      : "";
+    standingsAngle(fx, facts.teamName) ?? matchAngle(fx, facts);
   return {
     kind: "behavioral_big_match",
     headline: headline("مواجهة لافتة"),
-    body: body(`${fx.relativeDay} ${fx.kickoffLocalTime}: ${facts.teamName} أمام ${fx.opponent.name} في ${fx.competition}.${standings}`),
+    body: body(`${fx.relativeDay} ${fx.kickoffLocalTime}: ${facts.teamName} أمام ${fx.opponent.name}. ${standings}`),
     accent: "gold",
     importance: Math.max(82, fx.importance),
     entities: {
@@ -112,7 +135,7 @@ function postMatchTemplate(facts: TeamSnapFacts): TemplateSnap | null {
   return {
     kind: "post_match_recap",
     headline: headline("آخر نتيجة"),
-    body: body(`انتهت مباراة ${facts.teamName}: ${scoreText(result)} مع ${result.opponent.name}.${nextMatchSuffix(facts.nextMatch, result.fixtureId)}`),
+    body: body(`${outcomeText(result, facts.teamName)}${nextMatchSuffix(facts.nextMatch, result.fixtureId)}`),
     accent: result.outcome === "loss" ? "crimson" : "green",
     importance: 72,
     entities: {
