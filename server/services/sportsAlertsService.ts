@@ -84,6 +84,7 @@ interface DetectedAlert {
   title: string;
   body: string;
   teamRefIds: string[]; // معرّفات الفريقين (نص) لجلب المتابعين
+  dedupeKey?: string; // بصمة معنوية عند تغيّر النص رقميًا دون تغيّر القصة
 }
 
 // لقطة آخر حالة لكل مباراة (id → snapshot). تُمسح ضمنيًّا بانتهاء اليوم لأن
@@ -118,15 +119,35 @@ let lastTsEventCleanup = 0;
 // المزوّد أعلاه، إشعارٌ بعنوان+نصّ سبق إرسالهما حرفيًّا لنفس المباراة لا يخرج ثانيةً.
 const sentAlertSigs = new Map<number, Set<string>>();
 let lastSentSigsCleanup = 0;
-const alertSig = (a: DetectedAlert): string => `${a.kind}|${a.title}|${a.body}`;
+const alertSig = (a: DetectedAlert): string => a.dedupeKey ?? `${a.kind}|${a.title}|${a.body}`;
 
 const STAT_INSIGHT_BUCKET_MINUTES = 10;
 const STAT_INSIGHT_LOCK_TTL_MS = 75 * 60 * 1000;
+const STAT_INSIGHT_MIN_SEND_GAP_MS = 20 * 60 * 1000;
 const statInsightMemoryLocks = new Map<string, number>();
 
 interface StatInsightStory {
+  key: string;
   title: string;
   body: string;
+}
+
+function statInsightDedupeKey(story: StatInsightStory): string {
+  return `stat_insight:${story.key}`;
+}
+
+function hasSentStatInsightStory(fixtureId: number, story: StatInsightStory): boolean {
+  const sigs = sentAlertSigs.get(fixtureId);
+  if (!sigs) return false;
+  const key = statInsightDedupeKey(story);
+  if (sigs.has(key)) return true;
+  // توافق مع الحالة المحفوظة قبل إضافة البصمة المعنوية: كانت تحفظ النص كاملاً،
+  // فتغيير الأرقام وحده كان يسمح بتكرار نفس القصة. العنوان هنا يحمل القصة والفريق.
+  const legacyPrefix = `stat_insight|${story.title}|`;
+  for (const sig of sigs) {
+    if (sig.startsWith(legacyPrefix)) return true;
+  }
+  return false;
 }
 
 // توقيع مستقرّ ضد تذبذب دقيقة المزوّد (السبب الشائع لتكرار إشعار البطاقة، مثل ظهور
@@ -206,6 +227,23 @@ async function reserveStatInsightBucket(fixtureId: number, bucket: number): Prom
   return true;
 }
 
+async function reserveStatInsightSendGap(fixtureId: number): Promise<boolean> {
+  const key = `sports_alerts:stat_insight:gap:${fixtureId}`;
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      return (await redis.setLock(key, "1", STAT_INSIGHT_MIN_SEND_GAP_MS)) === "OK";
+    } catch (err) {
+      console.error("[SportsAlerts] stat insight gap lock failed:", err);
+    }
+  }
+
+  compactStatInsightLocks();
+  if (statInsightMemoryLocks.has(key)) return false;
+  statInsightMemoryLocks.set(key, Date.now() + STAT_INSIGHT_MIN_SEND_GAP_MS);
+  return true;
+}
+
 function statPair(stats: TsLiveStats | null, key: keyof TsLiveStats): [number, number] | null {
   const value = stats?.[key];
   return Array.isArray(value) ? value : null;
@@ -214,8 +252,9 @@ function statPair(stats: TsLiveStats | null, key: keyof TsLiveStats): [number, n
 function pickStatInsightStory(m: SplLiveBoardItem, stats: TsLiveStats | null): StatInsightStory | null {
   if (!stats) return null;
   const teams = [m.home.name, m.away.name] as const;
-  const winnerName = (pair: [number, number]) => teams[pair[0] >= pair[1] ? 0 : 1];
-  const loserName = (pair: [number, number]) => teams[pair[0] >= pair[1] ? 1 : 0];
+  const winnerSide = (pair: [number, number]) => (pair[0] >= pair[1] ? "home" : "away");
+  const winnerName = (pair: [number, number]) => teams[winnerSide(pair) === "home" ? 0 : 1];
+  const loserName = (pair: [number, number]) => teams[winnerSide(pair) === "home" ? 1 : 0];
   const diff = (pair: [number, number]) => Math.abs(pair[0] - pair[1]);
   const total = (pair: [number, number]) => pair[0] + pair[1];
 
@@ -229,6 +268,7 @@ function pickStatInsightStory(m: SplLiveBoardItem, stats: TsLiveStats | null): S
   if (dangerous && diff(dangerous) >= 8 && total(dangerous) >= 14) {
     const team = winnerName(dangerous);
     return {
+      key: `dangerous-pressure:${winnerSide(dangerous)}`,
       title: `${team} يرفع الضغط`,
       body: `الهجمات الخطرة تميل بوضوح: ${dangerous[0]}-${dangerous[1]}. النتيجة لا تعكس الزخم الآن.`,
     };
@@ -237,6 +277,7 @@ function pickStatInsightStory(m: SplLiveBoardItem, stats: TsLiveStats | null): S
   if (shotsOn && diff(shotsOn) >= 2 && total(shotsOn) >= 3) {
     const team = winnerName(shotsOn);
     return {
+      key: `shots-on-target:${winnerSide(shotsOn)}`,
       title: `${team} أقرب لهز الشباك`,
       body: `التسديدات على المرمى ${shotsOn[0]}-${shotsOn[1]}. الخطر الحقيقي صار في اتجاه واحد.`,
     };
@@ -247,6 +288,7 @@ function pickStatInsightStory(m: SplLiveBoardItem, stats: TsLiveStats | null): S
     const shotEdge = possession[0] >= possession[1] ? shotsOn[0] - shotsOn[1] : shotsOn[1] - shotsOn[0];
     if (shotEdge <= 0) {
       return {
+        key: `sterile-possession:${winnerSide(possession)}`,
         title: `${possessionTeam} يسيطر بلا ضربة واضحة`,
         body: `الاستحواذ ${possession[0]}%-${possession[1]}%، لكن التسديدات على المرمى لا تخدم صاحب الكرة.`,
       };
@@ -257,6 +299,7 @@ function pickStatInsightStory(m: SplLiveBoardItem, stats: TsLiveStats | null): S
     const team = winnerName(corners);
     const underPressure = loserName(corners);
     return {
+      key: `corner-pressure:${winnerSide(corners)}`,
       title: `${team} يحاصر ${underPressure}`,
       body: `ركنيات متتالية وزخم واضح في الثلث الأخير. الدفاع تحت اختبار حقيقي.`,
     };
@@ -265,6 +308,7 @@ function pickStatInsightStory(m: SplLiveBoardItem, stats: TsLiveStats | null): S
   if (attacks && diff(attacks) >= 18 && total(attacks) >= 35) {
     const team = winnerName(attacks);
     return {
+      key: `attack-volume:${winnerSide(attacks)}`,
       title: `${team} يمسك بإيقاع المباراة`,
       body: `حجم الهجمات يميل بوضوح: ${attacks[0]}-${attacks[1]}. المباراة بدأت تختار طرفاً.`,
     };
@@ -272,6 +316,7 @@ function pickStatInsightStory(m: SplLiveBoardItem, stats: TsLiveStats | null): S
 
   if (shotsOff && shotsOn && total(shotsOff) >= 8 && total(shotsOn) <= 1) {
     return {
+      key: "poor-finishing",
       title: "محاولات كثيرة بلا دقة",
       body: `التسديد حاضر، لكن المرمى غائب: ${shotsOn[0]}-${shotsOn[1]} بين الخشبات.`,
     };
@@ -295,7 +340,10 @@ async function detectStatInsightAlerts(
 
     const story = pickStatInsightStory(m, tsLive.get(m.id)?.stats ?? null);
     if (!story) continue;
+    const dedupeKey = statInsightDedupeKey(story);
+    if (hasSentStatInsightStory(m.id, story)) continue;
     if (!(await reserveStatInsightBucket(m.id, bucket))) continue;
+    if (!(await reserveStatInsightSendGap(m.id))) continue;
 
     out.push({
       fixtureId: m.id,
@@ -303,6 +351,7 @@ async function detectStatInsightAlerts(
       title: story.title,
       body: story.body,
       teamRefIds: [String(m.home.id), String(m.away.id)],
+      dedupeKey,
     });
   }
   return out;
