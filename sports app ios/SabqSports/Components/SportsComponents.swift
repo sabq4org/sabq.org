@@ -482,7 +482,7 @@ struct SpMyMatchesCard: View {
     @Environment(SpAuthStore.self) private var auth
 
     var body: some View {
-        let matches = follows.visibleItems.sorted { $0.timestamp < $1.timestamp }
+        let matches = follows.visibleItems.sorted(by: matchOrder)
         let groups = dayGroups(matches)
         if !matches.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
@@ -571,8 +571,16 @@ struct SpMyMatchesCard: View {
             calendar.startOfDay(for: fixture.kickoff)
         }
         return grouped
-            .map { DayGroup(date: $0.key, fixtures: $0.value.sorted { $0.timestamp < $1.timestamp }) }
+            .map { DayGroup(date: $0.key, fixtures: $0.value.sorted(by: matchOrder)) }
             .sorted { $0.date < $1.date }
+    }
+
+    private func matchOrder(_ a: SpFixture, _ b: SpFixture) -> Bool {
+        let ra = a.status.live ? 0 : a.status.finished ? 2 : 1
+        let rb = b.status.live ? 0 : b.status.finished ? 2 : 1
+        if ra != rb { return ra < rb }
+        if a.timestamp != b.timestamp { return a.timestamp < b.timestamp }
+        return a.id < b.id
     }
 
     private func dayHeader(for date: Date, count: Int) -> some View {
