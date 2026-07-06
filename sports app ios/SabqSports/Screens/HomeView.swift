@@ -22,6 +22,7 @@ struct HomeView: View {
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpMatchFollows.self) private var matchFollows
     @Environment(SpAuthStore.self) private var auth
+    @Environment(SpAppRouter.self) private var router
 
     @State private var comp: SpCompetition?
     @State private var outlook: SpOutlook?
@@ -255,8 +256,53 @@ struct HomeView: View {
             HStack(spacing: 8) {
                 headerButton("magnifyingglass", label: "بحث") { showSearch = true }
                 headerButton("bell", label: "لك") { showForYou = true }
+                accountHeaderButton
             }
         }
+    }
+
+    // مؤشّر الحساب في الترويسة: ضيف = حبّة «دخول» ذهبية تفتح ورقة الدخول العامّة؛
+    // عضو = أفتار بأحرف الاسم + نقطة خضراء يفتح تبويب «حسابي».
+    @ViewBuilder private var accountHeaderButton: some View {
+        Button {
+            if auth.isLoggedIn { router.openAccount() } else { router.requestLogin() }
+        } label: {
+            if auth.isLoggedIn {
+                ZStack(alignment: .bottomTrailing) {
+                    Group {
+                        if let a = auth.member?.avatar, !a.isEmpty {
+                            SpAvatarImage(url: a, size: 32, ring: SpTheme.green.opacity(0.5),
+                                          placeholderFg: SpTheme.onDarkFaint, placeholderBg: SpTheme.chipFill)
+                        } else {
+                            Circle().fill(SpTheme.green)
+                                .frame(width: 32, height: 32)
+                                .overlay(Text(memberInitial)
+                                    .font(SportsFonts.app(size: 14, weight: .heavy))
+                                    .foregroundStyle(.white))
+                        }
+                    }
+                    Circle().fill(Color(red: 0.15, green: 0.78, blue: 0.50))
+                        .frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(SpTheme.surface, lineWidth: 2))
+                }
+                .frame(width: 38, height: 38)
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "person.crop.circle").font(.system(size: 15, weight: .bold))
+                    Text("دخول").font(SportsFonts.app(size: 12.5, weight: .heavy))
+                }
+                .foregroundStyle(Color(red: 0.11, green: 0.08, blue: 0.02))
+                .padding(.horizontal, 12).frame(height: 38)
+                .background(Capsule().fill(SpTheme.gold))
+            }
+        }
+        .buttonStyle(SpPressStyle())
+        .accessibilityLabel(auth.isLoggedIn ? "حسابي" : "تسجيل الدخول بعضوية سبق")
+    }
+
+    private var memberInitial: String {
+        let n = (auth.member?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? "؟" : String(n.prefix(1))
     }
 
     private func headerButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
