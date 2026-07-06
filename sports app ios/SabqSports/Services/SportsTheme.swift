@@ -5,8 +5,8 @@ import UIKit
 
 // هوية «VARA الرياضي» البصرية — **تكيّفية فاتح/داكن باحترافية**.
 //
-// الفاتح (الافتراضي): أبيض نظيف + أخضر زمردي مقتصد، خلفية رمادية فاتحة جدًّا،
-// بطاقات بيضاء بحدود رمادية خفيفة، نص أسود/رمادي.
+// الفاتح (الافتراضي): iOS grouped هادئ — خلفية رمادية محايدة فاتحة،
+// بطاقات/بلوكات بيضاء كبيرة بزوايا ناعمة، نص أسود/رمادي، ولون مظهر قابل للتغيير.
 // الداكن: سُخامي مزرقّ هادئ على طراز «Dim» (لا أسود كالح) — خلفية #1B2129،
 // أسطح مرتفعة #252C36، حدود خفيفة، نص أبيض/رمادي، والأخضر أسطع ليُقرأ.
 //
@@ -54,28 +54,28 @@ nonisolated struct SpTeamPalette: Identifiable, Equatable {
         )
     }
 
-    // ١٠ ألوان هادئة — كل لون قابل للقراءة كنص/زر على الأبيض والداكن. الأخضر
-    // الملعبي هو الافتراضي، وبقية الألوان شخصية لا تغيّر هوية البطولات.
+    // ١٠ ألوان هادئة — كل لون قابل للقراءة كنص/زر على الأبيض والداكن.
+    // الأحمر هو الافتراضي، لكن اختيار المستخدم من «لون التطبيق» يبقى هو الحاكم.
     static let emerald  = make("emerald",  "أخضر",    Color(red: 0.059, green: 0.463, blue: 0.431), Color(red: 0.302, green: 0.729, blue: 0.650))
     static let blue     = make("blue",     "أزرق",    Color(red: 0.145, green: 0.388, blue: 0.620), Color(red: 0.424, green: 0.639, blue: 0.910))
     static let teal     = make("teal",     "سماوي",   Color(red: 0.055, green: 0.463, blue: 0.522), Color(red: 0.333, green: 0.741, blue: 0.808))
     static let indigo   = make("indigo",   "نيلي",    Color(red: 0.294, green: 0.337, blue: 0.588), Color(red: 0.565, green: 0.612, blue: 0.886))
     static let purple   = make("purple",   "بنفسجي",  Color(red: 0.431, green: 0.329, blue: 0.620), Color(red: 0.682, green: 0.584, blue: 0.871))
     static let pink     = make("pink",     "وردي",    Color(red: 0.635, green: 0.290, blue: 0.467), Color(red: 0.878, green: 0.549, blue: 0.690))
-    static let red      = make("red",      "أحمر",    Color(red: 0.690, green: 0.267, blue: 0.267), Color(red: 0.918, green: 0.502, blue: 0.502))
+    static let red      = make("red",      "أحمر VARA", Color(red: 0.733, green: 0.216, blue: 0.204), Color(red: 0.918, green: 0.408, blue: 0.388))
     static let orange   = make("orange",   "نحاسي",   Color(red: 0.678, green: 0.392, blue: 0.149), Color(red: 0.918, green: 0.620, blue: 0.369))
     static let amber    = make("amber",    "ذهبي",    Color(red: 0.651, green: 0.482, blue: 0.082), Color(red: 0.878, green: 0.714, blue: 0.278))
     static let graphite = make("graphite", "رصاصي",   Color(red: 0.275, green: 0.314, blue: 0.365), Color(red: 0.612, green: 0.659, blue: 0.729))
 
     static let all: [SpTeamPalette] = [
-        .emerald, .blue, .teal, .indigo, .purple, .pink, .red, .orange, .amber, .graphite
+        .red, .emerald, .blue, .teal, .indigo, .purple, .pink, .orange, .amber, .graphite
     ]
-    static func by(id: String) -> SpTeamPalette { all.first { $0.id == id } ?? .emerald }
+    static func by(id: String) -> SpTeamPalette { all.first { $0.id == id } ?? .red }
 }
 
 /// اللوحة الفعّالة — حامل غير معزول كي يقرأه `SpTheme` (nonisolated) مباشرةً.
 /// يُحدَّث من `SpAccentTheme` (MainActor) عند تبديل النادي.
-nonisolated(unsafe) var spActivePalette: SpTeamPalette = .emerald
+nonisolated(unsafe) var spActivePalette: SpTeamPalette = .red
 
 /// نمط الألوان الفعّال: false = هوية موحّدة للواجهة، والبطولات لا تعيد صبغ التطبيق.
 /// يبقى المتغير لأجل توافق الشاشات القديمة التي تقرأه.
@@ -92,8 +92,7 @@ nonisolated enum SpTheme {
         })
     }
 
-    // ── ألوان العلامة: الأخضر الزمردي (أسطع قليلًا في الداكن)، الذهبي للميداليات ──
-    // اللون المحوري (الأخضر سابقًا) يتبع لوحة النادي المختارة عبر `spActivePalette`.
+    // ── ألوان العلامة: تتبع «لون التطبيق» المختار، والذهبي للميداليات ──
     static var ink: Color       { dyn(spActivePalette.deepLight, spActivePalette.primaryDark) }
     static var greenDeep: Color { dyn(spActivePalette.deepLight, spActivePalette.deepDark) }
     static var green: Color     { dyn(spActivePalette.primaryLight, spActivePalette.primaryDark) }
@@ -115,7 +114,7 @@ nonisolated enum SpTheme {
     static var excellence: Color { gold }
 
     /// صبغة البطولة داخل الواجهة. بعد التجربة، ألوان البطولات لا تصبغ التطبيق؛
-    /// نعيد لون المستخدم كي تبقى الهوية متناسقة في كل الشاشات.
+    /// نعيد لون التطبيق المختار كي تبقى الهوية متناسقة في كل الشاشات.
     static func compAccent(_ slug: String?) -> Color {
         green
     }
@@ -125,18 +124,18 @@ nonisolated enum SpTheme {
     static let medalBronze = dyn(Color(red: 0.80, green: 0.55, blue: 0.35), Color(red: 0.88, green: 0.64, blue: 0.44))
     static var leaf: Color { dyn(spActivePalette.softLight, spActivePalette.softDark) }
 
-    /// اللون المحوري للإبراز/الأيقونات (يتبع لوحة النادي).
+    /// اللون المحوري للإبراز/الأيقونات.
     static var emeraldDeep: Color { dyn(spActivePalette.primaryLight, spActivePalette.primaryDark) }
-    /// لمسة لون النادي الثانوية (مثل أصفر النصر) — للشارات واللمسات الصغيرة.
+    /// لمسة ثانوية من لون التطبيق — للشارات واللمسات الصغيرة فقط.
     static var teamSecondary: Color { dyn(spActivePalette.secondaryLight, spActivePalette.secondaryDark) }
 
-    // ── الترويسات الخضراء (شرائط علوية بنص أبيض — تبقى خضراء في المظهرين) ──
+    // ── الترويسات الملونة (شرائط علوية بنص أبيض — تتبع لون التطبيق) ──
     static var heroTop: Color { dyn(spActivePalette.primaryLight, spActivePalette.deepDark) }
     static var heroBottom: Color { dyn(spActivePalette.deepLight, spActivePalette.deepDark) }
     static var stadiumTop: Color { dyn(spActivePalette.primaryLight, spActivePalette.deepDark) }
     static var stadiumBottom: Color { dyn(spActivePalette.deepLight, spActivePalette.deepDark) }
 
-    /// تدرّج الترويسة الخضراء (نص أبيض دائمًا).
+    /// تدرّج الترويسة الملونة (نص أبيض دائمًا).
     static var heroGradient: LinearGradient {
         LinearGradient(colors: [heroTop, heroBottom], startPoint: .top, endPoint: .bottom)
     }
@@ -158,13 +157,13 @@ nonisolated enum SpTheme {
                        startPoint: .topTrailing, endPoint: .bottomLeading)
     }
 
-    /// خلفية الشاشة — «ضبابي نعناعي» #F4F8F6 من دليل الهوية (فاتح) /
+    /// خلفية الشاشة — رمادي iOS محايد قريب من المراجع (#F4F4F7 → #F1F2F5) /
     /// سُخامي مزرقّ هادئ (داكن، لا أسود كالح).
     static var screenGradient: LinearGradient {
         LinearGradient(
             colors: [
-                dyn(Color(red: 0.957, green: 0.973, blue: 0.965), Color(red: 0.106, green: 0.128, blue: 0.160)),
-                dyn(Color(red: 0.947, green: 0.965, blue: 0.955), Color(red: 0.090, green: 0.110, blue: 0.140)),
+                dyn(Color(red: 0.957, green: 0.957, blue: 0.973), Color(red: 0.106, green: 0.128, blue: 0.160)),
+                dyn(Color(red: 0.945, green: 0.949, blue: 0.965), Color(red: 0.090, green: 0.110, blue: 0.140)),
             ],
             startPoint: .top, endPoint: .bottom
         )
@@ -182,7 +181,7 @@ nonisolated enum SpTheme {
         LinearGradient(
             colors: [
                 dyn(.white, Color(red: 0.157, green: 0.186, blue: 0.227)),
-                dyn(Color(red: 0.992, green: 0.994, blue: 0.996), Color(red: 0.137, green: 0.163, blue: 0.203)),
+                dyn(.white, Color(red: 0.137, green: 0.163, blue: 0.203)),
             ],
             startPoint: .topLeading, endPoint: .bottomTrailing
         )
@@ -190,31 +189,31 @@ nonisolated enum SpTheme {
 
     // بلا إطارات للبطاقات — نعتمد التباعد والتدرّج اللوني (tonal elevation) للفصل
     // بدل الحدّ الصريح الذي كان يجعل كل قسم صندوقًا، خصوصًا في الوضع الداكن.
-    // دليل الهوية: «البنية تصنعها حدود شعرية 1px بلون #E4ECE7» في الفاتح؛
-    // الداكن يبقى بلا إطارات (فصل بالتدرّج اللوني tonal elevation).
-    static var cardStroke: Color { dyn(Color(red: 0.894, green: 0.925, blue: 0.906), .clear) }
+    // دليل الهوية الجديد: البنية تصنعها كتل بيضاء فوق رمادي محايد؛ الحدّ
+    // خافت جداً حتى لا تصبح البطاقات صناديق ثقيلة.
+    static var cardStroke: Color { dyn(Color(red: 0.910, green: 0.914, blue: 0.925), .clear) }
     static var cardFill: Color { dyn(.white, Color(red: 0.145, green: 0.172, blue: 0.212)) }
-    static var chipFill: Color { dyn(Color(red: 0.929, green: 0.949, blue: 0.937), Color(red: 0.196, green: 0.230, blue: 0.278)) }  // شريحة #EDF2EF
+    static var chipFill: Color { dyn(Color(red: 0.941, green: 0.943, blue: 0.949), Color(red: 0.196, green: 0.230, blue: 0.278)) }  // شريحة #F0F0F2
     /// حبّة شريط الأيام — أغمق قليلًا من الخلفية في الداكن كي تذوب معها (أبيض في الفاتح).
     static var railChipFill: Color { dyn(.white, Color(red: 0.082, green: 0.100, blue: 0.128)) }
     /// فاصل داخليّ خافت جدًّا — خطوط شعرية بدل حدود ثقيلة.
-    static var outline: Color { dyn(Color(red: 0.894, green: 0.925, blue: 0.906), Color(red: 0.216, green: 0.250, blue: 0.298)) }
+    static var outline: Color { dyn(Color(red: 0.890, green: 0.894, blue: 0.906), Color(red: 0.216, green: 0.250, blue: 0.298)) }
 
     /// لا ظلّ للبطاقات — تصميم مسطّح يعتمد الحدّ الحادّ الخفيف للفصل.
     static var cardShadow: Color { .clear }
 
-    // ── حبر النص (دليل الهوية): حبر أخضر #10231B + رمادي مخضرّ #5A6E64 (فاتح)
-    //    / أبيض/رمادي (داكن) — الأسماء محفوظة ──
-    static var onDark: Color { dyn(Color(red: 0.063, green: 0.137, blue: 0.106), Color(red: 0.93, green: 0.95, blue: 0.97)) }     // أساسي
-    static var onDarkStrong: Color { dyn(Color(red: 0.039, green: 0.090, blue: 0.067), .white) }                                  // أقوى
-    static var onDarkDim: Color { dyn(Color(red: 0.353, green: 0.431, blue: 0.392), Color(red: 0.64, green: 0.68, blue: 0.73)) }  // ثانوي
-    static var onDarkFaint: Color { dyn(Color(red: 0.616, green: 0.706, blue: 0.659), Color(red: 0.46, green: 0.50, blue: 0.55)) } // باهت #9DB4A8
+    // ── حبر النص: أسود/رمادي محايد في الفاتح، أبيض/رمادي في الداكن.
+    // الأسماء محفوظة لتوافق مئات الاستخدامات القديمة.
+    static var onDark: Color { dyn(Color(red: 0.055, green: 0.057, blue: 0.062), Color(red: 0.93, green: 0.95, blue: 0.97)) }       // أساسي
+    static var onDarkStrong: Color { dyn(.black, .white) }                                                                         // أقوى
+    static var onDarkDim: Color { dyn(Color(red: 0.455, green: 0.459, blue: 0.475), Color(red: 0.64, green: 0.68, blue: 0.73)) }   // ثانوي
+    static var onDarkFaint: Color { dyn(Color(red: 0.675, green: 0.682, blue: 0.706), Color(red: 0.46, green: 0.50, blue: 0.55)) } // باهت
 
-    // سُلّم الزوايا من دليل الهوية: حقول 10 · أزرار 14 · بطاقات 18.
-    static let cardRadius: CGFloat = 18
-    static let tileRadius: CGFloat = 14
-    static let chipRadius: CGFloat = 10
-    static let buttonRadius: CGFloat = 14
+    // سُلّم الزوايا بنمط iOS grouped: بطاقات كبيرة 28 · بلاطات 16 · شرائح 12.
+    static let cardRadius: CGFloat = 28
+    static let tileRadius: CGFloat = 16
+    static let chipRadius: CGFloat = 12
+    static let buttonRadius: CGFloat = 16
 }
 
 // MARK: - علامة VARA اللاتينية
@@ -294,6 +293,7 @@ final class SpAccentTheme {
 
     private let key = "sabqsports.accent.team"
     private let styleKey = "sabqsports.accent.style"
+    private let defaultMigrationKey = "sabqsports.accent.default.red.20260706"
 
     var paletteId: String {
         didSet {
@@ -318,7 +318,19 @@ final class SpAccentTheme {
     var palette: SpTeamPalette { SpTeamPalette.by(id: paletteId) }
 
     private init() {
-        let saved = UserDefaults.standard.string(forKey: key) ?? SpTeamPalette.emerald.id
+        let stored = UserDefaults.standard.string(forKey: key)
+        let migrated = UserDefaults.standard.bool(forKey: defaultMigrationKey)
+        let saved: String
+        if stored == nil {
+            saved = SpTeamPalette.red.id
+        } else if stored == SpTeamPalette.emerald.id, !migrated {
+            saved = SpTeamPalette.red.id
+            UserDefaults.standard.set(saved, forKey: key)
+            UserDefaults.standard.set(true, forKey: defaultMigrationKey)
+        } else {
+            saved = stored ?? SpTeamPalette.red.id
+            if !migrated { UserDefaults.standard.set(true, forKey: defaultMigrationKey) }
+        }
         paletteId = saved
         spActivePalette = SpTeamPalette.by(id: saved)
         styleId = "unified"
