@@ -41,6 +41,7 @@ import {
   TS_VAR_DECISIVE_RESULTS,
   TS_VAR_RESULT_AR,
   type TsEvent,
+  type TsLiveStats,
   type TsMatchLive,
 } from "./theSportsService";
 import { resolveNames } from "./worldCupNameTranslator";
@@ -65,7 +66,7 @@ interface MatchSnapshot {
   finished: boolean;
 }
 
-type SportsAlertKind = "kickoff" | "goal" | "fulltime" | "card" | "var";
+type SportsAlertKind = "kickoff" | "goal" | "fulltime" | "card" | "var" | "stat_insight";
 
 // تحويل نوع الحدث إلى مفتاح التفضيل المقابل (لترشيح المستلمين).
 const ALERT_KIND_TO_PREF: Record<SportsAlertKind, SportsAlertEventKey> = {
@@ -74,6 +75,7 @@ const ALERT_KIND_TO_PREF: Record<SportsAlertKind, SportsAlertEventKey> = {
   fulltime: "fulltime",
   card: "cards",
   var: "varReview",
+  stat_insight: "smartSnaps",
 };
 
 interface DetectedAlert {
@@ -117,6 +119,15 @@ let lastTsEventCleanup = 0;
 const sentAlertSigs = new Map<number, Set<string>>();
 let lastSentSigsCleanup = 0;
 const alertSig = (a: DetectedAlert): string => `${a.kind}|${a.title}|${a.body}`;
+
+const STAT_INSIGHT_BUCKET_MINUTES = 10;
+const STAT_INSIGHT_LOCK_TTL_MS = 75 * 60 * 1000;
+const statInsightMemoryLocks = new Map<string, number>();
+
+interface StatInsightStory {
+  title: string;
+  body: string;
+}
 
 // توقيع مستقرّ ضد تذبذب دقيقة المزوّد (السبب الشائع لتكرار إشعار البطاقة، مثل ظهور
 // نفس البطاقة عند د83 ثم د84):
@@ -170,6 +181,131 @@ function goalContext(m: SplLiveBoardItem): string | null {
   const el = m.status.elapsed;
   if (el != null && el >= 85) return "في الدقائق الأخيرة";
   return null;
+}
+
+function compactStatInsightLocks(now = Date.now()): void {
+  for (const [key, expiresAt] of statInsightMemoryLocks) {
+    if (expiresAt <= now) statInsightMemoryLocks.delete(key);
+  }
+}
+
+async function reserveStatInsightBucket(fixtureId: number, bucket: number): Promise<boolean> {
+  const key = `sports_alerts:stat_insight:${fixtureId}:${bucket}`;
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      return (await redis.setLock(key, "1", STAT_INSIGHT_LOCK_TTL_MS)) === "OK";
+    } catch (err) {
+      console.error("[SportsAlerts] stat insight redis lock failed:", err);
+    }
+  }
+
+  compactStatInsightLocks();
+  if (statInsightMemoryLocks.has(key)) return false;
+  statInsightMemoryLocks.set(key, Date.now() + STAT_INSIGHT_LOCK_TTL_MS);
+  return true;
+}
+
+function statPair(stats: TsLiveStats | null, key: keyof TsLiveStats): [number, number] | null {
+  const value = stats?.[key];
+  return Array.isArray(value) ? value : null;
+}
+
+function pickStatInsightStory(m: SplLiveBoardItem, stats: TsLiveStats | null): StatInsightStory | null {
+  if (!stats) return null;
+  const teams = [m.home.name, m.away.name] as const;
+  const winnerName = (pair: [number, number]) => teams[pair[0] >= pair[1] ? 0 : 1];
+  const loserName = (pair: [number, number]) => teams[pair[0] >= pair[1] ? 1 : 0];
+  const diff = (pair: [number, number]) => Math.abs(pair[0] - pair[1]);
+  const total = (pair: [number, number]) => pair[0] + pair[1];
+
+  const dangerous = statPair(stats, "dangerousAttacks");
+  const shotsOn = statPair(stats, "shotsOnTarget");
+  const shotsOff = statPair(stats, "shotsOffTarget");
+  const possession = statPair(stats, "possession");
+  const corners = statPair(stats, "corners");
+  const attacks = statPair(stats, "attacks");
+
+  if (dangerous && diff(dangerous) >= 8 && total(dangerous) >= 14) {
+    const team = winnerName(dangerous);
+    return {
+      title: `${team} يرفع الضغط`,
+      body: `الهجمات الخطرة تميل بوضوح: ${dangerous[0]}-${dangerous[1]}. النتيجة لا تعكس الزخم الآن.`,
+    };
+  }
+
+  if (shotsOn && diff(shotsOn) >= 2 && total(shotsOn) >= 3) {
+    const team = winnerName(shotsOn);
+    return {
+      title: `${team} أقرب لهز الشباك`,
+      body: `التسديدات على المرمى ${shotsOn[0]}-${shotsOn[1]}. الخطر الحقيقي صار في اتجاه واحد.`,
+    };
+  }
+
+  if (possession && diff(possession) >= 20 && shotsOn) {
+    const possessionTeam = winnerName(possession);
+    const shotEdge = possession[0] >= possession[1] ? shotsOn[0] - shotsOn[1] : shotsOn[1] - shotsOn[0];
+    if (shotEdge <= 0) {
+      return {
+        title: `${possessionTeam} يسيطر بلا ضربة واضحة`,
+        body: `الاستحواذ ${possession[0]}%-${possession[1]}%، لكن التسديدات على المرمى لا تخدم صاحب الكرة.`,
+      };
+    }
+  }
+
+  if (corners && dangerous && diff(corners) >= 3 && diff(dangerous) >= 5) {
+    const team = winnerName(corners);
+    const underPressure = loserName(corners);
+    return {
+      title: `${team} يحاصر ${underPressure}`,
+      body: `ركنيات متتالية وزخم واضح في الثلث الأخير. الدفاع تحت اختبار حقيقي.`,
+    };
+  }
+
+  if (attacks && diff(attacks) >= 18 && total(attacks) >= 35) {
+    const team = winnerName(attacks);
+    return {
+      title: `${team} يمسك بإيقاع المباراة`,
+      body: `حجم الهجمات يميل بوضوح: ${attacks[0]}-${attacks[1]}. المباراة بدأت تختار طرفاً.`,
+    };
+  }
+
+  if (shotsOff && shotsOn && total(shotsOff) >= 8 && total(shotsOn) <= 1) {
+    return {
+      title: "محاولات كثيرة بلا دقة",
+      body: `التسديد حاضر، لكن المرمى غائب: ${shotsOn[0]}-${shotsOn[1]} بين الخشبات.`,
+    };
+  }
+
+  return null;
+}
+
+async function detectStatInsightAlerts(
+  matches: SplLiveBoardItem[],
+  tsLive: Map<number, TsMatchLive>,
+  suppressedFixtureIds: Set<number>,
+): Promise<DetectedAlert[]> {
+  const out: DetectedAlert[] = [];
+  for (const m of matches) {
+    if (!m.status.live || m.status.finished || suppressedFixtureIds.has(m.id)) continue;
+    const elapsed = m.status.elapsed ?? 0;
+    if (elapsed < STAT_INSIGHT_BUCKET_MINUTES) continue;
+    const bucket = Math.floor(elapsed / STAT_INSIGHT_BUCKET_MINUTES);
+    if (bucket <= 0) continue;
+
+    const story = pickStatInsightStory(m, tsLive.get(m.id)?.stats ?? null);
+    if (!story) continue;
+    if (!(await reserveStatInsightBucket(m.id, bucket))) continue;
+
+    out.push({
+      fixtureId: m.id,
+      kind: "stat_insight",
+      title: story.title,
+      body: story.body,
+      teamRefIds: [String(m.home.id), String(m.away.id)],
+    });
+  }
+  return out;
 }
 
 // ── صمود خطّ الأساس لإعادة التشغيل/النشر (Redis، أفضل جهد) ──
@@ -399,6 +535,7 @@ export async function pushToUserDevices(
   title: string,
   body: string,
   data: Record<string, string>,
+  options: { interruptionLevel?: "active" | "time-sensitive"; apnsPriority?: "5" | "10" } = {},
 ): Promise<void> {
   try {
     const devices = await db
@@ -421,8 +558,11 @@ export async function pushToUserDevices(
           try {
             const resp = await sendPushNotification(
               d.token,
-              createCustomNotificationPayload(title, body, { ...data, priority: "time-sensitive" }),
-              { priority: "10", pushType: "alert", topic: d.bundleId ?? undefined },
+              createCustomNotificationPayload(title, body, {
+                ...data,
+                priority: options.interruptionLevel ?? "time-sensitive",
+              }),
+              { priority: options.apnsPriority ?? "10", pushType: "alert", topic: d.bundleId ?? undefined },
             );
             // تشخيص: نطبع نتيجة كل دفعة (نجاح/فشل + السبب) لكشف الرفض الصامت
             // (BadDeviceToken/DeviceTokenNotForTopic) الذي يمنع وصول إشعارات الرياضة.
@@ -488,7 +628,10 @@ async function dispatchAlert(alert: DetectedAlert): Promise<number> {
       } catch (err) {
         console.error(`[SportsAlerts] inbox/emit for user ${userId} failed:`, err);
       }
-      await pushToUserDevices(userId, alert.title, alert.body, pushData);
+      await pushToUserDevices(userId, alert.title, alert.body, pushData, {
+        interruptionLevel: alert.kind === "stat_insight" ? "active" : "time-sensitive",
+        apnsPriority: alert.kind === "stat_insight" ? "5" : "10",
+      });
     }),
   );
 
@@ -710,7 +853,13 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
   const alerts = detectAlerts(matches, tsHandledIds);
   const eventAlerts = await detectEventAlerts(matches, tsHandledIds);
   const tsEventAlerts = await detectTsEventAlerts(matches, tsLive);
-  const allAlerts = [...alerts, ...eventAlerts, ...tsEventAlerts];
+  const hardAlertFixtureIds = new Set(
+    [...alerts, ...eventAlerts, ...tsEventAlerts]
+      .filter((alert) => alert.kind !== "kickoff" && alert.kind !== "fulltime")
+      .map((alert) => alert.fixtureId),
+  );
+  const statInsightAlerts = await detectStatInsightAlerts(matches, tsLive, hardAlertFixtureIds);
+  const allAlerts = [...alerts, ...eventAlerts, ...tsEventAlerts, ...statInsightAlerts];
 
   let recipients = 0;
   for (const alert of allAlerts) {
