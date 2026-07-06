@@ -85,11 +85,8 @@ struct TcCertaintyTag: View {
             Text(confirmed ? "مؤكّدة" : "إشاعة")
                 .font(SportsFonts.app(size: 10, weight: .heavy))
         }
-        .foregroundStyle(confirmed ? SpTheme.dyn(Color(red: 0.05, green: 0.55, blue: 0.35), Color(red: 0.30, green: 0.80, blue: 0.55)) : SpTheme.dyn(Color(red: 0.66, green: 0.20, blue: 0.55), Color(red: 0.90, green: 0.52, blue: 0.80)))
-        .padding(.horizontal, 7).padding(.vertical, 3)
-        .background(
-            Capsule().fill((confirmed ? Color.green : Color.purple).opacity(0.12))
-        )
+        // نص + أيقونة بلا كبسولة — الحالة لمسة (أخضر مؤكّد / رمادي إشاعة).
+        .foregroundStyle(confirmed ? SpTheme.dyn(Color(red: 0.05, green: 0.55, blue: 0.35), Color(red: 0.30, green: 0.80, blue: 0.55)) : SpTheme.onDarkDim)
     }
 }
 
@@ -107,17 +104,16 @@ struct TcHereWeGoBadge: View {
     }
 }
 
-/// مبلغ الصفقة — «85 مليون €» (الرقم ثم رمز العملة)، بخلفية كهرمانية.
+/// مبلغ الصفقة — «85 مليون €» (الرقم ثم رمز العملة). رقم عارٍ بحبر داكن بلا
+/// كبسولة ذهبية (المبلغ ليس تميّزًا، والذهبي محجوز للتتويج/الميداليات).
 struct TcMoneyPill: View {
     let amount: Double?
     let currency: String?
     var body: some View {
         if let text = TcMoney.format(amount, currency: currency) {
             Text(text)
-                .font(SportsFonts.app(size: 12, weight: .heavy))
-                .foregroundStyle(SpTheme.goldDeep)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(SpTheme.gold.opacity(0.14)))
+                .font(SportsFonts.app(size: 13, weight: .heavy))
+                .foregroundStyle(SpTheme.onDark)
         }
     }
 }
@@ -268,15 +264,8 @@ struct TcHeroCard: View {
             }
             .padding(15)
             .frame(width: 280, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(SpTheme.card)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(LinearGradient(colors: [(rumour.hereWeGo ? SpTheme.crimson : SpTheme.green).opacity(0.07), .clear],
-                                                 startPoint: .topTrailing, endPoint: .bottomLeading))
-                    )
-            )
+            // بطاقة بيضاء مسطّحة بلا تدرّج ملوّن — الحالة الوشيكة تُميَّز بالحدّ القرمزي فقط.
+            .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(SpTheme.card))
             .overlay(
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .stroke(rumour.hereWeGo ? SpTheme.crimson.opacity(0.4) : SpTheme.cardStroke, lineWidth: 1)

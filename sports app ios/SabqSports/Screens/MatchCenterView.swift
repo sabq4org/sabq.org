@@ -380,24 +380,14 @@ struct SpMatchCenter: View {
                         .font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
                 }
+                // سطر الموعد/البطولة/الدور حُذف — يتكرّر مفصّلًا في بطاقة المعلومات أدناه.
                 SpCountdownChips(timestampMs: f.timestamp * 1000)
                     .frame(maxWidth: .infinity, alignment: .center)
-                let when = headerMeta(f)
-                if !when.isEmpty {
-                    HStack(spacing: 6) {
-                        Image(systemName: "calendar")
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
-                        Text("\(when) · \(SpFormat.kickoffTime(f.date))")
-                            .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
-                        Spacer(minLength: 0)
-                    }
-                }
             }
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
                     .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
-                    .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
             )
             .padding(.horizontal, 16)
         }
@@ -439,9 +429,8 @@ struct SpMatchCenter: View {
     private func infoLine(_ icon: String, _ label: String, _ value: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold)).foregroundStyle(acc)
+                .font(.system(size: 14, weight: .semibold)).foregroundStyle(acc)
                 .frame(width: 26, height: 26)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(acc.opacity(0.10)))
             Text(label).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
             Spacer(minLength: 8)
             Text(value).font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark)
@@ -643,7 +632,6 @@ struct SpMatchCenter: View {
             .background(
                 RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
                     .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
-                    .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
             )
             .padding(.horizontal, 16)
         }
@@ -1314,12 +1302,13 @@ struct SpMatchCenter: View {
     }
 
     private var expectedBadge: some View {
+        // «تشكيلة متوقعة» — رقاقة محايدة بلا برتقالي (لون محوري واحد للتطبيق).
         HStack(spacing: 8) {
             Text("تشكيلة متوقعة")
                 .font(SportsFonts.app(size: 11, weight: .heavy))
-                .foregroundStyle(.white)
+                .foregroundStyle(SpTheme.onDark)
                 .padding(.horizontal, 10).padding(.vertical, 3)
-                .background(Capsule().fill(Color.orange))
+                .background(Capsule().fill(SpTheme.chipFill))
             Text("ترشيح المزوّد قبل الإعلان الرسمي — قد تتغيّر")
                 .font(SportsFonts.app(size: 11))
                 .foregroundStyle(SpTheme.onDarkDim)
@@ -1327,7 +1316,7 @@ struct SpMatchCenter: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8).padding(.horizontal, 12)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.12)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.chipFill.opacity(0.5)))
         .padding(.horizontal, 16)
     }
 
@@ -1535,24 +1524,24 @@ struct SpMatchCenter: View {
     }
 
     private func momentumCard(_ m: SpMomentum) -> some View {
+        // الاستحواذ يُعرض في تبويب «الإحصاءات» — لا نكرّره هنا؛ الرسم للزخم وحده.
         VStack(spacing: 12) {
-            sectionTitle("الزخم والاستحواذ", icon: "waveform.path.ecg")
-            if let pos = m.possession {
-                compareRow("الاستحواذ", home: Double(pos.home), away: Double(pos.away), fmt: "%.0f", suffix: "%")
-            }
+            sectionTitle("الزخم", icon: "waveform.path.ecg")
             if !m.points.isEmpty {
-                SpFlowChart(points: m.points)
+                SpFlowChart(points: m.points, homeColor: acc)
                 chartLegend
             }
         }
+        .padding(16).background(analysisCardBg)
     }
 
     private func pressureCard(_ p: SpPressure) -> some View {
         VStack(spacing: 12) {
             sectionTitle("مؤشّر الضغط", icon: "gauge.with.dots.needle.50percent")
-            SpFlowChart(points: downsample(p.points, maxCount: 24))
+            SpFlowChart(points: downsample(p.points, maxCount: 24), homeColor: acc)
             chartLegend
         }
+        .padding(16).background(analysisCardBg)
     }
 
     private func factsCard(_ f: SpMatchFacts) -> some View {
@@ -1640,7 +1629,6 @@ struct SpMatchCenter: View {
     private var analysisCardBg: some View {
         RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
             .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
-            .shadow(color: SpTheme.cardShadow, radius: 10, x: 0, y: 6)
     }
 
     private func downsample(_ pts: [SpFlowPoint], maxCount: Int) -> [SpFlowPoint] {
@@ -1676,9 +1664,10 @@ struct SpMatchCenter: View {
             HStack(spacing: 13) {
                 playerPhoto(photo, size: 52)
                 VStack(alignment: .leading, spacing: 3) {
+                    // «أفضل لاعب» تميّز — بذهبيّ التميّز لا اللون المحوري.
                     HStack(spacing: 5) {
-                        Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(acc)
-                        Text("أفضل لاعب في المباراة").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(acc)
+                        Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(SpTheme.excellence)
+                        Text("أفضل لاعب في المباراة").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.excellence)
                     }
                     Text(m.name).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                     Text(m.team).font(SportsFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
@@ -1687,7 +1676,7 @@ struct SpMatchCenter: View {
                 ratingBadge(m.rating)
             }
             .padding(13).frame(maxWidth: .infinity)
-            .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(acc.opacity(0.06)))
+            .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.excellence.opacity(0.07)))
             .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
         }
         .buttonStyle(SpPressStyle())
@@ -1726,7 +1715,8 @@ struct SpMatchCenter: View {
         Text(String(format: "%.1f", r))
             .font(SportsFonts.app(size: 13, weight: .heavy)).foregroundStyle(.white)
             .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(Capsule().fill(r >= 7 ? acc : (r >= 6 ? SpTheme.onDarkDim : SpTheme.crimson)))
+            // التقييم العالي (≥7) تميّز بذهبيّ التميّز؛ 6–7 محايد و<6 قرمزي.
+            .background(Capsule().fill(r >= 7 ? SpTheme.excellence : (r >= 6 ? SpTheme.onDarkDim : SpTheme.crimson)))
             .environment(\.layoutDirection, .leftToRight)
     }
 

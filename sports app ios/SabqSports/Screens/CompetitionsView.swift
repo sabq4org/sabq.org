@@ -39,7 +39,8 @@ struct CompetitionsView: View {
                     } else if let loadError {
                         SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
                     } else {
-                        overview
+                        // بطاقة «دليل البطولات» حُذفت — كانت تكرّر عنوان الشريط
+                        // وأعداد الأقسام والفلاتر. القائمة تبدأ مباشرة بالفلاتر.
                         myCompetitionsCard
                         filters
                         ForEach(grouped, id: \.category) { group in
@@ -56,44 +57,6 @@ struct CompetitionsView: View {
         }
         .task { await load() }
         .refreshable { await load(force: true) }
-    }
-
-    private var overview: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("دليل البطولات")
-                    .font(SportsFonts.app(size: 22, weight: .heavy))
-                    .foregroundStyle(SpTheme.onDark)
-                HStack(spacing: 8) {
-                    metricChip("\(competitions.count)", "بطولة")
-                    metricChip("\(competitions.filter { $0.status == "ongoing" }.count)", "جارية")
-                    metricChip("\(competitions.filter { $0.hasStandings }.count)", "ترتيب")
-                }
-            }
-            Spacer(minLength: 0)
-            Image(systemName: "trophy.fill")
-                .font(.system(size: 30, weight: .bold))
-                .foregroundStyle(SpTheme.green)
-                .frame(width: 56, height: 56)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(SpTheme.green.opacity(0.10)))
-        }
-        .padding(16)
-        .background(cardBg)
-    }
-
-    private func metricChip(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 1) {
-            Text(value)
-                .font(SportsFonts.app(size: 15, weight: .heavy))
-                .foregroundStyle(SpTheme.green)
-                .monospacedDigit()
-            Text(label)
-                .font(SportsFonts.app(size: 9.5, weight: .bold))
-                .foregroundStyle(SpTheme.onDarkDim)
-        }
-        .frame(minWidth: 54)
-        .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.chipFill))
     }
 
     private var filters: some View {
@@ -136,14 +99,9 @@ struct CompetitionsView: View {
                         .font(SportsFonts.app(size: 16, weight: .heavy))
                         .foregroundStyle(SpTheme.onDark)
                     Text("\(favs.count)")
-                        .font(SportsFonts.app(size: 11, weight: .bold))
-                        .foregroundStyle(SpTheme.green)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(Capsule().fill(SpTheme.green.opacity(0.12)))
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(SpTheme.gold)
+                        .font(SportsFonts.app(size: 12, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDarkFaint)
+                        .monospacedDigit()
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 14)
@@ -234,12 +192,6 @@ struct CompetitionsView: View {
         }
     }
 
-    private var cardBg: some View {
-        RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
-            .fill(SpTheme.card)
-            .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
-    }
-
     private func load(force: Bool = false) async {
         if !force { loading = true }
         do {
@@ -327,11 +279,10 @@ struct CompetitionRow: View {
         }()
         return Group {
             if !label.isEmpty {
+                // نص ملوّن هادئ بلا كبسولة — الحالة لمسة لا صندوق.
                 Text(label)
-                    .font(SportsFonts.app(size: 10, weight: .bold))
+                    .font(SportsFonts.app(size: 10.5, weight: .bold))
                     .foregroundStyle(color)
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(Capsule().fill(color.opacity(0.12)))
             }
         }
     }

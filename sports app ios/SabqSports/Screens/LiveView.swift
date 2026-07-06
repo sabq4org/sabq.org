@@ -52,7 +52,6 @@ struct LiveView: View {
                          title: "لا مباريات مباشرة عالميًا الآن",
                          subtitle: "ستظهر هنا أي مباراة جارية الآن حول العالم")
         } else {
-            overviewStrip
             ForEach(worldCategorySections) { section in
                 VStack(alignment: .leading, spacing: 18) {
                     categoryHeader(section)
@@ -66,20 +65,18 @@ struct LiveView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 Image(systemName: "globe")
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(SpTheme.green)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(SpTheme.green.opacity(0.10)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("عالمية")
                         .font(SportsFonts.headline(size: 24))
                         .foregroundStyle(SpTheme.onDark)
-                    Text("المباريات الجارية حول العالم مرتبة حسب الأهمية والمنطقة")
+                    Text("المباريات الجارية حول العالم")
                         .font(SportsFonts.app(size: 11.5, weight: .semibold))
                         .foregroundStyle(SpTheme.onDarkDim)
-                        .lineLimit(2)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 0)
                 if liveNowCount > 0 { quietLiveBadge("\(liveNowCount)") }
@@ -89,41 +86,6 @@ struct LiveView: View {
     }
 
     private var liveNowCount: Int { world.filter { $0.fixture.status.live }.count }
-
-    private var overviewStrip: some View {
-        HStack(spacing: 8) {
-            summaryChip(icon: "dot.radiowaves.left.and.right", title: "مباشرة", value: "\(liveNowCount)", tint: SpTheme.green)
-            summaryChip(icon: "trophy", title: "بطولات", value: "\(worldGroups.count)", tint: SpTheme.gold)
-            summaryChip(icon: "map", title: "دول", value: "\(countryCount)", tint: SpTheme.greenSoft)
-        }
-    }
-
-    private var countryCount: Int {
-        Set(world.map { $0.countryAr.isEmpty ? $0.country : $0.countryAr }.filter { !$0.isEmpty }).count
-    }
-
-    private func summaryChip(icon: String, title: String, value: String, tint: Color) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(tint)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(title)
-                    .font(SportsFonts.app(size: 10, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDarkDim)
-                Text(value)
-                    .font(SportsFonts.app(size: 14, weight: .heavy))
-                    .foregroundStyle(SpTheme.onDark)
-                    .monospacedDigit()
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .frame(height: 48)
-        .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.cardFill))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
-    }
 
     // MARK: - التجميع حسب البطولة (بطولاتنا أولًا ثم العالم)
 
@@ -262,14 +224,11 @@ struct LiveView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            HStack(spacing: 4) {
-                Circle().fill(tint).frame(width: 6, height: 6)
-                Text("\(g.matches.count)")
-                    .font(SportsFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(tint)
-            }
-            .padding(.horizontal, 10).padding(.vertical, 4)
-            .background(Capsule().fill(tint.opacity(0.12)))
+            // عدّاد المباريات — رقم هادئ بلا كبسولة ملوّنة (نمط القوائم المسطّحة).
+            Text("\(g.matches.count)")
+                .font(SportsFonts.app(size: 13, weight: .heavy))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .monospacedDigit()
         }
         .padding(.top, 4)
     }
@@ -288,9 +247,8 @@ struct LiveView: View {
     }
 
     private func groupSubtitle(_ g: LiveGroup) -> String {
-        let cat = categoryTitle(g.category)
-        guard !g.country.isEmpty else { return cat }
-        return "\(cat) · \(g.country)"
+        // الفئة معروضة في ترويسة القسم فوق المجموعة — نكتفي بالدولة هنا (لا تكرار).
+        g.country.isEmpty ? categoryTitle(g.category) : g.country
     }
 
     private func categoryTitle(_ category: String) -> String {
@@ -298,23 +256,23 @@ struct LiveView: View {
     }
 
     private func categoryTint(_ category: String) -> Color {
+        // لون محوري واحد للفئات — الذهبي محجوز للتميّز لا لتلوين فئة خليجية/عربية.
         switch category {
         case "saudi": return SpTheme.green
-        case "gulf", "arab": return SpTheme.gold
-        case "european", "world": return SpTheme.greenSoft
+        case "european", "world", "gulf", "arab": return SpTheme.greenSoft
         default: return SpTheme.onDarkDim
         }
     }
 
     private func quietLiveBadge(_ value: String) -> some View {
+        // نقطة + نص أخضر بلا كبسولة ملوّنة — لمسة مباشر هادئة.
         HStack(spacing: 6) {
-            Circle().fill(SpTheme.green).frame(width: 7, height: 7)
+            Circle().fill(SpTheme.crimson).frame(width: 7, height: 7)
             Text("\(value) مباشرة")
                 .font(SportsFonts.app(size: 12.5, weight: .bold))
-                .foregroundStyle(SpTheme.green)
+                .foregroundStyle(SpTheme.onDarkDim)
+                .monospacedDigit()
         }
-        .padding(.horizontal, 11).padding(.vertical, 6)
-        .background(Capsule().fill(SpTheme.green.opacity(0.12)))
     }
 
     // MARK: - التحميل + التحديث اللحظي
