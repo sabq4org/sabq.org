@@ -157,6 +157,8 @@ struct MatchesCenterView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(SpLiveStream.self) private var liveStream
     @Environment(SpMatchFollows.self) private var follows
+    @Environment(SpAuthStore.self) private var auth
+    @Environment(SpAppRouter.self) private var router
 
     @State private var competitions: [SpCompetition] = []
     @State private var fixtures: [SpFixture] = []
@@ -268,7 +270,52 @@ struct MatchesCenterView: View {
             manageButton
             calendarButton
             liveToggle
+            accountChip
         }
+    }
+
+    // مؤشّر الحساب في شريط «المباريات» (التبويب الافتراضي): ضيف = «دخول» ذهبية
+    // تفتح ورقة الدخول العامّة؛ عضو = أفتار + نقطة خضراء يفتح تبويب «حسابي».
+    @ViewBuilder private var accountChip: some View {
+        Button {
+            if auth.isLoggedIn { router.openAccount() } else { router.requestLogin() }
+        } label: {
+            if auth.isLoggedIn {
+                ZStack(alignment: .bottomTrailing) {
+                    Group {
+                        if let a = auth.member?.avatar, !a.isEmpty {
+                            SpAvatarImage(url: a, size: 28, ring: SpTheme.green.opacity(0.5),
+                                          placeholderFg: SpTheme.onDarkFaint, placeholderBg: SpTheme.chipFill)
+                        } else {
+                            Circle().fill(SpTheme.green)
+                                .frame(width: 28, height: 28)
+                                .overlay(Text(memberInitial)
+                                    .font(SportsFonts.app(size: 13, weight: .heavy))
+                                    .foregroundStyle(.white))
+                        }
+                    }
+                    Circle().fill(Color(red: 0.15, green: 0.78, blue: 0.50))
+                        .frame(width: 9, height: 9)
+                        .overlay(Circle().stroke(SpTheme.surface, lineWidth: 2))
+                }
+                .frame(width: 34, height: 34)
+            } else {
+                HStack(spacing: 5) {
+                    Image(systemName: "person.crop.circle").font(.system(size: 14, weight: .bold))
+                    Text("دخول").font(SportsFonts.app(size: 12.5, weight: .heavy))
+                }
+                .foregroundStyle(Color(red: 0.11, green: 0.08, blue: 0.02))
+                .padding(.horizontal, 11).frame(height: 34)
+                .background(Capsule().fill(SpTheme.gold))
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(auth.isLoggedIn ? "حسابي" : "تسجيل الدخول بعضوية سبق")
+    }
+
+    private var memberInitial: String {
+        let n = (auth.member?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? "؟" : String(n.prefix(1))
     }
 
     /// أيقونة ضبط البطولات — تفتح صفحة اختيار ما يظهر في الجدول الموحّد.

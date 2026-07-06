@@ -13,6 +13,7 @@ struct SabqSportsApp: App {
     @State private var themeMode = SpThemeMode.shared
     @State private var accent = SpAccentTheme.shared
     @State private var liveStream = SpLiveStream.shared
+    @State private var router = SpAppRouter.shared
 
     init() {
         // سجّل خط IBM Plex Sans Arabic قبل أي واجهة تستعمله.
@@ -31,6 +32,7 @@ struct SabqSportsApp: App {
                 .environment(themeMode)
                 .environment(accent)
                 .environment(liveStream)
+                .environment(router)
                 // إعادة بناء الشجرة عند تبديل لون التطبيق كي تلتقط
                 // كل الشاشات القيم الجديدة فورًا (تُقرأ من الحوامل العامة أثناء الرسم).
                 .id("\(accent.paletteId)|\(accent.styleId)")

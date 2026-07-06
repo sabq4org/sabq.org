@@ -8,9 +8,8 @@ struct AccountView: View {
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpThemeMode.self) private var themeMode
     @Environment(SpAccentTheme.self) private var accent
+    @Environment(SpAppRouter.self) private var router
     @Environment(\.openURL) private var openURL
-    @State private var identifier = ""
-    @State private var password = ""
     @State private var selectedTeam: IDBox?
     @State private var showSignOutConfirm = false
 
@@ -95,6 +94,8 @@ struct AccountView: View {
                 Spacer(minLength: 0)
             }
 
+            membershipRow
+
             HStack(spacing: 8) {
                 profileMetric("\(favorites.team == nil ? 0 : 1)", "مفضل")
                 profileMetric("\(followedTeams.count)", "متابعة")
@@ -104,6 +105,35 @@ struct AccountView: View {
         .padding(16)
         .frame(maxWidth: .infinity)
         .background(cardBg)
+    }
+
+    // شارة العضوية «عضو سبق» + رابط إدارة الحساب على سبق — الرعاية الخفيفة (الموضع الثالث).
+    private var membershipRow: some View {
+        HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 12, weight: .bold))
+                Text("عضو سبق")
+                    .font(SportsFonts.app(size: 11.5, weight: .heavy))
+            }
+            .foregroundStyle(SpTheme.gold)
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(Capsule().fill(SpTheme.gold.opacity(0.14))
+                .overlay(Capsule().stroke(SpTheme.gold.opacity(0.5), lineWidth: 1)))
+
+            Spacer(minLength: 0)
+
+            Button { openURL(URL(string: "https://sabq.org/profile")!) } label: {
+                HStack(spacing: 3) {
+                    Text("إدارة حساب سبق")
+                        .font(SportsFonts.app(size: 11.5, weight: .bold))
+                    Image(systemName: "chevron.backward")
+                        .font(.system(size: 9, weight: .bold))
+                }
+                .foregroundStyle(SpTheme.green)
+            }
+            .buttonStyle(.plain)
+        }
     }
 
     private var activeAlertsCount: Int {
@@ -402,19 +432,21 @@ struct AccountView: View {
                      : "تصلك هذه التنبيهات عن مباريات فِرقك المتابَعة.")
             } else {
                 settingsCard {
-                    Button { /* يمرّر المستخدم لأعلى لتسجيل الدخول */ } label: {
+                    Button { router.requestLogin() } label: {
                         HStack(spacing: 12) {
-                            iconTile("bell.slash.fill", SpTheme.onDarkFaint)
-                            Text("سجّل الدخول لتفعيل تنبيهات فِرقك")
+                            iconTile("bell.badge.fill", SpTheme.gold)
+                            Text("سجّل الدخول بعضوية سبق لتفعيل تنبيهات فِرقك")
                                 .font(SportsFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SpTheme.onDarkDim)
+                                .foregroundStyle(SpTheme.onDark)
                             Spacer(minLength: 0)
+                            Image(systemName: "chevron.backward")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(SpTheme.onDarkFaint)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 14)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .disabled(true)
+                    .buttonStyle(SpPressStyle())
                 }
             }
         }
@@ -434,19 +466,21 @@ struct AccountView: View {
                 hint("تصلك الصفقات المؤكّدة فور تأكيدها — تنبيهات سوق عامّة لا تتطلّب متابعة فريق.")
             } else {
                 settingsCard {
-                    Button { /* يمرّر المستخدم لأعلى لتسجيل الدخول */ } label: {
+                    Button { router.requestLogin() } label: {
                         HStack(spacing: 12) {
-                            iconTile("bell.slash.fill", SpTheme.onDarkFaint)
-                            Text("سجّل الدخول لتفعيل تنبيهات الانتقالات")
+                            iconTile("bell.badge.fill", SpTheme.gold)
+                            Text("سجّل الدخول بعضوية سبق لتفعيل تنبيهات الانتقالات")
                                 .font(SportsFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SpTheme.onDarkDim)
+                                .foregroundStyle(SpTheme.onDark)
                             Spacer(minLength: 0)
+                            Image(systemName: "chevron.backward")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(SpTheme.onDarkFaint)
                         }
                         .padding(.horizontal, 14).padding(.vertical, 14)
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .disabled(true)
+                    .buttonStyle(SpPressStyle())
                 }
             }
         }
@@ -552,101 +586,13 @@ struct AccountView: View {
         .buttonStyle(SpPressStyle())
     }
 
-    // MARK: - تسجيل الدخول (كما هو)
+    // MARK: - تسجيل الدخول (بعضوية سبق — عبر المكوّن المشترك SpMembershipLogin)
 
     private var signInCard: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "person.crop.circle")
-                .font(.system(size: 40))
-                .foregroundStyle(SpTheme.green)
-            Text("سجّل دخولك")
-                .font(SportsFonts.app(size: 22, weight: .bold))
-                .foregroundStyle(SpTheme.onDark)
-            Text("بحساب VARA لمتابعة فِرقك وتلقّي تنبيهات المباريات والمشاركة في المجتمع.")
-                .font(SportsFonts.app(size: 13))
-                .foregroundStyle(SpTheme.onDarkDim)
-                .multilineTextAlignment(.center)
-
-            VStack(spacing: 10) {
-                field(text: $identifier, placeholder: "البريد الإلكتروني أو الجوال", icon: "person", secure: false)
-                field(text: $password, placeholder: "كلمة المرور", icon: "lock", secure: true)
-            }
-
-            Button {
-                Task { await auth.loginWithCredentials(identifier: identifier, password: password) }
-            } label: {
-                HStack(spacing: 8) {
-                    if auth.isLoading { ProgressView().tint(.white) }
-                    Text("تسجيل الدخول").font(SportsFonts.app(size: 16, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity).frame(height: 50)
-                .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(SpTheme.green))
-            }
-            .buttonStyle(.plain)
-            .disabled(auth.isLoading)
-
-            dividerOr
-
-            Button { auth.startAppleSignIn() } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "applelogo").font(.system(size: 18, weight: .semibold))
-                    Text("تسجيل الدخول بـ Apple").font(SportsFonts.app(size: 16, weight: .semibold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity).frame(height: 50)
-                .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(.black))
-            }
-            .buttonStyle(.plain)
-            .disabled(auth.isLoading)
-
-            if let err = auth.errorMessage {
-                Text(err)
-                    .font(SportsFonts.app(size: 12))
-                    .foregroundStyle(SpTheme.crimson)
-                    .multilineTextAlignment(.center)
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24).padding(.horizontal, 16)
-        .background(cardBg)
-    }
-
-    @ViewBuilder private func field(text: Binding<String>, placeholder: String, icon: String, secure: Bool) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 14))
-                .foregroundStyle(SpTheme.onDarkFaint)
-                .frame(width: 18)
-            Group {
-                if secure {
-                    SecureField("", text: text, prompt: Text(placeholder).foregroundStyle(SpTheme.onDarkFaint))
-                } else {
-                    TextField("", text: text, prompt: Text(placeholder).foregroundStyle(SpTheme.onDarkFaint))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.emailAddress)
-                }
-            }
-            .font(SportsFonts.app(size: 15))
-            .foregroundStyle(SpTheme.onDark)
-            .tint(SpTheme.green)
-        }
-        .padding(.horizontal, 14).padding(.vertical, 13)
-        .background(
-            RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
-                .fill(SpTheme.cardFill)
-                .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
-        )
-    }
-
-    private var dividerOr: some View {
-        HStack(spacing: 12) {
-            Rectangle().fill(SpTheme.outline).frame(height: 1)
-            Text("أو").font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
-            Rectangle().fill(SpTheme.outline).frame(height: 1)
-        }
-        .padding(.vertical, 2)
+        SpMembershipLogin()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 22).padding(.horizontal, 16)
+            .background(cardBg)
     }
 
     @ViewBuilder private var avatarView: some View {
@@ -728,5 +674,174 @@ struct AccountView: View {
         RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
             .fill(SpTheme.card)
             .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+    }
+}
+
+// MARK: - موجّه التطبيق (تبويب مُختار + ورقة الدخول العامّة)
+
+/// تبويبات الجذر (RootTabView) — تسمح بالتنقّل البرمجي بين التبويبات.
+enum SpTab: Hashable { case matches, roshn, competitions, world, account }
+
+/// موجّه بسيط مشترك يُحقن بالبيئة: يفتح ورقة الدخول من أي شاشة (`requestLogin`)
+/// وينقل للتبويب المطلوب (`openAccount`). حامل مفرد كي يصمد أمام إعادة بناء الشجرة.
+@Observable final class SpAppRouter {
+    static let shared = SpAppRouter()
+    var selectedTab: SpTab = .matches
+    var showLogin = false
+    private init() {}
+    func requestLogin() { showLogin = true }
+    func openAccount() { selectedTab = .account }
+}
+
+// MARK: - مكوّن الدخول بعضوية سبق (مشترك بين تبويب «حسابي» وورقة الدخول العامّة)
+
+/// نموذج الدخول بعضوية سبق: عنوان + حقول + زر «الدخول بعضوية سبق» الأساسي +
+/// Apple بديلًا + ختم «من سبق». يُستخدم داخل بطاقة «حسابي» (SpMembershipLogin في
+/// signInCard) وداخل SpLoginSheet المنبثقة.
+struct SpMembershipLogin: View {
+    @Environment(SpAuthStore.self) private var auth
+    @State private var identifier = ""
+    @State private var password = ""
+
+    var body: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 6) {
+                Text("مرحبًا بك في")
+                    .font(SportsFonts.app(size: 20, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                SpWordmark(size: 20)
+            }
+            Text("سجّل بعضويتك في سبق لتحفظ فريقك، وترسل توقّعاتك، وتصلك تنبيهات المباريات على كل أجهزتك.")
+                .font(SportsFonts.app(size: 13))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            VStack(spacing: 10) {
+                field(text: $identifier, placeholder: "البريد الإلكتروني أو الجوال", icon: "person", secure: false)
+                field(text: $password, placeholder: "كلمة المرور", icon: "lock", secure: true)
+            }
+
+            // الزر الأساسي — الدخول بعضوية سبق (نفس حساب سبق).
+            Button {
+                Task { await auth.loginWithCredentials(identifier: identifier, password: password) }
+            } label: {
+                HStack(spacing: 8) {
+                    if auth.isLoading {
+                        ProgressView().tint(.white)
+                    } else {
+                        Text("سبق")
+                            .font(SportsFonts.app(size: 11, weight: .heavy))
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Capsule().fill(Color.white.opacity(0.18)))
+                    }
+                    Text("الدخول بعضوية سبق").font(SportsFonts.app(size: 16, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 50)
+                .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(SpTheme.green))
+            }
+            .buttonStyle(.plain)
+            .disabled(auth.isLoading)
+
+            dividerOr
+
+            // بديل — المتابعة عبر Apple.
+            Button { auth.startAppleSignIn() } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "applelogo").font(.system(size: 18, weight: .semibold))
+                    Text("المتابعة عبر Apple").font(SportsFonts.app(size: 15, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 48)
+                .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(.black))
+            }
+            .buttonStyle(.plain)
+            .disabled(auth.isLoading)
+
+            if let err = auth.errorMessage {
+                Text(err)
+                    .font(SportsFonts.app(size: 12))
+                    .foregroundStyle(SpTheme.crimson)
+                    .multilineTextAlignment(.center)
+            }
+
+            // ختم «من سبق» — الرعاية الخفيفة (الموضع الثاني).
+            HStack(spacing: 7) {
+                Text("أحد منتجات")
+                    .font(SportsFonts.app(size: 11, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkFaint)
+                Rectangle().fill(SpTheme.outline).frame(width: 1, height: 11)
+                Text("صحيفة سبق")
+                    .font(SportsFonts.app(size: 11, weight: .heavy))
+                    .foregroundStyle(SpTheme.green)
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    @ViewBuilder private func field(text: Binding<String>, placeholder: String, icon: String, secure: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(SpTheme.onDarkFaint)
+                .frame(width: 18)
+            Group {
+                if secure {
+                    SecureField("", text: text, prompt: Text(placeholder).foregroundStyle(SpTheme.onDarkFaint))
+                } else {
+                    TextField("", text: text, prompt: Text(placeholder).foregroundStyle(SpTheme.onDarkFaint))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.emailAddress)
+                }
+            }
+            .font(SportsFonts.app(size: 15))
+            .foregroundStyle(SpTheme.onDark)
+            .tint(SpTheme.green)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 13)
+        .background(
+            RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                .fill(SpTheme.cardFill)
+                .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
+        )
+    }
+
+    private var dividerOr: some View {
+        HStack(spacing: 12) {
+            Rectangle().fill(SpTheme.outline).frame(height: 1)
+            Text("أو").font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
+            Rectangle().fill(SpTheme.outline).frame(height: 1)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+/// ورقة الدخول المنبثقة (Bottom Sheet) — تُستضاف عامّةً على RootTabView وتُفتح من
+/// أي محفّز عبر SpAppRouter.requestLogin(). تُغلق ذاتيًّا عند نجاح الدخول.
+struct SpLoginSheet: View {
+    @Environment(SpAuthStore.self) private var auth
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule().fill(SpTheme.outline)
+                .frame(width: 40, height: 4)
+                .padding(.top, 10).padding(.bottom, 2)
+            ScrollView {
+                SpMembershipLogin()
+                    .padding(.horizontal, 22)
+                    .padding(.top, 12)
+                    .padding(.bottom, 28)
+            }
+        }
+        .background(SpTheme.surface.ignoresSafeArea())
+        .presentationDetents([.height(580), .large])
+        .presentationDragIndicator(.hidden)
+        .presentationCornerRadius(26)
+        .onChange(of: auth.isLoggedIn) { _, logged in
+            if logged { dismiss() }
+        }
     }
 }
