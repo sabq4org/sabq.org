@@ -160,6 +160,7 @@ struct MatchesCenterView: View {
 
     @State private var competitions: [SpCompetition] = []
     @State private var fixtures: [SpFixture] = []
+    @State private var wcBracket: SpWcBracket?
     @State private var visibleDays: [SpCenterDay] = []
     @State private var loading = true
     @State private var loadError: String?
@@ -559,6 +560,10 @@ struct MatchesCenterView: View {
                             .padding(.top, 2)
                     }
 
+                    if shouldShowWorldCupBracket {
+                        worldCupBracketBlock
+                    }
+
                     if visibleDays.isEmpty {
                         emptyList
                     } else {
@@ -683,6 +688,28 @@ struct MatchesCenterView: View {
                 subtitle: liveOnly ? "أوقف فلتر «مباشر» لعرض الجدول كاملًا" : "جرّب بطولة أخرى أو عد لاحقًا"
             )
             .padding(.top, 40)
+        }
+    }
+
+    private var shouldShowWorldCupBracket: Bool {
+        selection == "world-cup" && !liveOnly
+    }
+
+    @ViewBuilder private var worldCupBracketBlock: some View {
+        if let tree = wcBracket?.tree, !tree.columns.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 9) {
+                    Image(systemName: "trophy.fill")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(SpTheme.gold)
+                    Text("الأدوار الإقصائية")
+                        .font(SportsFonts.headline(size: 18))
+                        .foregroundStyle(SpTheme.onDark)
+                    Spacer(minLength: 0)
+                }
+                SpWcBracketTreeView(tree: tree)
+            }
+            .padding(.bottom, 2)
         }
     }
 
@@ -1033,8 +1060,15 @@ struct MatchesCenterView: View {
         let comps = selection == "all" ? favorites.items.map(\.slug) : [selection]
         let window = requestWindow()
         do {
-            let merged = try await APIClient.shared.fetchUnifiedFixturesChunked(
+            async let mergedTask = APIClient.shared.fetchUnifiedFixturesChunked(
                 comps: comps, from: window.from, to: window.to)
+            async let bracketTask: SpWcBracket? = comps.contains("world-cup")
+                ? (try? await APIClient.shared.fetchWorldCupBracket(ignoreCache: true))
+                : nil
+
+            let unified = try await mergedTask
+            let bracket = await bracketTask
+            let merged = mergeWorldCupBracketFixtures(from: bracket, into: unified)
             if Task.isCancelled { return }
             if visualSignature(merged) != visualSignature(fixtures) {
                 fixtures = merged
@@ -1042,11 +1076,40 @@ struct MatchesCenterView: View {
             } else if visibleDays.isEmpty {
                 rebuildDays(keepSelection: true)
             }
+            wcBracket = bracket
             loadError = nil
         } catch {
             if fixtures.isEmpty { loadError = (error as? LocalizedError)?.errorDescription ?? "تعذّر الاتصال بخادم البيانات" }
+            if selection != "world-cup" { wcBracket = nil }
         }
         loading = false
+    }
+
+    /// `/sports/fixtures` لا يعيد خانات المونديال الصناعية التي يبنيها مسار
+    /// `/world-cup/bracket` للمواجهات المستقبلية قبل نشرها من المزوّد. ندمجها
+    /// هنا حتى تظهر مباريات مثل ربع النهائي بمجرد حسم طرفيها.
+    private func mergeWorldCupBracketFixtures(from bracket: SpWcBracket?, into unified: [SpFixture]) -> [SpFixture] {
+        guard let bracket else { return unified }
+
+        var byId: [Int: SpFixture] = [:]
+        for column in bracket.tree?.columns ?? [] {
+            for slot in column.slots {
+                if let fx = slot.fixture {
+                    byId[fx.id] = SpFixture(worldCup: fx)
+                }
+            }
+        }
+        if let thirdPlace = bracket.tree?.thirdPlace {
+            byId[thirdPlace.id] = SpFixture(worldCup: thirdPlace)
+        }
+
+        for fixture in unified {
+            byId[fixture.id] = fixture
+        }
+        return byId.values.sorted { a, b in
+            if a.timestamp != b.timestamp { return a.timestamp < b.timestamp }
+            return a.id < b.id
+        }
     }
 
     private func visualSignature(_ rows: [SpFixture]) -> String {
