@@ -30,6 +30,8 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>يعرض VARA عدد خطواتك اليومية بأسلوب رياضي محفّز. تُقرأ خطواتك من تطبيق «صحّتي» لعرضها لك داخل التطبيق فقط، ولا تُشارَك مع أي جهة.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>يعرض VARA نشاطك من «صحّتي» لقراءته فقط، ولا يكتب أو يعدّل أي بيانات صحية على جهازك.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
