@@ -32,12 +32,10 @@ struct HomeView: View {
     @State private var assists: [SpScorer] = []
     @State private var transfers: [SpLeagueTransfer] = []
 
-    // إثراء الهيرو (أفضل جهد) — إحصائيات + xG لمباراة الواجهة المباشرة.
+    // إثراء الهيرو (أفضل جهد) — إحصائيات + xG + تعليق لمباراة الواجهة التي بدأت.
+    // (الزخم/الضغط/الوقائع أُخرجت من الهيرو إلى مركز المباراة — تخفيف زحمة 2026-07-06.)
     @State private var featuredDetail: SpMatchDetail?
     @State private var featuredXg: SpXg?
-    @State private var featuredMomentum: SpMomentum?
-    @State private var featuredPressure: SpPressure?
-    @State private var featuredFacts: SpMatchFacts?
     @State private var featuredCommentary: SpCommentary?
 
     @State private var scorerMode: ScorerMode = .goals
@@ -185,17 +183,9 @@ struct HomeView: View {
     // MARK: - الهيرو
 
     @ViewBuilder private var heroSection: some View {
-        VStack(spacing: 16) {
-            brandBar
-            leagueHeader
-            // بلوك «فريقي» — مباريات الفريق المفضّل عبر البطولات (خلَف «مبارياتي»
-            // الذي انتقل لمركز المباريات). البلوك مكمّل للهيرو لا بديل عنه.
-            SpMyTeamCard(
-                standings: standings,
-                onOpenMatch: { selectedMatch = $0 },
-                onOpenTeam: { selectedTeam = IDBox(id: $0) },
-                onPickTeam: { showAllStandings = true }
-            )
+        VStack(spacing: 14) {
+            topBar
+            leagueStrip
             if let f = featured {
                 heroMatch(f)
                     .transition(.opacity)
@@ -207,43 +197,45 @@ struct HomeView: View {
                     .transition(.opacity)
             }
             // أثناء التحميل: لا هيرو احتياطي — مؤشّر SpLoading أسفل القسم يكفي، بلا قفز.
+            // بلوك «فريقي» بعد الهيرو — الهيرو يتصدّر الواجهة ومباريات المفضّل تليه.
+            SpMyTeamCard(
+                standings: standings,
+                onOpenMatch: { selectedMatch = $0 },
+                onOpenTeam: { selectedTeam = IDBox(id: $0) },
+                onPickTeam: { showAllStandings = true }
+            )
         }
         .animation(.easeInOut(duration: 0.25), value: loading)
     }
 
-    // شعار التطبيق (VARA) أعلى الصفحة الرئيسية — علامة الهوية:
-    // الأيقونة + VA(R ذهبية)A + «دقّة الرياضة» (دليل الهوية).
-    private var brandBar: some View {
-        HStack(spacing: 10) {
+    // شريط علوي واحد — علامة VARA يمينًا والأدوات (بحث/لك/الحساب) يسارًا.
+    // دمجٌ لشريطَي العلامة والترويسة السابقين: صفّ chrome واحد بدل اثنين.
+    private var topBar: some View {
+        HStack(spacing: 9) {
             Image("VaraLogo")
                 .resizable()
                 .scaledToFill()
-                .frame(width: 32, height: 32)
+                .frame(width: 30, height: 30)
                 .clipShape(Circle())
                 .overlay(Circle().stroke(SpTheme.cardStroke, lineWidth: 1))
-            VStack(alignment: .leading, spacing: 0) {
-                SpWordmark(size: 18)
-                Text("دقّة الرياضة")
-                    .font(SportsFonts.app(size: 9.5, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDarkDim)
-            }
+            SpWordmark(size: 16)
+            Spacer(minLength: 0)
+            headerButton("magnifyingglass", label: "بحث") { showSearch = true }
+            headerButton("bell", label: "لك") { showForYou = true }
+            accountHeaderButton
         }
-        .frame(maxWidth: .infinity)
         .padding(.top, 6)
     }
 
-    // ترويسة الهوية: شعار + «دوري روشن» + الموسم/الجولة.
-    private var leagueHeader: some View {
-        HStack(spacing: 12) {
-            ZStack {
-                // شعار دوري روشن الرسمي (أصل محلّي) — ثابت في ترويسة الواجهة.
-                Image("RoshnLogo")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 44, height: 44)
-                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
-            }
+    // ترويسة الدوري — هوية فقط بلا أدوات: شعار روشن + الاسم + سطر الموسم.
+    private var leagueStrip: some View {
+        HStack(spacing: 11) {
+            Image("RoshnLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 40, height: 40)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
             VStack(alignment: .leading, spacing: 2) {
                 (Text("دوري ").foregroundStyle(SpTheme.onDark)
                     + Text("روشن").foregroundStyle(rslAccent))
@@ -253,12 +245,8 @@ struct HomeView: View {
                     .foregroundStyle(SpTheme.onDarkDim)
             }
             Spacer(minLength: 0)
-            HStack(spacing: 8) {
-                headerButton("magnifyingglass", label: "بحث") { showSearch = true }
-                headerButton("bell", label: "لك") { showForYou = true }
-                accountHeaderButton
-            }
         }
+        .padding(.top, 2)
     }
 
     // مؤشّر الحساب في الترويسة: ضيف = حبّة «دخول» ذهبية تفتح ورقة الدخول العامّة؛
@@ -285,14 +273,14 @@ struct HomeView: View {
                         .frame(width: 10, height: 10)
                         .overlay(Circle().stroke(SpTheme.surface, lineWidth: 2))
                 }
-                .frame(width: 38, height: 38)
+                .frame(width: 36, height: 36)
             } else {
                 HStack(spacing: 6) {
                     Image(systemName: "person.crop.circle").font(.system(size: 15, weight: .bold))
                     Text("دخول").font(SportsFonts.app(size: 12.5, weight: .heavy))
                 }
                 .foregroundStyle(Color(red: 0.11, green: 0.08, blue: 0.02))
-                .padding(.horizontal, 12).frame(height: 38)
+                .padding(.horizontal, 12).frame(height: 36)
                 .background(Capsule().fill(SpTheme.gold))
             }
         }
@@ -305,15 +293,14 @@ struct HomeView: View {
         return n.isEmpty ? "؟" : String(n.prefix(1))
     }
 
+    // أيقونات عارية بلا صناديق — chrome أخفّ (الصناديق الثلاثة كانت تثقل الترويسة).
     private func headerButton(_ icon: String, label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(SpTheme.onDark)
-                .frame(width: 38, height: 38)
-                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(SpTheme.surface)
-                    .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1)))
-                .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .frame(width: 36, height: 36)
+                .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
         .accessibilityLabel(label)
@@ -323,11 +310,13 @@ struct HomeView: View {
         "الموسم سينطلق قريبًا"
     }
 
-    // بطاقة الهيرو الفاخرة (فحمي → بترولي) مع المباراة المميّزة.
+    // بطاقة الهيرو الهادئة — المواجهة والنتيجة أولًا وسطر سياق واحد كحدّ أقصى.
+    // التحليل الغنيّ (ضغط/زخم/طقس/غيابات) كلّه في مركز المباراة: «الإثراء في
+    // التفاصيل لا في الواجهة» (قاعدة المالك 2026-06-29، عُمّمت على الهيرو).
     private func heroMatch(_ f: SpFixture) -> some View {
         Button { selectedMatch = f } label: {
-            VStack(spacing: 16) {
-                HStack(alignment: .center) {
+            VStack(spacing: 15) {
+                HStack(alignment: .center, spacing: 8) {
                     HStack(spacing: 5) {
                         if heroIsFavorite {
                             Image(systemName: "star.fill").font(.system(size: 9, weight: .bold))
@@ -339,10 +328,12 @@ struct HomeView: View {
                     }
                     .font(SportsFonts.app(size: 11, weight: .bold))
                     .foregroundStyle(rslAccent)
-                    .padding(.horizontal, 9).padding(.vertical, 4)
-                    .background(Capsule().fill(rslAccent.opacity(0.10)))
                     Spacer(minLength: 8)
                     heroStatusBadge(f)
+                    // البطاقة كلها زرّ لمركز المباراة — سهم خافت يكفي بدل سطر دعوة كامل.
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(SpTheme.onDarkFaint)
                 }
 
                 HStack(alignment: .top, spacing: 8) {
@@ -351,21 +342,8 @@ struct HomeView: View {
                     heroTeam(f.away)
                 }
 
-                if let story = heroStoryLine(f) {
-                    HStack(spacing: 7) {
-                        Image(systemName: f.status.finished ? "checkmark.seal.fill" : "calendar.badge.clock")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(rslAccent)
-                        Text(story)
-                            .font(SportsFonts.app(size: 11.5, weight: .bold))
-                            .foregroundStyle(SpTheme.onDarkDim)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(rslAccent.opacity(0.055)))
+                if f.status.finished, let story = heroStoryLine(f) {
+                    heroContextLine(icon: "checkmark.seal.fill", text: story)
                 }
 
                 let stats = heroStats(f)
@@ -384,43 +362,10 @@ struct HomeView: View {
                     }
                 }
 
-                let insights = heroInsightItems(f)
-                if !insights.isEmpty {
-                    HStack(spacing: 7) {
-                        ForEach(Array(insights.enumerated()), id: \.offset) { _, item in
-                            heroInsightChip(icon: item.0, title: item.1, value: item.2)
-                        }
-                    }
-                }
-
                 // آخر مجريات المباراة الحيّة — سطر واحد من التعليق العربي.
                 if f.status.live, let line = latestCommentLine {
-                    HStack(spacing: 7) {
-                        Image(systemName: "bolt.horizontal.circle.fill")
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(rslAccent)
-                        Text(line)
-                            .font(SportsFonts.app(size: 11, weight: .semibold))
-                            .foregroundStyle(SpTheme.onDarkDim)
-                            .lineLimit(1)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(.horizontal, 10).padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(SpTheme.chipFill))
+                    heroContextLine(icon: "bolt.horizontal.circle.fill", text: line)
                 }
-
-                HStack(spacing: 7) {
-                    Image(systemName: "chart.bar.xaxis")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(rslAccent)
-                    Text("اضغط لفتح مركز المباراة والتحليل")
-                        .font(SportsFonts.app(size: 11.5, weight: .bold))
-                        .foregroundStyle(SpTheme.onDarkDim)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(SpTheme.onDarkFaint)
-                }
-                .padding(.top, 1)
             }
             .padding(16)
             .background(heroBackground)
@@ -429,19 +374,28 @@ struct HomeView: View {
         .buttonStyle(SpPressStyle())
     }
 
+    // سطر سياق مسطّح (أيقونة + نص رمادي) — بلا حشوات ولا خلفيات ملوّنة.
+    private func heroContextLine(icon: String, text: String) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(rslAccent)
+            Text(text)
+                .font(SportsFonts.app(size: 11.5, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Spacer(minLength: 0)
+        }
+    }
+
+    // سطر السياق للمباراة المنتهية فقط — القادمة يكفيها الموعد في عمود النتيجة.
     private func heroStoryLine(_ f: SpFixture) -> String? {
-        if f.status.finished, let home = f.goals.home, let away = f.goals.away {
-            let margin = abs(home - away)
-            if home == away {
-                return "تعادل مثير في آخر ظهور لفريقك"
-            }
-            let visualWinner = away > home ? f.away.name : f.home.name
-            return margin >= 3 ? "\(visualWinner) حسمها بفارق \(margin)" : "\(visualWinner) انتصر بفارق \(margin)"
-        }
-        if f.status.live {
-            return "مباراة فريقك مباشرة الآن — التحديث لحظة بلحظة"
-        }
-        return "\(SpFormat.kickoffDay(f.date)) · \(SpFormat.kickoffTime(f.date))"
+        guard f.status.finished, let home = f.goals.home, let away = f.goals.away else { return nil }
+        if home == away { return "انتهت بالتعادل" }
+        let visualWinner = away > home ? f.away.name : f.home.name
+        let margin = abs(home - away)
+        return margin >= 3 ? "\(visualWinner) حسمها بفارق \(margin)" : "\(visualWinner) انتصر بفارق \(margin)"
     }
 
     private func heroTeam(_ team: SpTeam) -> some View {
@@ -524,26 +478,6 @@ struct HomeView: View {
         return Array(out.prefix(3))
     }
 
-    private func heroInsightItems(_ f: SpFixture) -> [(String, String, String)] {
-        var out: [(String, String, String)] = []
-        if let pressure = featuredPressure, pressure.available, let latest = pressure.latest {
-            out.append(("gauge.with.dots.needle.bottom.50percent", "الضغط", "\(pressureSideName(latest.side, fixture: f)) \(Int(latest.value.rounded()))"))
-        }
-        if let momentum = featuredMomentum, momentum.available, let possession = momentum.possession {
-            out.append(("waveform.path.ecg", "الاستحواذ", "\(possession.home)% · \(possession.away)%"))
-        }
-        if let facts = featuredFacts, facts.available, let weather = facts.weather, let temp = weather.temp {
-            out.append(("cloud.sun", "الطقس", "\(temp)°"))
-        }
-        if let facts = featuredFacts, facts.available, !facts.absentees.isEmpty {
-            out.append(("cross.case", "الغيابات", "\(facts.absentees.count)"))
-        }
-        if let player = featuredXg?.topPlayers.first {
-            out.append(("scope", "الأخطر", player.name))
-        }
-        return Array(out.prefix(3))
-    }
-
     /// آخر مجرى بارز من التعليق الحي: أحدث حدث مهم/هدف ضمن آخر العناصر، وإلا الأحدث مطلقًا.
     private var latestCommentLine: String? {
         guard let items = featuredCommentary?.items, !items.isEmpty else { return nil }
@@ -552,37 +486,6 @@ struct HomeView: View {
         guard let c = pick, !c.textAr.isEmpty else { return nil }
         let minute = c.extraMinute.flatMap { $0 > 0 ? "\(c.minute)+\($0)′" : nil } ?? "\(c.minute)′"
         return "\(minute) · \(c.textAr)"
-    }
-
-    private func pressureSideName(_ side: String, fixture: SpFixture) -> String {
-        switch side.lowercased() {
-        case "home": return fixture.home.name
-        case "away": return fixture.away.name
-        default: return "متوازن"
-        }
-    }
-
-    private func heroInsightChip(icon: String, title: String, value: String) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(rslAccent)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(SportsFonts.app(size: 9, weight: .bold))
-                    .foregroundStyle(SpTheme.onDarkDim)
-                Text(value)
-                    .font(SportsFonts.app(size: 10.5, weight: .heavy))
-                    .foregroundStyle(SpTheme.onDark)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-            }
-            Spacer(minLength: 0)
-        }
-        .frame(maxWidth: .infinity, minHeight: 42, alignment: .leading)
-        .padding(.horizontal, 10)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(rslAccent.opacity(0.055)))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(rslAccent.opacity(0.16), lineWidth: 1))
     }
 
     private func findStat(_ keys: [String]) -> String? {
@@ -643,7 +546,7 @@ struct HomeView: View {
             if !displayResults.isEmpty { recentResultsCard.padding(.horizontal, 16) }
             if !standings.isEmpty { titleRaceCard.padding(.horizontal, 16) }
             if hasDisplayScorers { scorersAssistsCard.padding(.horizontal, 16) }
-            if !standings.isEmpty { statSpotlight.padding(.horizontal, 16) }
+            // «أبرز الأرقام» حُذف — كان يكرّر مؤشرات «نبض الدوري» نفسها (هجوم/دفاع/فوز).
             if !transfers.isEmpty { transfersCard.padding(.horizontal, 16) }
         }
     }
@@ -674,30 +577,19 @@ struct HomeView: View {
         let gap: Int? = standings.count >= 2 ? standings[0].points - standings[1].points : nil
 
         VStack(alignment: .leading, spacing: 11) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    sectionTitle(favoriteTeamName.map { "نبض \($0)" } ?? "نبض الدوري")
-                    Spacer()
-                    if let row = favoriteRow {
-                        Text("المركز \(row.rank)")
-                            .font(SportsFonts.app(size: 11, weight: .bold))
-                            .foregroundStyle(rslAccent)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(rslAccent.opacity(0.10)))
-                    } else if let g = gap {
-                        Text(g == 0 ? "صدارة مشتعلة" : "الفارق \(g) نقطة")
-                            .font(SportsFonts.app(size: 11, weight: .bold))
-                            .foregroundStyle(rslAccent)
-                            .padding(.horizontal, 9)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(rslAccent.opacity(0.10)))
-                        }
+            // العنوان + شارة واحدة — الجملة التلخيصية حُذفت (كانت تكرّر أرقام البلاطات نصًّا).
+            HStack {
+                sectionTitle(favoriteTeamName.map { "نبض \($0)" } ?? "نبض الدوري")
+                Spacer()
+                if let row = favoriteRow {
+                    Text("المركز \(row.rank)")
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(rslAccent)
+                } else if let g = gap {
+                    Text(g == 0 ? "صدارة مشتعلة" : "الفارق \(g) نقطة")
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(rslAccent)
                 }
-                Text(favoriteRow.map { favoritePulseSummary(row: $0, topScorer: topScorer) } ?? leaguePulseSummary(leader: leader, topScorer: topScorer, gap: gap))
-                    .font(SportsFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDarkDim)
-                    .lineLimit(2)
             }
             .padding(.horizontal, 16)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -710,6 +602,7 @@ struct HomeView: View {
                     }
                 }
                 .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.card))
+                .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
                 .padding(.horizontal, 16)
             }
         }
@@ -737,30 +630,9 @@ struct HomeView: View {
         return tiles
     }
 
-    private func leaguePulseSummary(leader: SpStandingRow?, topScorer: SpScorer?, gap: Int?) -> String {
-        var parts: [String] = []
-        if let leader {
-            let lead = (gap ?? 0) == 0 ? "يتقاسم الصدارة" : "يتصدر بفارق \(gap ?? 0)"
-            parts.append("\(leader.team.name) \(lead)")
-        }
-        if let topScorer {
-            parts.append("\(topScorer.name) يقود سباق الهدافين")
-        }
-        return parts.isEmpty ? "أهم مؤشرات الدوري في لقطة واحدة." : parts.joined(separator: " · ")
-    }
-
-    private func favoritePulseSummary(row: SpStandingRow, topScorer: SpScorer?) -> String {
-        var parts = ["\(row.team.name) في المركز \(row.rank) بـ\(row.points) نقطة"]
-        parts.append("سجّل \(row.goalsFor) واستقبل \(row.goalsAgainst)")
-        if let s = topScorer, s.team.id == row.team.id {
-            parts.append("هدافه \(s.name) بـ\(s.goals) هدف")
-        }
-        return parts.joined(separator: " · ")
-    }
-
     private func pulseTile(_ label: String, _ value: String, _ sub: String, logo: String?) -> some View {
-        // «الهدّاف» و«المتصدّر» بلغة التميّز الذهبية المحدودة.
-        let highlight = (label == "الهدّاف" || label == "المتصدّر") ? SpTheme.excellence : rslAccent
+        // «الهدّاف» و«المتصدّر» وحدهما بذهبيّ التميّز؛ البقية رمادية — لون أقل، قراءة أهدأ.
+        let highlight = (label == "الهدّاف" || label == "المتصدّر") ? SpTheme.excellence : SpTheme.onDarkDim
         return VStack(alignment: .leading, spacing: 5) {
             Text(label).font(SportsFonts.app(size: 9.5, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
             HStack(spacing: 6) {
@@ -796,8 +668,6 @@ struct HomeView: View {
                     Text(SpFormat.kickoffDay(f.date))
                         .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(rslAccent)
                         .lineLimit(1).minimumScaleFactor(0.7)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(rslAccent.opacity(0.1)))
                     Spacer(minLength: 6)
                     Text(SpFormat.kickoffTime(f.date))
                         .font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
@@ -853,10 +723,8 @@ struct HomeView: View {
                             SpTeamLogo(logo: row.team.logo, size: 28)
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(row.team.name).font(SportsFonts.app(size: 13.5, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                                HStack(spacing: 7) {
-                                    titleRaceProgress(row, leaderPoints: leader?.points ?? row.points)
-                                    formDots(row.form)
-                                }
+                                // نقاط الفورمة وحدها — شريط التقدّم حُذف (كان يكرّر عمود النقاط بصريًّا).
+                                formDots(row.form)
                             }
                             Spacer(minLength: 6)
                             VStack(alignment: .trailing, spacing: 2) {
@@ -893,24 +761,6 @@ struct HomeView: View {
         let gap = leader.points - row.points
         if row.rank == 1 { return "المتصدر" }
         return gap == 0 ? "متساوٍ" : "-\(gap)"
-    }
-
-    private func titleRaceProgress(_ row: SpStandingRow, leaderPoints: Int) -> some View {
-        let pct = leaderPoints > 0 ? min(1, max(0.08, CGFloat(row.points) / CGFloat(leaderPoints))) : 0.08
-        let isLeader = row.rank == 1
-        return GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(SpTheme.chipFill)
-                Capsule()
-                    .fill(isLeader
-                          ? LinearGradient(colors: [rslAccent, SpTheme.emeraldDeep],
-                                           startPoint: .leading, endPoint: .trailing)
-                          : LinearGradient(colors: [rslAccent.opacity(0.55), rslAccent.opacity(0.45)],
-                                           startPoint: .leading, endPoint: .trailing))
-                    .frame(width: geo.size.width * pct)
-            }
-        }
-        .frame(height: 8)
     }
 
     // نقاط الفورمة (آخر 5): فوز أخضر، تعادل رمادي ممتلئ، خسارة حلقة رمادية. لونان فقط.
@@ -989,47 +839,6 @@ struct HomeView: View {
         .buttonStyle(.plain)
     }
 
-    // الأرقام اللافتة — مشتقّة من الترتيب (هجوم/دفاع/انتصارات) + أكثر تهديفًا.
-    @ViewBuilder private var statSpotlight: some View {
-        let topAtk = standings.max { $0.goalsFor < $1.goalsFor }
-        let bestDef = standings.min { $0.goalsAgainst < $1.goalsAgainst }
-        let mostWin = standings.max { $0.win < $1.win }
-        let attacks = Array(standings.sorted { $0.goalsFor > $1.goalsFor }.prefix(4))
-        let maxAtk = max(1, attacks.first?.goalsFor ?? 1)
-
-        VStack(alignment: .leading, spacing: 11) {
-            sectionTitle("أبرز الأرقام")
-            HStack(spacing: 8) {
-                if let t = topAtk { statTile("أكثر تهديفًا", t.team.name, "\(t.goalsFor) هدفًا", rslAccent) }
-                if let d = bestDef { statTile("أمتن دفاع", d.team.name, "\(d.goalsAgainst) عليه", rslAccent) }
-                if let w = mostWin { statTile("أكثر فوزًا", w.team.name, "\(w.win) فوزًا", rslAccent) }
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                Text("الأكثر تهديفًا في الدوري")
-                    .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
-                ForEach(attacks) { row in
-                    HStack(spacing: 9) {
-                        SpTeamLogo(logo: row.team.logo, size: 22)
-                        Text(row.team.name).font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDark)
-                            .frame(width: 58, alignment: .leading).lineLimit(1).minimumScaleFactor(0.8)
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(SpTheme.chipFill).frame(height: 7)
-                                Capsule().fill(LinearGradient(colors: [rslAccent, rslAccent], startPoint: .leading, endPoint: .trailing))
-                                    .frame(width: geo.size.width * CGFloat(row.goalsFor) / CGFloat(maxAtk), height: 7)
-                            }
-                        }.frame(height: 7)
-                        Text("\(row.goalsFor)").font(SportsFonts.app(size: 13, weight: .heavy)).foregroundStyle(SpTheme.onDark)
-                            .frame(width: 24, alignment: .trailing).monospacedDigit()
-                    }
-                }
-            }
-            .padding(13)
-            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(SpTheme.card))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
-        }
-    }
-
     // آخر النتائج — قائمة مدمجة لآخر المباريات المنتهية (تفتح مركز المباراة).
     private var recentResultsCard: some View {
         let results = displayResults
@@ -1076,8 +885,8 @@ struct HomeView: View {
                 HStack(spacing: 8) {
                     Text("مركز الانتقالات").font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
-                    Text("المركز الكامل").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.green)
-                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                    Text("المركز الكامل").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(rslAccent)
+                    Image(systemName: "chevron.left").font(.system(size: 11, weight: .bold)).foregroundStyle(rslAccent)
                 }
                 .contentShape(Rectangle())
             }
@@ -1129,18 +938,6 @@ struct HomeView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
-    }
-
-    private func statTile(_ label: String, _ value: String, _ sub: String, _ accent: Color) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(SportsFonts.app(size: 9.5, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
-            Text(value).font(SportsFonts.app(size: 13, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1).minimumScaleFactor(0.65)
-            Text(sub).font(SportsFonts.app(size: 10.5, weight: .bold)).foregroundStyle(accent).lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 11).padding(.vertical, 10)
-        .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(SpTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
     }
 
     private func sectionTitle(_ t: String) -> some View {
@@ -1330,34 +1127,17 @@ struct HomeView: View {
         // تحديث حالة/نتيجة المباريات المتابَعة (بطاقة «مبارياتي») من الخادم.
         await matchFollows.refresh()
 
-        // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + زخم/ضغط/طقس + آخر مجريات.
+        // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + آخر مجريات.
         if let f = featured, f.started {
             async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: force)
             async let xgOpt = try? APIClient.shared.fetchXg(matchId: f.id, ignoreCache: force)
-            async let momentumOpt = try? APIClient.shared.fetchMomentum(matchId: f.id, ignoreCache: force)
-            async let pressureOpt = try? APIClient.shared.fetchPressure(matchId: f.id, ignoreCache: force)
-            async let factsOpt = try? APIClient.shared.fetchMatchFacts(matchId: f.id, ignoreCache: force)
             async let commentaryOpt = try? APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: force)
             self.featuredDetail = await detailOpt
             self.featuredXg = await xgOpt
-            self.featuredMomentum = await momentumOpt
-            self.featuredPressure = await pressureOpt
-            self.featuredFacts = await factsOpt
             self.featuredCommentary = f.status.live ? await commentaryOpt : nil
-        } else if let f = featured {
-            // قبل المباراة: الوقائع وحدها (الطقس + الغيابات) تُغني شرائح الهيرو.
-            self.featuredFacts = try? await APIClient.shared.fetchMatchFacts(matchId: f.id, ignoreCache: force)
-            self.featuredDetail = nil
-            self.featuredXg = nil
-            self.featuredMomentum = nil
-            self.featuredPressure = nil
-            self.featuredCommentary = nil
         } else {
             self.featuredDetail = nil
             self.featuredXg = nil
-            self.featuredMomentum = nil
-            self.featuredPressure = nil
-            self.featuredFacts = nil
             self.featuredCommentary = nil
         }
 

@@ -59,27 +59,23 @@ struct CommunityView: View {
 
     // MARK: - لافتة
 
+    // ترويسة بسيطة (أيقونة عارية + عنوان) بدل بطاقة ولافتة خضراء ثقيلة.
     private var banner: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: "trophy.fill")
                 .font(.system(size: 20))
                 .foregroundStyle(SpTheme.green)
-                .frame(width: 46, height: 46)
-                .background(Circle().fill(SpTheme.green.opacity(0.12)))
             VStack(alignment: .leading, spacing: 2) {
                 Text("لوحة المتصدّرين")
-                    .font(SportsFonts.headline(size: 20))
+                    .font(SportsFonts.headline(size: 22))
                     .foregroundStyle(SpTheme.onDark)
                 Text("نافِس الجمهور بتوقّعاتك واصعد القمة")
-                    .font(SportsFonts.app(size: 11))
+                    .font(SportsFonts.app(size: 11.5, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkDim)
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
     }
 
     private var periodPicker: some View {
@@ -177,11 +173,13 @@ struct CommunityView: View {
             }
         }
         .padding(12)
+        // صفّك يُميَّز بحدّ أخضر رفيع فقط — بطاقة «ترتيبك» أعلى الشاشة تحمل الإبراز
+        // الكامل، فلا نكرّر الكتلة الخضراء الممتلئة هنا.
         .background(
             RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
-                .fill(isMe ? SpTheme.green.opacity(0.10) : SpTheme.cardFill)
+                .fill(SpTheme.cardFill)
                 .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
-                    .stroke(isMe ? SpTheme.green.opacity(0.40) : SpTheme.outline, lineWidth: 1))
+                    .stroke(isMe ? SpTheme.green.opacity(0.55) : SpTheme.outline, lineWidth: isMe ? 1.5 : 1))
         )
     }
 

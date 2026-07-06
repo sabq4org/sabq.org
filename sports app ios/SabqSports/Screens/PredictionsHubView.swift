@@ -192,22 +192,27 @@ struct PredictionsHubView: View {
         .frame(maxWidth: .infinity)
     }
 
+    // شرح توزيع النقاط — أعمدة نصّية مسطّحة مفصولة بخطوط شعرية بلا خلفيات ملوّنة
+    // (التفصيل الكامل في تبويب «كيف تلعب؟»).
     private var scoringExplainer: some View {
-        HStack(spacing: 6) {
-            explainerPill("🎯", "دقيقة", "50٪", SpTheme.green)
-            explainerPill("📏", "فارق", "30٪", SpTheme.greenSoft)
-            explainerPill("✅", "نتيجة", "20٪", SpTheme.teal)
+        HStack(spacing: 0) {
+            explainerPill("🎯", "دقيقة", "50٪")
+            divider
+            explainerPill("📏", "فارق", "30٪")
+            divider
+            explainerPill("✅", "نتيجة", "20٪")
         }
+        .padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: SpTheme.chipRadius, style: .continuous).fill(SpTheme.chipFill))
     }
 
-    private func explainerPill(_ emoji: String, _ title: String, _ pct: String, _ color: Color) -> some View {
+    private func explainerPill(_ emoji: String, _ title: String, _ pct: String) -> some View {
         VStack(spacing: 2) {
             Text("\(emoji) \(title)").font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDark)
             Text("\(pct) من البركة").font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: SpTheme.chipRadius, style: .continuous).fill(color.opacity(0.10)))
+        .padding(.vertical, 6)
     }
 
     // MARK: - بانر القسم الأسبوعي

@@ -121,15 +121,17 @@ struct CompetitionDetailView: View {
 
     // MARK: - الترويسة البطلة
 
+    // ترويسة بطاقة بيضاء نظيفة (بدل كتلة التدرّج + التوهّج الذهبي) — لمسة محورية
+    // في الحالة فقط، نصوص حبر داكن على أبيض.
     private var hero: some View {
         HStack(spacing: 14) {
             compLogo
             VStack(alignment: .leading, spacing: 6) {
-                Text(comp.name).font(SportsFonts.app(size: 22, weight: .heavy)).foregroundStyle(.white).lineLimit(2)
+                Text(comp.name).font(SportsFonts.app(size: 22, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(2)
                 HStack(spacing: 8) {
                     if let s = seasonValue {
                         Label(seasonLabel(s), systemImage: "calendar")
-                            .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.9))
+                            .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                             .labelStyle(.titleAndIcon)
                             .environment(\.layoutDirection, .leftToRight)
                     }
@@ -137,11 +139,11 @@ struct CompetitionDetailView: View {
                 }
                 if !standings.isEmpty {
                     Label("\(standings.count) ناديًا", systemImage: "person.3.fill")
-                        .font(SportsFonts.app(size: 12)).foregroundStyle(.white.opacity(0.75))
+                        .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
                         .labelStyle(.titleAndIcon)
                 } else if isWorldCup && !wcGroups.isEmpty {
                     Label("\(wcGroups.reduce(0) { $0 + $1.rows.count }) منتخبًا", systemImage: "flag.fill")
-                        .font(SportsFonts.app(size: 12)).foregroundStyle(.white.opacity(0.75))
+                        .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
                         .labelStyle(.titleAndIcon)
                 }
             }
@@ -150,13 +152,9 @@ struct CompetitionDetailView: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            SpTheme.compHeroGradient(comp.slug)
-                .overlay(alignment: .topLeading) {
-                    Circle().fill(SpTheme.gold.opacity(0.18))
-                        .frame(width: 150, height: 150).blur(radius: 55).offset(x: -30, y: -50)
-                }
+            RoundedRectangle(cornerRadius: 22, style: .continuous).fill(SpTheme.card)
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
         )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.horizontal, 16)
     }
 
@@ -170,27 +168,26 @@ struct CompetitionDetailView: View {
                 SpRemoteImage(url: l)
                     .padding(8)
             } else {
-                Image(systemName: "trophy.fill").font(.system(size: 24)).foregroundStyle(.white.opacity(0.9))
+                Image(systemName: "trophy.fill").font(.system(size: 24)).foregroundStyle(acc)
             }
         }
         .frame(width: 64, height: 64)
-        .background(Circle().fill(comp.slug == SportsConstants.defaultComp ? .white : .white.opacity(0.15)))
+        .background(Circle().fill(comp.slug == SportsConstants.defaultComp ? .white : SpTheme.chipFill))
     }
 
     @ViewBuilder private var statusBadge: some View {
+        // الحالة نص ملوّن هادئ بلا كبسولة — «منتهٍ» محايد لا ذهبي (ليس تميّزًا).
         let (text, color): (String, Color) = {
             switch comp.status {
-            case "finished": return ("منتهٍ", SpTheme.gold)
-            case "ongoing": return ("جارٍ", SpTheme.leaf)
+            case "finished": return ("منتهٍ", SpTheme.onDarkFaint)
+            case "ongoing": return ("جارٍ", SpTheme.green)
             case "upcoming": return ("قادم", acc)
             default: return ("", .clear)
             }
         }()
         if !text.isEmpty {
             Text(text)
-                .font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(.white)
-                .padding(.horizontal, 8).padding(.vertical, 2)
-                .background(Capsule().fill(color))
+                .font(SportsFonts.app(size: 10.5, weight: .bold)).foregroundStyle(color)
         }
     }
 
@@ -325,24 +322,19 @@ struct CompetitionDetailView: View {
                 SpTeamLogo(logo: champ.logo, size: 56)
             }
             .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(LinearGradient(colors: [SpTheme.gold.opacity(0.16), SpTheme.goldSoft.opacity(0.10)],
-                                         startPoint: .topTrailing, endPoint: .bottomLeading))
-            )
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(SpTheme.gold.opacity(0.4), lineWidth: 1))
+            // بطاقة بيضاء + تاج ونص ذهبيان + حدّ ذهبي شعري — الذهبي لمسة تتويج
+            // (بطل = التميّز الشرعي) لا خلفية تدرّج كبيرة.
+            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(SpTheme.card))
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(SpTheme.gold.opacity(0.45), lineWidth: 1))
         }
         .buttonStyle(SpPressStyle())
     }
 
     @ViewBuilder private var quickFacts: some View {
-        let topScorer = scorers.first
-        let topAssister = assists.first
+        // أهداف/صناعة المتصدّر حُذفا — يعرضهما قسم «أبرز اللاعبين» أدناه أغنى.
         let facts: [(value: String, label: String, accent: Color?)] = [
             seasonValue.map { (seasonLabel($0), "الموسم", acc as Color?) },
             standings.isEmpty ? nil : ("\(standings.count)", "الأندية", nil),
-            topScorer.map { ("\($0.goals)", "أهداف المتصدّر", nil) },
-            topAssister.map { ("\($0.assists)", "صناعة المتصدّر", nil) },
         ].compactMap { $0 }
         if !facts.isEmpty {
             HStack(spacing: 8) {
@@ -609,7 +601,7 @@ struct CompetitionDetailView: View {
                 }
                 Spacer(minLength: 0)
                 VStack(spacing: 1) {
-                    Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundStyle(SpTheme.gold)
+                    Image(systemName: icon).font(.system(size: 12, weight: .bold)).foregroundStyle(acc)
                     Text(value).font(SportsFonts.app(size: 17, weight: .heavy)).foregroundStyle(acc).monospacedDigit()
                     Text(unit).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
                 }

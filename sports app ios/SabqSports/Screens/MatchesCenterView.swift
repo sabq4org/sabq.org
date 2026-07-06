@@ -319,16 +319,16 @@ struct MatchesCenterView: View {
     }
 
     /// أيقونة ضبط البطولات — تفتح صفحة اختيار ما يظهر في الجدول الموحّد.
+    // أزرار الترويسة أيقونات عارية بلا صناديق (chrome أخف).
     private var manageButton: some View {
         Button {
             showCompsManager = true
         } label: {
             Image(systemName: "slider.horizontal.3")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(SpTheme.onDarkDim)
-                .frame(width: 38, height: 34)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpTheme.chipFill))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("اختيار البطولات")
@@ -340,15 +340,16 @@ struct MatchesCenterView: View {
             showDatePicker = true
         } label: {
             Image(systemName: "calendar")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(SpTheme.onDarkDim)
-                .frame(width: 38, height: 34)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpTheme.chipFill))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("اختيار التاريخ")
     }
 
+    // زرّ «مباشر» — نقطة + نص بلا كبسولة؛ القرمزي لمسة الحالة النشطة فقط.
     private var liveToggle: some View {
         Button {
             withAnimation(.easeOut(duration: 0.2)) { liveOnly.toggle() }
@@ -361,10 +362,9 @@ struct MatchesCenterView: View {
                     .font(SportsFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(liveOnly ? SpTheme.crimson : SpTheme.onDarkDim)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 6)
             .frame(height: 34)
-            .background(Capsule().fill(liveOnly ? SpTheme.crimson.opacity(0.10) : SpTheme.chipFill))
-            .overlay(Capsule().stroke(liveOnly ? SpTheme.crimson.opacity(0.45) : SpTheme.outline, lineWidth: 1))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -769,10 +769,9 @@ struct MatchesCenterView: View {
                     .foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
                 Text("\(liveFixtures.count)")
-                    .font(SportsFonts.app(size: 13, weight: .bold))
+                    .font(SportsFonts.app(size: 13, weight: .heavy))
                     .foregroundStyle(SpTheme.crimson)
-                    .padding(.horizontal, 9).padding(.vertical, 3)
-                    .background(Capsule().fill(SpTheme.crimson.opacity(0.12)))
+                    .monospacedDigit()
             }
             matchGroup(liveFixtures.sorted { $0.timestamp < $1.timestamp })
         }
@@ -841,7 +840,6 @@ struct MatchesCenterView: View {
                 .padding(.horizontal, 16).padding(.vertical, 11)
                 .background(Capsule().fill(accent))
                 .overlay(Capsule().stroke(.white.opacity(0.15), lineWidth: 1))
-                .shadow(color: accent.opacity(0.35), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
             .padding(.bottom, 12)
@@ -1229,9 +1227,10 @@ private struct SpCenterMatchRow: View {
         if showCompetition, let comp = fixture.competition, !comp.isEmpty {
             HStack(spacing: 6) {
                 Color.clear.frame(width: 24, height: 0)
+                // اسم البطولة رمادي هادئ — يتكرّر أسفل كل صف، فاللون المحوري هنا ضوضاء.
                 Text(comp)
                     .font(SportsFonts.app(size: 9.5, weight: .bold))
-                    .foregroundStyle(SpTheme.compAccent(fixture.competitionSlug ?? ""))
+                    .foregroundStyle(SpTheme.onDarkDim)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
             }

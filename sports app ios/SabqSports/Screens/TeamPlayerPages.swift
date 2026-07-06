@@ -62,7 +62,10 @@ struct SpTeamPage: View {
         }
     }
 
-    // MARK: الترويسة البطلة (تدرّج أخضر + نص أبيض)
+    // MARK: الترويسة (بطاقة بيضاء نظيفة — على منوال ترويسة اللاعب)
+    //
+    // المركز/النقاط والمدرّب حُذفا من الترويسة — يعرضهما «أبرز الأرقام» وبطاقة
+    // المدرّب أدناه أغنى. الترويسة = الشعار + الاسم + البطولة فقط.
 
     private var headerCard: some View {
         let info = profile?.team
@@ -70,20 +73,10 @@ struct SpTeamPage: View {
             SpTeamLogo(logo: info?.logo ?? previewLogo ?? "", size: 72)
             VStack(alignment: .leading, spacing: 6) {
                 Text(info?.name ?? previewName ?? "—")
-                    .font(SportsFonts.app(size: 23, weight: .heavy)).foregroundStyle(.white).lineLimit(2)
-                if let s = profile?.standing {
-                    Label("المركز \(s.rank) · \(s.points) نقطة", systemImage: "list.number")
-                        .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.9))
-                        .labelStyle(.titleAndIcon)
-                }
+                    .font(SportsFonts.app(size: 23, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(2)
                 if let comp = profile?.competitionName, !comp.isEmpty {
                     Label(comp, systemImage: "trophy")
-                        .font(SportsFonts.app(size: 12)).foregroundStyle(.white.opacity(0.75))
-                        .labelStyle(.titleAndIcon)
-                }
-                if let c = profile?.coach {
-                    Label("المدرّب: \(c.name)", systemImage: "person.crop.square")
-                        .font(SportsFonts.app(size: 12)).foregroundStyle(.white.opacity(0.75))
+                        .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                         .labelStyle(.titleAndIcon)
                 }
             }
@@ -92,13 +85,9 @@ struct SpTeamPage: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            SpTheme.heroGradient
-                .overlay(alignment: .topLeading) {
-                    Circle().fill(SpTheme.gold.opacity(0.16))
-                        .frame(width: 150, height: 150).blur(radius: 55).offset(x: -30, y: -50)
-                }
+            RoundedRectangle(cornerRadius: 22, style: .continuous).fill(SpTheme.card)
+                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
         )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .padding(.horizontal, 16)
     }
 
@@ -123,9 +112,11 @@ struct SpTeamPage: View {
                 Image(systemName: fav ? "star.fill" : "star").font(.system(size: 13, weight: .bold))
                 Text(fav ? "المفضّل" : "اجعله المفضّل").font(SportsFonts.app(size: 13, weight: .heavy))
             }
+            // النشط أخضر مملوء؛ الخامل مفرّغ بحدّ أخضر (لمسة محورية أهدأ).
             .foregroundStyle(fav ? .white : SpTheme.green)
             .padding(.horizontal, 16).padding(.vertical, 10)
-            .background(Capsule().fill(fav ? SpTheme.green : SpTheme.green.opacity(0.12)))
+            .background(Capsule().fill(fav ? SpTheme.green : Color.clear))
+            .overlay(Capsule().stroke(fav ? Color.clear : SpTheme.green.opacity(0.5), lineWidth: 1))
         }
         .buttonStyle(SpPressStyle())
     }
@@ -146,7 +137,8 @@ struct SpTeamPage: View {
             }
             .foregroundStyle(following ? .white : SpTheme.green)
             .padding(.horizontal, 14).padding(.vertical, 10)
-            .background(Capsule().fill(following ? SpTheme.green : SpTheme.green.opacity(0.12)))
+            .background(Capsule().fill(following ? SpTheme.green : Color.clear))
+            .overlay(Capsule().stroke(following ? Color.clear : SpTheme.green.opacity(0.5), lineWidth: 1))
         }
         .buttonStyle(SpPressStyle())
     }
@@ -593,8 +585,8 @@ struct SpPlayerPage: View {
     private func marketSection(_ m: SpPlayerMarket) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.gold)
-                Text("القيمة السوقية").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.gold)
+                Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.green)
+                Text("القيمة السوقية").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
                 Spacer()
                 Text(formatMoney(m.value, m.currency))
                     .font(SportsFonts.app(size: 15, weight: .heavy)).foregroundStyle(SpTheme.onDark)
@@ -611,7 +603,7 @@ struct SpPlayerPage: View {
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(SpTheme.card))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(SpTheme.gold.opacity(0.25), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
     }
 
     private func formatMoney(_ v: Double?, _ cur: String?) -> String {
@@ -666,9 +658,10 @@ struct SpPlayerPage: View {
     }
 
     private func ratingColor(_ r: Double) -> Color {
+        // تدرّج أخضر للتقييم المرتفع، رمادي للمتوسط، قرمزي للمنخفض — بلا ذهبي روتيني.
         if r >= 8 { return SpTheme.greenDeep }
-        if r >= 7 { return SpTheme.leaf }
-        if r >= 6 { return SpTheme.gold }
+        if r >= 7 { return SpTheme.green }
+        if r >= 6 { return SpTheme.onDarkDim }
         return SpTheme.crimson
     }
 
@@ -707,7 +700,7 @@ struct SpPlayerPage: View {
     private func xgChart(_ matches: [SpFormMatch]) -> some View {
         Chart(Array(matches.prefix(10))) { m in
             BarMark(x: .value("الخصم", m.opponent), y: .value("xG", m.xg ?? 0))
-                .foregroundStyle(SpTheme.green.gradient)
+                .foregroundStyle(SpTheme.green)
                 .cornerRadius(3)
         }
         .chartYAxis {
@@ -750,12 +743,12 @@ struct SpPlayerPage: View {
             Spacer(minLength: 4)
             HStack(spacing: 8) {
                 if let x = m.xg, x > 0 {
+                    // الرسم أعلى القسم يعرض xG بصريًّا — هنا رقم عارٍ بلا كبسولة.
                     HStack(spacing: 3) {
-                        Text("xG").font(SportsFonts.app(size: 8, weight: .bold)).foregroundStyle(SpTheme.green.opacity(0.8))
+                        Text("xG").font(SportsFonts.app(size: 8, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
                         Text(String(format: "%.1f", x)).font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.green)
                             .environment(\.layoutDirection, .leftToRight)
                     }
-                    .padding(.horizontal, 6).padding(.vertical, 2).background(Capsule().fill(SpTheme.green.opacity(0.12)))
                 }
                 if let g = m.goals, g > 0 {
                     HStack(spacing: 2) {
@@ -784,7 +777,7 @@ struct SpPlayerPage: View {
         switch r.uppercased() { case "W": return "ف"; case "L": return "خ"; default: return "ت" }
     }
     private func resultColor(_ r: String) -> Color {
-        switch r.uppercased() { case "W": return SpTheme.greenDeep; case "L": return SpTheme.crimson; default: return SpTheme.gold }
+        switch r.uppercased() { case "W": return SpTheme.greenDeep; case "L": return SpTheme.crimson; default: return SpTheme.onDarkFaint }
     }
 
     // MARK: سجل المواسم

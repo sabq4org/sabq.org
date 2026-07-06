@@ -19,7 +19,7 @@ struct AccountView: View {
         NavigationStack {
             ScrollViewReader { proxy in
             ScrollView {
-                VStack(spacing: 22) {
+                VStack(spacing: 18) {
                     // مرساة أعلى الصفحة — للقفز إليها بعد تسجيل الخروج فتظهر بطاقة الدخول.
                     Color.clear.frame(height: 0).id(Self.accountTopId)
                     if auth.isLoggedIn {
@@ -38,7 +38,6 @@ struct AccountView: View {
                     ))
 
                     predictionsSection
-                    servicesSection
                     appearanceSection
                     notificationsSection
                     transfersNotificationsSection
@@ -123,16 +122,14 @@ struct AccountView: View {
     // شارة العضوية «عضو سبق» + رابط إدارة الحساب على سبق — الرعاية الخفيفة (الموضع الثالث).
     private var membershipRow: some View {
         HStack(spacing: 8) {
+            // شارة العضوية لمسة ذهبية بلا كبسولة — أيقونة الختم + النص يكفيان.
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 13, weight: .bold))
                 Text("عضو سبق")
-                    .font(SportsFonts.app(size: 11.5, weight: .heavy))
+                    .font(SportsFonts.app(size: 12, weight: .heavy))
             }
             .foregroundStyle(SpTheme.gold)
-            .padding(.horizontal, 11).padding(.vertical, 6)
-            .background(Capsule().fill(SpTheme.gold.opacity(0.14))
-                .overlay(Capsule().stroke(SpTheme.gold.opacity(0.5), lineWidth: 1)))
 
             Spacer(minLength: 0)
 
@@ -275,47 +272,8 @@ struct AccountView: View {
         .buttonStyle(SpPressStyle())
     }
 
-    // MARK: - خدماتي
-
-    private var servicesSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("خدماتي")
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                serviceTile("مبارياتي", "calendar.badge.clock", "\(auth.isLoggedIn ? followedTeams.count : 0) فريق", SpTheme.green)
-                serviceTile("تنبيهات مباشرة", "bell.badge.fill", "\(activeAlertsCount) مفعّلة", SpTheme.green)
-                serviceTile("الدعم", "questionmark.circle.fill", "تواصل", SpTheme.onDarkDim)
-            }
-        }
-    }
-
-    private func serviceTile(_ title: String, _ icon: String, _ subtitle: String, _ tint: Color) -> some View {
-        Button {
-            if title == "الدعم", let url = URL(string: "https://sabq.org/contact") { openURL(url) }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(tint)
-                    .frame(width: 34, height: 34)
-                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(tint.opacity(0.12)))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(SportsFonts.app(size: 13, weight: .heavy))
-                        .foregroundStyle(SpTheme.onDark)
-                        .lineLimit(1)
-                    Text(subtitle)
-                        .font(SportsFonts.app(size: 10.5, weight: .bold))
-                        .foregroundStyle(SpTheme.onDarkDim)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(12)
-            .frame(minHeight: 68)
-            .background(cardBg)
-        }
-        .buttonStyle(SpPressStyle())
-    }
+    // «خدماتي» حُذف — كان يكرّر عددَي المتابَعة/التنبيهات المعروضين في «فِرقي»
+    // وبطاقة ذكاء VARA، وبطاقتاه ساكنتان بلا نقر. «الدعم» انتقل إلى «عن التطبيق».
 
     // MARK: - فِرقي (المفضّل + المتابَعة)
 
@@ -432,7 +390,7 @@ struct AccountView: View {
                 settingsCard {
                     Button { router.requestLogin() } label: {
                         HStack(spacing: 12) {
-                            iconTile("bell.badge.fill", SpTheme.gold)
+                            iconTile("bell.badge.fill", SpTheme.green)
                             Text("سجّل الدخول بعضوية سبق لتفعيل تنبيهات فِرقك")
                                 .font(SportsFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SpTheme.onDark)
@@ -466,7 +424,7 @@ struct AccountView: View {
                 settingsCard {
                     Button { router.requestLogin() } label: {
                         HStack(spacing: 12) {
-                            iconTile("bell.badge.fill", SpTheme.gold)
+                            iconTile("bell.badge.fill", SpTheme.green)
                             Text("سجّل الدخول بعضوية سبق لتفعيل تنبيهات الانتقالات")
                                 .font(SportsFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SpTheme.onDark)
@@ -497,17 +455,15 @@ struct AccountView: View {
                     .font(SportsFonts.app(size: 14.5, weight: .semibold))
                     .foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
+                // نقطة + نص بلا كبسولة ملوّنة — الحالة لمسة لا صندوق (×7 صفوف).
                 HStack(spacing: 6) {
                     Circle()
                         .fill(active ? SpTheme.green : SpTheme.onDarkFaint)
                         .frame(width: 7, height: 7)
                     Text(active ? "مفعّل" : "متوقف")
-                        .font(SportsFonts.app(size: 11, weight: .bold))
+                        .font(SportsFonts.app(size: 11.5, weight: .bold))
                 }
                 .foregroundStyle(active ? SpTheme.green : SpTheme.onDarkFaint)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(active ? SpTheme.green.opacity(0.10) : SpTheme.chipFill))
             }
             .padding(.horizontal, 14).padding(.vertical, 12)
             .contentShape(Rectangle())
@@ -527,9 +483,28 @@ struct AccountView: View {
                 rowDivider
                 navRow("doc.text.fill", "شروط الاستخدام") { TermsView() }
                 rowDivider
+                linkRow("questionmark.circle.fill", "الدعم", "https://sabq.org/contact")
+                rowDivider
                 infoRow("number", "الإصدار", appVersion)
             }
         }
+    }
+
+    // صفّ يفتح رابطًا خارجيًّا (بنفس هيئة navRow).
+    private func linkRow(_ icon: String, _ title: String, _ urlString: String) -> some View {
+        Button {
+            if let url = URL(string: urlString) { openURL(url) }
+        } label: {
+            HStack(spacing: 12) {
+                iconTile(icon, SpTheme.onDarkDim)
+                Text(title).font(SportsFonts.app(size: 14.5, weight: .semibold)).foregroundStyle(SpTheme.onDark)
+                Spacer(minLength: 8)
+                Image(systemName: "arrow.up.forward").font(.system(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SpPressStyle())
     }
 
     private var appVersion: String {
@@ -684,11 +659,27 @@ enum SpTab: Hashable { case matches, roshn, competitions, world, account }
 /// وينقل للتبويب المطلوب (`openAccount`). حامل مفرد كي يصمد أمام إعادة بناء الشجرة.
 @Observable final class SpAppRouter {
     static let shared = SpAppRouter()
-    var selectedTab: SpTab = .matches
+    // وسيط إقلاع للأتمتة (لقطات المحاكي): -tab <matches|roshn|competitions|world|account>.
+    var selectedTab: SpTab = SpAppRouter.launchTab()
     var showLogin = false
     private init() {}
     func requestLogin() { showLogin = true }
     func openAccount() { selectedTab = .account }
+
+    private static func launchTab() -> SpTab {
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-tab-roshn") { return .roshn }
+        if let i = args.firstIndex(of: "-tab"), i + 1 < args.count {
+            switch args[i + 1] {
+            case "roshn": return .roshn
+            case "competitions": return .competitions
+            case "world": return .world
+            case "account": return .account
+            default: return .matches
+            }
+        }
+        return .matches
+    }
 }
 
 // MARK: - بطاقة الخطوات من «صحّتي» (HealthKit)
@@ -784,13 +775,12 @@ struct SpStepsCard: View {
                     .font(SportsFonts.app(size: 13.5, weight: .heavy))
                     .foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
+                // وسم «ذكاء VARA» نص خافت بلا كبسولة ذهبية (زينة أهدأ).
                 HStack(spacing: 3) {
                     Image(systemName: "sparkles").font(.system(size: 9, weight: .bold))
                     Text("ذكاء VARA").font(SportsFonts.app(size: 9.5, weight: .heavy))
                 }
-                .foregroundStyle(SpTheme.gold)
-                .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(SpTheme.gold.opacity(0.12)))
+                .foregroundStyle(SpTheme.onDarkFaint)
             }
 
             HStack(spacing: 16) {
@@ -822,8 +812,7 @@ struct SpStepsCard: View {
             Circle()
                 .trim(from: 0, to: progress)
                 .stroke(
-                    LinearGradient(colors: [SpTheme.green, SpTheme.gold],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    SpTheme.green,
                     style: StrokeStyle(lineWidth: 9, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
