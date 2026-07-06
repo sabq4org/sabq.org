@@ -6,6 +6,9 @@ import UserNotifications
 // إدارة جلسة العضو (تسجيل دخول Apple → Bearer عبر /api/v1/auth/apple). الرمز
 // يُحفظ في Keychain ويُضبط على APIClient لكل الطلبات المحميّة (المتابعة/التنبيهات).
 // @Observable + @MainActor: تُحقن في البيئة وتُحدّث الواجهة تلقائيًّا.
+/// مصدر خطأ الدخول — لتوجيه الرسالة تحت الزر المناسب في ورقة الدخول.
+enum SpAuthErrorSource { case none, credentials, apple }
+
 @MainActor
 @Observable
 final class SpAuthStore {
@@ -15,6 +18,9 @@ final class SpAuthStore {
     private(set) var token: String?
     var isLoading = false
     var errorMessage: String?
+    /// مصدر آخر خطأ — ليعرض كلٌّ تحت زره الصحيح (خطأ العضوية تحت الزر الأخضر،
+    /// وخطأ Apple تحت زر Apple) فلا يُظنّ أن خطأ الحقول يخصّ دخول Apple.
+    var errorSource: SpAuthErrorSource = .none
 
     // متابعات المستخدم + تفضيلات التنبيهات (تُحمَّل بعد الدخول).
     private(set) var followedKeys: Set<String> = []
@@ -130,6 +136,7 @@ final class SpAuthStore {
 
     func startAppleSignIn() {
         errorMessage = nil
+        errorSource = .none
         let provider = ASAuthorizationAppleIDProvider()
         let request = provider.createRequest()
         request.requestedScopes = [.fullName, .email]
@@ -157,6 +164,7 @@ final class SpAuthStore {
         guard let data = credential.identityToken,
               let identityToken = String(data: data, encoding: .utf8) else {
             errorMessage = "تعذّر قراءة بيانات Apple"
+            errorSource = .apple
             return
         }
         // Apple يشارك الاسم/البريد في أول تفويض فقط؛ لاحقًا يطابق الخادم بـsub.
@@ -169,11 +177,13 @@ final class SpAuthStore {
     private func handleAppleFailure(_ error: Error) {
         if let asError = error as? ASAuthorizationError, asError.code == .canceled { return }
         errorMessage = "تعذّر تسجيل الدخول عبر Apple"
+        errorSource = .apple
     }
 
     private func exchange(identityToken: String, firstName: String?, lastName: String?, email: String?) async {
         isLoading = true
         errorMessage = nil
+        errorSource = .none
         do {
             let resp = try await APIClient.shared.loginWithApple(
                 identityToken: identityToken, firstName: firstName, lastName: lastName, email: email
@@ -181,6 +191,7 @@ final class SpAuthStore {
             try await applySession(resp)
         } catch {
             errorMessage = friendly(error)
+            errorSource = .apple
         }
         isLoading = false
     }
@@ -191,15 +202,18 @@ final class SpAuthStore {
         let id = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !id.isEmpty, !password.isEmpty else {
             errorMessage = "أدخل البريد/الجوال وكلمة المرور"
+            errorSource = .credentials
             return
         }
         isLoading = true
         errorMessage = nil
+        errorSource = .none
         do {
             let resp = try await APIClient.shared.loginWithIdentifier(id, password: password)
             try await applySession(resp)
         } catch {
             errorMessage = friendly(error)
+            errorSource = .credentials
         }
         isLoading = false
     }

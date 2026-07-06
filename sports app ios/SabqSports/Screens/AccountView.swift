@@ -744,6 +744,10 @@ struct SpMembershipLogin: View {
             .buttonStyle(.plain)
             .disabled(auth.isLoading)
 
+            // خطأ دخول العضوية — تحت الزر الأخضر مباشرةً كي يعرف المستخدم أنه يخصّ
+            // حقول البريد/كلمة المرور لا زر Apple.
+            errorText(for: .credentials)
+
             dividerOr
 
             // بديل — المتابعة عبر Apple.
@@ -759,14 +763,10 @@ struct SpMembershipLogin: View {
             .buttonStyle(.plain)
             .disabled(auth.isLoading)
 
-            if let err = auth.errorMessage {
-                Text(err)
-                    .font(SportsFonts.app(size: 12))
-                    .foregroundStyle(SpTheme.crimson)
-                    .multilineTextAlignment(.center)
-            }
+            // خطأ دخول Apple — تحت زر Apple.
+            errorText(for: .apple)
 
-            // ختم «من سبق» — الرعاية الخفيفة (الموضع الثاني).
+            // ختم «من سبق» — الرعاية الخفيفة (الموضع الثاني)، بمسافة تفصله عن الأزرار.
             HStack(spacing: 7) {
                 Text("أحد منتجات")
                     .font(SportsFonts.app(size: 11, weight: .semibold))
@@ -776,7 +776,18 @@ struct SpMembershipLogin: View {
                     .font(SportsFonts.app(size: 11, weight: .heavy))
                     .foregroundStyle(SpTheme.green)
             }
-            .padding(.top, 2)
+            .padding(.top, 12)
+        }
+    }
+
+    /// رسالة الخطأ تظهر فقط تحت الزر الذي أنتجها (العضوية/Apple).
+    @ViewBuilder private func errorText(for source: SpAuthErrorSource) -> some View {
+        if auth.errorSource == source, let err = auth.errorMessage {
+            Text(err)
+                .font(SportsFonts.app(size: 12))
+                .foregroundStyle(SpTheme.crimson)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 
