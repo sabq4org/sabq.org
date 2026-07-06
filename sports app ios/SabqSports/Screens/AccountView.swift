@@ -704,9 +704,17 @@ enum SpTab: Hashable { case matches, roshn, competitions, world, account }
     }
 
     func handle(url: URL) {
-        if url.scheme == "sabq", url.host == "match" {
+        if (url.scheme == "sabqsports" || url.scheme == "sabq"), url.host == "match" {
             let id = Int(url.pathComponents.dropFirst().first ?? "")
             if let id { openMatch(id) }
+            return
+        }
+        if url.scheme == "sabqsports",
+           url.host == "sports",
+           url.pathComponents.count >= 3,
+           url.pathComponents[1] == "match",
+           let id = Int(url.pathComponents[2]) {
+            openMatch(id)
             return
         }
         if url.pathComponents.count >= 3,

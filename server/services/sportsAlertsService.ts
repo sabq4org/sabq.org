@@ -463,7 +463,7 @@ async function dispatchAlert(alert: DetectedAlert): Promise<number> {
   const type = `sports.${alert.kind}`;
   const pushData: Record<string, string> = {
     type,
-    deeplink: `sabq://match/${alert.fixtureId}`,
+    deeplink: `sabqsports://match/${alert.fixtureId}`,
     fixtureId: String(alert.fixtureId),
   };
 

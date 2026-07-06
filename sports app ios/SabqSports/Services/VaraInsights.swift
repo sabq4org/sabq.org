@@ -158,6 +158,7 @@ struct VaraInsightCard: View {
     let context: VaraInsightContext
     @State private var index = 0
     @Environment(\.openURL) private var openURL
+    @Environment(SpAppRouter.self) private var router
 
     var body: some View {
         TimelineView(.everyMinute) { tl in
@@ -197,7 +198,11 @@ struct VaraInsightCard: View {
     private func insightRow(_ ins: VaraInsight) -> some View {
         Button {
             if let deeplink = ins.deeplink, let url = URL(string: deeplink) {
-                openURL(url)
+                if url.scheme == "sabqsports" || url.scheme == "sabq" {
+                    router.handle(url: url)
+                } else {
+                    openURL(url)
+                }
             }
         } label: {
         HStack(spacing: 12) {

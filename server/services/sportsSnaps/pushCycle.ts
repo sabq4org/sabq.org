@@ -54,6 +54,7 @@ export interface SportsSnapsPushCycleSummary {
 const DEDUPE_TTL_MS = 8 * 24 * 3600 * 1000;
 const DAY_TTL_SECONDS = 36 * 3600;
 const WEEK_TTL_SECONDS = 9 * 24 * 3600;
+const SNAP_COPY_VERSION = 2;
 
 const memoryDedupe = new Map<string, number>();
 const memoryCounters = new Map<string, { count: number; expiresAt: number }>();
@@ -249,6 +250,7 @@ async function getUpcomingCandidates(): Promise<PushCandidate[]> {
   const candidates: PushCandidate[] = [];
   for (const row of rows) {
     const entities = parseEntities(row.entities);
+    if (entities.snapVersion !== SNAP_COPY_VERSION) continue;
     const fixtureId = toNumber(entities.fixtureId);
     const teamId = toNumber(entities.teamId ?? row.refId);
     const kickoff = parseKickoff(entities.kickoff);
@@ -283,6 +285,7 @@ async function getBehavioralCandidates(): Promise<PushCandidate[]> {
   const candidates: PushCandidate[] = [];
   for (const row of rows) {
     const entities = parseEntities(row.entities);
+    if (entities.snapVersion !== SNAP_COPY_VERSION) continue;
     const fixtureId = toNumber(entities.fixtureId);
     const teamId = toNumber(entities.teamId ?? row.refId);
     const kickoff = parseKickoff(entities.kickoff);
@@ -321,7 +324,7 @@ async function dispatchSnap(candidate: PushCandidate): Promise<number> {
       const deeplink = `/sports/match/${candidate.fixtureId}`;
       const pushData: Record<string, string> = {
         type,
-        deeplink: `sabq://match/${candidate.fixtureId}`,
+        deeplink: `sabqsports://match/${candidate.fixtureId}`,
         fixtureId: String(candidate.fixtureId),
         kind: candidate.kind,
         insightId: candidate.insightId,

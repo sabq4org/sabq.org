@@ -39,6 +39,8 @@ const ACCENT_BY_KIND: Record<SportsSnapKind, SportsSnapAccent> = {
   standings_stake: "crimson",
 };
 
+const SNAP_COPY_VERSION = 2;
+
 export interface SnapDto {
   id: string;
   kind: SportsSnapKind;
@@ -62,9 +64,9 @@ function entitiesOf(row: SportsInsight): Record<string, any> {
 }
 
 function deeplink(entities: Record<string, any>): string {
-  if (typeof entities.fixtureId === "number") return `sabq://match/${entities.fixtureId}`;
-  if (typeof entities.teamId === "number") return `sabq://team/${entities.teamId}`;
-  return "sabq://sports";
+  if (typeof entities.fixtureId === "number") return `sabqsports://match/${entities.fixtureId}`;
+  if (typeof entities.teamId === "number") return `sabqsports://team/${entities.teamId}`;
+  return "sabqsports://sports";
 }
 
 function toDto(row: SportsInsight): SnapDto {
@@ -87,6 +89,10 @@ function toDto(row: SportsInsight): SnapDto {
   };
 }
 
+function hasCurrentCopy(row: SportsInsight): boolean {
+  return entitiesOf(row).snapVersion === SNAP_COPY_VERSION;
+}
+
 function withBody(dto: SnapDto, body: string): SnapDto {
   return { ...dto, body };
 }
@@ -106,7 +112,7 @@ async function storeTeamSnaps(teamId: number, snaps: TemplateSnap[], sourceStats
       importance: snap.importance,
       headline: snap.headline,
       body: snap.body,
-      entities: { ...snap.entities, accent: snap.accent },
+      entities: { ...snap.entities, accent: snap.accent, snapVersion: SNAP_COPY_VERSION },
       sourceStats,
       dedupeKey: snap.dedupeKey,
       ttlMs: ttlMsFor(snap),
@@ -128,9 +134,15 @@ export async function getTeamSnaps(teamId: number, opts: { lazy?: boolean } = {}
     kinds: [...PHASE_ONE_SNAP_KINDS],
     limit: SNAP_FEED_LIMIT,
   });
-  if (rows.length > 0 || opts.lazy === false) return rows.map(toDto);
+  if (opts.lazy === false) return rows.map(toDto);
+  if (rows.length > 0 && rows.every(hasCurrentCopy)) return rows.map(toDto);
 
-  await refreshTeamSnaps(teamId);
+  try {
+    await refreshTeamSnaps(teamId);
+  } catch (error) {
+    if (rows.length > 0) return rows.map(toDto);
+    throw error;
+  }
   const fresh = await queryInsights({
     scope: "team",
     refId: String(teamId),
