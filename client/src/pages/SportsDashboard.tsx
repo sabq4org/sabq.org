@@ -28,6 +28,7 @@ import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import { OptimizedImage } from "@/components/OptimizedImage";
+import { VaraMembershipBadge } from "@/components/sports/VaraMembershipBadge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCacheBustedImageUrl, getObjectPosition } from "@/lib/imageUtils";
 import type { ArticleWithDetails, Category } from "@shared/schema";
@@ -271,6 +272,9 @@ function SportsHero({
           {today} · <span className="tabular-nums">{todayCount}</span> اليوم · <span className="tabular-nums">{compCount}</span> بطولة
         </span>
       </div>
+
+      {/* مؤشّر دخول عضوية سبق — معاينة فقط (?vara=1)، غير مرئي للزوار. */}
+      <VaraMembershipBadge />
 
       {nav.length > 0 && (
         /* تنقّل أفقي قابل للتمرير على الجوال (بدل flex-wrap الذي يأكل ارتفاعًا) —
