@@ -10,6 +10,7 @@ struct AccountView: View {
     @Environment(SpAccentTheme.self) private var accent
     @Environment(SpAppRouter.self) private var router
     @Environment(\.openURL) private var openURL
+    @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
     @State private var selectedTeam: IDBox?
     @State private var showSignOutConfirm = false
 
@@ -30,12 +31,14 @@ struct AccountView: View {
 
                     teamsSection
 
-                    VaraInsightCard(context: VaraInsightContext(
-                        isLoggedIn: auth.isLoggedIn,
-                        favoriteName: favorites.team?.name,
-                        followsCount: followedTeams.count,
-                        activeAlerts: activeAlertsCount
-                    ))
+                    if showSmartSnaps {
+                        VaraInsightCard(context: VaraInsightContext(
+                            isLoggedIn: auth.isLoggedIn,
+                            favoriteName: favorites.team?.name,
+                            followsCount: followedTeams.count,
+                            activeAlerts: activeAlertsCount
+                        ))
+                    }
 
                     predictionsSection
                     appearanceSection
@@ -382,6 +385,10 @@ struct AccountView: View {
                     alertRow("حالات الفار (VAR)", "tv.fill", \.varReview)
                     rowDivider
                     alertRow("نهاية المباراة", "flag.checkered", \.fulltime)
+                    rowDivider
+                    alertRow("لقطات ذكية", "sparkles", \.smartSnaps)
+                    rowDivider
+                    localSmartSnapsRow
                 }
                 hint(followedTeams.isEmpty
                      ? "تابع فريقًا ليصلك تنبيه عند أحداث مبارياته."
@@ -488,6 +495,31 @@ struct AccountView: View {
                 infoRow("number", "الإصدار", appVersion)
             }
         }
+    }
+
+    private var localSmartSnapsRow: some View {
+        Button {
+            showSmartSnaps.toggle()
+        } label: {
+            HStack(spacing: 12) {
+                iconTile("eye", showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
+                Text("إظهار اللقطات داخل التطبيق")
+                    .font(SportsFonts.app(size: 14.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDark)
+                Spacer(minLength: 0)
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
+                        .frame(width: 7, height: 7)
+                    Text(showSmartSnaps ? "ظاهر" : "مخفي")
+                        .font(SportsFonts.app(size: 11.5, weight: .bold))
+                }
+                .foregroundStyle(showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
+            }
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SpPressStyle())
     }
 
     // صفّ يفتح رابطًا خارجيًّا (بنفس هيئة navRow).
@@ -662,9 +694,28 @@ enum SpTab: Hashable { case matches, roshn, competitions, world, account }
     // وسيط إقلاع للأتمتة (لقطات المحاكي): -tab <matches|roshn|competitions|world|account>.
     var selectedTab: SpTab = SpAppRouter.launchTab()
     var showLogin = false
+    var pendingMatchId: Int?
     private init() {}
     func requestLogin() { showLogin = true }
     func openAccount() { selectedTab = .account }
+    func openMatch(_ fixtureId: Int) {
+        selectedTab = .matches
+        pendingMatchId = fixtureId
+    }
+
+    func handle(url: URL) {
+        if url.scheme == "sabq", url.host == "match" {
+            let id = Int(url.pathComponents.dropFirst().first ?? "")
+            if let id { openMatch(id) }
+            return
+        }
+        if url.pathComponents.count >= 3,
+           url.pathComponents[1] == "sports",
+           url.pathComponents[2] == "match",
+           let id = Int(url.pathComponents.dropFirst(3).first ?? "") {
+            openMatch(id)
+        }
+    }
 
     private static func launchTab() -> SpTab {
         let args = ProcessInfo.processInfo.arguments

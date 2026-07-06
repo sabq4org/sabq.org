@@ -78,6 +78,7 @@ struct SpMatchCenter: View {
     @State private var expectedLineup: SpExpectedLineups?
     // قوّة الفريقين من ترتيب البطولة — تغذّي «توقّع VARA» الديناميكي (أفضل جهد).
     @State private var strength: [Int: VaraTeamStrength] = [:]
+    @State private var recordedMatchView = false
 
     private enum Segment: String, CaseIterable {
         case events, commentary, analysis, ratings, lineups, stats, h2h
@@ -254,6 +255,7 @@ struct SpMatchCenter: View {
             }
         }
         .task { await load() }
+        .task(id: fixtureId) { await recordMatchViewIfNeeded() }
         // حكم المباراة (نقطة المونديال — أفضل جهد؛ تختفي البطاقة إن لا حكم/بطولة أخرى).
         .task(id: fixtureId) { await loadReferee() }
         // تحديث لحظي تلقائي أثناء اللعب — الأهداف/الكروت/الدقيقة/النتيجة تتجدّد
@@ -1911,6 +1913,14 @@ struct SpMatchCenter: View {
             VaraPickArchive.save(fixtureId: f.id, pick: varaPick(f))
         }
         self.loading = false
+        await recordMatchViewIfNeeded()
+    }
+
+    private func recordMatchViewIfNeeded() async {
+        guard auth.isLoggedIn, !recordedMatchView else { return }
+        guard let f = detail?.fixture ?? preview else { return }
+        recordedMatchView = true
+        try? await APIClient.shared.recordMatchView(f)
     }
 }
 
