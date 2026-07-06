@@ -2,10 +2,14 @@ import SwiftUI
 import AuthenticationServices
 import Security
 import UserNotifications
+import HealthKit
 
 // إدارة جلسة العضو (تسجيل دخول Apple → Bearer عبر /api/v1/auth/apple). الرمز
 // يُحفظ في Keychain ويُضبط على APIClient لكل الطلبات المحميّة (المتابعة/التنبيهات).
 // @Observable + @MainActor: تُحقن في البيئة وتُحدّث الواجهة تلقائيًّا.
+/// مصدر خطأ الدخول — لتوجيه الرسالة تحت الزر المناسب في ورقة الدخول.
+enum SpAuthErrorSource { case none, credentials, apple }
+
 @MainActor
 @Observable
 final class SpAuthStore {
@@ -15,6 +19,9 @@ final class SpAuthStore {
     private(set) var token: String?
     var isLoading = false
     var errorMessage: String?
+    /// مصدر آخر خطأ — ليعرض كلٌّ تحت زره الصحيح (خطأ العضوية تحت الزر الأخضر،
+    /// وخطأ Apple تحت زر Apple) فلا يُظنّ أن خطأ الحقول يخصّ دخول Apple.
+    var errorSource: SpAuthErrorSource = .none
 
     // متابعات المستخدم + تفضيلات التنبيهات (تُحمَّل بعد الدخول).
     private(set) var followedKeys: Set<String> = []
@@ -130,6 +137,7 @@ final class SpAuthStore {
 
     func startAppleSignIn() {
         errorMessage = nil
+        errorSource = .none
         let provider = ASAuthorizationAppleIDProvider()
         let request = provider.createRequest()
         request.requestedScopes = [.fullName, .email]
@@ -157,6 +165,7 @@ final class SpAuthStore {
         guard let data = credential.identityToken,
               let identityToken = String(data: data, encoding: .utf8) else {
             errorMessage = "تعذّر قراءة بيانات Apple"
+            errorSource = .apple
             return
         }
         // Apple يشارك الاسم/البريد في أول تفويض فقط؛ لاحقًا يطابق الخادم بـsub.
@@ -169,11 +178,13 @@ final class SpAuthStore {
     private func handleAppleFailure(_ error: Error) {
         if let asError = error as? ASAuthorizationError, asError.code == .canceled { return }
         errorMessage = "تعذّر تسجيل الدخول عبر Apple"
+        errorSource = .apple
     }
 
     private func exchange(identityToken: String, firstName: String?, lastName: String?, email: String?) async {
         isLoading = true
         errorMessage = nil
+        errorSource = .none
         do {
             let resp = try await APIClient.shared.loginWithApple(
                 identityToken: identityToken, firstName: firstName, lastName: lastName, email: email
@@ -181,6 +192,7 @@ final class SpAuthStore {
             try await applySession(resp)
         } catch {
             errorMessage = friendly(error)
+            errorSource = .apple
         }
         isLoading = false
     }
@@ -191,15 +203,18 @@ final class SpAuthStore {
         let id = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !id.isEmpty, !password.isEmpty else {
             errorMessage = "أدخل البريد/الجوال وكلمة المرور"
+            errorSource = .credentials
             return
         }
         isLoading = true
         errorMessage = nil
+        errorSource = .none
         do {
             let resp = try await APIClient.shared.loginWithIdentifier(id, password: password)
             try await applySession(resp)
         } catch {
             errorMessage = friendly(error)
+            errorSource = .credentials
         }
         isLoading = false
     }
@@ -240,11 +255,15 @@ final class SpAuthStore {
         }
         token = nil
         member = nil
+        // نمسح فقط ما هو مرتبط بالحساب: المتابعات وتفضيلات التنبيهات المُحمَّلة من
+        // الخادم بعد الدخول. أمّا التخصيص المحلّي (الفريق المفضّل + متابعة المباريات
+        // + البطولات المفضّلة) فيعمل بلا تسجيل دخول ويجب أن يبقى بعد الخروج —
+        // مسحه كان يُفقد المستخدم فريقه ومبارياته المتابَعة عند كل خروج.
         followedKeys = []
         follows = []
         alertPrefs = SpAlertPrefs()
-        SpFavorites.shared.clear()
-        SpMatchFollows.shared.clearAll()
+        // تنبيهات الخادم تتوقّف أصلًا بإلغاء تسجيل رمز الدفع أعلاه؛ نُنهي الأنشطة
+        // الحيّة فقط لأنها مرتبطة بدفع APNs للجلسة.
         SpLiveActivityManager.shared.endAll()
         SpKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
@@ -331,6 +350,71 @@ nonisolated struct SpFavTeam: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
     let logo: String?
+}
+
+// MARK: - خطواتك من «صحّتي» (HealthKit) — تخصيص محلّي للنشاط
+
+// نقرأ عدد خطوات اليوم من HealthKit فقط (قراءة، لا كتابة) لعرضها في بطاقة رياضية
+// محفّزة داخل «حسابي». الاتصال اختياريّ بلمسة، ونحفظ حالة الاتصال محليًّا. لا تُرفع
+// أي بيانات صحية للخادم — العرض محليّ بحت. ملاحظة HealthKit: حالة إذن القراءة
+// تبقى «غير محدّدة» بتصميم Apple (خصوصية)، فنعتمد على علم الاتصال + محاولة القراءة.
+@MainActor
+@Observable
+final class SpHealthSteps {
+    static let shared = SpHealthSteps()
+
+    private let store = HKHealthStore()
+    private let connectedKey = "sabqsports.health.connected"
+
+    /// هل يدعم الجهاز HealthKit (لا يدعمه iPad مثلًا).
+    let available: Bool
+    /// هل ربط المستخدم «صحّتي» (طلب الإذن مرّة على الأقل).
+    private(set) var connected: Bool
+    private(set) var todaySteps: Int = 0
+    private(set) var isRequesting = false
+
+    /// هدف الخطوات اليومي — معيار الصحّة الشائع.
+    let dailyGoal = 10_000
+
+    private var stepType: HKQuantityType? { HKQuantityType.quantityType(forIdentifier: .stepCount) }
+
+    private init() {
+        available = HKHealthStore.isHealthDataAvailable()
+        connected = UserDefaults.standard.bool(forKey: connectedKey)
+    }
+
+    /// يطلب إذن قراءة الخطوات (ورقة نظام Apple) ثم يحمّل خطوات اليوم عند الموافقة.
+    func connect() async {
+        guard available, let stepType else { return }
+        isRequesting = true
+        defer { isRequesting = false }
+        do {
+            try await store.requestAuthorization(toShare: [], read: [stepType])
+            connected = true
+            UserDefaults.standard.set(true, forKey: connectedKey)
+            await refresh()
+        } catch {
+            // ألغى المستخدم أو تعذّر الطلب — نبقى على «غير متّصل».
+        }
+    }
+
+    /// يعيد قراءة إجمالي خطوات اليوم (من منتصف الليل المحلّي حتى الآن).
+    func refresh() async {
+        guard connected, let stepType else { return }
+        let start = Calendar.current.startOfDay(for: Date())
+        let predicate = HKQuery.predicateForSamples(withStart: start, end: Date(), options: .strictStartDate)
+        todaySteps = await withCheckedContinuation { cont in
+            let query = HKStatisticsQuery(
+                quantityType: stepType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum
+            ) { _, result, _ in
+                let steps = result?.sumQuantity()?.doubleValue(for: HKUnit.count()) ?? 0
+                cont.resume(returning: Int(steps))
+            }
+            store.execute(query)
+        }
+    }
 }
 
 // MARK: - البطولات المفضّلة (تخصيص محلّي خفيف)

@@ -17,8 +17,11 @@ struct AccountView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 22) {
+                    // مرساة أعلى الصفحة — للقفز إليها بعد تسجيل الخروج فتظهر بطاقة الدخول.
+                    Color.clear.frame(height: 0).id(Self.accountTopId)
                     if auth.isLoggedIn {
                         profileHeader
                     } else {
@@ -61,14 +64,26 @@ struct AccountView: View {
             .navigationTitle("حسابي")
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
-            .confirmationDialog("تسجيل الخروج", isPresented: $showSignOutConfirm, titleVisibility: .visible) {
+            .alert("تسجيل الخروج", isPresented: $showSignOutConfirm) {
                 Button("تسجيل الخروج", role: .destructive) { auth.signOut() }
                 Button("إلغاء", role: .cancel) {}
             } message: {
-                Text("سيتم إنهاء جلستك ومسح اختياراتك المحلية مثل الفريق المفضّل ومبارياتي على هذا الجهاز.")
+                Text("سيتم إنهاء جلستك على هذا الجهاز. يبقى فريقك المفضّل ومبارياتك المتابَعة كما هي.")
+            }
+            // بعد تسجيل الخروج: اقفز لأعلى الصفحة فتظهر بطاقة الدخول فورًا بدل
+            // البقاء عند موضع زر الخروج بالأسفل.
+            .onChange(of: auth.isLoggedIn) { _, loggedIn in
+                if !loggedIn {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        proxy.scrollTo(Self.accountTopId, anchor: .top)
+                    }
+                }
+            }
             }
         }
     }
+
+    private static let accountTopId = "account-top"
 
     // MARK: - الملف الشخصي (ترويسة مدمجة)
 
@@ -96,11 +111,9 @@ struct AccountView: View {
 
             membershipRow
 
-            HStack(spacing: 8) {
-                profileMetric("\(favorites.team == nil ? 0 : 1)", "مفضل")
-                profileMetric("\(followedTeams.count)", "متابعة")
-                profileMetric("\(activeAlertsCount)", "تنبيهات")
-            }
+            // بطاقة «خطواتك» من صحّتي — بديل البطاقات الثلاث (مفضل/متابعة/تنبيهات)
+            // التي تتكرّر بالأسفل. نشاط رياضي محفّز بهوية VARA.
+            SpStepsCard()
         }
         .padding(16)
         .frame(maxWidth: .infinity)
@@ -139,21 +152,6 @@ struct AccountView: View {
     private var activeAlertsCount: Int {
         [auth.alertPrefs.kickoff, auth.alertPrefs.goals, auth.alertPrefs.cards, auth.alertPrefs.varReview, auth.alertPrefs.fulltime]
             .filter { $0 }.count
-    }
-
-    private func profileMetric(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 2) {
-            Text(value)
-                .font(SportsFonts.app(size: 15, weight: .heavy))
-                .foregroundStyle(SpTheme.green)
-                .monospacedDigit()
-            Text(label)
-                .font(SportsFonts.app(size: 10, weight: .bold))
-                .foregroundStyle(SpTheme.onDarkDim)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.chipFill))
     }
 
     private var loyaltyLine: String {
@@ -693,6 +691,175 @@ enum SpTab: Hashable { case matches, roshn, competitions, world, account }
     func openAccount() { selectedTab = .account }
 }
 
+// MARK: - بطاقة الخطوات من «صحّتي» (HealthKit)
+
+/// نشاطك اليومي بهوية VARA: دعوة ربط بلمسة، ثم حلقة تقدّم نحو هدف 10 آلاف خطوة،
+/// عبارة تحفيزية متدرّجة، وطرافة رياضية («كم ملعبًا مشيت؟» + المسافة). العرض محليّ
+/// بحت — لا تُرفع أي بيانات صحية للخادم.
+struct SpStepsCard: View {
+    @State private var health = SpHealthSteps.shared
+
+    private var progress: Double {
+        guard health.dailyGoal > 0 else { return 0 }
+        return min(1.0, Double(health.todaySteps) / Double(health.dailyGoal))
+    }
+    private var distanceKm: Double { Double(health.todaySteps) * 0.75 / 1000 }
+    private var pitches: Int { Int(Double(health.todaySteps) * 0.75 / 105) }
+
+    /// عبارة تحفيزية تتدرّج مع نسبة الإنجاز — لمسة «ذكاء VARA».
+    private var motivation: String {
+        switch progress {
+        case ..<0.01:  return "ابدأ يومك بخطوة — VARA معك ⚡️"
+        case ..<0.25:  return "انطلاقة قوية! واصل التقدّم"
+        case ..<0.5:   return "أنت على المسار الصحيح 💪"
+        case ..<0.75:  return "منتصف الملعب — لا تتوقّف الآن"
+        case ..<1.0:   return "اقتربت من هدفك، دفعة أخيرة! 🔥"
+        default:       return "بطل! تجاوزت هدف اليوم 🏆"
+        }
+    }
+
+    var body: some View {
+        if !health.available {
+            EmptyView()
+        } else if !health.connected {
+            invitation
+        } else {
+            connected.task { await health.refresh() }
+        }
+    }
+
+    // MARK: دعوة الربط
+    private var invitation: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                ZStack {
+                    Circle().fill(SpTheme.green.opacity(0.14)).frame(width: 46, height: 46)
+                    Image(systemName: "figure.run")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(SpTheme.green)
+                }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("اربط «صحّتي» وتابع خطواتك")
+                        .font(SportsFonts.app(size: 14.5, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                    Text("نشاطك اليومي بأسلوب VARA — خطواتك، مسافتك، وإنجازك نحو هدفك.")
+                        .font(SportsFonts.app(size: 11.5))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            Button { Task { await health.connect() } } label: {
+                HStack(spacing: 7) {
+                    if health.isRequesting {
+                        ProgressView().tint(.white)
+                    } else {
+                        Image(systemName: "heart.fill").font(.system(size: 13, weight: .bold))
+                    }
+                    Text("ربط صحّتي").font(SportsFonts.app(size: 14, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 44)
+                .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(SpTheme.green))
+            }
+            .buttonStyle(.plain)
+            .disabled(health.isRequesting)
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(SpTheme.chipFill)
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
+        )
+    }
+
+    // MARK: العرض بعد الربط
+    private var connected: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 7) {
+                Image(systemName: "figure.run")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(SpTheme.green)
+                Text("خطواتك اليوم")
+                    .font(SportsFonts.app(size: 13.5, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                Spacer(minLength: 0)
+                HStack(spacing: 3) {
+                    Image(systemName: "sparkles").font(.system(size: 9, weight: .bold))
+                    Text("ذكاء VARA").font(SportsFonts.app(size: 9.5, weight: .heavy))
+                }
+                .foregroundStyle(SpTheme.gold)
+                .padding(.horizontal, 8).padding(.vertical, 3)
+                .background(Capsule().fill(SpTheme.gold.opacity(0.12)))
+            }
+
+            HStack(spacing: 16) {
+                ring
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(motivation)
+                        .font(SportsFonts.app(size: 13, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(spacing: 10) {
+                        statChip(icon: "location.fill", value: String(format: "%.1f كم", distanceKm))
+                        statChip(icon: "sportscourt.fill", value: "\(pitches) ملعب")
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(SpTheme.chipFill)
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
+        )
+    }
+
+    private var ring: some View {
+        ZStack {
+            Circle().stroke(SpTheme.outline.opacity(0.35), lineWidth: 9)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    LinearGradient(colors: [SpTheme.green, SpTheme.gold],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .animation(.easeOut(duration: 0.6), value: progress)
+            VStack(spacing: 0) {
+                Text(grouped(health.todaySteps))
+                    .font(SportsFonts.app(size: 20, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.6).lineLimit(1)
+                Text("خطوة")
+                    .font(SportsFonts.app(size: 10, weight: .bold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+            }
+            .padding(6)
+        }
+        .frame(width: 104, height: 104)
+    }
+
+    private func statChip(icon: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon).font(.system(size: 9.5, weight: .bold)).foregroundStyle(SpTheme.green)
+            Text(value).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
+                .monospacedDigit()
+        }
+    }
+
+    /// أرقام لاتينية مفصولة بالآلاف (12,450) — متسقة مع بقية أرقام التطبيق.
+    private func grouped(_ n: Int) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.locale = Locale(identifier: "en_US_POSIX")
+        return f.string(from: NSNumber(value: n)) ?? "\(n)"
+    }
+}
+
 // MARK: - مكوّن الدخول بعضوية سبق (مشترك بين تبويب «حسابي» وورقة الدخول العامّة)
 
 /// نموذج الدخول بعضوية سبق: عنوان + حقول + زر «الدخول بعضوية سبق» الأساسي +
@@ -711,6 +878,17 @@ struct SpMembershipLogin: View {
                     .foregroundStyle(SpTheme.onDark)
                 SpWordmark(size: 20)
             }
+            // ختم «من سبق» أسفل الترحيب مباشرةً — الرعاية الخفيفة أعلى البطاقة.
+            HStack(spacing: 7) {
+                Text("أحد منتجات")
+                    .font(SportsFonts.app(size: 11, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkFaint)
+                Rectangle().fill(SpTheme.outline).frame(width: 1, height: 11)
+                Text("صحيفة سبق")
+                    .font(SportsFonts.app(size: 11, weight: .heavy))
+                    .foregroundStyle(SpTheme.green)
+            }
+            .padding(.top, -4)
             Text("سجّل بعضويتك في سبق لتحفظ فريقك، وترسل توقّعاتك، وتصلك تنبيهات المباريات على كل أجهزتك.")
                 .font(SportsFonts.app(size: 13))
                 .foregroundStyle(SpTheme.onDarkDim)
@@ -744,6 +922,10 @@ struct SpMembershipLogin: View {
             .buttonStyle(.plain)
             .disabled(auth.isLoading)
 
+            // خطأ دخول العضوية — تحت الزر الأخضر مباشرةً كي يعرف المستخدم أنه يخصّ
+            // حقول البريد/كلمة المرور لا زر Apple.
+            errorText(for: .credentials)
+
             dividerOr
 
             // بديل — المتابعة عبر Apple.
@@ -759,24 +941,19 @@ struct SpMembershipLogin: View {
             .buttonStyle(.plain)
             .disabled(auth.isLoading)
 
-            if let err = auth.errorMessage {
-                Text(err)
-                    .font(SportsFonts.app(size: 12))
-                    .foregroundStyle(SpTheme.crimson)
-                    .multilineTextAlignment(.center)
-            }
+            // خطأ دخول Apple — تحت زر Apple.
+            errorText(for: .apple)
+        }
+    }
 
-            // ختم «من سبق» — الرعاية الخفيفة (الموضع الثاني).
-            HStack(spacing: 7) {
-                Text("أحد منتجات")
-                    .font(SportsFonts.app(size: 11, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDarkFaint)
-                Rectangle().fill(SpTheme.outline).frame(width: 1, height: 11)
-                Text("صحيفة سبق")
-                    .font(SportsFonts.app(size: 11, weight: .heavy))
-                    .foregroundStyle(SpTheme.green)
-            }
-            .padding(.top, 2)
+    /// رسالة الخطأ تظهر فقط تحت الزر الذي أنتجها (العضوية/Apple).
+    @ViewBuilder private func errorText(for source: SpAuthErrorSource) -> some View {
+        if auth.errorSource == source, let err = auth.errorMessage {
+            Text(err)
+                .font(SportsFonts.app(size: 12))
+                .foregroundStyle(SpTheme.crimson)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
     }
 
