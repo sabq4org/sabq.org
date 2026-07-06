@@ -19,6 +19,7 @@ import {
   localizeEvent,
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
+import { getFixtures as getWorldCupMergedFixtures } from "./worldCupService";
 import { getPlayerForm as smGetPlayerForm, isSportmonksConfigured } from "./sportmonksService";
 import {
   getTheSportsFastScore,
@@ -335,6 +336,13 @@ function localizeFixture(item: any, tr: FxTranslators = FX_NOOP_TR): SplFixture 
 // ---------- المباريات ----------
 
 export async function getFixtures(comp: SaudiCompetition, seasonOverride?: number): Promise<SplFixture[]> {
+  // المونديال: جدول worldCupService المُكمّل (mergeFullKnockoutSchedule) بدل جدول
+  // المزوّد الخام — يُرقّي المتأهلين للأدوار الإقصائية فور حسمهم ويُبقي الخانات
+  // غير المحسومة برموز FIFA (W97، 2A، …) كما تعرضها صفحة المونديال على الويب.
+  // بذلك يرى الجدول الموحّد (/api/sports/fixtures) وشجرة التطبيق المصدر نفسه.
+  if (comp.slug === "world-cup" && seasonOverride == null) {
+    return getWorldCupMergedFixtures();
+  }
   const season = seasonOverride ?? await seasonFor(comp);
   return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
@@ -445,15 +453,33 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
     const ours = rows.filter((r: any) => byId.has(r.league?.id));
     const tr = await fixtureTranslators(ours);
-    return ours
-      .map((r: any): SplLiveBoardItem => {
-        const comp = byId.get(r.league.id)!;
-        return { ...localizeFixture(r, tr), competition: comp.name, competitionSlug: comp.slug };
-      })
-      .sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => {
-        if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
-        return a.timestamp - b.timestamp;
-      });
+    let items = ours.map((r: any): SplLiveBoardItem => {
+      const comp = byId.get(r.league.id)!;
+      return { ...localizeFixture(r, tr), competition: comp.name, competitionSlug: comp.slug };
+    });
+    // المونديال: استبدال صفوف المزوّد الخام بجدول worldCupService المُكمّل ليوم
+    // التاريخ نفسه — فتظهر مباريات الأدوار الإقصائية بالمتأهلين المُرقّين ورموز
+    // FIFA حتى قبل نشرها من المزوّد (نفس منطق getFixtures للجدول الموحّد).
+    try {
+      const wcDay = (await getWorldCupMergedFixtures()).filter(
+        (fx) => riyadhKeyOf(fx.timestamp) === dateKey,
+      );
+      if (wcDay.length) {
+        const wcName = byId.get(1)?.name ?? "كأس العالم";
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "world-cup"),
+          ...wcDay.map(
+            (fx): SplLiveBoardItem => ({ ...fx, competition: wcName, competitionSlug: "world-cup" }),
+          ),
+        ];
+      }
+    } catch {
+      // المونديال المتعثر لا يُسقط لوحة اليوم — تبقى صفوف المزوّد الخام.
+    }
+    return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => {
+      if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
+      return a.timestamp - b.timestamp;
+    });
   });
 }
 
