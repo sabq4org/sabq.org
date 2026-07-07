@@ -2551,11 +2551,64 @@ function collectBestNamesById(item: any): Map<number, string> {
 function nameResolverById(
   tr: (name: string | null | undefined) => string,
   bestById: Map<number, string>,
+  tsArById?: Map<number, string>,
 ): (id: number | null | undefined, name: string | null | undefined) => string {
   return (id, name) => {
+    if (typeof id === "number") {
+      // اسم TheSports العربي الكامل (name_aa) عبر جسر رقم القميص — أدقّ وأكمل من
+      // اسم API-Football المختصر، وعربيٌّ أصلًا فلا يمرّ بـtr.
+      const arFull = tsArById?.get(id);
+      if (arFull) return arFull;
+    }
     const best = typeof id === "number" ? bestById.get(id) : undefined;
     return tr(best ?? name);
   };
+}
+
+/**
+ * جسر أسماء: معرّف لاعب API-Football → اسمه العربي الكامل (name_aa) من TheSports.
+ * الطريق: uuid المباراة (getWcMatchTsId) → تشكيلة TheSports (رقم قميص + name_aa)،
+ * ثم مطابقة رقم القميص داخل كل جانب بتشكيلة API-Football (معرّف + رقم). يعالج جذر
+ * الأسماء المختصرة/المخترعة في المباريات المنتهية دون فقد قابلية النقر (نُبقي معرّف
+ * API-Football). أفضل جهد بالكامل: أيّ فجوة (uuid/تشكيلة/رقم مفقود) تُبقي التعريب
+ * الحالي لذلك اللاعب فقط.
+ */
+async function tsArNameByApiPlayerId(
+  fixtureId: number,
+  homeTeamId: number | null | undefined,
+  awayTeamId: number | null | undefined,
+  item: any,
+): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  try {
+    const uuid = await getWcMatchTsId(fixtureId).catch(() => null);
+    if (!uuid) return out;
+    const lineup = await getTsLineup(uuid).catch(() => null as TsLineup | null);
+    if (!lineup) return out;
+    const apiLineups: any[] = Array.isArray(item?.lineups) ? item.lineups : [];
+    for (const apiTeam of apiLineups) {
+      const teamId = apiTeam?.team?.id;
+      const tsSide: TsLineupPlayer[] | null =
+        teamId === homeTeamId ? lineup.home : teamId === awayTeamId ? lineup.away : null;
+      if (!tsSide) continue;
+      const byNumber = new Map<number, string>();
+      for (const p of tsSide) {
+        if (p.shirtNumber != null && p.nameAr) byNumber.set(p.shirtNumber, p.nameAr);
+      }
+      const apiPlayers = [...(apiTeam?.startXI ?? []), ...(apiTeam?.substitutes ?? [])];
+      for (const ap of apiPlayers) {
+        const pid = ap?.player?.id;
+        const num = ap?.player?.number;
+        if (typeof pid === "number" && typeof num === "number") {
+          const nm = byNumber.get(num);
+          if (nm) out.set(pid, nm);
+        }
+      }
+    }
+  } catch {
+    // أفضل جهد — أيّ فشل يُبقي التعريب الحالي بلا عطل
+  }
+  return out;
 }
 
 /** يعرّب أحداث المباراة فقط — مشترك بين التفاصيل الكاملة والمسار الخفيف. */
@@ -2563,8 +2616,9 @@ function localizeMatchEvents(
   item: any,
   tr: (name: string | null | undefined) => string,
   bestById?: Map<number, string>,
+  tsArById?: Map<number, string>,
 ): WcMatchEvent[] {
-  const arName = nameResolverById(tr, bestById ?? new Map());
+  const arName = nameResolverById(tr, bestById ?? new Map(), tsArById);
   return (item?.events ?? []).map((ev: any): WcMatchEvent => {
     const localized = localizeEvent(ev.type ?? "", ev.detail ?? "");
     // تبديل: API-Football يعكس الحقلين — ev.player = الخارج، ev.assist = الداخل.
@@ -2754,12 +2808,20 @@ export async function getMatchDetail(
       for (const p of teamBlock.players ?? []) rawNames.push(p.player?.name);
     }
     const tr = await resolveNames(rawNames);
-    const arName = nameResolverById(tr, bestById);
+    // جسر الأسماء الكاملة من TheSports (name_aa) بمطابقة رقم القميص — يُصلح الأسماء
+    // المختصرة/المخترعة في المباريات المنتهية. أفضل جهد: خريطة فارغة = التعريب الحالي.
+    const tsArById = await tsArNameByApiPlayerId(
+      fixtureId,
+      item.teams?.home?.id,
+      item.teams?.away?.id,
+      item,
+    );
+    const arName = nameResolverById(tr, bestById, tsArById);
 
     const fixture = localizeFixture(item);
     const events: WcMatchEvent[] = appendWcScoreSummaryEvents(
       fixture,
-      localizeMatchEvents(item, tr, bestById)
+      localizeMatchEvents(item, tr, bestById, tsArById)
     );
 
     let lineups: WcLineup[] = (item.lineups ?? []).map((lineup: any): WcLineup => {

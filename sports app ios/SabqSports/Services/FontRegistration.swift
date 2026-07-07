@@ -1,11 +1,14 @@
 import SwiftUI
 import CoreText
 
-// تسجيل خط IBM Plex Sans Arabic المُجمَّع (woff2) وقت التشغيل عبر CoreText — نفس
-// نمط تطبيق سبق (لا نعتمد UIAppFonts في Info.plist). ثلاثة أوزان تكفي الواجهة.
+// تسجيل خط IBM Plex Sans Arabic المُجمَّع (ttf) وقت التشغيل عبر CoreText — نفس نمط
+// تطبيق سبق (لا نعتمد UIAppFonts في Info.plist). ثلاثة أوزان تكفي الواجهة.
+// ملاحظة: CoreText لا يسجّل صيغة الويب woff2 — نرفق ttf. والأسماء أدناه هي أسماء
+// PostScript الفعلية داخل الملفات (Regular بلا لاحقة، وSemiBold باسم SmBld) — أيّ
+// خطأ فيها يُسقط الوزن إلى خط النظام بصمت.
 enum SportsFonts {
-    static let regular  = "IBMPlexSansArabic-Regular"
-    static let semibold = "IBMPlexSansArabic-SemiBold"
+    static let regular  = "IBMPlexSansArabic"
+    static let semibold = "IBMPlexSansArabic-SmBld"
     static let bold     = "IBMPlexSansArabic-Bold"
 
     /// موحّد: يربط أوزان SwiftUI الثلاثة بالخط المُجمَّع.
@@ -31,9 +34,9 @@ enum FontRegistration {
         didRegister = true
 
         let filenames = [
-            "IBMPlexSansArabic-Regular.woff2",
-            "IBMPlexSansArabic-SemiBold.woff2",
-            "IBMPlexSansArabic-Bold.woff2",
+            "IBMPlexSansArabic-Regular.ttf",
+            "IBMPlexSansArabic-SemiBold.ttf",
+            "IBMPlexSansArabic-Bold.ttf",
         ]
         for filename in filenames {
             registerFont(named: filename)
