@@ -199,11 +199,11 @@ struct MatchesCenterView: View {
 
     /// لمسة اللون: أخضر الهوية للوضع المختلط، ولون البطولة عند فلترة واحدة.
     private var accent: Color {
-        selection == "all" ? SpTheme.green : SpTheme.compAccent(selection)
+        isMixed ? SpTheme.green : SpTheme.compAccent(selection)
     }
 
     /// الجدول مختلط (أكثر من بطولة)؟ — يقرّر إظهار شارة البطولة على الصفوف.
-    private var isMixed: Bool { selection == "all" }
+    private var isMixed: Bool { selection == "all" || selection.hasPrefix("lens:") }
 
     var body: some View {
         NavigationStack {
@@ -269,6 +269,7 @@ struct MatchesCenterView: View {
     private var header: some View {
         VStack(spacing: 14) {
             toolbar
+            lensStrip
             compsStrip
             if singleCupRounds.count > 1 { roundStrip }
         }
@@ -420,6 +421,43 @@ struct MatchesCenterView: View {
         }
     }
 
+    private var lensStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                Text("عدسة")
+                    .font(SportsFonts.app(size: 11, weight: .heavy))
+                    .foregroundStyle(SpTheme.green)
+                    .padding(.horizontal, 9).padding(.vertical, 6)
+                    .background(Capsule().fill(SpTheme.green.opacity(0.10)))
+                lensChip(key: "all", title: "الكل", systemImage: "circle.grid.2x2.fill")
+                lensChip(key: "lens:important", title: "الأهم", systemImage: "sparkles")
+                lensChip(key: "lens:category:saudi", title: "السعودية", systemImage: "flag.fill")
+                lensChip(key: "lens:category:european", title: "أوروبا", systemImage: "globe.europe.africa.fill")
+                lensChip(key: "lens:category:world", title: "العالمية", systemImage: "globe")
+            }
+            .padding(.horizontal, 1)
+        }
+    }
+
+    private func lensChip(key: String, title: String, systemImage: String) -> some View {
+        let active = selection == key || (key == "all" && selection == "all")
+        return Button {
+            withAnimation(.easeOut(duration: 0.2)) { selection = key }
+            SpCenterFilter.save(key)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage).font(.system(size: 11, weight: .bold))
+                Text(title)
+                    .font(SportsFonts.app(size: 12.5, weight: active ? .bold : .semibold))
+            }
+            .foregroundStyle(active ? .white : SpTheme.onDarkDim)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(Capsule().fill(active ? SpTheme.green : SpTheme.chipFill))
+            .overlay(Capsule().stroke(active ? SpTheme.green.opacity(0.55) : SpTheme.outline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+
     private func filterChip(slug: String, name: String, logo: String?) -> some View {
         let active = selection == slug
         let tint = slug == "all" ? SpTheme.green : SpTheme.compAccent(slug)
@@ -462,7 +500,7 @@ struct MatchesCenterView: View {
     // شريط الأدوار — يظهر عند فلترة بطولة إقصائية واحدة بتعدد أدوار (المونديال
     // وأشباهه): شرائح بأسماء الأدوار المعرَّبة تقفز لأول يوم في الدور.
     private var singleCupRounds: [String] {
-        guard selection != "all" else { return [] }
+        guard selection != "all", !selection.hasPrefix("lens:") else { return [] }
         var seen = Set<String>()
         var rounds: [String] = []
         for day in visibleDays where !day.round.isEmpty {
@@ -1100,20 +1138,34 @@ struct MatchesCenterView: View {
     private func requestWindow() -> (from: String, to: String) {
         let day: TimeInterval = 86_400
         let from = SpFormat.dateKey(Date().addingTimeInterval(-7 * day))
-        let span: TimeInterval = selection == "all" ? 60 : 120
+        let span: TimeInterval = isMixed ? 60 : 120
         let to = SpFormat.dateKey(Date().addingTimeInterval(span * day))
         return (from, to)
+    }
+
+    private var effectiveCompetitionSlugs: [String] {
+        let available = favorites.items
+        if selection == "all" { return available.map(\.slug) }
+        if selection == "lens:important" {
+            let important = Set(SpCenterFilter.defaultSlugs)
+            return available.filter { important.contains($0.slug) }.map(\.slug)
+        }
+        if selection.hasPrefix("lens:category:") {
+            let category = String(selection.dropFirst("lens:category:".count))
+            return available.filter { $0.category == category }.map(\.slug)
+        }
+        return [selection]
     }
 
     private func load(force: Bool = false) async {
         if !force, fixtures.isEmpty { loading = true }
         // اختيار يتيم (بطولة أُزيلت من المفضّلة وشريحتها اختفت) → عودة لـ«الكل».
-        if selection != "all", !favorites.items.isEmpty, !favorites.isFavorite(selection) {
+        if selection != "all", !selection.hasPrefix("lens:"), !favorites.items.isEmpty, !favorites.isFavorite(selection) {
             selection = "all"
             SpCenterFilter.save("all")
             return // task(id: reloadKey) سيعيد التحميل بالاختيار الجديد
         }
-        let comps = selection == "all" ? favorites.items.map(\.slug) : [selection]
+        let comps = effectiveCompetitionSlugs
         let window = requestWindow()
         do {
             async let mergedTask = APIClient.shared.fetchUnifiedFixturesChunked(
