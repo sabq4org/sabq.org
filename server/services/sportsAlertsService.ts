@@ -97,6 +97,14 @@ let lastCleanup = 0;
 const eventSeen = new Map<number, Set<string>>();
 let lastEventCleanup = 0;
 
+// أحداث بطاقة/فار مرصودة لكن لم تُؤكَّد بعد (id مباراة → توقيع → أول لحظة رصد).
+// لا نُرسل إشعار بطاقة/فار إلا بعد أن يصمد الحدث في فيد المزوّد نافذةً زمنيةً تتجاوز
+// كاش الأحداث (12ث) — أي بعد تحديثٍ حقيقيّ واحد على الأقل. الغرض: أخطاء المزوّد
+// العابرة (بطاقة تظهر ثم يُصحّحها ويحذفها) تختفي قبل انقضاء النافذة فلا تخرج أبدًا.
+// (الدورة كل 3ث لكن الأحداث مخزَّنة 12ث؛ فالتأكيد زمنيّ لا بعدد الدورات.)
+const eventPending = new Map<number, Map<string, number>>();
+const EVENT_CONFIRM_MS = Number(process.env.SPORTS_CARD_CONFIRM_MS ?? 20_000);
+
 const eventSig = (e: SplMatchEvent): string => {
   // البطاقات: لاعب واحد ≤ بطاقة واحدة من كل نوع → نتجاهل الدقيقة المتذبذبة لمنع تكرار الإشعار.
   if (e.type === "yellow-card" || e.type === "red-card") {
@@ -547,18 +555,55 @@ async function detectEventAlerts(
     }
 
     const prev = eventSeen.get(m.id);
-    // اتحاد تراكمي لا استبدال: اختفاء حدث مؤقتًا من بثّ المزوّد ثم عودته كان
-    // يمحو توقيعه فيُرسَل إشعاره من جديد — التوقيع المرصود يبقى حتى نهاية المباراة.
-    const curSigs = new Set(events.map(eventSig));
-    eventSeen.set(m.id, prev ? new Set([...prev, ...curSigs]) : curSigs);
-    if (!prev) continue; // خطّ أساس فقط
+    const curByType = events.map((e) => ({ e, sig: eventSig(e) }));
+
+    // خطّ الأساس: أول رصدٍ للمباراة يسجّل كل التواقيع بلا إرسال ولا احتجاز.
+    if (!prev) {
+      eventSeen.set(m.id, new Set(curByType.map((c) => c.sig)));
+      eventPending.delete(m.id);
+      continue;
+    }
+
+    // اتحاد تراكمي لا استبدال: اختفاء حدثٍ مؤقتًا من بثّ المزوّد ثم عودته كان يمحو
+    // توقيعه فيُرسَل إشعاره من جديد — التوقيع المرصود يبقى حتى نهاية المباراة.
+    const nextSeen = new Set(prev);
+    const prevPending = eventPending.get(m.id);
+    const nextPending = new Map<string, number>();
+    const nowMs = Date.now();
 
     const matchName = `${m.home.name} ضد ${m.away.name}`;
-    for (const e of events) {
-      if (prev.has(eventSig(e))) continue; // ليس جديدًا
-      if (isStaleMatchEvent(m, e.minute, e.extra ?? 0)) continue;
+    for (const { e, sig } of curByType) {
+      if (prev.has(sig)) continue; // سبق إرساله/تأسيسه
+
+      const isCard = e.type === "yellow-card" || e.type === "red-card";
+      const isVar = e.type === "var";
+      // غير الكروت/الفار لا يُنتج إشعارًا هنا (الأهداف عبر اللقطة) — نسجّله ونمضي.
+      if (!isCard && !isVar) {
+        nextSeen.add(sig);
+        continue;
+      }
+      if (isStaleMatchEvent(m, e.minute, e.extra ?? 0)) {
+        nextSeen.add(sig);
+        continue;
+      }
+
+      // نافذة التأكيد: لا نُرسِل إلا بعد أن يصمد الحدث زمنًا يتجاوز كاش الأحداث.
+      const firstSeenAt = prevPending?.get(sig);
+      if (firstSeenAt == null) {
+        // أول رصدٍ → احتجاز بانتظار التأكيد (بلا إرسال).
+        nextPending.set(sig, nowMs);
+        continue;
+      }
+      if (nowMs - firstSeenAt < EVENT_CONFIRM_MS) {
+        // ما زال ضمن النافذة → يبقى معلّقًا بطابعه الزمني الأصلي.
+        nextPending.set(sig, firstSeenAt);
+        continue;
+      }
+
+      // صمد الحدث ما يكفي → إشعارٌ مؤكَّد، ونقله إلى «المرصودة».
+      nextSeen.add(sig);
       const minute = e.minute != null ? ` · د${e.minute}${e.extra ? `+${e.extra}` : ""}` : "";
-      if (e.type === "yellow-card" || e.type === "red-card") {
+      if (isCard) {
         const icon = e.type === "red-card" ? "🟥" : "🟨";
         out.push({
           fixtureId: m.id,
@@ -567,8 +612,8 @@ async function detectEventAlerts(
           body: `${e.player || matchName}${minute}`,
           teamRefIds,
         });
-      } else if (e.type === "var") {
-        // «تأكيد هدف بعد المراجعة» فحص روتيني يلي كل هدف تقريبًا — الهدف نفسه
+      } else {
+        // فار: «تأكيد هدف بعد المراجعة» فحص روتيني يلي كل هدف تقريبًا — الهدف نفسه
         // أُشعِر به للتوّ، فلا نُغرق المتابع بمراجعةٍ لم تغيّر شيئًا.
         if (e.label === "تأكيد هدف بعد مراجعة الفار") continue;
         // التفصيل المعرّب (إلغاء هدف/احتساب ركلة...)؛ نُسقط البادئة العامة لتفادي التكرار مع العنوان.
@@ -582,6 +627,10 @@ async function detectEventAlerts(
         });
       }
     }
+
+    eventSeen.set(m.id, nextSeen);
+    if (nextPending.size > 0) eventPending.set(m.id, nextPending);
+    else eventPending.delete(m.id);
   }
 
   // تنظيف دوريّ لتوقيعات مباريات لم تعد ضمن القائمة (مرّة كل ساعة).
@@ -590,6 +639,9 @@ async function detectEventAlerts(
     lastEventCleanup = now;
     for (const id of eventSeen.keys()) {
       if (!allIds.has(id)) eventSeen.delete(id);
+    }
+    for (const id of eventPending.keys()) {
+      if (!allIds.has(id)) eventPending.delete(id);
     }
   }
 
