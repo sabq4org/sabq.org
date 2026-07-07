@@ -2548,6 +2548,13 @@ function collectBestNamesById(item: any): Map<number, string> {
  * يرجّع دالة تعريب تفضّل المعرّف الثابت: لو توفّر معرّف اللاعب، تُعرّب أفضل اسم
  * خام له (الأكمل) بدل سلسلة الاسم المحلية المتقلّبة. تتراجع لتعريب الاسم كما ورد.
  */
+// مقطع مختصر: حرفٌ واحد متبوعٌ بنقطة ("م." / "M.") — علامة اسمٍ ناقص.
+const ABBREV_NAME_TOKEN = /(?:^|\s)\p{L}\.(?=\s|$)/u;
+
+// مُعرِّف اسم موحّد بترتيب أولويةٍ يمنع الارتداد: القاموس المعتمد (WC_PLAYER_AR،
+// بشريّ) فوق الكل ← التعريب الحالي (AI/DB) إن كان اسمًا كاملًا (فلا نُراجع اسمًا
+// صحيحًا فنكسره) ← اسم TheSports name_aa يملأ الاختصار فقط ← الحالي احتياطًا.
+// يُطبَّق موحّدًا على الأحداث والتشكيلة والتقييمات فلا يختلف اسم اللاعب بين سطحين.
 function nameResolverById(
   tr: (name: string | null | undefined) => string,
   bestById: Map<number, string>,
@@ -2561,7 +2568,18 @@ function nameResolverById(
       if (arFull) return arFull;
     }
     const best = typeof id === "number" ? bestById.get(id) : undefined;
-    return tr(best ?? name);
+    // 1) القاموس المعتمد — أعلى سلطة، يتجاوز المزوّد كلّه (يطابق الاسم اللاتيني).
+    const curated = (best && WC_PLAYER_AR[best]) || (name ? WC_PLAYER_AR[name] : undefined);
+    if (curated) return curated;
+    // 2) التعريب الحالي (AI + تصحيحات DB) — نُبقيه إن كان كاملًا (لا نكسر اسمًا صحيحًا).
+    const resolved = tr(best ?? name);
+    if (resolved && !ABBREV_NAME_TOKEN.test(resolved)) return resolved;
+    // 3) اسم TheSports name_aa يملأ الاختصار فقط (لا يتجاوز اسمًا كاملًا أعلاه).
+    if (typeof id === "number") {
+      const arFull = tsArById?.get(id);
+      if (arFull) return arFull;
+    }
+    return resolved;
   };
 }
 
@@ -2585,21 +2603,36 @@ async function tsArNameByApiPlayerId(
     if (!uuid) return out;
     const lineup = await getTsLineup(uuid).catch(() => null as TsLineup | null);
     if (!lineup) return out;
-    const apiLineups: any[] = Array.isArray(item?.lineups) ? item.lineups : [];
-    for (const apiTeam of apiLineups) {
-      const teamId = apiTeam?.team?.id;
+    // مصادر (معرّف API-Football + رقم قميص) لكل منتخب: التشكيلة، والتقييمات (players)
+    // التي تحمل الرقم في statistics[0].games.number — فيعمل الجسر حتى إن غابت التشكيلة
+    // (جذر حالة «التشكيلة كاملة والأحداث مختصرة»).
+    const apiSources: { teamId: any; entries: { pid: any; num: any }[] }[] = [];
+    for (const t of Array.isArray(item?.lineups) ? item.lineups : []) {
+      const players = [...(t?.startXI ?? []), ...(t?.substitutes ?? [])];
+      apiSources.push({
+        teamId: t?.team?.id,
+        entries: players.map((p: any) => ({ pid: p?.player?.id, num: p?.player?.number })),
+      });
+    }
+    for (const t of Array.isArray(item?.players) ? item.players : []) {
+      apiSources.push({
+        teamId: t?.team?.id,
+        entries: (t?.players ?? []).map((p: any) => ({
+          pid: p?.player?.id,
+          num: p?.statistics?.[0]?.games?.number,
+        })),
+      });
+    }
+    for (const src of apiSources) {
       const tsSide: TsLineupPlayer[] | null =
-        teamId === homeTeamId ? lineup.home : teamId === awayTeamId ? lineup.away : null;
+        src.teamId === homeTeamId ? lineup.home : src.teamId === awayTeamId ? lineup.away : null;
       if (!tsSide) continue;
       const byNumber = new Map<number, string>();
       for (const p of tsSide) {
         if (p.shirtNumber != null && p.nameAr) byNumber.set(p.shirtNumber, p.nameAr);
       }
-      const apiPlayers = [...(apiTeam?.startXI ?? []), ...(apiTeam?.substitutes ?? [])];
-      for (const ap of apiPlayers) {
-        const pid = ap?.player?.id;
-        const num = ap?.player?.number;
-        if (typeof pid === "number" && typeof num === "number") {
+      for (const { pid, num } of src.entries) {
+        if (typeof pid === "number" && typeof num === "number" && !out.has(pid)) {
           const nm = byNumber.get(num);
           if (nm) out.set(pid, nm);
         }
