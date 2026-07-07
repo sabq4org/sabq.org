@@ -39,10 +39,6 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	<key>NSHealthShareUsageDescription</key>
-	<string>يعرض VARA عدد خطواتك اليومية بأسلوب رياضي محفّز. تُقرأ خطواتك من تطبيق «صحّتي» لعرضها لك داخل التطبيق فقط، ولا تُشارَك مع أي جهة.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>لا يكتب VARA أي بيانات في تطبيق «صحّتي»؛ يقرأ خطواتك فقط لعرضها لك داخل التطبيق بأسلوب رياضي محفّز.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
