@@ -55,7 +55,7 @@ nonisolated struct SpTeamPalette: Identifiable, Equatable {
     }
 
     // ١٠ ألوان هادئة — كل لون قابل للقراءة كنص/زر على الأبيض والداكن.
-    // الأحمر هو الافتراضي، لكن اختيار المستخدم من «لون التطبيق» يبقى هو الحاكم.
+    // الأخضر هو الافتراضي، لكن اختيار المستخدم من «لون التطبيق» يبقى هو الحاكم.
     static let emerald  = make("emerald",  "أخضر",    Color(red: 0.059, green: 0.463, blue: 0.431), Color(red: 0.302, green: 0.729, blue: 0.650))
     static let blue     = make("blue",     "أزرق",    Color(red: 0.145, green: 0.388, blue: 0.620), Color(red: 0.424, green: 0.639, blue: 0.910))
     static let teal     = make("teal",     "سماوي",   Color(red: 0.055, green: 0.463, blue: 0.522), Color(red: 0.333, green: 0.741, blue: 0.808))
@@ -68,14 +68,14 @@ nonisolated struct SpTeamPalette: Identifiable, Equatable {
     static let graphite = make("graphite", "رصاصي",   Color(red: 0.275, green: 0.314, blue: 0.365), Color(red: 0.612, green: 0.659, blue: 0.729))
 
     static let all: [SpTeamPalette] = [
-        .red, .emerald, .blue, .teal, .indigo, .purple, .pink, .orange, .amber, .graphite
+        .emerald, .blue, .teal, .indigo, .purple, .pink, .red, .orange, .amber, .graphite
     ]
-    static func by(id: String) -> SpTeamPalette { all.first { $0.id == id } ?? .red }
+    static func by(id: String) -> SpTeamPalette { all.first { $0.id == id } ?? .emerald }
 }
 
 /// اللوحة الفعّالة — حامل غير معزول كي يقرأه `SpTheme` (nonisolated) مباشرةً.
 /// يُحدَّث من `SpAccentTheme` (MainActor) عند تبديل النادي.
-nonisolated(unsafe) var spActivePalette: SpTeamPalette = .red
+nonisolated(unsafe) var spActivePalette: SpTeamPalette = .emerald
 
 /// نمط الألوان الفعّال: false = هوية موحّدة للواجهة، والبطولات لا تعيد صبغ التطبيق.
 /// يبقى المتغير لأجل توافق الشاشات القديمة التي تقرأه.
@@ -293,7 +293,8 @@ final class SpAccentTheme {
 
     private let key = "sabqsports.accent.team"
     private let styleKey = "sabqsports.accent.style"
-    private let defaultMigrationKey = "sabqsports.accent.default.red.20260706"
+    private let legacyRedDefaultKey = "sabqsports.accent.default.red.20260706"
+    private let greenDefaultRepairKey = "sabqsports.accent.default.green.20260707"
 
     var paletteId: String {
         didSet {
@@ -318,19 +319,16 @@ final class SpAccentTheme {
     var palette: SpTeamPalette { SpTeamPalette.by(id: paletteId) }
 
     private init() {
-        let stored = UserDefaults.standard.string(forKey: key)
-        let migrated = UserDefaults.standard.bool(forKey: defaultMigrationKey)
-        let saved: String
-        if stored == nil {
-            saved = SpTeamPalette.red.id
-        } else if stored == SpTeamPalette.emerald.id, !migrated {
-            saved = SpTeamPalette.red.id
-            UserDefaults.standard.set(saved, forKey: key)
-            UserDefaults.standard.set(true, forKey: defaultMigrationKey)
-        } else {
-            saved = stored ?? SpTeamPalette.red.id
-            if !migrated { UserDefaults.standard.set(true, forKey: defaultMigrationKey) }
+        var stored = UserDefaults.standard.string(forKey: key)
+        let repairedGreenDefault = UserDefaults.standard.bool(forKey: greenDefaultRepairKey)
+        let wasMovedToRedDefault = UserDefaults.standard.bool(forKey: legacyRedDefaultKey)
+        if !repairedGreenDefault, wasMovedToRedDefault, stored == SpTeamPalette.red.id {
+            stored = SpTeamPalette.emerald.id
+            UserDefaults.standard.set(stored, forKey: key)
         }
+        UserDefaults.standard.set(true, forKey: greenDefaultRepairKey)
+
+        let saved = stored ?? SpTeamPalette.emerald.id
         paletteId = saved
         spActivePalette = SpTeamPalette.by(id: saved)
         styleId = "unified"

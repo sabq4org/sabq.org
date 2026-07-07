@@ -654,8 +654,9 @@ class NewsletterScheduler {
       
       await Promise.all(notificationPromises);
       
-      // Send email notifications to admins (if email service is configured)
-      if (process.env.SENDGRID_API_KEY) {
+      // Send email notifications to admins (if any transactional provider is configured)
+      if (process.env.MAILERSEND_API_KEY || process.env.SENDGRID_API_KEY) {
+        const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || 'https://sabq.org';
         const emailPromises = adminUsers.map(admin =>
           sendEmailNotification({
             to: admin.email,
@@ -667,7 +668,7 @@ class NewsletterScheduler {
                 <p>${notificationBody}</p>
                 ${status === 'success' && newsletterId ? `
                   <p>
-                    <a href="${process.env.APP_URL}/admin/audio-newsletters/${newsletterId}" 
+                    <a href="${frontendUrl}/admin/audio-newsletters/${newsletterId}" 
                        style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">
                       عرض النشرة
                     </a>

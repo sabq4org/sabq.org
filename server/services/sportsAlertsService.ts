@@ -115,6 +115,23 @@ const eventSig = (e: SplMatchEvent): string => {
 const tsEventSeen = new Map<number, Set<string>>();
 let lastTsEventCleanup = 0;
 
+// لا نرسل حدثًا يُضاف متأخرًا جدًا من المزوّد. بعض مزوّدي الأحداث يعيدون ملء
+// بطاقة/فار قديمة أثناء الشوط الثاني؛ كانت تُعامل كـ«حدث جديد» وتصل للمستخدم
+// متأخرة جدًا (مثال: بطاقة د21 تصل عند د81). نترك هامشًا صغيرًا للتأخير الطبيعي.
+const STALE_EVENT_MINUTE_GRACE = 8;
+
+function isStaleMatchEvent(
+  match: SplLiveBoardItem,
+  eventMinute: number | null | undefined,
+  extraMinute = 0,
+): boolean {
+  const currentMinute = match.status.elapsed;
+  if (!match.status.live || currentMinute == null || eventMinute == null || eventMinute <= 0) {
+    return false;
+  }
+  return currentMinute - (eventMinute + extraMinute) > STALE_EVENT_MINUTE_GRACE;
+}
+
 // حارس الإرسال الأخير: بصمة نصّ الإشعار نفسه لكل مباراة — مهما تقلّبت تواقيع
 // المزوّد أعلاه، إشعارٌ بعنوان+نصّ سبق إرسالهما حرفيًّا لنفس المباراة لا يخرج ثانيةً.
 const sentAlertSigs = new Map<number, Set<string>>();
@@ -539,6 +556,7 @@ async function detectEventAlerts(
     const matchName = `${m.home.name} ضد ${m.away.name}`;
     for (const e of events) {
       if (prev.has(eventSig(e))) continue; // ليس جديدًا
+      if (isStaleMatchEvent(m, e.minute, e.extra ?? 0)) continue;
       const minute = e.minute != null ? ` · د${e.minute}${e.extra ? `+${e.extra}` : ""}` : "";
       if (e.type === "yellow-card" || e.type === "red-card") {
         const icon = e.type === "red-card" ? "🟥" : "🟨";
@@ -813,6 +831,7 @@ async function detectTsEventAlerts(
 
     for (const e of ts.events) {
       if (prev.has(tsEventSig(e))) continue; // ليس جديدًا
+      if (isStaleMatchEvent(m, e.minute)) continue;
       const minute = e.minute ? ` · د${e.minute}` : "";
       const teamName = TEAM_NAME(m, e.team);
 

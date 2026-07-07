@@ -4,6 +4,8 @@ import { eq, and, lte, or, isNull, desc, inArray } from 'drizzle-orm';
 import { audioNewsletters, articles } from '@shared/schema';
 import { audioNewsletterService } from '../services/audioNewsletterService';
 
+let audioNewsletterJobsStarted = false;
+
 // Queue for managing audio generation jobs
 class AudioNewsletterJobQueue {
   private queue: Array<{
@@ -423,6 +425,11 @@ async function cleanupOldJobs() {
 
 // Initialize cron jobs
 export function initializeAudioNewsletterJobs() {
+  if (audioNewsletterJobsStarted) {
+    console.log('📻 Audio newsletter job scheduler already initialized');
+    return { queue: audioNewsletterQueue };
+  }
+
   console.log('📻 Initializing audio newsletter job scheduler...');
   
   const scheduledJob = cron.schedule(
@@ -452,6 +459,7 @@ export function initializeAudioNewsletterJobs() {
   );
   
   console.log('✅ Audio newsletter jobs initialized');
+  audioNewsletterJobsStarted = true;
   
   // Process any pending scheduled newsletters on startup
   processScheduledNewsletters();
