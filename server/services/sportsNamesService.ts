@@ -70,6 +70,22 @@ function isLatin(name: string): boolean {
 const MIXED_SCRIPT_TOKEN = /[؀-ۿ][^\s]*[A-Za-z]|[A-Za-z][^\s]*[؀-ۿ]/;
 const HAS_ARABIC = /[؀-ۿ]/;
 
+// تصحيحات تعريب منهجية لأسماء عربية الأصل يشوّهها التقليب اللاتيني↔العربي (مثال:
+// "Marwan" من فيد لاتيني يُترجَم أحيانًا "ماروان" بألفٍ زائدة). تُطبَّق على المخرَج
+// النهائي، فتُصحّح حتى القيم المخزّنة سابقًا عند القراءة (بلا إعادة ترجمة). أضِف
+// فقط ما لا لبس فيه — بديلًا خاطئًا لا يصحّ اسمًا أبدًا. المطابقة بالكلمة الكاملة.
+const SYSTEMATIC_AR_FIXES: Record<string, string> = {
+  "ماروان": "مروان",
+};
+
+function applyArabicFixes(value: string): string {
+  if (!value || !HAS_ARABIC.test(value)) return value;
+  return value
+    .split(/(\s+)/)
+    .map((tok) => SYSTEMATIC_AR_FIXES[tok] ?? tok)
+    .join("");
+}
+
 function isAcceptableArabic(candidate: string, source: string): boolean {
   const c = candidate.trim();
   if (!c || c.length > 120) return false;
@@ -279,7 +295,7 @@ export async function resolveSportsNames(
   return (name: string | null | undefined): string => {
     if (!name) return "";
     const trimmed = name.trim();
-    return memory.get(memKey(type, trimmed)) ?? trimmed;
+    return applyArabicFixes(memory.get(memKey(type, trimmed)) ?? trimmed);
   };
 }
 
