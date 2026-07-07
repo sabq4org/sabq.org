@@ -465,10 +465,27 @@ function normalizeParty(team: any, leagueId: number | null, roshnIds: Set<number
   };
 }
 
+// توقيع الاسم المختصر: أيّ مقطعٍ من حرفٍ واحد متبوعٍ بنقطة ("M." في "M. Hassan").
+const ABBREV_NAME_RE = /(?:^|\s)\p{L}\.(?=\s|$)/u;
+
+// أفضل اسمٍ خامّ للاعب. SportMonks كثيرًا ما يعيد display_name مختصرًا ("M. Hassan")
+// فيصل المستخدم مختصرًا حتى بعد التعريب ("م. حسن"). نُفضّل الاسم الكامل: نبقي
+// display_name إن لم يكن مختصرًا، وإلا نركّب من الاسم الأول واللقب ثم نتراجع لـname.
+function playerRawName(p: any): string | null {
+  const display = String(p?.display_name ?? "").trim();
+  const full = String(p?.name ?? "").trim();
+  const composed = [p?.firstname, p?.lastname]
+    .map((s) => String(s ?? "").trim())
+    .filter(Boolean)
+    .join(" ");
+  if (display && !ABBREV_NAME_RE.test(display)) return display;
+  return composed || full || display || null;
+}
+
 function normalizePlayer(p: any, arName: (n: string | null | undefined) => string): TcPlayer {
   return {
     id: p?.id ?? 0,
-    name: arName(p?.display_name || p?.name),
+    name: arName(playerRawName(p)),
     image: p?.image_path ?? null,
     position: POSITION_AR[p?.position_id] ?? null,
     birthdate: p?.date_of_birth ?? null,
@@ -546,7 +563,7 @@ export async function getTransferRumours(): Promise<TcRumoursFeed> {
 
     // تعريب أسماء اللاعبين: فوري بالمتاح (قاموس + كاش DB)، والناقص يُترجم
     // بالخلفية ليظهر معرَّبًا في التحديث التالي — نفس نمط انتقالات روشن.
-    const names = raw.map((r) => r?.player?.display_name || r?.player?.name);
+    const names = raw.map((r) => playerRawName(r?.player));
     const [arName, tr] = await Promise.all([
       resolveNames(names, { skipAi: true }),
       transferTranslators(raw),
@@ -595,7 +612,7 @@ export async function getGlobalConfirmed(): Promise<TcConfirmed[]> {
       }
     }
 
-    const names = raw.map((r) => r?.player?.display_name || r?.player?.name);
+    const names = raw.map((r) => playerRawName(r?.player));
     const [arName, tr] = await Promise.all([
       resolveNames(names, { skipAi: true }),
       transferTranslators(raw),
@@ -673,7 +690,7 @@ export async function getRumourStory(playerId: number): Promise<TcStory> {
     const raw: any[] = res?.data ?? [];
     if (!raw.length) return { found: false, player: null, timeline: [] };
 
-    const names = raw.map((r) => r?.player?.display_name || r?.player?.name);
+    const names = raw.map((r) => playerRawName(r?.player));
     const [arName, tr] = await Promise.all([
       resolveNames(names, { skipAi: true }),
       transferTranslators(raw),
