@@ -2,7 +2,6 @@ import SwiftUI
 import AuthenticationServices
 import Security
 import UserNotifications
-import HealthKit
 
 // إدارة جلسة العضو (تسجيل دخول Apple → Bearer عبر /api/v1/auth/apple). الرمز
 // يُحفظ في Keychain ويُضبط على APIClient لكل الطلبات المحميّة (المتابعة/التنبيهات).
@@ -350,71 +349,6 @@ nonisolated struct SpFavTeam: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
     let logo: String?
-}
-
-// MARK: - خطواتك من «صحّتي» (HealthKit) — تخصيص محلّي للنشاط
-
-// نقرأ عدد خطوات اليوم من HealthKit فقط (قراءة، لا كتابة) لعرضها في بطاقة رياضية
-// محفّزة داخل «حسابي». الاتصال اختياريّ بلمسة، ونحفظ حالة الاتصال محليًّا. لا تُرفع
-// أي بيانات صحية للخادم — العرض محليّ بحت. ملاحظة HealthKit: حالة إذن القراءة
-// تبقى «غير محدّدة» بتصميم Apple (خصوصية)، فنعتمد على علم الاتصال + محاولة القراءة.
-@MainActor
-@Observable
-final class SpHealthSteps {
-    static let shared = SpHealthSteps()
-
-    private let store = HKHealthStore()
-    private let connectedKey = "sabqsports.health.connected"
-
-    /// هل يدعم الجهاز HealthKit (لا يدعمه iPad مثلًا).
-    let available: Bool
-    /// هل ربط المستخدم «صحّتي» (طلب الإذن مرّة على الأقل).
-    private(set) var connected: Bool
-    private(set) var todaySteps: Int = 0
-    private(set) var isRequesting = false
-
-    /// هدف الخطوات اليومي — معيار الصحّة الشائع.
-    let dailyGoal = 10_000
-
-    private var stepType: HKQuantityType? { HKQuantityType.quantityType(forIdentifier: .stepCount) }
-
-    private init() {
-        available = HKHealthStore.isHealthDataAvailable()
-        connected = UserDefaults.standard.bool(forKey: connectedKey)
-    }
-
-    /// يطلب إذن قراءة الخطوات (ورقة نظام Apple) ثم يحمّل خطوات اليوم عند الموافقة.
-    func connect() async {
-        guard available, let stepType else { return }
-        isRequesting = true
-        defer { isRequesting = false }
-        do {
-            try await store.requestAuthorization(toShare: [], read: [stepType])
-            connected = true
-            UserDefaults.standard.set(true, forKey: connectedKey)
-            await refresh()
-        } catch {
-            // ألغى المستخدم أو تعذّر الطلب — نبقى على «غير متّصل».
-        }
-    }
-
-    /// يعيد قراءة إجمالي خطوات اليوم (من منتصف الليل المحلّي حتى الآن).
-    func refresh() async {
-        guard connected, let stepType else { return }
-        let start = Calendar.current.startOfDay(for: Date())
-        let predicate = HKQuery.predicateForSamples(withStart: start, end: Date(), options: .strictStartDate)
-        todaySteps = await withCheckedContinuation { cont in
-            let query = HKStatisticsQuery(
-                quantityType: stepType,
-                quantitySamplePredicate: predicate,
-                options: .cumulativeSum
-            ) { _, result, _ in
-                let steps = result?.sumQuantity()?.doubleValue(for: HKUnit.count()) ?? 0
-                cont.resume(returning: Int(steps))
-            }
-            store.execute(query)
-        }
-    }
 }
 
 // MARK: - البطولات المفضّلة (تخصيص محلّي خفيف)
