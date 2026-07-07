@@ -2561,6 +2561,12 @@ function nameResolverById(
   tsArById?: Map<number, string>,
 ): (id: number | null | undefined, name: string | null | undefined) => string {
   return (id, name) => {
+    if (typeof id === "number") {
+      // اسم TheSports العربي الكامل (name_aa) عبر جسر رقم القميص — أدقّ وأكمل من
+      // اسم API-Football المختصر، وعربيٌّ أصلًا فلا يمرّ بـtr.
+      const arFull = tsArById?.get(id);
+      if (arFull) return arFull;
+    }
     const best = typeof id === "number" ? bestById.get(id) : undefined;
     // 1) القاموس المعتمد — أعلى سلطة، يتجاوز المزوّد كلّه (يطابق الاسم اللاتيني).
     const curated = (best && WC_PLAYER_AR[best]) || (name ? WC_PLAYER_AR[name] : undefined);
