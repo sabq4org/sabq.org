@@ -563,6 +563,12 @@ export async function getTransferRumours(): Promise<TcRumoursFeed> {
 }
 
 // ---------- 2) المؤكّد العالمي (فيد SportMonks /transfers) ----------
+// حدّ «الصفقة البارزة» بالمبلغ (يورو). دون هذا الحدّ لا تُعدّ الصفقة بارزة إلا إن
+// كان طرفاها ناديين معروفين. السبب: فيد SportMonks يضع مبلغًا لأغلب الصفقات ولو
+// ضئيلًا، فاعتماد «amount != null» وحده كان يوسم كلّ انتقالٍ مغمور كـ«بارز» ويُغرق
+// إشعارات الانتقالات العالمية. قابل للضبط عبر SPORTS_TRANSFER_MAJOR_MIN_EUR.
+const MAJOR_MIN_AMOUNT_EUR = Number(process.env.SPORTS_TRANSFER_MAJOR_MIN_EUR ?? 8_000_000);
+
 export async function getGlobalConfirmed(): Promise<TcConfirmed[]> {
   return withSWR(`tc:global-confirmed`, CONFIRMED_TTL, CONFIRMED_TTL * 2, async () => {
     const roshn = await getRoshnSmTeams();
@@ -613,7 +619,8 @@ export async function getGlobalConfirmed(): Promise<TcConfirmed[]> {
           from,
           to,
           saudi: from.saudi || to.saudi,
-          major: fromKnown || toKnown || amount != null,
+          // «بارزة» = ناديان معروفان معًا، أو مبلغ يتجاوز الحدّ (لا مجرّد وجود مبلغ).
+          major: (fromKnown && toKnown) || (amount != null && amount >= MAJOR_MIN_AMOUNT_EUR),
         };
       })
       .filter((t) => t.id && t.date && t.player.id)

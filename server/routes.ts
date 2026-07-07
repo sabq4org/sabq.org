@@ -34352,17 +34352,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
         finalSubject = finalSubject.replace(placeholder, value);
       });
       
-      // Send email using SendGrid
-      const sgMail = require('@sendgrid/mail');
-      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-      
-      await sgMail.send({
+      const { sendEmailNotification } = await import("./services/email");
+      const emailResult = await sendEmailNotification({
         to: adminEmail,
-        from: process.env.SENDGRID_FROM_EMAIL || 'noreply@sabq.org',
         subject: `[اختبار] ${finalSubject}`,
         text: finalText,
         html: finalHtml,
       });
+      if (!emailResult.success) {
+        throw new Error(emailResult.error || "فشل إرسال البريد التجريبي");
+      }
       
       res.json({ message: "تم إرسال البريد التجريبي بنجاح", sentTo: adminEmail });
     } catch (error: any) {
@@ -34471,22 +34470,19 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
       // إرسال نسخة من الرسالة إلى بريد الصحيفة
       try {
-        const { MailerSend, EmailParams, Sender, Recipient } = await import("mailersend");
-        const mailerSend = new MailerSend({
-          apiKey: process.env.MAILERSEND_API_KEY || "",
-        });
-
         const attachmentsList = validatedData.attachments.length > 0
           ? `<div style="margin-top: 16px; padding: 12px; background: #f5f5f5; border-radius: 8px;"><strong>المرفقات:</strong><ul style="margin: 8px 0 0 0; padding-right: 20px;">${validatedData.attachments.map((att: any) => `<li><a href="https://sabq.org${att.url}">${att.name}</a></li>`).join("")}</ul></div>`
           : "";
 
-        const emailParams = new EmailParams()
-          .setFrom(new Sender("sabqai@sabq.org", "نموذج التواصل - سبق"))
-          .setTo([new Recipient("info@sabq.org", "فريق سبق")])
-          .setSubject(`رسالة جديدة: ${validatedData.subject} - من ${validatedData.name}`)
-          .setHtml(`<div dir="rtl" style="font-family: Segoe UI, Tahoma, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 24px; border-radius: 12px 12px 0 0;"><h1 style="color: #fff; margin: 0; font-size: 24px;">📩 رسالة جديدة من نموذج التواصل</h1></div><div style="background: #fff; padding: 24px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 12px 12px;"><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666; width: 120px;"><strong>الاسم:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;">${validatedData.name}</td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>البريد:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;"><a href="mailto:${validatedData.email}">${validatedData.email}</a></td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>الهاتف:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;" dir="ltr">${validatedData.phone}</td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>الموضوع:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;">${validatedData.subject}</td></tr></table><div style="margin-top: 20px;"><strong style="color: #666;">نص الرسالة:</strong><div style="margin-top: 12px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-right: 4px solid #0d6efd; white-space: pre-wrap;">${validatedData.message}</div></div>${attachmentsList}<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 12px;"><a href="https://sabq.org/dashboard/contact-messages" style="color: #0d6efd;">عرض في لوحة التحكم</a></div></div></div>`);
-
-        await mailerSend.email.send(emailParams);
+        const { sendEmailNotification } = await import("./services/email");
+        const result = await sendEmailNotification({
+          to: "info@sabq.org",
+          subject: `رسالة جديدة: ${validatedData.subject} - من ${validatedData.name}`,
+          html: `<div dir="rtl" style="font-family: Segoe UI, Tahoma, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;"><div style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 24px; border-radius: 12px 12px 0 0;"><h1 style="color: #fff; margin: 0; font-size: 24px;">📩 رسالة جديدة من نموذج التواصل</h1></div><div style="background: #fff; padding: 24px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 12px 12px;"><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666; width: 120px;"><strong>الاسم:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;">${validatedData.name}</td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>البريد:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;"><a href="mailto:${validatedData.email}">${validatedData.email}</a></td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>الهاتف:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;" dir="ltr">${validatedData.phone}</td></tr><tr><td style="padding: 12px 0; border-bottom: 1px solid #eee; color: #666;"><strong>الموضوع:</strong></td><td style="padding: 12px 0; border-bottom: 1px solid #eee;">${validatedData.subject}</td></tr></table><div style="margin-top: 20px;"><strong style="color: #666;">نص الرسالة:</strong><div style="margin-top: 12px; padding: 16px; background: #f8f9fa; border-radius: 8px; border-right: 4px solid #0d6efd; white-space: pre-wrap;">${validatedData.message}</div></div>${attachmentsList}<div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 12px;"><a href="https://sabq.org/dashboard/contact-messages" style="color: #0d6efd;">عرض في لوحة التحكم</a></div></div></div>`,
+        });
+        if (!result.success) {
+          throw new Error(result.error || "Failed to send contact notification");
+        }
         console.log("[Contact] Email notification sent to info@sabq.org");
       } catch (emailError) {
         console.error("[Contact] Failed to send email notification:", emailError);

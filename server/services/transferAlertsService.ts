@@ -34,6 +34,11 @@ const SPORTS_BUNDLE_ID = process.env.APNS_SPORTS_BUNDLE_ID || "com.sabq.sports";
 // لا نُرسل صفقةً أقدم من هذا العمر حتى لو ظهرت كـ«جديدة» (بعد إعادة ضبط الأساس).
 const MAX_AGE_DAYS = 3;
 
+// سقف الصفقات العالمية المُرسَلة في الدورة الواحدة. حتى بعد تضييق تعريف «بارزة»،
+// قد تتأكّد عدّة صفقات كبرى في نافذةٍ واحدة؛ الفائض يُعلَّم مرصودًا (فلا يعود) بلا
+// دفعة إشعارات متلاحقة. قابل للضبط عبر SPORTS_TRANSFER_MAX_GLOBAL_PER_CYCLE.
+const MAX_GLOBAL_PER_CYCLE = Number(process.env.SPORTS_TRANSFER_MAX_GLOBAL_PER_CYCLE ?? 3);
+
 type TransferScope = "saudi" | "global";
 
 interface DetectedTransferAlert {
@@ -137,6 +142,8 @@ async function detectGlobal(): Promise<DetectedTransferAlert[]> {
     seenGlobal.add(key);
     if (baseline) continue;
     if (!isRecent(t.date)) continue;
+    // سقف الدورة: نُعلّم الفائض مرصودًا (لن يُعاد) لكن لا نُرسله — منعًا للإغراق.
+    if (out.length >= MAX_GLOBAL_PER_CYCLE) continue;
     out.push({
       key,
       scope: "global",

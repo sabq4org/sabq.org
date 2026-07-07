@@ -16,7 +16,7 @@ struct LiveView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 14) {
                     header
                     content
                 }
@@ -52,37 +52,46 @@ struct LiveView: View {
                          title: "لا مباريات مباشرة عالميًا الآن",
                          subtitle: "ستظهر هنا أي مباراة جارية الآن حول العالم")
         } else {
-            ForEach(worldCategorySections) { section in
-                VStack(alignment: .leading, spacing: 18) {
-                    categoryHeader(section)
-                    ForEach(section.groups) { g in
-                        worldGroupSection(g)
-                    }
+            VStack(spacing: 12) {
+                ForEach(worldCategorySections) { section in
+                    worldCategoryCard(section)
                 }
             }
         }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "globe")
-                    .font(.system(size: 20, weight: .bold))
-                    .foregroundStyle(SpTheme.green)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("عالمية")
-                        .font(SportsFonts.headline(size: 24))
-                        .foregroundStyle(SpTheme.onDark)
-                    Text("المباريات الجارية حول العالم")
-                        .font(SportsFonts.app(size: 11.5, weight: .semibold))
-                        .foregroundStyle(SpTheme.onDarkDim)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                if liveNowCount > 0 { quietLiveBadge("\(liveNowCount)") }
+        HStack(spacing: 12) {
+            Image(systemName: "globe")
+                .font(.system(size: 24, weight: .bold))
+                .foregroundStyle(SpTheme.green)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(SpTheme.green.opacity(0.12)))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("عالمية")
+                    .font(SportsFonts.headline(size: 25))
+                    .foregroundStyle(SpTheme.onDark)
+                Text("المباريات الجارية حول العالم")
+                    .font(SportsFonts.app(size: 12.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                    .lineLimit(1)
             }
+
+            Spacer(minLength: 0)
+
+            if liveNowCount > 0 { liveBadge("\(liveNowCount)") }
         }
+        .padding(14)
         .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                .fill(SpTheme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                .stroke(SpTheme.cardStroke, lineWidth: 1)
+        )
     }
 
     private var liveNowCount: Int { world.filter { $0.fixture.status.live }.count }
@@ -163,36 +172,72 @@ struct LiveView: View {
         return "other"
     }
 
+    private func worldCategoryCard(_ section: LiveCategorySection) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            categoryHeader(section)
+                .padding(.horizontal, 14)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
+
+            ForEach(Array(section.groups.enumerated()), id: \.element.id) { idx, group in
+                if idx > 0 {
+                    Rectangle().fill(SpTheme.outline.opacity(0.72)).frame(height: 1)
+                        .padding(.horizontal, 14)
+                }
+                worldGroupSection(group)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                .fill(SpTheme.card)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                .stroke(SpTheme.cardStroke, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous))
+    }
+
     private func categoryHeader(_ section: LiveCategorySection) -> some View {
         let tint = categoryTint(section.category)
         return HStack(spacing: 8) {
             Rectangle()
                 .fill(tint)
-                .frame(width: 4, height: 22)
+                .frame(width: 4, height: 20)
                 .clipShape(Capsule())
             Text(categoryTitle(section.category))
                 .font(SportsFonts.headline(size: 17))
                 .foregroundStyle(SpTheme.onDark)
             Spacer(minLength: 0)
+            HStack(spacing: 5) {
+                Circle().fill(SpTheme.crimson).frame(width: 6, height: 6)
+                Text("\(section.matchCount) مباشرة")
+                    .font(SportsFonts.app(size: 11.5, weight: .bold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                    .monospacedDigit()
+            }
         }
-        .padding(.top, 6)
     }
 
-    // مجموعة بطولة على طراز شاشة «المباريات»: ترويسة البطولة + خطّ فاصل + صفوف
-    // مسطّحة (SpFlatMatchRow) مفصولة بخطوط رفيعة — بلا إطارات/بطاقات.
+    // مجموعة بطولة على طراز شاشة «المباريات»: ترويسة البطولة + صفوف مسطّحة مفصولة
+    // بخطوط رفيعة داخل بطاقة القسم.
     private func worldGroupSection(_ g: LiveGroup) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             worldGroupHeader(g)
-            Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 8)
+            Rectangle().fill(SpTheme.outline.opacity(0.72)).frame(height: 1)
+                .padding(.horizontal, 14)
+                .padding(.top, 8)
             ForEach(Array(g.matches.enumerated()), id: \.element.id) { idx, item in
                 if idx > 0 {
-                    Rectangle().fill(SpTheme.outline.opacity(0.78)).frame(height: 1)
-                        .padding(.horizontal, 10)
+                    Rectangle().fill(SpTheme.outline.opacity(0.52)).frame(height: 1)
+                        .padding(.horizontal, 14)
                 }
                 SpFlatMatchRow(fixture: item.fixture)
+                    .padding(.horizontal, 6)
             }
         }
         .padding(.top, 2)
+        .padding(.bottom, 4)
     }
 
     private func worldGroupHeader(_ g: LiveGroup) -> some View {
@@ -215,22 +260,19 @@ struct LiveView: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(cleanLeagueName(g.name, country: g.country))
-                    .font(SportsFonts.headline(size: 16))
+                    .font(SportsFonts.headline(size: 15.5))
                     .foregroundStyle(SpTheme.onDark)
-                    .lineLimit(1).minimumScaleFactor(0.8)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
                 Text(groupSubtitle(g))
-                    .font(SportsFonts.app(size: 11))
+                    .font(SportsFonts.app(size: 11.5, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkDim)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
-            // عدّاد المباريات — رقم هادئ بلا كبسولة ملوّنة (نمط القوائم المسطّحة).
-            Text("\(g.matches.count)")
-                .font(SportsFonts.app(size: 13, weight: .heavy))
-                .foregroundStyle(SpTheme.onDarkDim)
-                .monospacedDigit()
         }
-        .padding(.top, 4)
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
     }
 
     private func cleanLeagueName(_ name: String, country: String) -> String {
@@ -264,15 +306,17 @@ struct LiveView: View {
         }
     }
 
-    private func quietLiveBadge(_ value: String) -> some View {
-        // نقطة + نص أخضر بلا كبسولة ملوّنة — لمسة مباشر هادئة.
+    private func liveBadge(_ value: String) -> some View {
         HStack(spacing: 6) {
-            Circle().fill(SpTheme.crimson).frame(width: 7, height: 7)
+            Circle().fill(SpTheme.crimson).frame(width: 6, height: 6)
             Text("\(value) مباشرة")
-                .font(SportsFonts.app(size: 12.5, weight: .bold))
-                .foregroundStyle(SpTheme.onDarkDim)
+                .font(SportsFonts.app(size: 12, weight: .heavy))
+                .foregroundStyle(SpTheme.crimson)
                 .monospacedDigit()
         }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(SpTheme.crimson.opacity(0.09)))
     }
 
     // MARK: - التحميل + التحديث اللحظي

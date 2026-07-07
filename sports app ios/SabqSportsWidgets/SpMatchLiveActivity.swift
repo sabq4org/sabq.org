@@ -107,7 +107,7 @@ struct SpMatchLiveActivity: Widget {
                 .foregroundStyle(.white)
                 .frame(maxWidth: 56)
         } else {
-            Text("\(context.state.homeScore)-\(context.state.awayScore)")
+            Text(verbatim: "\(context.state.homeScore)-\(context.state.awayScore)")
                 .font(.system(size: 13, weight: .heavy, design: .rounded))
                 .foregroundStyle(.white)
         }
@@ -117,7 +117,7 @@ struct SpMatchLiveActivity: Widget {
         HStack(spacing: 3) {
             Text(SpLA.shortName(name))
                 .font(.system(size: 11, weight: .bold))
-            Text("\(score)")
+            Text(verbatim: "\(score)")
                 .font(.system(size: 15, weight: .black, design: .rounded))
                 .monospacedDigit()
         }
@@ -160,7 +160,7 @@ func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Dat
 // البطاقة RTL: المضيف يمينًا والضيف يسارًا. نرسم النتيجة LTR بترتيب
 // "الضيف - المضيف" حتى تقع الأرقام تحت أماكن الفرق كما في ويدجت سبق.
 private func scoreText(_ state: SpMatchActivityAttributes.ContentState) -> some View {
-    Text("\(state.awayScore) - \(state.homeScore)")
+    Text(verbatim: "\(state.awayScore) - \(state.homeScore)")
         .foregroundStyle(.white)
         .environment(\.layoutDirection, .leftToRight)
 }

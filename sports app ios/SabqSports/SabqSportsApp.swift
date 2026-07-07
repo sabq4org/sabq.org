@@ -4,6 +4,10 @@ import SwiftUI
 struct SabqSportsApp: App {
     @UIApplicationDelegateAdaptor(SpAppDelegate.self) private var appDelegate
 
+    init() {
+        FontRegistration.registerAll()
+    }
+
     var body: some Scene {
         WindowGroup {
             SpStartupShell()
@@ -60,11 +64,6 @@ private struct SpAppEnvironmentRoot: View {
             .id("\(accent.paletteId)|\(accent.styleId)")
             .sportsRTL()
             .preferredColorScheme(themeMode.colorScheme)
-            .task {
-                await Task.yield()
-                try? await Task.sleep(nanoseconds: 700_000_000)
-                FontRegistration.registerAll()
-            }
             .task {
                 await Task.yield()
                 try? await Task.sleep(nanoseconds: 350_000_000)
