@@ -59,6 +59,8 @@ import {
   getTheSportsFastScore,
   getTheSportsMatchLive,
   isTheSportsConfigured,
+  resolveTsNames,
+  TS_I18N_TYPE,
   TS_VAR_RESULT_AR,
   type TsEvent,
   type TsEventType,
@@ -149,6 +151,7 @@ function mapTsEventsToWc(
   events: TsEvent[],
   fx: WcFixture,
   tr: (n: string | null | undefined) => string,
+  arById: (id: string | null | undefined) => string | null,
 ): WcMatchEvent[] {
   const out: WcMatchEvent[] = [];
   for (const e of events) {
@@ -163,7 +166,9 @@ function mapTsEventsToWc(
         type: meta.type,
         label: meta.label,
         detail: "Substitution",
-        player: tr(e.inPlayer), // الداخل
+        // الاسم بمعرّف اللاعب (name_aa الكامل) أولًا لتفادي تصادم الاختصارات
+        // ("H. Hassan" للاعبين مختلفين)؛ يتراجع لتعريب سلسلة الاسم.
+        player: arById(e.playerId) ?? tr(e.inPlayer), // الداخل
         playerId: null, // معرّف TheSports نصّي لا يطابق بطاقة اللاعب (API-Football)
         assist: e.outPlayer ? tr(e.outPlayer) : null, // «بديلًا عن»
         assistId: null,
@@ -188,7 +193,8 @@ function mapTsEventsToWc(
               : e.type === "yellow_red"
                 ? "Second Yellow card"
                 : "",
-        player: tr(e.player),
+        // الاسم بمعرّف اللاعب (name_aa الكامل) أولًا — يحلّ تصادم الاختصارات.
+        player: arById(e.playerId) ?? tr(e.player),
         playerId: null,
         assist: e.assist ? tr(e.assist) : null,
         assistId: null,
@@ -246,7 +252,10 @@ async function overlayLiveDetail(detail: WcMatchDetail): Promise<WcMatchDetail> 
     const raw: (string | null | undefined)[] = [];
     for (const e of ts.events) raw.push(e.player, e.assist, e.inPlayer, e.outPlayer);
     const tr = await resolveNames(raw);
-    const events = mapTsEventsToWc(ts.events, fixture, tr);
+    // اسم عربيّ كامل بمعرّف اللاعب (قاموس TheSports name_aa) — فريدٌ لكل لاعب فيمنع
+    // تصادم الأسماء المختصرة؛ يتراجع mapTsEventsToWc إلى تعريب السلسلة عند غيابه.
+    const arById = await resolveTsNames(TS_I18N_TYPE.player, ts.events.map((e) => e.playerId));
+    const events = mapTsEventsToWc(ts.events, fixture, tr, arById);
     const statistics = ts.stats ? mapTsStatsToWc(ts.stats) : [];
     return {
       ...detail,
