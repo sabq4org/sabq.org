@@ -15,7 +15,7 @@
  *     عند إعادة التشغيل يعيد ضبط الأساس بلا تكرار إشعارات سابقة.
  *   - فشل التوصيل لمستخدم لا يكسر بقيّة الدورة (محصّن بـ try/catch).
  */
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { notificationsInbox, pushDevices } from "@shared/schema";
 import { notificationBus } from "../notificationBus";
@@ -591,14 +591,30 @@ export async function pushToUserDevices(
       .select({
         token: pushDevices.deviceToken,
         provider: pushDevices.tokenProvider,
+        platform: pushDevices.platform,
         bundleId: pushDevices.bundleId,
       })
       .from(pushDevices)
-      .where(and(eq(pushDevices.userId, userId), eq(pushDevices.isActive, true)));
+      .where(and(eq(pushDevices.userId, userId), eq(pushDevices.isActive, true)))
+      .orderBy(desc(pushDevices.updatedAt));
     if (devices.length === 0) return;
 
-    const apnsDevices = devices.filter((d) => d.provider === "apns");
-    const fcmTokens = devices.filter((d) => d.provider === "fcm").map((d) => d.token);
+    const uniqueDevices = [];
+    const seenRoutes = new Set<string>();
+    for (const device of devices) {
+      const route = `${device.platform}:${device.provider}:${device.bundleId ?? "default"}`;
+      if (seenRoutes.has(route)) continue;
+      seenRoutes.add(route);
+      uniqueDevices.push(device);
+    }
+    if (uniqueDevices.length < devices.length) {
+      console.warn(
+        `[SportsAlerts] collapsed ${devices.length - uniqueDevices.length} duplicate active push token(s) for user=${userId}`,
+      );
+    }
+
+    const apnsDevices = uniqueDevices.filter((d) => d.provider === "apns");
+    const fcmTokens = uniqueDevices.filter((d) => d.provider === "fcm").map((d) => d.token);
 
     if (apnsDevices.length > 0 && isApnsConfigured()) {
       await Promise.all(

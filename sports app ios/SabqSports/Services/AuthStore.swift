@@ -501,6 +501,7 @@ final class SpMatchFollows {
     private let refreshLead: TimeInterval = 3 * 3600
     private let refreshTail: TimeInterval = 24 * 3600
     private var finishedAtById: [String: TimeInterval] = [:]
+    private var didLoadStored = false
 
     /// حلقة الاستطلاع الدوري الأمامية (تُلغى عند خلفية التطبيق).
     private var autoRefreshTask: Task<Void, Never>?
@@ -514,7 +515,11 @@ final class SpMatchFollows {
         return items.filter { !shouldHideFinished($0, now: now) }
     }
 
-    private init() {
+    private init() {}
+
+    func loadStoredIfNeeded() {
+        guard !didLoadStored else { return }
+        didLoadStored = true
         if let data = UserDefaults.standard.data(forKey: key),
            let stored = try? JSONDecoder().decode([SpFixture].self, from: data) {
             items = stored.sorted { $0.timestamp < $1.timestamp }
@@ -603,6 +608,7 @@ final class SpMatchFollows {
 
     /// يبدأ الاستطلاع الدوري (آمن للاستدعاء المتكرّر — لا يُنشئ أكثر من حلقة).
     func startAutoRefresh() {
+        loadStoredIfNeeded()
         pruneExpiredFinishedMatches()
         guard autoRefreshTask == nil else { return }
         autoRefreshTask = Task { [weak self] in

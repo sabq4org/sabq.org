@@ -19,7 +19,7 @@ import SwiftUI
 @Observable
 final class SpLiveActivityManager {
     static let shared = SpLiveActivityManager()
-    private init() { adoptExisting() }
+    private init() {}
 
     /// معرّفات المباريات التي لها نشاط حيّ قائم (لعكس حالة الزرّ في الواجهة).
     private(set) var activeFixtureIds: Set<Int> = []
@@ -29,19 +29,25 @@ final class SpLiveActivityManager {
 
     /// آخر توكن دفع لكل مباراة (لإبلاغ الخادم بالإلغاء عند الإيقاف اليدوي).
     private var pushTokens: [Int: String] = [:]
+    private var didAdoptExisting = false
 
     var isSupported: Bool { ActivityAuthorizationInfo().areActivitiesEnabled }
 
-    func isActive(_ fixtureId: Int) -> Bool { activeFixtureIds.contains(fixtureId) }
+    func isActive(_ fixtureId: Int) -> Bool {
+        adoptExistingIfNeeded()
+        return activeFixtureIds.contains(fixtureId)
+    }
 
     /// يبدّل المتابعة اللحظية لمباراة (يبدأ إن لم تكن قائمة، وإلا يُنهيها).
     func toggle(for fixture: SpFixture) {
+        adoptExistingIfNeeded()
         if isActive(fixture.id) { end(fixtureId: fixture.id) }
         else { start(for: fixture) }
     }
 
     // MARK: بدء النشاط
     func start(for fixture: SpFixture) {
+        adoptExistingIfNeeded()
         guard isSupported, activities[fixture.id] == nil else { return }
         // أظهر الحالة فورًا (تفاؤليًّا) ريثما تكتمل عملية البدء غير المتزامنة.
         activeFixtureIds.insert(fixture.id)
@@ -132,6 +138,12 @@ final class SpLiveActivityManager {
     }
 
     // MARK: مساعدات
+
+    func adoptExistingIfNeeded() {
+        guard !didAdoptExisting else { return }
+        didAdoptExisting = true
+        adoptExisting()
+    }
 
     /// يلتقط النشاطات الباقية من جلسة سابقة بعد إعادة تشغيل التطبيق.
     private func adoptExisting() {

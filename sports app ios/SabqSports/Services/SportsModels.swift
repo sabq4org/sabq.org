@@ -1124,6 +1124,7 @@ nonisolated struct SpPlayerMarket: Decodable {
 nonisolated enum SportsConstants {
     /// دوري روشن — البطولة الافتراضية والأبرز.
     static let defaultComp = "pro-league"
+    static let worldCupComp = "world-cup"
 
     /// ترتيب عرض فئات البطولات (السعودية أولًا).
     static let categoryOrder = ["saudi", "gulf", "arab", "european", "world"]

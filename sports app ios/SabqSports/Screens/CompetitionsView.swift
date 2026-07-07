@@ -254,6 +254,10 @@ struct CompetitionRow: View {
                 .padding(4)
                 .frame(width: 36, height: 36)
                 .background(Circle().fill(.white))
+        } else if comp.slug == SportsConstants.worldCupComp {
+            Image("WorldCupLogo")
+                .resizable().scaledToFit()
+                .frame(width: 36, height: 44)
         } else if let url = comp.logo, !url.isEmpty {
             SpRemoteImage(url: url)
                 .padding(5)

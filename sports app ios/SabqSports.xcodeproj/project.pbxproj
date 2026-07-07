@@ -35,6 +35,7 @@
 		5B000022 /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000022 /* IBMPlexSansArabic-Regular.woff2 */; };
 		5B000023 /* IBMPlexSansArabic-SemiBold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000023 /* IBMPlexSansArabic-SemiBold.woff2 */; };
 		5B000024 /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000024 /* IBMPlexSansArabic-Bold.woff2 */; };
+		5B000025 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 5C000025 /* LaunchScreen.storyboard */; };
 		5B0000A1 /* VaraPrediction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A1 /* VaraPrediction.swift */; };
 		5B0000A2 /* VaraInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A2 /* VaraInsights.swift */; };
 		5B0000A3 /* LegalPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A3 /* LegalPages.swift */; };
@@ -107,6 +108,7 @@
 		5C000022 /* IBMPlexSansArabic-Regular.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Regular.woff2"; sourceTree = "<group>"; };
 		5C000023 /* IBMPlexSansArabic-SemiBold.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-SemiBold.woff2"; sourceTree = "<group>"; };
 		5C000024 /* IBMPlexSansArabic-Bold.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Bold.woff2"; sourceTree = "<group>"; };
+		5C000025 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		5C000030 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5C000031 /* SabqSports.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SabqSports.entitlements; sourceTree = "<group>"; };
 		5C000040 /* SabqSports.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SabqSports.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -159,6 +161,7 @@
 				5D000005 /* Resources */,
 				5D000007 /* ar.lproj */,
 				5C000020 /* Assets.xcassets */,
+				5C000025 /* LaunchScreen.storyboard */,
 				5C000030 /* Info.plist */,
 				5C000031 /* SabqSports.entitlements */,
 				5C000001 /* SabqSportsApp.swift */,
@@ -352,6 +355,7 @@
 				5B000022 /* IBMPlexSansArabic-Regular.woff2 in Resources */,
 				5B000023 /* IBMPlexSansArabic-SemiBold.woff2 in Resources */,
 				5B000024 /* IBMPlexSansArabic-Bold.woff2 in Resources */,
+				5B000025 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -506,7 +510,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070618;
+				CURRENT_PROJECT_VERSION = 2026070712;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
@@ -514,7 +518,7 @@
 				INFOPLIST_FILE = SabqSports/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = VARA;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
@@ -537,7 +541,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070618;
+				CURRENT_PROJECT_VERSION = 2026070712;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
@@ -545,7 +549,7 @@
 				INFOPLIST_FILE = SabqSports/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = VARA;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports";
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = NO;
 				INFOPLIST_KEY_UIStatusBarStyle = UIStatusBarStyleLightContent;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UIUserInterfaceLayoutDirection = UIUserInterfaceLayoutDirectionRightToLeft;
@@ -566,7 +570,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = SabqSportsWidgets/SabqSportsWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070618;
+				CURRENT_PROJECT_VERSION = 2026070712;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SabqSportsWidgets/Info.plist;
@@ -591,7 +595,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = SabqSportsWidgets/SabqSportsWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070618;
+				CURRENT_PROJECT_VERSION = 2026070712;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SabqSportsWidgets/Info.plist;

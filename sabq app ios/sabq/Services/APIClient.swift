@@ -863,11 +863,13 @@ actor APIClient {
             let appVersion: String?
             let locale: String?
             let timezone: String?
+            let bundleId: String?
         }
         try await postRaw(path: "/members/push-token", body: Body(
             token: token, provider: provider, platform: platform,
             deviceName: deviceName, osVersion: osVersion, appVersion: appVersion,
-            locale: locale, timezone: timezone
+            locale: locale, timezone: timezone,
+            bundleId: Bundle.main.bundleIdentifier
         ))
     }
 

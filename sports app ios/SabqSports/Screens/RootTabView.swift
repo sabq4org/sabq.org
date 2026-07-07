@@ -26,27 +26,37 @@ struct RootTabView: View {
     var body: some View {
         @Bindable var router = router
         TabView(selection: $router.selectedTab) {
-            MatchesCenterView()
+            SpLazyTab(active: router.selectedTab == .matches) {
+                MatchesCenterView()
+            }
                 .tabItem { Label("المباريات", systemImage: "soccerball") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.matches)
 
-            HomeView()
+            SpLazyTab(active: router.selectedTab == .roshn) {
+                HomeView()
+            }
                 .tabItem { Label("روشن", systemImage: "trophy.fill") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.roshn)
 
-            CompetitionsView()
+            SpLazyTab(active: router.selectedTab == .competitions) {
+                CompetitionsView()
+            }
                 .tabItem { Label("البطولات", systemImage: "sportscourt.fill") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.competitions)
 
-            LiveView()
+            SpLazyTab(active: router.selectedTab == .world) {
+                LiveView()
+            }
                 .tabItem { Label("عالمية", systemImage: "globe") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.world)
 
-            AccountView()
+            SpLazyTab(active: router.selectedTab == .account) {
+                AccountView()
+            }
                 .tabItem { Label("حسابي", systemImage: "person.crop.circle") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.account)
@@ -59,6 +69,38 @@ struct RootTabView: View {
         }
         .onAppear { if !onboardingSeen { showOnboarding = true } }
         .onOpenURL { router.handle(url: $0) }
+    }
+}
+
+private struct SpLazyTab<Content: View>: View {
+    let active: Bool
+    @ViewBuilder let content: () -> Content
+    @State private var loaded = false
+
+    var body: some View {
+        Group {
+            if active || loaded {
+                content()
+            } else {
+                SpTabPlaceholder()
+            }
+        }
+        .onAppear {
+            if active { loaded = true }
+        }
+        .onChange(of: active) { _, nowActive in
+            if nowActive { loaded = true }
+        }
+    }
+}
+
+private struct SpTabPlaceholder: View {
+    var body: some View {
+        ZStack {
+            SpAmbientBackground().ignoresSafeArea()
+            ProgressView()
+                .tint(SpTheme.green)
+        }
     }
 }
 

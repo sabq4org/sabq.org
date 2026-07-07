@@ -1,9 +1,8 @@
 import SwiftUI
 
-// تفاصيل بطولة — «كل شيء عن البطولة» من كل اشتراكاتنا، مرتّبًا بالاستايل الأخير:
-// ترويسة بطلة + حبوب تبويب أفقية + نظرة شاملة (بطل الموسم المنتهي، بلاطات حقائق،
-// مقتطف الترتيب، هدّاف/صانع البطولة، آخر النتائج) ثم تبويبات الترتيب/الهدّافون/
-// الصنّاع/المباريات/الانتقالات. تُخفى التبويبات الفارغة تلقائيًا.
+// تفاصيل بطولة — «كل شيء عن البطولة» من كل اشتراكاتنا، مرتّبًا حسب طبيعتها:
+// الدوري يبرز الترتيب والسباقات، الكأس يبرز الأدوار والمواعيد، والبطولات الخاصة
+// مثل كأس العالم تحتفظ بمساراتها. تُخفى التبويبات الفارغة تلقائيًا.
 struct CompetitionDetailView: View {
     /// لون صفحة البطولة يتبع لون التطبيق المحوري.
     private var acc: Color { SpTheme.compAccent(comp.slug) }
@@ -33,6 +32,7 @@ struct CompetitionDetailView: View {
     @State private var scorers: [SpScorer] = []
     @State private var assists: [SpScorer] = []
     @State private var outlook: SpOutlook?
+    @State private var insights: SpLeagueInsightsResponse?
     @State private var leagueTransfers: [SpLeagueTransfer] = []
     @State private var wcFixtures: [SpWcFixture] = []
     @State private var wcGroups: [SpWcGroup] = []
@@ -46,6 +46,15 @@ struct CompetitionDetailView: View {
     @State private var selectedPlayer: IDBox?
 
     private var isWorldCup: Bool { comp.slug == "world-cup" }
+    private var supportsTransfers: Bool { comp.slug == SportsConstants.defaultComp }
+    private var competitionKindLabel: String {
+        comp.type == "cup" ? "كأس" : "دوري"
+    }
+    private var competitionSummarySubtitle: String {
+        comp.type == "cup"
+            ? "الأدوار والمواعيد من جدول البطولة"
+            : "الترتيب والمباريات من الاشتراكات المتاحة"
+    }
 
     private var hasWcBracket: Bool {
         if let cols = wcBracket?.tree?.columns, !cols.isEmpty { return true }
@@ -68,16 +77,33 @@ struct CompetitionDetailView: View {
         if !scorers.isEmpty { s.append(.scorers) }
         if !assists.isEmpty { s.append(.assists) }
         s.append(.matches)
-        if !leagueTransfers.isEmpty { s.append(.transfers) }
+        if supportsTransfers && !leagueTransfers.isEmpty { s.append(.transfers) }
         return s
     }
     private var effectiveSegment: Segment { segments.contains(segment) ? segment : .overview }
     private var seasonValue: Int? { outlook?.season ?? comp.season }
+    private var regularFixtures: [SpFixture] {
+        guard let matches else { return [] }
+        return matches.live + matches.today + matches.upcoming + matches.results
+    }
+    private var futureFixtures: [SpFixture] {
+        regularFixtures
+            .filter { !$0.status.live && !$0.status.finished }
+            .sorted { $0.timestamp < $1.timestamp }
+    }
+    private var resultFixtures: [SpFixture] {
+        regularFixtures
+            .filter { $0.status.finished }
+            .sorted { $0.timestamp > $1.timestamp }
+    }
+    private var participatingTeamsCount: Int {
+        Set(regularFixtures.flatMap { [$0.home.id, $0.away.id] }).count
+    }
 
     // أي بيانات وصلت من أيّ نداء — لا نحجب الصفحة كلها لأنّ نداءً واحدًا فشل.
     private var hasAnyData: Bool {
         matches != nil || !standings.isEmpty || !scorers.isEmpty
-            || !assists.isEmpty || outlook != nil || !leagueTransfers.isEmpty
+            || !assists.isEmpty || outlook != nil || insights != nil || !leagueTransfers.isEmpty
             || !wcFixtures.isEmpty || !wcGroups.isEmpty || wcBracket != nil
             || !wcScorers.isEmpty || !wcAssists.isEmpty || !wcCards.isEmpty
     }
@@ -163,6 +189,8 @@ struct CompetitionDetailView: View {
             if comp.slug == SportsConstants.defaultComp {
                 // دوري روشن — الشعار الرسمي (أصل محلّي).
                 Image("RSLLogo").resizable().scaledToFit().padding(6)
+            } else if comp.slug == SportsConstants.worldCupComp {
+                Image("WorldCupLogo").resizable().scaledToFit()
             } else if let l = comp.logo, !l.isEmpty {
                 // SpRemoteImage (كاش @State) بدل AsyncImage — يمنع وميض الشعار عند إعادة الرسم.
                 SpRemoteImage(url: l)
@@ -171,8 +199,8 @@ struct CompetitionDetailView: View {
                 Image(systemName: "trophy.fill").font(.system(size: 24)).foregroundStyle(acc)
             }
         }
-        .frame(width: 64, height: 64)
-        .background(Circle().fill(comp.slug == SportsConstants.defaultComp ? .white : SpTheme.chipFill))
+        .frame(width: comp.slug == SportsConstants.worldCupComp ? 48 : 64, height: 64)
+        .background(Circle().fill(comp.slug == SportsConstants.defaultComp ? .white : (comp.slug == SportsConstants.worldCupComp ? Color.clear : SpTheme.chipFill)))
     }
 
     @ViewBuilder private var statusBadge: some View {
@@ -223,6 +251,8 @@ struct CompetitionDetailView: View {
             VStack(alignment: .leading, spacing: 18) {
                 if let champ = outlook?.champion { championBanner(champ) }
                 quickFacts
+                competitionDataSummary
+                insightsHighlights
                 if !standings.isEmpty { standingsPreview }
                 topPerformers
                 recentResults
@@ -334,6 +364,7 @@ struct CompetitionDetailView: View {
         // أهداف/صناعة المتصدّر حُذفا — يعرضهما قسم «أبرز اللاعبين» أدناه أغنى.
         let facts: [(value: String, label: String, accent: Color?)] = [
             seasonValue.map { (seasonLabel($0), "الموسم", acc as Color?) },
+            (competitionKindLabel, "النوع", nil),
             standings.isEmpty ? nil : ("\(standings.count)", "الأندية", nil),
         ].compactMap { $0 }
         if !facts.isEmpty {
@@ -341,6 +372,235 @@ struct CompetitionDetailView: View {
                 ForEach(facts, id: \.label) { f in SpFactTile(value: f.value, label: f.label, accent: f.accent) }
             }
         }
+    }
+
+    @ViewBuilder private var competitionDataSummary: some View {
+        if (matches != nil && !regularFixtures.isEmpty) || insights?.featured != nil {
+            VStack(alignment: .leading, spacing: 12) {
+                SpSectionHeader(
+                    icon: comp.type == "cup" ? "trophy.fill" : "chart.bar.doc.horizontal",
+                    title: "ملخص البطولة",
+                    subtitle: competitionSummarySubtitle,
+                    tint: acc
+                )
+
+                if !regularFixtures.isEmpty {
+                    HStack(spacing: 8) {
+                        if participatingTeamsCount > 0 {
+                            SpFactTile(value: "\(participatingTeamsCount)", label: comp.type == "cup" ? "فريق مشارك" : "فريق", accent: nil)
+                        }
+                        SpFactTile(value: "\(futureFixtures.count)", label: "قادمة", accent: acc)
+                        SpFactTile(value: "\(resultFixtures.count)", label: "نتائج", accent: nil)
+                        if let next = futureFixtures.first {
+                            SpFactTile(value: SpFormat.dayMonth(next.date), label: "أقرب موعد", accent: acc)
+                        }
+                    }
+
+                } else if let providers = insights?.providers, !providers.isEmpty {
+                    HStack(spacing: 8) {
+                        ForEach(providers.prefix(3)) { provider in
+                            SpFactTile(
+                                value: provider.available ? "متاح" : "غير متاح",
+                                label: provider.label,
+                                accent: provider.available ? acc : nil
+                            )
+                        }
+                    }
+                }
+
+                if let next = futureFixtures.first ?? insights?.featured?.fixture {
+                    nextMatchCard(next)
+                }
+
+                if comp.type == "cup" {
+                    cupRoundsPreview
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var insightsHighlights: some View {
+        if let insights, !insights.signals.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                SpSectionHeader(
+                    icon: "sparkles",
+                    title: "إشارات البطولة",
+                    subtitle: insights.summary?.subtitle,
+                    count: min(insights.signals.count, 6),
+                    tint: acc
+                )
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                    ForEach(insights.signals.prefix(6)) { signal in
+                        insightSignalCard(signal)
+                    }
+                }
+            }
+        } else if regularFixtures.isEmpty && standings.isEmpty && scorers.isEmpty && assists.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                SpSectionHeader(
+                    icon: "externaldrive.badge.icloud",
+                    title: "بيانات البطولة",
+                    subtitle: "ستظهر المباريات والأرقام من الاشتراكات فور توفرها",
+                    tint: acc
+                )
+                if let providers = insights?.providers, !providers.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(Array(providers.enumerated()), id: \.element.id) { idx, provider in
+                            if idx > 0 { Rectangle().fill(SpTheme.outline.opacity(0.55)).frame(height: 1) }
+                            providerRow(provider)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .background(tileBg)
+                }
+            }
+        }
+    }
+
+    private func insightSignalCard(_ signal: SpLeagueSignal) -> some View {
+        Button {
+            if let playerId = signal.playerId {
+                selectedPlayer = IDBox(id: playerId)
+            } else if let teamId = signal.teamId {
+                selectedTeam = IDBox(id: teamId)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
+                    if let logo = signal.logo, !logo.isEmpty {
+                        SpTeamLogo(logo: logo, size: 24)
+                    } else {
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(acc)
+                            .frame(width: 24, height: 24)
+                            .background(Circle().fill(acc.opacity(0.10)))
+                    }
+                    Text(signal.label)
+                        .font(SportsFonts.app(size: 10.5, weight: .bold))
+                        .foregroundStyle(acc)
+                        .lineLimit(1)
+                }
+                Text(signal.title)
+                    .font(SportsFonts.app(size: 13.5, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                Text(signal.value)
+                    .font(SportsFonts.app(size: 15, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDarkStrong)
+                    .lineLimit(1)
+                if let subtitle = signal.subtitle, !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(tileBg)
+        }
+        .buttonStyle(SpPressStyle())
+    }
+
+    private func providerRow(_ provider: SpLeagueProvider) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: provider.available ? "checkmark.circle.fill" : "minus.circle")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(provider.available ? acc : SpTheme.onDarkFaint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(provider.label)
+                    .font(SportsFonts.app(size: 12.5, weight: .bold))
+                    .foregroundStyle(SpTheme.onDark)
+                if let summary = provider.summary, !summary.isEmpty {
+                    Text(summary)
+                        .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 9)
+    }
+
+    private func nextMatchCard(_ fixture: SpFixture) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Image(systemName: "clock.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(acc)
+                Text("أقرب مباراة")
+                    .font(SportsFonts.app(size: 13, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                Spacer(minLength: 0)
+                Text(SpFormat.kickoffDay(fixture.date))
+                    .font(SportsFonts.app(size: 11, weight: .bold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                    .lineLimit(1)
+            }
+            SpFlatMatchRow(fixture: fixture)
+        }
+        .padding(12)
+        .background(cardBg)
+    }
+
+    @ViewBuilder private var cupRoundsPreview: some View {
+        let groups = roundGroups(from: futureFixtures)
+        if !groups.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
+                    Image(systemName: "list.bullet.rectangle")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(acc)
+                    Text("الأدوار القادمة")
+                        .font(SportsFonts.app(size: 13, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                    Spacer(minLength: 0)
+                }
+                VStack(spacing: 0) {
+                    ForEach(Array(groups.prefix(4).enumerated()), id: \.element.round) { idx, group in
+                        if idx > 0 {
+                            Rectangle().fill(SpTheme.outline.opacity(0.55)).frame(height: 1)
+                        }
+                        HStack(spacing: 10) {
+                            Text(group.round)
+                                .font(SportsFonts.app(size: 12.5, weight: .bold))
+                                .foregroundStyle(SpTheme.onDark)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Text("\(group.fixtures.count) مباراة")
+                                .font(SportsFonts.app(size: 11, weight: .semibold))
+                                .foregroundStyle(SpTheme.onDarkDim)
+                            if let first = group.fixtures.first {
+                                Text(SpFormat.dayMonth(first.date))
+                                    .font(SportsFonts.app(size: 11, weight: .bold))
+                                    .foregroundStyle(acc)
+                                    .lineLimit(1)
+                            }
+                        }
+                        .padding(.vertical, 9)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .background(tileBg)
+            }
+        }
+    }
+
+    private func roundGroups(from fixtures: [SpFixture]) -> [(round: String, fixtures: [SpFixture])] {
+        let groups = Dictionary(grouping: fixtures) { fixture in
+            fixture.round.isEmpty ? "الدور القادم" : fixture.round
+        }
+        return groups
+            .map { (round: $0.key, fixtures: $0.value.sorted { $0.timestamp < $1.timestamp }) }
+            .sorted {
+                let left = $0.fixtures.first?.timestamp ?? Int.max
+                let right = $1.fixtures.first?.timestamp ?? Int.max
+                if left != right { return left < right }
+                return $0.round < $1.round
+            }
     }
 
     // مقتطف الترتيب (أعلى ٥) + زرّ للترتيب الكامل
@@ -779,7 +1039,7 @@ struct CompetitionDetailView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     matchBucket("مباشر", m.live, tint: SpTheme.crimson, icon: "dot.radiowaves.left.and.right")
                     matchBucket("اليوم", m.today, tint: acc, icon: "calendar")
-                    matchBucket("قادمة", m.upcoming, tint: acc, icon: "clock")
+                    upcomingMatchBucket(m.upcoming, tint: acc, icon: "clock")
                     matchBucket("النتائج", Array(m.results.reversed()), tint: SpTheme.onDarkDim, icon: "checkmark.seal")
                 }
             } else {
@@ -803,11 +1063,87 @@ struct CompetitionDetailView: View {
         return VStack(alignment: .leading, spacing: 18) {
             wcMatchBucket("مباشر", live, tint: SpTheme.crimson, icon: "dot.radiowaves.left.and.right")
             wcMatchBucket("اليوم", today, tint: acc, icon: "calendar")
-            wcMatchBucket("قادمة", upcoming, tint: acc, icon: "clock")
+            upcomingMatchBucket(upcoming.map { SpFixture(worldCup: $0) }, tint: acc, icon: "clock")
             wcMatchBucket("النتائج", results, tint: SpTheme.onDarkDim, icon: "checkmark.seal")
             if wcFixtures.isEmpty {
                 SpEmptyState(icon: "sportscourt", title: "لا مباريات", subtitle: "لم تصل بيانات جدول كأس العالم بعد")
             }
+        }
+    }
+
+    private struct MatchDayGroup: Identifiable {
+        let date: Date
+        let fixtures: [SpFixture]
+        var id: TimeInterval { date.timeIntervalSince1970 }
+    }
+
+    private var matchCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Riyadh") ?? .current
+        calendar.locale = Locale(identifier: "ar-u-nu-latn")
+        return calendar
+    }
+
+    private func dayGroups(_ fixtures: [SpFixture]) -> [MatchDayGroup] {
+        let calendar = matchCalendar
+        let grouped = Dictionary(grouping: fixtures) { fixture in
+            calendar.startOfDay(for: fixture.kickoff)
+        }
+        return grouped
+            .map { MatchDayGroup(date: $0.key, fixtures: $0.value.sorted { $0.timestamp < $1.timestamp }) }
+            .sorted { $0.date < $1.date }
+    }
+
+    @ViewBuilder private func upcomingMatchBucket(_ items: [SpFixture], tint: Color, icon: String) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
+                SpSectionHeader(icon: icon, title: "قادمة", count: items.count, tint: tint)
+                Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 8)
+                VStack(spacing: 14) {
+                    ForEach(dayGroups(items)) { group in
+                        VStack(spacing: 0) {
+                            matchDayHeader(group.date, count: group.fixtures.count, tint: tint)
+                            SpFlatMatchList(fixtures: group.fixtures)
+                        }
+                    }
+                }
+                .padding(.top, 10)
+            }
+        }
+    }
+
+    private func matchDayHeader(_ date: Date, count: Int, tint: Color) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "calendar")
+                .font(.system(size: 10.5, weight: .bold))
+                .foregroundStyle(tint)
+            Text(matchDayTitle(date))
+                .font(SportsFonts.app(size: 12, weight: .heavy))
+                .foregroundStyle(SpTheme.onDark)
+            Text(count == 1 ? "مباراة" : "\(count) مباريات")
+                .font(SportsFonts.app(size: 9.5, weight: .bold))
+                .foregroundStyle(tint)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(tint.opacity(0.10)))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint.opacity(0.06)))
+    }
+
+    private func matchDayTitle(_ date: Date) -> String {
+        let calendar = matchCalendar
+        let today = calendar.startOfDay(for: Date())
+        let day = calendar.startOfDay(for: date)
+        let diff = calendar.dateComponents([.day], from: today, to: day).day ?? 0
+        let dateText = SpFormat.dayMonthLabel(day)
+        switch diff {
+        case 0: return "اليوم \(dateText)"
+        case 1: return "غدًا \(dateText)"
+        case 2: return "بعد غد \(dateText)"
+        default: return "\(SpFormat.weekdayName(day)) \(dateText)"
         }
     }
 
@@ -896,7 +1232,8 @@ struct CompetitionDetailView: View {
         async let assistsT: [SpScorer]? = comp.hasScorers
             ? (try? await APIClient.shared.fetchAssists(comp: comp.slug, ignoreCache: force))?.assists : nil
         async let outlookT: SpOutlook?? = (try? await APIClient.shared.fetchOutlook(comp: comp.slug, ignoreCache: force))?.outlook
-        async let transfersT: SpLeagueTransfersResponse? = comp.category == "saudi"
+        async let insightsT: SpLeagueInsightsResponse? = try? await APIClient.shared.fetchLeagueInsights(comp: comp.slug, ignoreCache: force)
+        async let transfersT: SpLeagueTransfersResponse? = supportsTransfers
             ? (try? await APIClient.shared.fetchLeagueTransfers(ignoreCache: force)) : nil
 
         do {
@@ -910,6 +1247,7 @@ struct CompetitionDetailView: View {
         self.scorers = (await scorersT) ?? []
         self.assists = (await assistsT) ?? []
         self.outlook = (await outlookT) ?? nil
+        self.insights = await insightsT
         let tr = await transfersT
         self.leagueTransfers = (tr?.topDeals ?? tr?.transfers) ?? []
         self.loading = false
