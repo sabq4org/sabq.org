@@ -1316,7 +1316,12 @@ export async function getAcMatchDetail(fixtureId: number): Promise<AcMatchDetail
 
     const events: AcMatchEvent[] = (item.events ?? []).map((ev: any): AcMatchEvent => {
       const localized = localizeEvent(ev?.type ?? "", ev?.detail ?? "");
-      const hasAssist = !!(ev?.assist?.name || ev?.assist?.id);
+      // تبديل: API-Football يعكس الحقلين — ev.player = الخارج، ev.assist = الداخل.
+      // نعرض الداخل عنوانًا والخارج «بديلًا عن». الأهداف/البطاقات تبقى كما هي.
+      const isSubst = String(ev?.type ?? "").toLowerCase() === "subst";
+      const inSide = isSubst ? ev?.assist : ev?.player;
+      const outSide = isSubst ? ev?.player : ev?.assist;
+      const hasSecondary = !!(outSide?.name || outSide?.id);
       return {
         minute: ev?.time?.elapsed ?? 0,
         extraMinute: ev?.time?.extra ?? null,
@@ -1324,12 +1329,12 @@ export async function getAcMatchDetail(fixtureId: number): Promise<AcMatchDetail
         type: localized.type,
         label: localized.label,
         detail: ev?.detail ?? "",
-        player: tr(ev?.player?.name),
-        playerEn: ev?.player?.name ?? "",
-        playerId: ev?.player?.id ?? null,
-        assist: hasAssist ? tr(ev?.assist?.name) || null : null,
-        assistEn: hasAssist ? ev?.assist?.name ?? null : null,
-        assistId: ev?.assist?.id ?? null,
+        player: tr(inSide?.name),
+        playerEn: inSide?.name ?? "",
+        playerId: inSide?.id ?? null,
+        assist: hasSecondary ? tr(outSide?.name) || null : null,
+        assistEn: hasSecondary ? outSide?.name ?? null : null,
+        assistId: outSide?.id ?? null,
       };
     });
 

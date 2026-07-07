@@ -2567,7 +2567,13 @@ function localizeMatchEvents(
   const arName = nameResolverById(tr, bestById ?? new Map());
   return (item?.events ?? []).map((ev: any): WcMatchEvent => {
     const localized = localizeEvent(ev.type ?? "", ev.detail ?? "");
-    const hasAssist = !!(ev.assist?.name || ev.assist?.id);
+    // تبديل: API-Football يعكس الحقلين — ev.player = الخارج، ev.assist = الداخل.
+    // نعرض الداخل في «player» (العنوان) والخارج في «assist» («بديلًا عن»)، مطابقةً
+    // لمسار TheSports. الأهداف/البطاقات تبقى كما هي (player=الفاعل، assist=الصانع).
+    const isSubst = String(ev.type ?? "").toLowerCase() === "subst";
+    const inSide = isSubst ? ev.assist : ev.player;
+    const outSide = isSubst ? ev.player : ev.assist;
+    const hasSecondary = !!(outSide?.name || outSide?.id);
     return {
       minute: ev.time?.elapsed ?? 0,
       extraMinute: ev.time?.extra ?? null,
@@ -2575,10 +2581,10 @@ function localizeMatchEvents(
       type: localized.type,
       label: localized.label,
       detail: ev.detail ?? "",
-      player: arName(ev.player?.id, ev.player?.name),
-      playerId: ev.player?.id ?? null,
-      assist: hasAssist ? arName(ev.assist?.id, ev.assist?.name) || null : null,
-      assistId: ev.assist?.id ?? null,
+      player: arName(inSide?.id, inSide?.name),
+      playerId: inSide?.id ?? null,
+      assist: hasSecondary ? arName(outSide?.id, outSide?.name) || null : null,
+      assistId: outSide?.id ?? null,
     };
   });
 }
