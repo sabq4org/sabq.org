@@ -28,6 +28,11 @@ struct CompetitionDetailView: View {
 
     @State private var segment: Segment = .overview
     @State private var matches: SpMatchesResponse?
+    @State private var rounds: [SpRound] = []
+    @State private var currentRound: String?
+    @State private var selectedRound: String?
+    @State private var roundFixtures: [SpFixture] = []
+    @State private var roundLoading = false
     @State private var standings: [SpStandingRow] = []
     @State private var scorers: [SpScorer] = []
     @State private var assists: [SpScorer] = []
@@ -85,6 +90,10 @@ struct CompetitionDetailView: View {
     private var regularFixtures: [SpFixture] {
         guard let matches else { return [] }
         return matches.live + matches.today + matches.upcoming + matches.results
+    }
+    private var selectedRoundLabel: String {
+        guard let selectedRound else { return "" }
+        return rounds.first(where: { $0.key == selectedRound })?.label ?? selectedRound
     }
     private var futureFixtures: [SpFixture] {
         regularFixtures
@@ -1037,16 +1046,73 @@ struct CompetitionDetailView: View {
             let hasAny = !(m.live.isEmpty && m.today.isEmpty && m.upcoming.isEmpty && m.results.isEmpty)
             if hasAny {
                 VStack(alignment: .leading, spacing: 18) {
+                    roundsBrowser
                     matchBucket("مباشر", m.live, tint: SpTheme.crimson, icon: "dot.radiowaves.left.and.right")
                     matchBucket("اليوم", m.today, tint: acc, icon: "calendar")
                     upcomingMatchBucket(m.upcoming, tint: acc, icon: "clock")
                     matchBucket("النتائج", Array(m.results.reversed()), tint: SpTheme.onDarkDim, icon: "checkmark.seal")
                 }
+            } else if !rounds.isEmpty {
+                roundsBrowser
             } else {
                 SpEmptyState(icon: "sportscourt", title: "لا مباريات", subtitle: "لا توجد مباريات متاحة حاليًا لهذه البطولة")
             }
         } else {
             SpEmptyState(icon: "sportscourt", title: "تعذّر جلب المباريات", subtitle: "حاول التحديث بالسحب للأسفل")
+        }
+    }
+
+    @ViewBuilder private var roundsBrowser: some View {
+        if !rounds.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    HStack(spacing: 6) {
+                        Image(systemName: "trophy.fill").font(.system(size: 13)).foregroundStyle(acc)
+                        Text("أدوار البطولة").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
+                    }
+                    Spacer(minLength: 0)
+                    if currentRound != nil {
+                        Text("الجاري الآن")
+                            .font(SportsFonts.app(size: 10, weight: .bold))
+                            .foregroundStyle(acc)
+                    }
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(rounds) { round in
+                            let active = round.key == selectedRound
+                            Button {
+                                Task { await selectRound(round.key) }
+                            } label: {
+                                Text(round.label)
+                                    .font(SportsFonts.app(size: 12, weight: .bold))
+                                    .foregroundStyle(active ? .white : SpTheme.onDarkDim)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .background(Capsule().fill(active ? acc : SpTheme.chipFill))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                if roundLoading {
+                    SpLoading().padding(.vertical, 10)
+                } else if !roundFixtures.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "calendar").font(.system(size: 12)).foregroundStyle(acc)
+                            Text(selectedRoundLabel)
+                                .font(SportsFonts.app(size: 13, weight: .bold))
+                                .foregroundStyle(SpTheme.onDarkDim)
+                        }
+                        SpFlatMatchList(fixtures: roundFixtures)
+                    }
+                } else if selectedRound != nil {
+                    SpEmptyState(icon: "calendar.badge.exclamationmark", title: "لا مباريات", subtitle: "لا توجد مباريات معتمدة لهذا الدور بعد")
+                }
+            }
+            .padding(14)
+            .background(cardBg)
         }
     }
 
@@ -1243,6 +1309,17 @@ struct CompetitionDetailView: View {
             self.loadError = error.localizedDescription
         }
 
+        let roundsResponse = try? await APIClient.shared.fetchRounds(comp: comp.slug, ignoreCache: force)
+        self.rounds = roundsResponse?.rounds ?? []
+        self.currentRound = roundsResponse?.current
+        let preferredRound = selectedRound ?? roundsResponse?.current ?? roundsResponse?.rounds.first?.key
+        self.selectedRound = preferredRound
+        if let preferredRound {
+            await loadRound(preferredRound, force: force)
+        } else {
+            self.roundFixtures = []
+        }
+
         self.standings = (await standingsT) ?? []
         self.scorers = (await scorersT) ?? []
         self.assists = (await assistsT) ?? []
@@ -1251,6 +1328,19 @@ struct CompetitionDetailView: View {
         let tr = await transfersT
         self.leagueTransfers = (tr?.topDeals ?? tr?.transfers) ?? []
         self.loading = false
+    }
+
+    private func selectRound(_ round: String) async {
+        guard selectedRound != round else { return }
+        selectedRound = round
+        await loadRound(round, force: false)
+    }
+
+    private func loadRound(_ round: String, force: Bool) async {
+        roundLoading = true
+        let response = try? await APIClient.shared.fetchRoundFixtures(comp: comp.slug, round: round, ignoreCache: force)
+        roundFixtures = response?.fixtures ?? []
+        roundLoading = false
     }
 
     private func loadWorldCup(force: Bool = false) async {

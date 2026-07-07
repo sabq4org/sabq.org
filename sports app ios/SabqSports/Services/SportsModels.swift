@@ -200,6 +200,23 @@ nonisolated struct SpMatchesResponse: Decodable {
     let results: [SpFixture]
 }
 
+nonisolated struct SpRound: Decodable, Identifiable, Hashable {
+    let key: String
+    let label: String
+    var id: String { key }
+}
+
+nonisolated struct SpRoundsResponse: Decodable {
+    let configured: Bool
+    let rounds: [SpRound]
+    let current: String?
+}
+
+nonisolated struct SpRoundFixturesResponse: Decodable {
+    let configured: Bool
+    let fixtures: [SpFixture]
+}
+
 nonisolated struct SpLeagueInsightsResponse: Decodable {
     let configured: Bool
     let generatedAt: Double?
@@ -1324,6 +1341,16 @@ extension APIClient {
     func fetchMatches(comp: String, ignoreCache: Bool = false) async throws -> SpMatchesResponse {
         try await get(SpMatchesResponse.self, path: "/sports/\(comp)/matches",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchRounds(comp: String, ignoreCache: Bool = false) async throws -> SpRoundsResponse {
+        try await get(SpRoundsResponse.self, path: "/sports/\(comp)/rounds",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchRoundFixtures(comp: String, round: String, ignoreCache: Bool = false) async throws -> SpRoundFixturesResponse {
+        try await get(SpRoundFixturesResponse.self, path: "/sports/\(comp)/round",
+                      query: ["name": round], ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
     func fetchLeagueInsights(comp: String, ignoreCache: Bool = false) async throws -> SpLeagueInsightsResponse {

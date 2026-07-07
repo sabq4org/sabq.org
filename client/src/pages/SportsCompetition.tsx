@@ -348,6 +348,8 @@ function CardsPane({ slug }: { slug: string }) {
 
 // ---------- المباريات (نفس صف صفحة «مباريات اليوم») ----------
 
+type SpRound = { key: string; label: string };
+
 function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => void }) {
   const { data, isLoading } = useQuery<{ live: SpLiveItem[]; today: SpLiveItem[]; upcoming: SpLiveItem[]; results: SpLiveItem[] }>({
     queryKey: [`/api/sports/${slug}/matches`],
@@ -355,6 +357,25 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
   });
+  const { data: roundsData } = useQuery<{ rounds: SpRound[]; current: string | null }>({
+    queryKey: [`/api/sports/${slug}/rounds`],
+    staleTime: 30 * 60_000,
+  });
+  const rounds = Array.isArray(roundsData?.rounds) ? roundsData.rounds : [];
+  const [selectedRound, setSelectedRound] = useState<string | null>(null);
+  const effectiveRound = selectedRound ?? roundsData?.current ?? rounds[0]?.key ?? null;
+  useEffect(() => {
+    if (!selectedRound && effectiveRound) setSelectedRound(effectiveRound);
+  }, [effectiveRound, selectedRound]);
+  const { data: roundData, isLoading: roundLoading } = useQuery<{ fixtures: SpLiveItem[] }>({
+    queryKey: [`/api/sports/${slug}/round`, { name: effectiveRound }],
+    enabled: !!effectiveRound,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+  });
+  const roundFixtures = Array.isArray(roundData?.fixtures) ? roundData.fixtures : [];
+  const selectedRoundLabel = rounds.find((r) => r.key === effectiveRound)?.label ?? effectiveRound ?? "";
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const toggle = (id: number) =>
     setExpanded((prev) => {
@@ -369,7 +390,7 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
   const today = Array.isArray(data?.today) ? data!.today : [];
   const upcoming = Array.isArray(data?.upcoming) ? data!.upcoming : [];
   const results = Array.isArray(data?.results) ? data!.results : [];
-  if (live.length + today.length + upcoming.length + results.length === 0) {
+  if (live.length + today.length + upcoming.length + results.length === 0 && rounds.length === 0) {
     return <TabEmpty text="لا توجد مباريات متاحة لهذه البطولة حاليًا." />;
   }
   const section = (title: string, rows: SpLiveItem[], opts?: { accentLive?: boolean; byDay?: boolean }) =>
@@ -400,6 +421,52 @@ function MatchesPane({ slug, onOpen }: { slug: string; onOpen: (id: number) => v
     );
   return (
     <div className="space-y-4">
+      {rounds.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-border bg-card sm:rounded-2xl">
+          <div className="flex items-center gap-2.5 border-b border-border bg-gradient-to-l from-primary/10 to-transparent px-3 py-2.5 sm:px-4 sm:py-3">
+            <Trophy className="h-4 w-4 text-primary" />
+            <span className="flex-1 font-black text-foreground">أدوار البطولة</span>
+            {roundsData?.current && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
+                الجاري الآن
+              </span>
+            )}
+          </div>
+          <div className="border-b border-border px-3 py-2 sm:px-4">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+              {rounds.map((round) => {
+                const active = round.key === effectiveRound;
+                return (
+                  <button
+                    key={round.key}
+                    type="button"
+                    onClick={() => setSelectedRound(round.key)}
+                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-black transition-colors ${
+                      active ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    }`}
+                  >
+                    {round.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {roundLoading ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">جارٍ تحميل مباريات الدور…</div>
+          ) : roundFixtures.length > 0 ? (
+            <div>
+              <div className="flex items-center gap-1.5 border-b border-border bg-muted/40 px-3 py-1.5 text-[11px] font-bold text-muted-foreground sm:px-4">
+                <CalendarDays className="h-3.5 w-3.5 text-primary" /> {selectedRoundLabel}
+              </div>
+              {roundFixtures.map((f) => (
+                <MatchRow key={f.id} f={f} expanded={expanded.has(f.id)} onToggle={() => toggle(f.id)} onOpen={onOpen} />
+              ))}
+            </div>
+          ) : (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">لا توجد مباريات معتمدة لهذا الدور بعد.</div>
+          )}
+        </div>
+      )}
       {section("مباشر الآن", live, { accentLive: true })}
       {section("مباريات اليوم", today.filter((t) => !live.some((l) => l.id === t.id)))}
       {section("مباريات قادمة", upcoming.slice(0, 20), { byDay: true })}
