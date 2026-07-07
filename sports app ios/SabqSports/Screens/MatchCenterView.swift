@@ -160,7 +160,7 @@ struct SpMatchCenter: View {
         if f.started {
             var score = "\(f.goals.home ?? 0) - \(f.goals.away ?? 0)"
             if let p = f.penaltyScore, let h = p.home, let a = p.away {
-                score += " (ترجيح \(max(h, a))-\(min(h, a)))"
+                score += " (ترجيح \(h)-\(a))"
             }
             middle = score
         } else {
@@ -349,20 +349,21 @@ struct SpMatchCenter: View {
                     .foregroundStyle(acc)
                     .environment(\.layoutDirection, .leftToRight)
             }
-            // أثناء الترجيح فقط: النتيجة الجارية ركلةً بركلة (بعد الحسم تكفي جملة
-            // الفائز أسفل الترويسة — لا نكدّس سطرين بالمعلومة نفسها).
+            // أثناء الترجيح فقط: النتيجة الجارية ركلةً بركلة. نستبدل شارة الحالة
+            // بسطر واحد كي لا تظهر «ترجيح» فوق و«ركلات» تحت.
             if f.shootoutLive, let p = f.penaltyScore {
                 HStack(spacing: 5) {
+                    Text("ركلات الترجيح")
+                        .font(SportsFonts.app(size: 11, weight: .bold))
                     Text("\(p.away ?? 0) - \(p.home ?? 0)")
                         .font(SportsFonts.app(size: 16, weight: .heavy))
                         .monospacedDigit()
                         .environment(\.layoutDirection, .leftToRight)
-                    Text("ترجيح")
-                        .font(SportsFonts.app(size: 11, weight: .bold))
                 }
                 .foregroundStyle(SpTheme.crimson)
+            } else {
+                SpStatusPill(fixture: f)
             }
-            SpStatusPill(fixture: f)
         }
         .frame(minWidth: 96)
     }

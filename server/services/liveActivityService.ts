@@ -258,6 +258,8 @@ function buildContentState(
   const base: LiveActivityContentState = {
     homeScore: f.goals.home ?? 0,
     awayScore: f.goals.away ?? 0,
+    homePenaltyScore: f.penalties?.home ?? null,
+    awayPenaltyScore: f.penalties?.away ?? null,
     minute: minuteText(f.status),
     statusLabel: f.status.label,
     isLive: f.status.live,
@@ -292,6 +294,8 @@ function buildContentState(
       ...base,
       homeScore: ts.home,
       awayScore: ts.away,
+      homePenaltyScore: ts.penHome ?? base.homePenaltyScore ?? null,
+      awayPenaltyScore: ts.penAway ?? base.awayPenaltyScore ?? null,
       minute: minuteLabel(displayMinute),
       statusLabel: tsLabel || base.statusLabel,
       isLive: ts.live,
@@ -448,6 +452,8 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     const pushKey = JSON.stringify({
       h: state.homeScore,
       a: state.awayScore,
+      ph: state.homePenaltyScore ?? null,
+      pa: state.awayPenaltyScore ?? null,
       m: state.minute,
       s: state.statusLabel,
       l: state.isLive,
@@ -460,7 +466,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     const nowSec = Math.floor(Date.now() / 1000);
 
     // قياس تغيّر النتيجة (للتسجيل فقط) — دفعة النتيجة دائمًا بأولوية 10 فورية.
-    const scoreKey = `${state.homeScore}-${state.awayScore}`;
+    const scoreKey = `${state.homeScore}-${state.awayScore}:${state.homePenaltyScore ?? ""}-${state.awayPenaltyScore ?? ""}`;
     const scoreChanged =
       lastScoreByFixture.has(fixtureId) && lastScoreByFixture.get(fixtureId) !== scoreKey;
     const eventChanged = tokens.some((t) => {

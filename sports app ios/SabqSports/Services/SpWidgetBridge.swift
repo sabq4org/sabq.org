@@ -35,11 +35,22 @@ enum SpWidgetBridge {
             homeLogoFile: homeFile, awayLogoFile: awayFile,
             competition: (f.competition?.isEmpty == false) ? f.competition! : "دوري روشن",
             kickoff: f.kickoff,
-            isFavoriteTeam: isFav
+            isFavoriteTeam: isFav,
+            homeScore: f.started ? (f.goals.home ?? 0) : nil,
+            awayScore: f.started ? (f.goals.away ?? 0) : nil,
+            homePenaltyScore: f.penaltyScore?.home,
+            awayPenaltyScore: f.penaltyScore?.away,
+            statusLabel: f.status.label,
+            isLive: f.status.live,
+            isFinished: f.status.finished
         )
         guard current == nil || current!.fixtureId != snap.fixtureId
             || current!.homeLogoFile != snap.homeLogoFile || current!.awayLogoFile != snap.awayLogoFile
-            || current!.isFavoriteTeam != snap.isFavoriteTeam else { return }
+            || current!.isFavoriteTeam != snap.isFavoriteTeam
+            || current!.homeScore != snap.homeScore || current!.awayScore != snap.awayScore
+            || current!.homePenaltyScore != snap.homePenaltyScore || current!.awayPenaltyScore != snap.awayPenaltyScore
+            || current!.statusLabel != snap.statusLabel || current!.isLive != snap.isLive
+            || current!.isFinished != snap.isFinished else { return }
         snap.save()
         WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
     }

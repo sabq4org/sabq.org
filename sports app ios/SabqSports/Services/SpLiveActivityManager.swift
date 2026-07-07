@@ -164,6 +164,8 @@ final class SpLiveActivityManager {
         return .init(
             homeScore: f.goals.home ?? 0,
             awayScore: f.goals.away ?? 0,
+            homePenaltyScore: f.penaltyScore?.home,
+            awayPenaltyScore: f.penaltyScore?.away,
             minute: minute,
             statusLabel: f.status.finished ? "انتهت" : f.status.label,
             isLive: f.status.live,

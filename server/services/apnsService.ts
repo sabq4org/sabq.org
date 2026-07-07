@@ -342,6 +342,8 @@ function sendPushRaw(
 export interface LiveActivityContentState {
   homeScore: number;
   awayScore: number;
+  homePenaltyScore?: number | null;
+  awayPenaltyScore?: number | null;
   minute: string;
   statusLabel: string;
   isLive: boolean;

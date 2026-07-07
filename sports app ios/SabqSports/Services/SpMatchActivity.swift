@@ -81,6 +81,13 @@ nonisolated struct SpWidgetSnapshot: Codable {
     let competition: String
     let kickoff: Date
     let isFavoriteTeam: Bool
+    let homeScore: Int?
+    let awayScore: Int?
+    let homePenaltyScore: Int?
+    let awayPenaltyScore: Int?
+    let statusLabel: String?
+    let isLive: Bool?
+    let isFinished: Bool?
 
     static let defaultsKey = "sp_widget_next_match"
 
@@ -118,6 +125,8 @@ nonisolated struct SpMatchActivityAttributes: ActivityAttributes {
     public nonisolated struct ContentState: Codable, Hashable {
         var homeScore: Int
         var awayScore: Int
+        var homePenaltyScore: Int?
+        var awayPenaltyScore: Int?
         /// نصّ الدقيقة الجارية: «78'» أو «45+2'» — فارغ قبل الانطلاق/بعد النهاية.
         /// يبقى كـ fallback للأجهزة القديمة وأثناء توقّف الساعة (استراحة/ترجيح).
         var minute: String
@@ -133,11 +142,15 @@ nonisolated struct SpMatchActivityAttributes: ActivityAttributes {
         /// nil = الساعة متوقّفة (قبل البدء/استراحة/ترجيح) → يسقط العرض على `minute` المدفوع.
         var clockStartEpoch: Double?
 
-        public init(homeScore: Int = 0, awayScore: Int = 0, minute: String = "",
+        public init(homeScore: Int = 0, awayScore: Int = 0,
+                    homePenaltyScore: Int? = nil, awayPenaltyScore: Int? = nil,
+                    minute: String = "",
                     statusLabel: String = "", isLive: Bool = false, isFinished: Bool = false,
                     lastEvent: String? = nil, clockStartEpoch: Double? = nil) {
             self.homeScore = homeScore
             self.awayScore = awayScore
+            self.homePenaltyScore = homePenaltyScore
+            self.awayPenaltyScore = awayPenaltyScore
             self.minute = minute
             self.statusLabel = statusLabel
             self.isLive = isLive

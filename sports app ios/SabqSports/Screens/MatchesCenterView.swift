@@ -1265,7 +1265,7 @@ struct MatchesCenterView: View {
 
     private func visualSignature(_ rows: [SpFixture]) -> String {
         rows.map { f in
-            "\(f.id):\(f.timestamp):\(f.status.code):\(f.status.elapsed ?? -1):\(f.status.extra ?? -1):\(f.status.live):\(f.status.finished):\(f.goals.home ?? -1)-\(f.goals.away ?? -1):\(f.home.id)-\(f.away.id):\(f.competitionSlug ?? "")"
+            "\(f.id):\(f.timestamp):\(f.status.code):\(f.status.elapsed ?? -1):\(f.status.extra ?? -1):\(f.status.live):\(f.status.finished):\(f.goals.home ?? -1)-\(f.goals.away ?? -1):p\(f.penaltyScore?.home ?? -1)-\(f.penaltyScore?.away ?? -1):\(f.home.id)-\(f.away.id):\(f.competitionSlug ?? "")"
         }
         .joined(separator: "|")
     }
