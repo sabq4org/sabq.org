@@ -260,6 +260,16 @@ export function localizeSplRound(round: string): string {
   if (group) return `الجولة ${group[1]} — دور المجموعات`;
   const knockoutLeg = r.match(/^(League Stage|League Phase)\s*-\s*(\d+)/i);
   if (knockoutLeg) return `الجولة ${knockoutLeg[2]} — مرحلة الدوري`;
+  const qualifying = r.match(/^(\d+)(?:st|nd|rd|th)\s+Qualifying\s+Round/i);
+  if (qualifying) {
+    const labels: Record<string, string> = {
+      "1": "الدور التأهيلي الأول",
+      "2": "الدور التأهيلي الثاني",
+      "3": "الدور التأهيلي الثالث",
+    };
+    return labels[qualifying[1]] ?? `الدور التأهيلي ${qualifying[1]}`;
+  }
+  if (/Play-?offs?/i.test(r)) return "الملحق";
   const ro = r.match(/Round of\s*(\d+)/i);
   if (ro) return `دور الـ${ro[1]}`;
   return r;
