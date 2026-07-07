@@ -93,7 +93,7 @@ struct CompetitionDetailView: View {
     }
     private var selectedRoundLabel: String {
         guard let selectedRound else { return "" }
-        return rounds.first(where: { $0.key == selectedRound })?.label ?? selectedRound
+        return rounds.first(where: { $0.key == selectedRound })?.displayLabel ?? selectedRound
     }
     private var futureFixtures: [SpFixture] {
         regularFixtures
@@ -1084,7 +1084,7 @@ struct CompetitionDetailView: View {
                             Button {
                                 Task { await selectRound(round.key) }
                             } label: {
-                                Text(round.label)
+                                Text(round.displayLabel)
                                     .font(SportsFonts.app(size: 12, weight: .bold))
                                     .foregroundStyle(active ? .white : SpTheme.onDarkDim)
                                     .padding(.horizontal, 12)

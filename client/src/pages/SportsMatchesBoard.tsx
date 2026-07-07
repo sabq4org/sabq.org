@@ -26,6 +26,7 @@ import {
   Loader2,
   Radio,
   Search,
+  SlidersHorizontal,
   Trophy,
 } from "lucide-react";
 import { Header } from "@/components/Header";
@@ -58,6 +59,17 @@ const LIVE_STALE_MS = 5_000;
 
 // بطولات تُثبّت أعلى لوحة المباريات بالترتيب (كأس العالم 2026 أولًا).
 const PINNED_COMP_SLUGS = ["world-cup"];
+const IMPORTANT_COMP_SLUGS = [
+  ...PINNED_COMP_SLUGS,
+  "pro-league",
+  "champions-league",
+  "premier-league",
+  "la-liga",
+  "serie-a",
+  "bundesliga",
+  "ligue-1",
+];
+const IMPORTANT_COMP_SET = new Set(IMPORTANT_COMP_SLUGS);
 
 const ymdFmt = new Intl.DateTimeFormat("en-CA", {
   timeZone: RIYADH_TZ,
@@ -162,6 +174,17 @@ const STATE_FILTERS: { key: "all" | MatchState; label: string }[] = [
   { key: "live", label: "جارية الآن" },
   { key: "upcoming", label: "لم تبدأ" },
   { key: "finished", label: "انتهت" },
+];
+
+const LENSES: { key: "all" | "live" | "favorites" | SpCompetitionCategory; label: string }[] = [
+  { key: "all", label: "الكل" },
+  { key: "live", label: "مباشر" },
+  { key: "favorites", label: "الأهم" },
+  { key: "saudi", label: "السعودية" },
+  { key: "european", label: "أوروبا" },
+  { key: "world", label: "العالمية" },
+  { key: "gulf", label: "الخليج" },
+  { key: "arab", label: "العربية" },
 ];
 
 // ---------- أنواع تفاصيل المباراة (لمسجّلي الأهداف) ----------
@@ -447,7 +470,9 @@ function CompetitionGroup({
   slug,
   matches,
   expandedIds,
+  collapsed,
   toggle,
+  onToggleGroup,
   onOpen,
 }: {
   name: string;
@@ -455,13 +480,23 @@ function CompetitionGroup({
   slug: string | null;
   matches: SpLiveItem[];
   expandedIds: Set<number>;
+  collapsed: boolean;
   toggle: (id: number) => void;
+  onToggleGroup: () => void;
   onOpen: (id: number) => void;
 }) {
   const liveCount = matches.filter((m) => m.status.live).length;
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex items-center gap-2.5 border-b border-border bg-muted/60 px-3 py-2.5 sm:px-4 sm:py-3">
+        <button
+          type="button"
+          onClick={onToggleGroup}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-card text-muted-foreground ring-1 ring-border transition-colors hover:text-primary"
+          aria-label={collapsed ? "إظهار مباريات البطولة" : "إخفاء مباريات البطولة"}
+        >
+          <ChevronDown className={`h-4 w-4 transition-transform ${collapsed ? "rotate-90" : ""}`} strokeWidth={2} />
+        </button>
         {slug ? (
           <Link
             href={competitionHref(slug)}
@@ -495,11 +530,13 @@ function CompetitionGroup({
           <span className="text-[11px] font-bold tabular-nums text-muted-foreground">{matches.length}</span>
         )}
       </div>
-      <div>
-        {matches.map((m) => (
-          <MatchRow key={m.id} f={m} expanded={expandedIds.has(m.id)} onToggle={() => toggle(m.id)} onOpen={onOpen} />
-        ))}
-      </div>
+      {!collapsed && (
+        <div>
+          {matches.map((m) => (
+            <MatchRow key={m.id} f={m} expanded={expandedIds.has(m.id)} onToggle={() => toggle(m.id)} onOpen={onOpen} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -511,9 +548,12 @@ export default function SportsMatchesBoard() {
   const [date, setDate] = useState<string>(() => riyadhToday());
   const [stateFilter, setStateFilter] = useState<"all" | MatchState>("all");
   const [catFilter, setCatFilter] = useState<"all" | SpCompetitionCategory>("all");
+  const [lens, setLens] = useState<(typeof LENSES)[number]["key"]>("all");
+  const [compFilter, setCompFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [groupByComp, setGroupByComp] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [openMatch, setOpenMatch] = useState<number | null>(null);
 
   const today = riyadhToday();
@@ -592,6 +632,13 @@ export default function SportsMatchesBoard() {
   const filtered = useMemo(() => {
     const q = search.trim();
     return allMatches.filter((m) => {
+      if (lens === "live" && !m.status.live) return false;
+      if (lens === "favorites" && !(m.competitionSlug && IMPORTANT_COMP_SET.has(m.competitionSlug))) return false;
+      if (lens !== "all" && lens !== "live" && lens !== "favorites") {
+        const cat = m.competitionSlug ? compMeta.get(m.competitionSlug)?.category : undefined;
+        if (cat !== lens) return false;
+      }
+      if (compFilter !== "all" && m.competitionSlug !== compFilter) return false;
       if (stateFilter !== "all" && stateOf(m) !== stateFilter) return false;
       if (catFilter !== "all") {
         const cat = m.competitionSlug ? compMeta.get(m.competitionSlug)?.category : undefined;
@@ -603,7 +650,7 @@ export default function SportsMatchesBoard() {
       }
       return true;
     });
-  }, [allMatches, stateFilter, catFilter, search, compMeta]);
+  }, [allMatches, lens, compFilter, stateFilter, catFilter, search, compMeta]);
 
   // التجميع حسب البطولة (مع ترتيب المباريات بالوقت داخل كل مجموعة).
   const groups = useMemo(() => {
@@ -641,11 +688,50 @@ export default function SportsMatchesBoard() {
 
   const liveTotal = allMatches.filter((m) => m.status.live).length;
 
+  const matchLensCount = (key: (typeof LENSES)[number]["key"]) =>
+    allMatches.filter((m) => {
+      if (key === "all") return true;
+      if (key === "live") return m.status.live;
+      if (key === "favorites") return m.competitionSlug ? IMPORTANT_COMP_SET.has(m.competitionSlug) : false;
+      return m.competitionSlug ? compMeta.get(m.competitionSlug)?.category === key : false;
+    }).length;
+
+  const presentCompetitions = useMemo(() => {
+    const map = new Map<string, { slug: string; name: string; logo: string | null; count: number; live: number }>();
+    for (const m of allMatches) {
+      if (!m.competitionSlug) continue;
+      const meta = compMeta.get(m.competitionSlug);
+      const current = map.get(m.competitionSlug) ?? {
+        slug: m.competitionSlug,
+        name: m.competition || meta?.name || "بطولة",
+        logo: meta?.logo ?? null,
+        count: 0,
+        live: 0,
+      };
+      current.count += 1;
+      if (m.status.live) current.live += 1;
+      map.set(m.competitionSlug, current);
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.live !== b.live) return b.live - a.live;
+      if (a.count !== b.count) return b.count - a.count;
+      return a.name.localeCompare(b.name, "ar");
+    });
+  }, [allMatches, compMeta]);
+
   const toggle = (id: number) =>
     setExpandedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+
+  const toggleGroup = (key: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
 
@@ -754,6 +840,69 @@ export default function SportsMatchesBoard() {
           {/* شريط الفلاتر وحده لاصق أعلى الشاشة — يبقى عند النزول لتحرير المساحة */}
           <div className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
             <div className="mx-auto max-w-[1200px] px-4 py-2 sm:px-6 sm:py-2.5">
+              <div className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-card px-3 py-1.5 text-[11px] font-black text-primary ring-1 ring-border">
+                  <SlidersHorizontal className="h-3.5 w-3.5" /> عدسة المباريات
+                </span>
+                {LENSES.map((item) => {
+                  const count = matchLensCount(item.key);
+                  const active = lens === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => {
+                        setLens(item.key);
+                        setCompFilter("all");
+                        if (item.key !== "all" && item.key !== "live" && item.key !== "favorites") setCatFilter("all");
+                      }}
+                      className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition-colors sm:min-h-0 ${
+                        active ? "bg-primary text-white shadow-sm" : "bg-card text-muted-foreground ring-1 ring-border hover:text-primary"
+                      }`}
+                    >
+                      {item.label}
+                      <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${active ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"}`}>
+                        {count.toLocaleString("en")}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {presentCompetitions.length > 1 && (
+                <div className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                  <button
+                    type="button"
+                    onClick={() => setCompFilter("all")}
+                    className={`inline-flex min-h-9 shrink-0 items-center rounded-full px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${
+                      compFilter === "all" ? "bg-foreground text-background" : "bg-card text-muted-foreground ring-1 ring-border hover:text-foreground"
+                    }`}
+                  >
+                    كل البطولات
+                  </button>
+                  {presentCompetitions.map((comp) => {
+                    const active = compFilter === comp.slug;
+                    return (
+                      <button
+                        key={comp.slug}
+                        type="button"
+                        onClick={() => {
+                          setCompFilter(comp.slug);
+                          setLens("all");
+                        }}
+                        className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${
+                          active ? "bg-foreground text-background" : "bg-card text-muted-foreground ring-1 ring-border hover:text-foreground"
+                        }`}
+                      >
+                        {comp.logo && <img src={comp.logo} alt="" className="h-4 w-4 object-contain" loading="lazy" />}
+                        {comp.name}
+                        <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${active ? "bg-white/15" : "bg-muted"}`}>
+                          {comp.live > 0 ? `${comp.live} مباشر` : comp.count.toLocaleString("en")}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               {/* الحالة + الفئة + طريقة العرض */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:pb-0">
                 <div className="flex items-center gap-1 rounded-[10px] bg-muted p-0.5 shrink-0">
@@ -838,7 +987,9 @@ export default function SportsMatchesBoard() {
                     slug={g.slug}
                     matches={g.matches}
                     expandedIds={expandedIds}
+                    collapsed={collapsedGroups.has(g.slug ?? g.name)}
                     toggle={toggle}
+                    onToggleGroup={() => toggleGroup(g.slug ?? g.name)}
                     onOpen={setOpenMatch}
                   />
                 ))}

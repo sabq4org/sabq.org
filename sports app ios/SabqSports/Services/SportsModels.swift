@@ -204,6 +204,40 @@ nonisolated struct SpRound: Decodable, Identifiable, Hashable {
     let key: String
     let label: String
     var id: String { key }
+    var displayLabel: String { Self.localize(label) }
+
+    private static func localize(_ raw: String) -> String {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = value.lowercased()
+        if lower.range(of: #"^1st\s+qualifying\s+round"#, options: .regularExpression) != nil {
+            return "الدور التأهيلي الأول"
+        }
+        if lower.range(of: #"^2nd\s+qualifying\s+round"#, options: .regularExpression) != nil {
+            return "الدور التأهيلي الثاني"
+        }
+        if lower.range(of: #"^3rd\s+qualifying\s+round"#, options: .regularExpression) != nil {
+            return "الدور التأهيلي الثالث"
+        }
+        if lower.contains("play-off") || lower.contains("playoff") {
+            return "الملحق"
+        }
+        if let match = value.range(of: #"^(League Stage|League Phase)\s*-\s*(\d+)"#, options: [.regularExpression, .caseInsensitive]) {
+            let text = String(value[match])
+            let number = text.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }.last ?? ""
+            return number.isEmpty ? "مرحلة الدوري" : "الجولة \(number) — مرحلة الدوري"
+        }
+        if let match = value.range(of: #"^Group Stage\s*-\s*(\d+)"#, options: [.regularExpression, .caseInsensitive]) {
+            let text = String(value[match])
+            let number = text.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }.last ?? ""
+            return number.isEmpty ? "دور المجموعات" : "الجولة \(number) — دور المجموعات"
+        }
+        if let match = value.range(of: #"^Round of\s*(\d+)"#, options: [.regularExpression, .caseInsensitive]) {
+            let text = String(value[match])
+            let number = text.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }.last ?? ""
+            return number.isEmpty ? value : "دور الـ\(number)"
+        }
+        return value
+    }
 }
 
 nonisolated struct SpRoundsResponse: Decodable {
