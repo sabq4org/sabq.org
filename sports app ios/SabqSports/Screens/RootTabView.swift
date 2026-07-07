@@ -129,9 +129,6 @@ struct SpOnboardingView: View {
         SpOnboardPage(id: 3, icon: "bell.badge.fill",
                       title: "تابع فريقك ولا تفوّت لحظة",
                       subtitle: "تنبيهات فورية للأهداف والبطاقات وحالات الفار، وبطاقة «مبارياتي» بعدّاد تنازليّ حيّ."),
-        SpOnboardPage(id: 4, icon: "figure.run",
-                      title: "حتى خطواتك رياضة",
-                      subtitle: "اربط «صحّتي» وتابع نشاطك اليومي بأسلوب VARA المحفّز — خطواتك ومسافتك وإنجازك نحو هدفك."),
     ]
 
     private var isLast: Bool { page >= pages.count }
