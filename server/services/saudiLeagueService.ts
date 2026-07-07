@@ -1039,14 +1039,20 @@ function localizeLineups(rows: any[], tr: NameTranslator): SplLineup[] {
 
 function localizeEventRow(e: any, tr: NameTranslator): SplMatchEvent {
   const loc = localizeEvent(e.type ?? "", e.detail ?? "");
+  // تبديل: API-Football يعكس الحقلين — e.player = الخارج، e.assist = الداخل. نعرض
+  // الداخل في «player» (العنوان) والخارج في «assist» («بديلًا عن»)، مطابقةً لمسار
+  // TheSports. الأهداف/البطاقات تبقى كما هي (player=الفاعل، assist=الصانع).
+  const isSubst = String(e.type ?? "").toLowerCase() === "subst";
+  const inSide = isSubst ? e.assist : e.player;
+  const outSide = isSubst ? e.player : e.assist;
   return {
     minute: e.time?.elapsed ?? null,
     extra: e.time?.extra ?? null,
     teamId: e.team?.id ?? 0,
     team: localizeSplTeamName(e.team?.id, e.team?.name ?? ""),
-    player: tr(e.player?.name),
-    playerId: typeof e.player?.id === "number" ? e.player.id : undefined,
-    assist: e.assist?.name ? tr(e.assist.name) : null,
+    player: tr(inSide?.name),
+    playerId: typeof inSide?.id === "number" ? inSide.id : undefined,
+    assist: outSide?.name ? tr(outSide.name) : null,
     type: loc.type,
     label: loc.label,
   };
