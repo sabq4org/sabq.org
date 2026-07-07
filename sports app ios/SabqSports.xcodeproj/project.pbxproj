@@ -32,9 +32,9 @@
 		5B000018 /* PredictionExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000018 /* PredictionExtras.swift */; };
 		5B000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5C000020 /* Assets.xcassets */; };
 		5B000021 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5C000021 /* InfoPlist.strings */; };
-		5B000022 /* IBMPlexSansArabic-Regular.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000022 /* IBMPlexSansArabic-Regular.woff2 */; };
-		5B000023 /* IBMPlexSansArabic-SemiBold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000023 /* IBMPlexSansArabic-SemiBold.woff2 */; };
-		5B000024 /* IBMPlexSansArabic-Bold.woff2 in Resources */ = {isa = PBXBuildFile; fileRef = 5C000024 /* IBMPlexSansArabic-Bold.woff2 */; };
+		5B000022 /* IBMPlexSansArabic-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5C000022 /* IBMPlexSansArabic-Regular.ttf */; };
+		5B000023 /* IBMPlexSansArabic-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5C000023 /* IBMPlexSansArabic-SemiBold.ttf */; };
+		5B000024 /* IBMPlexSansArabic-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5C000024 /* IBMPlexSansArabic-Bold.ttf */; };
 		5B000025 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 5C000025 /* LaunchScreen.storyboard */; };
 		5B0000A1 /* VaraPrediction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A1 /* VaraPrediction.swift */; };
 		5B0000A2 /* VaraInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A2 /* VaraInsights.swift */; };
@@ -105,9 +105,9 @@
 		5C000018 /* PredictionExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionExtras.swift; sourceTree = "<group>"; };
 		5C000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5C000021 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
-		5C000022 /* IBMPlexSansArabic-Regular.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Regular.woff2"; sourceTree = "<group>"; };
-		5C000023 /* IBMPlexSansArabic-SemiBold.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-SemiBold.woff2"; sourceTree = "<group>"; };
-		5C000024 /* IBMPlexSansArabic-Bold.woff2 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Bold.woff2"; sourceTree = "<group>"; };
+		5C000022 /* IBMPlexSansArabic-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Regular.ttf"; sourceTree = "<group>"; };
+		5C000023 /* IBMPlexSansArabic-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-SemiBold.ttf"; sourceTree = "<group>"; };
+		5C000024 /* IBMPlexSansArabic-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Bold.ttf"; sourceTree = "<group>"; };
 		5C000025 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		5C000030 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5C000031 /* SabqSports.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SabqSports.entitlements; sourceTree = "<group>"; };
@@ -252,9 +252,9 @@
 		5D000008 /* Fonts */ = {
 			isa = PBXGroup;
 			children = (
-				5C000022 /* IBMPlexSansArabic-Regular.woff2 */,
-				5C000023 /* IBMPlexSansArabic-SemiBold.woff2 */,
-				5C000024 /* IBMPlexSansArabic-Bold.woff2 */,
+				5C000022 /* IBMPlexSansArabic-Regular.ttf */,
+				5C000023 /* IBMPlexSansArabic-SemiBold.ttf */,
+				5C000024 /* IBMPlexSansArabic-Bold.ttf */,
 			);
 			path = Fonts;
 			sourceTree = "<group>";
@@ -352,9 +352,9 @@
 			files = (
 				5B000020 /* Assets.xcassets in Resources */,
 				5B000021 /* InfoPlist.strings in Resources */,
-				5B000022 /* IBMPlexSansArabic-Regular.woff2 in Resources */,
-				5B000023 /* IBMPlexSansArabic-SemiBold.woff2 in Resources */,
-				5B000024 /* IBMPlexSansArabic-Bold.woff2 in Resources */,
+				5B000022 /* IBMPlexSansArabic-Regular.ttf in Resources */,
+				5B000023 /* IBMPlexSansArabic-SemiBold.ttf in Resources */,
+				5B000024 /* IBMPlexSansArabic-Bold.ttf in Resources */,
 				5B000025 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -510,7 +510,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070712;
+				CURRENT_PROJECT_VERSION = 2026070717;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
@@ -541,7 +541,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070712;
+				CURRENT_PROJECT_VERSION = 2026070717;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
