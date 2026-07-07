@@ -212,11 +212,23 @@ struct MatchesCenterView: View {
                 .navigationTitle("")
                 .toolbar(.hidden, for: .navigationBar)
         }
-        .task { await loadCompetitions() }
+        .task {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            await loadCompetitions()
+        }
         // إعادة التحميل تلقائيًّا مع كل تغيير فلتر أو تعديل للمفضّلة (المهمة السابقة تُلغى).
-        .task(id: reloadKey) { await load() }
+        .task(id: reloadKey) {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            await load()
+        }
         .sheet(isPresented: $showCompsManager) { compsManagerSheet }
-        .task { await pollLive() }
+        .task {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            await pollLive()
+        }
         .onChange(of: liveOnly) { _, _ in rebuildDays(keepSelection: true) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await load(force: true) } }

@@ -106,9 +106,17 @@ nonisolated enum VaraInsightsEngine {
         .init(
             id: "server-\(snap.id)",
             icon: systemIcon(snap.icon),
-            text: snap.body.isEmpty ? snap.headline : snap.body,
+            text: cleanPrefix(snap.body.isEmpty ? snap.headline : snap.body),
             accent: accent(snap.accent),
             deeplink: snap.deeplink
+        )
+    }
+
+    private static func cleanPrefix(_ text: String) -> String {
+        text.replacingOccurrences(
+            of: #"^\s*فريقك\s*[:：]\s*"#,
+            with: "",
+            options: .regularExpression
         )
     }
 

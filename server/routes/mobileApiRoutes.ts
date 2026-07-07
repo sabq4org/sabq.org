@@ -594,6 +594,27 @@ router.post("/devices/register", async (req: Request, res: Response) => {
     // Accept provided tokenProvider or determine from platform
     const tokenProvider = providedTokenProvider || (platform === 'ios' ? 'apns' : 'fcm');
 
+    // Keep one active token per user/platform/app bundle. APNs tokens can
+    // rotate across reinstalls or restores; if we leave the old rows active,
+    // the same sports alert can fan out as duplicate banners on iOS.
+    if (userId) {
+      const deactivated = await db
+        .update(pushDevices)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(and(
+          eq(pushDevices.userId, userId),
+          eq(pushDevices.platform, platform),
+          sql`${pushDevices.bundleId} IS NOT DISTINCT FROM ${safeBundleId ?? null}`,
+          sql`${pushDevices.deviceToken} != ${finalToken}`,
+          eq(pushDevices.isActive, true)
+        ))
+        .returning({ id: pushDevices.id });
+
+      if (deactivated.length > 0) {
+        console.log(`[Mobile API] Deactivated ${deactivated.length} old tokens for user ${userId}`);
+      }
+    }
+
     // Check if device already exists
     const [existing] = await db
       .select()
@@ -627,31 +648,6 @@ router.post("/devices/register", async (req: Request, res: Response) => {
         message: "Device updated",
         deviceId: existing.id
       });
-    }
-
-    // IMPORTANT: Deactivate old tokens for the same user/device before registering new one
-    // This prevents duplicate notifications and ensures only the latest token is used
-    if (userId) {
-      // Deactivate old tokens for this user — but ONLY within the SAME app
-      // (bundleId). Both Sabq apps (news + sports) run on the same iOS device
-      // with DIFFERENT APNs tokens but identical platform="ios"; without the
-      // bundleId scope, opening one app deactivated the other app's device row,
-      // so whichever app opened last silently killed the other's push delivery.
-      // IS NOT DISTINCT FROM buckets NULL legacy rows with NULL (same app).
-      const deactivated = await db
-        .update(pushDevices)
-        .set({ isActive: false, updatedAt: new Date() })
-        .where(and(
-          eq(pushDevices.userId, userId),
-          eq(pushDevices.platform, platform),
-          sql`${pushDevices.bundleId} IS NOT DISTINCT FROM ${safeBundleId ?? null}`,
-          sql`${pushDevices.deviceToken} != ${finalToken}`
-        ))
-        .returning({ id: pushDevices.id });
-      
-      if (deactivated.length > 0) {
-        console.log(`[Mobile API] Deactivated ${deactivated.length} old tokens for user ${userId}`);
-      }
     }
 
     // Create new device
@@ -5472,8 +5468,10 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       appVersion: z.string().optional(),
       locale: z.string().optional(),
       timezone: z.string().optional(),
+      bundleId: z.string().max(255).optional(),
     });
     const data = schema.parse(req.body);
+    const safeBundleId = data.bundleId && data.bundleId.length > 0 ? data.bundleId : undefined;
 
     const existing = await db
       .select({ id: pushDevices.id })
@@ -5494,6 +5492,7 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       userId: session.userId,
       tokenProvider: data.provider,
       platform: data.platform,
+      ...(safeBundleId ? { bundleId: safeBundleId } : {}),
       deviceName: data.deviceName,
       osVersion: data.osVersion,
       appVersion: data.appVersion,
@@ -5503,6 +5502,22 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       lastActiveAt: new Date(),
       updatedAt: new Date(),
     };
+
+    const deactivated = await db
+      .update(pushDevices)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(and(
+        eq(pushDevices.userId, session.userId),
+        eq(pushDevices.platform, data.platform),
+        sql`${pushDevices.bundleId} IS NOT DISTINCT FROM ${safeBundleId ?? null}`,
+        sql`${pushDevices.deviceToken} != ${data.token}`,
+        eq(pushDevices.isActive, true)
+      ))
+      .returning({ id: pushDevices.id });
+
+    if (deactivated.length > 0) {
+      console.log(`[Mobile API] /push-token deactivated ${deactivated.length} old tokens for user=${session.userId}`);
+    }
 
     if (existing.length > 0) {
       await db.update(pushDevices)

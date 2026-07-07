@@ -276,6 +276,154 @@ struct TcHeroCard: View {
     }
 }
 
+// MARK: - بطاقات الواجهة الجديدة
+
+struct TcMarketMetric: View {
+    let icon: String
+    let value: String
+    let label: String
+    var tint: Color = SpTheme.green
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(tint)
+                Text(label)
+                    .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                    .lineLimit(1)
+            }
+            Text(value)
+                .font(SportsFonts.app(size: 19, weight: .heavy))
+                .foregroundStyle(SpTheme.onDark)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.chipFill.opacity(0.65)))
+    }
+}
+
+struct TcFeaturedStoryCard: View {
+    let rumour: TcRumour
+    let rank: Int
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    SpAvatarImage(url: rumour.player.image, size: 62,
+                                  ring: SpTheme.cardStroke, placeholderFg: SpTheme.onDarkFaint, placeholderBg: SpTheme.chipFill)
+                    VStack(alignment: .leading, spacing: 5) {
+                        HStack(spacing: 7) {
+                            Text("القصة الأبرز")
+                                .font(SportsFonts.app(size: 11, weight: .heavy))
+                                .foregroundStyle(SpTheme.green)
+                            Text("#\(rank)")
+                                .font(SportsFonts.app(size: 11, weight: .heavy))
+                                .foregroundStyle(SpTheme.onDarkFaint)
+                                .environment(\.layoutDirection, .leftToRight)
+                            if rumour.hereWeGo { TcHereWeGoBadge() }
+                        }
+                        Text(rumour.player.name)
+                            .font(SportsFonts.app(size: 21, weight: .heavy))
+                            .foregroundStyle(SpTheme.onDark)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        if let pos = rumour.player.position {
+                            Text(pos)
+                                .font(SportsFonts.app(size: 12, weight: .semibold))
+                                .foregroundStyle(SpTheme.onDarkFaint)
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                HStack(alignment: .center, spacing: 10) {
+                    TcPartyChip(party: rumour.from)
+                    Image(systemName: "arrow.left")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundStyle(SpTheme.green)
+                    TcPartyChip(party: rumour.to, emphasize: true)
+                    Spacer(minLength: 0)
+                }
+
+                HStack(alignment: .bottom) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("القيمة المتداولة")
+                            .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkFaint)
+                        Text(TcMoney.format(rumour.amount, currency: rumour.currency) ?? "غير معلنة")
+                            .font(SportsFonts.app(size: 23, weight: .heavy))
+                            .foregroundStyle(SpTheme.onDark)
+                    }
+                    Spacer(minLength: 0)
+                    VStack(alignment: .trailing, spacing: 7) {
+                        TcProbabilityMeter(probability: rumour.probability)
+                        Text(TcDate.medium(rumour.date))
+                            .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkFaint)
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card))
+            .overlay(
+                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous)
+                    .stroke(rumour.hereWeGo ? SpTheme.crimson.opacity(0.45) : SpTheme.cardStroke, lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SpPressStyle())
+    }
+}
+
+struct TcMiniStoryRow: View {
+    let rumour: TcRumour
+    let rank: Int
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 10) {
+                Text("#\(rank)")
+                    .font(SportsFonts.app(size: 12, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDarkFaint)
+                    .frame(width: 28)
+                    .environment(\.layoutDirection, .leftToRight)
+                SpAvatarImage(url: rumour.player.image, size: 34,
+                              ring: SpTheme.cardStroke, placeholderFg: SpTheme.onDarkFaint, placeholderBg: SpTheme.chipFill)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(rumour.player.name)
+                        .font(SportsFonts.app(size: 13.5, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                        .lineLimit(1)
+                    HStack(spacing: 5) {
+                        Text(rumour.from.name)
+                        Image(systemName: "arrow.left").font(.system(size: 9, weight: .bold))
+                        Text(rumour.to.name)
+                    }
+                    .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkFaint)
+                    .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                TcProbabilityMeter(probability: rumour.probability, showLabel: false)
+            }
+            .padding(11)
+            .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.card))
+            .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(SpPressStyle())
+    }
+}
+
 // MARK: - عدّاد نافذة الانتقالات
 
 struct TcWindowCountdown: View {
@@ -466,17 +614,15 @@ struct TransferCenterView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
+            LazyVStack(alignment: .leading, spacing: 16) {
+                marketHeader
                 if let hero = overview?.hero, !hero.isEmpty { heroStrip(hero) }
-                if let windows = overview?.windows { windowsRow(windows) }
-                scopeTabs
-                contentTabs
-                filterBar
+                controlsPanel
                 content
                 marketStats
                 disclaimer
             }
-            .padding(.vertical, 12)
+            .padding(.vertical, 14)
         }
         .background(SpAmbientBackground())
         .navigationTitle("مركز الانتقالات")
@@ -492,13 +638,66 @@ struct TransferCenterView: View {
 
     // MARK: أقسام العرض
 
+    private var marketHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("نبض سوق الانتقالات")
+                        .font(SportsFonts.app(size: 22, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                    Text("الصفقات المؤكدة والإشاعات مرتبة حسب الحالة والمصدر.")
+                        .font(SportsFonts.app(size: 12.5, weight: .semibold))
+                        .foregroundStyle(SpTheme.onDarkDim)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "arrow.left.arrow.right.circle.fill")
+                    .font(.system(size: 31, weight: .bold))
+                    .foregroundStyle(SpTheme.green)
+            }
+
+            HStack(spacing: 8) {
+                TcMarketMetric(icon: "checkmark.seal.fill",
+                               value: "\(saudiConfirmed.count)",
+                               label: "مؤكدة",
+                               tint: SpTheme.green)
+                TcMarketMetric(icon: "sparkles",
+                               value: "\(rumours.count)",
+                               label: "إشاعات",
+                               tint: SpTheme.teal)
+                TcMarketMetric(icon: "flame.fill",
+                               value: "\(overview?.hero?.count ?? 0)",
+                               label: "بارزة",
+                               tint: SpTheme.crimson)
+            }
+
+            if let windows = overview?.windows {
+                windowsSummary(windows)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+        .padding(.horizontal, 16)
+    }
+
     private func heroStrip(_ hero: [TcRumour]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle(icon: "flame.fill", "أضخم القصص الجارية")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(Array(hero.enumerated()), id: \.element.id) { i, r in
-                        TcHeroCard(rumour: r, rank: i + 1) { selectedStory = IDBox(id: r.player.id) }
+            sectionTitle(icon: "flame.fill", "القصص الأبرز")
+            if let first = hero.first {
+                TcFeaturedStoryCard(rumour: first, rank: 1) {
+                    selectedStory = IDBox(id: first.player.id)
+                }
+                .padding(.horizontal, 16)
+            }
+            let rest = Array(hero.dropFirst().prefix(2).enumerated())
+            if !rest.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(rest, id: \.element.id) { i, r in
+                        TcMiniStoryRow(rumour: r, rank: i + 2) {
+                            selectedStory = IDBox(id: r.player.id)
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -506,11 +705,36 @@ struct TransferCenterView: View {
         }
     }
 
-    private func windowsRow(_ windows: TcWindows) -> some View {
-        VStack(spacing: 10) {
+    private func windowsSummary(_ windows: TcWindows) -> some View {
+        VStack(spacing: 9) {
             TcWindowCountdown(window: windows.saudi)
             TcWindowCountdown(window: windows.europe)
         }
+    }
+
+    private var controlsPanel: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            HStack(spacing: 7) {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(SpTheme.green)
+                Text("تصفية السوق")
+                    .font(SportsFonts.app(size: 15, weight: .heavy))
+                    .foregroundStyle(SpTheme.onDark)
+                Spacer(minLength: 0)
+                Text(activeListCaption)
+                    .font(SportsFonts.app(size: 11, weight: .bold))
+                    .foregroundStyle(SpTheme.onDarkFaint)
+            }
+
+            scopeTabs
+            contentTabs
+            filterBar
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
         .padding(.horizontal, 16)
     }
 
@@ -518,15 +742,21 @@ struct TransferCenterView: View {
         HStack(spacing: 8) {
             ForEach(Scope.allCases, id: \.self) { s in
                 Button { scope = s } label: {
-                    Text(s.rawValue)
-                        .font(SportsFonts.app(size: 14, weight: .heavy))
-                        .foregroundStyle(scope == s ? SpTheme.onDarkStrong : SpTheme.onDarkDim)
+                    HStack(spacing: 7) {
+                        Text(scopeIcon(s)).font(.system(size: 15))
+                        Text(scopeTitle(s)).font(SportsFonts.app(size: 14, weight: .heavy))
+                    }
+                        .foregroundStyle(scope == s ? .white : SpTheme.onDark)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .padding(.vertical, 11)
                         .background(
                             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(scope == s ? SpTheme.card : .clear)
-                                .shadow(color: scope == s ? SpTheme.cardShadow : .clear, radius: 4, y: 2)
+                                .fill(scope == s ? SpTheme.green : SpTheme.card)
+                                .shadow(color: scope == s ? SpTheme.cardShadow : .clear, radius: 5, y: 3)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(scope == s ? .clear : SpTheme.cardStroke, lineWidth: 1)
                         )
                 }
                 .buttonStyle(SpPressStyle())
@@ -534,7 +764,6 @@ struct TransferCenterView: View {
         }
         .padding(5)
         .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(SpTheme.chipFill))
-        .padding(.horizontal, 16)
     }
 
     private var contentTabs: some View {
@@ -552,7 +781,7 @@ struct TransferCenterView: View {
                     .buttonStyle(SpPressStyle())
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 1)
         }
     }
 
@@ -566,7 +795,7 @@ struct TransferCenterView: View {
                     probChip("متوسطة", .level(.medium))
                     probChip("ضعيفة", .level(.low))
                 }
-                .padding(.horizontal, 16)
+                .padding(.horizontal, 1)
             }
         } else if showGlobalConfirmed {
             HStack(spacing: 8) {
@@ -574,7 +803,6 @@ struct TransferCenterView: View {
                 majorChip("كل الانتقالات", false)
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
         }
     }
 
@@ -634,24 +862,96 @@ struct TransferCenterView: View {
     }
 
     private func saudiRow(_ t: SpLeagueTransfer) -> some View {
-        HStack(spacing: 11) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(t.player.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                Text(TcDate.medium(t.date)).font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                transferAvatar(playerImage: playerPhotoURL(t.player.id),
+                               teamLogo: t.inClubId != nil ? t.to.logo : t.from.logo,
+                               size: 40)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(t.player.name)
+                        .font(SportsFonts.app(size: 15, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                        .lineLimit(1)
+                    Text(TcDate.medium(t.date))
+                        .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                        .foregroundStyle(SpTheme.onDarkFaint)
+                }
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 4) {
+                    TcCertaintyTag(confirmed: true)
+                    Text(t.type)
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(SpTheme.green)
+                        .lineLimit(1)
+                }
             }
-            .frame(width: 130, alignment: .leading)
-            HStack(spacing: 6) {
+
+            HStack(spacing: 8) {
                 clubMini(t.from, roshn: t.outClubId != nil)
-                Image(systemName: "arrow.left").font(.system(size: 10, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
+                Image(systemName: "arrow.left")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(SpTheme.green)
                 clubMini(t.to, roshn: t.inClubId != nil)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
-            VStack(alignment: .trailing, spacing: 4) {
-                TcCertaintyTag(confirmed: true)
-                Text(t.type).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green).lineLimit(1)
-            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpTheme.chipFill.opacity(0.65)))
         }
-        .padding(.horizontal, 13).padding(.vertical, 11)
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+    }
+
+    private func globalRow(_ item: TcConfirmed) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                transferAvatar(playerImage: item.player.image,
+                               teamLogo: item.to.image ?? item.from.image ?? "",
+                               size: 40)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.player.name)
+                        .font(SportsFonts.app(size: 15, weight: .heavy))
+                        .foregroundStyle(SpTheme.onDark)
+                        .lineLimit(1)
+                    Text(TcDate.medium(item.date))
+                        .font(SportsFonts.app(size: 10.5, weight: .semibold))
+                        .foregroundStyle(SpTheme.onDarkFaint)
+                }
+                Spacer(minLength: 0)
+                VStack(alignment: .trailing, spacing: 4) {
+                    TcCertaintyTag(confirmed: true)
+                    if item.kind == .loan {
+                        Text("إعارة")
+                            .font(SportsFonts.app(size: 11, weight: .bold))
+                            .foregroundStyle(SpTheme.teal)
+                    } else if item.kind == .free {
+                        Text("انتقال حر")
+                            .font(SportsFonts.app(size: 11, weight: .bold))
+                            .foregroundStyle(SpTheme.green)
+                    } else {
+                        TcMoneyPill(amount: item.amount, currency: item.currency)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                TcPartyChip(party: item.from)
+                Image(systemName: "arrow.left")
+                    .font(.system(size: 11, weight: .heavy))
+                    .foregroundStyle(SpTheme.green)
+                TcPartyChip(party: item.to, emphasize: true)
+                Spacer(minLength: 0)
+                if item.kind != .transfer {
+                    TcMoneyPill(amount: item.amount, currency: item.currency)
+                }
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 10)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SpTheme.chipFill.opacity(0.65)))
+        }
+        .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.card))
         .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
@@ -683,7 +983,7 @@ struct TransferCenterView: View {
             } else {
                 VStack(spacing: 9) {
                     listCount(items.count, "انتقالًا")
-                    ForEach(items.prefix(60)) { TcConfirmedRow(item: $0) }
+                    ForEach(items.prefix(60)) { globalRow($0) }
                 }
                 .padding(.horizontal, 16)
             }
@@ -732,9 +1032,56 @@ struct TransferCenterView: View {
 
     // MARK: مساعدات
 
+    private func scopeTitle(_ s: Scope) -> String {
+        switch s {
+        case .saudi: return "سعودية"
+        case .global: return "عالمية"
+        }
+    }
+
+    private func scopeIcon(_ s: Scope) -> String {
+        switch s {
+        case .saudi: return "🇸🇦"
+        case .global: return "🌍"
+        }
+    }
+
+    private func transferAvatar(playerImage: String?, teamLogo: String, size: CGFloat = 40) -> some View {
+        SpAvatarImage(
+            url: playerImage ?? "",
+            size: size,
+            ring: SpTheme.cardStroke,
+            placeholderFg: SpTheme.onDarkFaint,
+            placeholderBg: SpTheme.chipFill
+        )
+        .overlay(alignment: .bottomTrailing) {
+            if !teamLogo.isEmpty {
+                SpTeamLogo(logo: teamLogo, size: size * 0.46).offset(x: 2, y: 2)
+            }
+        }
+    }
+
+    private func playerPhotoURL(_ id: Int) -> String {
+        "https://media.api-sports.io/football/players/\(id).png"
+    }
+
     private var showRumours: Bool { tab == .rumours || tab == .extensions || (tab == .loans) }
     private var showSaudiConfirmed: Bool { scope == .saudi && tab == .confirmed }
     private var showGlobalConfirmed: Bool { scope == .global && tab == .confirmed }
+
+    private var activeListCaption: String {
+        if showSaudiConfirmed {
+            return "\(saudiConfirmed.count) صفقة"
+        }
+        if showGlobalConfirmed {
+            let count = globalConfirmed
+                .filter { !$0.saudi }
+                .filter { majorsOnly ? $0.major : true }
+                .count
+            return loadedGlobal ? "\(count) انتقال" : "تحميل"
+        }
+        return "\(filteredRumours.count) إشاعة"
+    }
 
     private var filteredRumours: [TcRumour] {
         var list = rumours.filter { scope == .saudi ? $0.saudi : !$0.saudi }

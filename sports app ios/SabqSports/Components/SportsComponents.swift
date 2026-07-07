@@ -323,7 +323,7 @@ struct SpLoading: View {
 //
 // يطابق تمامًا صفّ شاشة «المباريات» (SpWcMatchRow): العَلَم 34 ملاصقًا للنتيجة في
 // المنتصف، الاسم 12.5 نحو الطرف الخارجي يدفعه Spacer، عمود نتيجة/توقيت ثابت العرض
-// (50) بنصّ 15/13، وسطر حالة موجز. **كل** بطاقات المباريات تستعمله لتوحيد الأحجام
+// بنصّ 15/13، وسطر حالة موجز. **كل** بطاقات المباريات تستعمله لتوحيد الأحجام
 // والمواضع (RTL: المضيف يمينًا، الضيف يسارًا).
 struct SpScoreRow: View {
     let fixture: SpFixture
@@ -404,8 +404,7 @@ struct SpScoreRow: View {
                     .lineLimit(1).minimumScaleFactor(0.6)
             }
         } else if !["NS", "TBD"].contains(fixture.status.code) {
-            // القادمة العادية بلا سطر حالة — الوقت (بنقطتيه) يغني عن «موعد»؛
-            // تبقى الخانة للاستثنائي فقط حيث المعلومة مهمة (مؤجلة/ملغاة…).
+            // الحالات الاستثنائية (مؤجلة/ملغاة…) أهم من التاريخ، فتظهر كسطر الحالة.
             Text(fixture.status.label)
                 .font(SportsFonts.app(size: 10.5, weight: .semibold))
                 .foregroundStyle(SpTheme.onDarkFaint)

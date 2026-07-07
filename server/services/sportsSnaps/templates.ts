@@ -158,7 +158,7 @@ export function deterministicSnaps(facts: TeamSnapFacts): TemplateSnap[] {
 }
 
 export function personalizeForFavorite(body: string): string {
-  return body.startsWith("فريقك") ? body : `فريقك: ${body}`;
+  return body.replace(/^فريقك\s*[:：]\s*/, "");
 }
 
 export function personalizeForViewedMatch(body: string, matchLabel?: string | null): string {
