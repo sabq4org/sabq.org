@@ -14,6 +14,7 @@ struct AccountView: View {
     @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
     @State private var selectedTeam: IDBox?
     @State private var showSignOutConfirm = false
+    @State private var showEditProfile = false
 
     private var followedTeams: [SpFollow] { auth.follows.filter { $0.kind == "team" } }
 
@@ -100,8 +101,14 @@ struct AccountView: View {
                         .font(SportsFonts.app(size: 18, weight: .heavy))
                         .foregroundStyle(SpTheme.onDark)
                         .lineLimit(1)
-                    if let email = auth.member?.email, !email.isEmpty {
+                    // لا نعرض البريد الاصطناعي @phone.sabq.org — نفضّل الجوال أو البريد الحقيقي.
+                    if let email = auth.member?.displayEmail {
                         Text(email)
+                            .font(SportsFonts.app(size: 12, weight: .semibold))
+                            .foregroundStyle(SpTheme.onDarkDim)
+                            .lineLimit(1)
+                    } else if let phone = auth.member?.phone, !phone.isEmpty {
+                        Text(phone)
                             .font(SportsFonts.app(size: 12, weight: .semibold))
                             .foregroundStyle(SpTheme.onDarkDim)
                             .lineLimit(1)
@@ -119,9 +126,13 @@ struct AccountView: View {
         .padding(16)
         .frame(maxWidth: .infinity)
         .background(cardBg)
+        .sheet(isPresented: $showEditProfile) {
+            EditProfileView()
+                .environment(auth)
+        }
     }
 
-    // شارة العضوية «عضو سبق» + رابط إدارة الحساب على سبق — الرعاية الخفيفة (الموضع الثالث).
+    // شارة العضوية «عضو سبق» + تعديل الملف داخل التطبيق.
     private var membershipRow: some View {
         HStack(spacing: 8) {
             // شارة العضوية لمسة ذهبية بلا كبسولة — أيقونة الختم + النص يكفيان.
@@ -135,9 +146,9 @@ struct AccountView: View {
 
             Spacer(minLength: 0)
 
-            Button { openURL(URL(string: "https://sabq.org/profile")!) } label: {
+            Button { showEditProfile = true } label: {
                 HStack(spacing: 3) {
-                    Text(L("إدارة حساب سبق"))
+                    Text(L("تعديل الملف الشخصي"))
                         .font(SportsFonts.app(size: 11.5, weight: .bold))
                     Image(systemName: "chevron.backward")
                         .font(.system(size: 9, weight: .bold))

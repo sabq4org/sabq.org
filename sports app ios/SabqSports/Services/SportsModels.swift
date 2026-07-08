@@ -554,14 +554,53 @@ nonisolated struct SpFlexKey: CodingKey {
 nonisolated struct SpMember: Decodable, Hashable {
     let id: String
     let name: String?       // الاسم الكامل (firstName + lastName، أو name/fullName)
+    let firstName: String?
+    let lastName: String?
     let email: String?
+    let phone: String?      // phone / phoneNumber من /members/profile
     let avatar: String?     // profileImageUrl
+    let isProfileComplete: Bool?
     /// هل للحساب كلمة مرور؟ يقرّر هل نطلبها عند حذف الحساب (Apple/الجوال بلا كلمة
     /// مرور). يأتي من /members/profile؛ nil قبل تحميل الملف.
     let hasPassword: Bool?
 
-    init(id: String, name: String?, email: String?, avatar: String?, hasPassword: Bool? = nil) {
-        self.id = id; self.name = name; self.email = email; self.avatar = avatar
+    /// بريد اصطناعي لحسابات الجوال — لا يُعرض للمستخدم.
+    var isSyntheticEmail: Bool {
+        guard let email, !email.isEmpty else { return false }
+        return email.lowercased().hasSuffix("@phone.sabq.org")
+    }
+
+    /// بريد حقيقي للعرض؛ nil إن كان اصطناعيًا أو فارغًا.
+    var displayEmail: String? {
+        guard let email, !email.isEmpty, !isSyntheticEmail else { return nil }
+        return email
+    }
+
+    /// هل الاسم قابل للتعديل؟ (write-once على الخادم).
+    var canEditName: Bool {
+        let n = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty
+    }
+
+    init(
+        id: String,
+        name: String?,
+        email: String?,
+        avatar: String?,
+        hasPassword: Bool? = nil,
+        firstName: String? = nil,
+        lastName: String? = nil,
+        phone: String? = nil,
+        isProfileComplete: Bool? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.firstName = firstName
+        self.lastName = lastName
+        self.email = email
+        self.phone = phone
+        self.avatar = avatar
+        self.isProfileComplete = isProfileComplete
         self.hasPassword = hasPassword
     }
 
@@ -574,6 +613,8 @@ nonisolated struct SpMember: Decodable, Hashable {
         // الاسم الثنائي: firstName + lastName أولًا، ثم name/fullName.
         let first = (try? c.decode(String.self, forKey: SpFlexKey("firstName"))) ?? ""
         let last = (try? c.decode(String.self, forKey: SpFlexKey("lastName"))) ?? ""
+        firstName = first.isEmpty ? nil : first
+        lastName = last.isEmpty ? nil : last
         let combined = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
         if !combined.isEmpty {
             name = combined
@@ -582,6 +623,10 @@ nonisolated struct SpMember: Decodable, Hashable {
                 ?? (try? c.decode(String.self, forKey: SpFlexKey("fullName")))
         }
         email = try? c.decode(String.self, forKey: SpFlexKey("email"))
+        let rawPhone = (try? c.decode(String.self, forKey: SpFlexKey("phone")))
+            ?? (try? c.decode(String.self, forKey: SpFlexKey("phoneNumber")))
+        phone = (rawPhone?.isEmpty == false) ? rawPhone : nil
+        isProfileComplete = try? c.decode(Bool.self, forKey: SpFlexKey("isProfileComplete"))
         let rawAvatar = (try? c.decode(String.self, forKey: SpFlexKey("profileImageUrl")))
             ?? (try? c.decode(String.self, forKey: SpFlexKey("profile_image_url")))
             ?? (try? c.decode(String.self, forKey: SpFlexKey("avatar")))
@@ -594,6 +639,14 @@ nonisolated struct SpMember: Decodable, Hashable {
         }
         hasPassword = try? c.decode(Bool.self, forKey: SpFlexKey("hasPassword"))
     }
+}
+
+/// طلب تحديث الملف الشخصي — يُرسل فقط الحقول غير الفارغة.
+nonisolated struct SpProfileUpdateRequest: Encodable {
+    var firstName: String?
+    var lastName: String?
+    var name: String?
+    var email: String?
 }
 
 nonisolated struct SpLoginResponse: Decodable {
@@ -1568,6 +1621,18 @@ extension APIClient {
     /// تحديث ملف العضو (صورة/اسم) من /members/profile.
     func fetchMemberProfile(ignoreCache: Bool = true) async throws -> SpMember? {
         try await get(SpProfileResponse.self, path: "/members/profile", ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).member
+    }
+
+    /// تحديث الاسم/البريد عبر PUT /members/profile (Bearer).
+    @discardableResult
+    func updateMemberProfile(_ body: SpProfileUpdateRequest) async throws -> SpMember? {
+        try await requestJSON(
+            SpProfileResponse.self,
+            method: "PUT",
+            path: "/members/profile",
+            body: body,
+            apiRoot: URLConstants.mobileAPI
+        ).member
     }
 
     // المتابعة + التفضيلات (Bearer، عبر mobileAPI).

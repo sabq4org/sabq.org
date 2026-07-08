@@ -1770,8 +1770,10 @@ router.put("/members/profile", async (req: Request, res: Response) => {
     }
 
     const {
-      firstName,
-      lastName,
+      firstName: rawFirstName,
+      lastName: rawLastName,
+      name,
+      email: rawEmail,
       profileImageUrl,
       gender,
       birthDate,
@@ -1781,6 +1783,18 @@ router.put("/members/profile", async (req: Request, res: Response) => {
       locale
     } = req.body;
 
+    // Accept a single `name` (VARA / phone-signup clients) and split it
+    // into firstName/lastName when the split fields weren't sent.
+    let firstName: string | undefined =
+      typeof rawFirstName === "string" ? rawFirstName.trim() || undefined : undefined;
+    let lastName: string | undefined =
+      typeof rawLastName === "string" ? rawLastName.trim() || undefined : undefined;
+    if (!firstName && !lastName && typeof name === "string" && name.trim()) {
+      const parts = name.trim().split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.length > 1 ? parts.slice(1).join(" ") : undefined;
+    }
+
     // Pull the current name so we know whether the lock applies. The
     // names are write-once: once a non-empty value exists in the row,
     // the column becomes readonly and any later edit is silently
@@ -1788,7 +1802,11 @@ router.put("/members/profile", async (req: Request, res: Response) => {
     // could otherwise rename it to impersonate a different commenter,
     // turning the comments archive into a deniability laundromat.
     const [currentRow] = await db
-      .select({ firstName: users.firstName, lastName: users.lastName })
+      .select({
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      })
       .from(users)
       .where(eq(users.id, session.userId))
       .limit(1);
@@ -1816,6 +1834,53 @@ router.put("/members/profile", async (req: Request, res: Response) => {
     if (typeof country === "string") updates.country = country.trim();
     if (typeof locale === "string") updates.locale = locale;
 
+    // Allow replacing a synthetic phone email (p966…@phone.sabq.org) with a
+    // real address. Real emails stay write-once here — change-email flows
+    // that need verification live elsewhere.
+    if (typeof rawEmail === "string" && rawEmail.trim()) {
+      const { isSyntheticPhoneEmail } = await import("../services/phoneAuth");
+      const nextEmail = rawEmail.trim().toLowerCase();
+      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail);
+      if (!emailOk) {
+        return res.status(400).json({
+          success: false,
+          message: "صيغة البريد الإلكتروني غير صحيحة",
+        });
+      }
+      if (isSyntheticPhoneEmail(nextEmail)) {
+        return res.status(400).json({
+          success: false,
+          message: "أدخل بريداً إلكترونياً حقيقياً",
+        });
+      }
+      const currentIsSynthetic = isSyntheticPhoneEmail(currentRow?.email);
+      if (!currentIsSynthetic && currentRow?.email?.trim()) {
+        // Already has a real email — ignore silently (same spirit as name lock).
+      } else if (nextEmail !== currentRow?.email?.trim().toLowerCase()) {
+        const [taken] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.email, nextEmail))
+          .limit(1);
+        if (taken && taken.id !== session.userId) {
+          return res.status(409).json({
+            success: false,
+            message: "هذا البريد مستخدم بالفعل",
+          });
+        }
+        updates.email = nextEmail;
+        updates.emailVerified = false;
+      }
+    }
+
+    // Mirror web storage.updateUser: a full name implies a complete profile
+    // for phone/OAuth accounts that only needed a display name.
+    const nextFirst = (updates.firstName as string | undefined) ?? currentRow?.firstName;
+    const nextLast = (updates.lastName as string | undefined) ?? currentRow?.lastName;
+    if (nextFirst?.trim() && nextLast?.trim()) {
+      updates.isProfileComplete = true;
+    }
+
     if (Object.keys(updates).length > 0) {
       await db.update(users).set(updates).where(eq(users.id, session.userId));
     }
@@ -1840,6 +1905,8 @@ router.put("/members/profile", async (req: Request, res: Response) => {
         locale: users.locale,
         emailVerified: users.emailVerified,
         phoneVerified: users.phoneVerified,
+        isProfileComplete: users.isProfileComplete,
+        authProvider: users.authProvider,
         role: users.role,
         jobTitle: users.jobTitle,
         department: users.department,

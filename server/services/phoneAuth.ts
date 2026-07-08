@@ -73,3 +73,9 @@ export async function findOrCreatePhoneUser(e164: string): Promise<PhoneUserResu
     .returning();
   return { ok: true, user: created };
 }
+
+/// بريد اصطناعي لحسابات الدخول بالجوال — ليس بريد المستخدم الحقيقي.
+export function isSyntheticPhoneEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return email.trim().toLowerCase().endsWith("@phone.sabq.org");
+}
