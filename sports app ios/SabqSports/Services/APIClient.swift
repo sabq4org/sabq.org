@@ -219,14 +219,14 @@ nonisolated enum APIError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "رابط غير صالح"
-        case .invalidResponse: return "استجابة غير صالحة من الخادم"
-        case .unauthorized: return "انتهت جلستك، يرجى تسجيل الدخول"
-        case .forbidden: return "ليس لديك صلاحية"
-        case .notFound: return "غير موجود"
-        case .rateLimited: return "طلبات كثيرة، حاول لاحقًا"
-        case .decoding: return "تعذّر قراءة البيانات"
-        case .server(let code, let msg): return msg ?? "خطأ في الخادم (\(code))"
+        case .invalidURL: return L("رابط غير صالح")
+        case .invalidResponse: return L("استجابة غير صالحة من الخادم")
+        case .unauthorized: return L("انتهت جلستك، يرجى تسجيل الدخول")
+        case .forbidden: return L("ليس لديك صلاحية")
+        case .notFound: return L("غير موجود")
+        case .rateLimited: return L("طلبات كثيرة، حاول لاحقًا")
+        case .decoding: return L("تعذّر قراءة البيانات")
+        case .server(let code, let msg): return msg ?? Lf("خطأ في الخادم (%d)", code)
         }
     }
 }

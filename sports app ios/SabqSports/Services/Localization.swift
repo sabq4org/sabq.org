@@ -52,6 +52,9 @@ final class SpLanguage {
         let code = lang.rawValue
         spActiveLangCode = code
         SpFormat.displayLangCode = code
+        // يقرأها الودجت وLive Activity من App Group (لا يصلها SpLanguage مباشرة).
+        UserDefaults(suiteName: SpSharedContainer.appGroup)?
+            .set(code, forKey: "sabqsports.app.language")
         Task { await APIClient.shared.setPreferredLanguage(code) }
         URLCache.shared.removeAllCachedResponses()
     }

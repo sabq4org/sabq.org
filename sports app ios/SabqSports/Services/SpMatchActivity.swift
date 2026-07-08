@@ -12,6 +12,14 @@ import UIKit
 
 enum SpSharedContainer {
     nonisolated static let appGroup = "group.com.sabq.sports"
+    nonisolated static let languageKey = "sabqsports.app.language"
+
+    /// لغة الواجهة كما كتبها التطبيق — يقرأها الودجت/Live Activity.
+    nonisolated static var languageCode: String {
+        UserDefaults(suiteName: appGroup)?.string(forKey: languageKey)
+            ?? UserDefaults.standard.string(forKey: languageKey)
+            ?? "ar"
+    }
 
     static func logosDir() -> URL? {
         guard let base = FileManager.default
@@ -105,6 +113,26 @@ nonisolated struct SpWidgetSnapshot: Codable {
 
     static func clear() {
         UserDefaults(suiteName: SpSharedContainer.appGroup)?.removeObject(forKey: defaultsKey)
+    }
+}
+
+/// ترجمة خفيفة للويدجت/Live Activity (لا يعتمد على EnglishStrings الكامل).
+nonisolated func SpWidgetL(_ arabic: String) -> String {
+    guard SpSharedContainer.languageCode == "en" else { return arabic }
+    switch arabic {
+    case "افتح VARA لتحميل مبارياتك": return "Open VARA to load your matches"
+    case "انطلقت": return "Started"
+    case "مباراة فريقك": return "Your team’s match"
+    case "انتهت": return "FT"
+    case "مباشر الآن": return "LIVE"
+    case "مباشر": return "LIVE"
+    case "اليوم": return "Today"
+    case "غدًا": return "Tomorrow"
+    case "على انطلاق المباراة": return "Until kickoff"
+    case "لم تبدأ": return "Not started"
+    case "قريبًا": return "Soon"
+    case "مباراة مباشرة": return "Live match"
+    default: return arabic
     }
 }
 

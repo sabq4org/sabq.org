@@ -137,14 +137,14 @@ struct SpMatchLiveActivity: Widget {
 
 // نصّ الحالة: انتهت / الشوط+الدقيقة (بدل الضائع) / استراحة / لم تبدأ.
 func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> String {
-    if s.isFinished { return "انتهت" }
+    if s.isFinished { return SpWidgetL("انتهت") }
     if s.isLive {
-        if s.minute.isEmpty { return s.statusLabel.isEmpty ? "مباشر" : s.statusLabel }
+        if s.minute.isEmpty { return s.statusLabel.isEmpty ? SpWidgetL("مباشر") : s.statusLabel }
         // صياغة تطبيق سبق: «45' · الشوط الأول».
         return s.statusLabel.isEmpty ? s.minute : "\(s.minute) · \(s.statusLabel)"
     }
-    if kickoff > Date() { return s.statusLabel.isEmpty ? "لم تبدأ" : s.statusLabel }
-    return s.statusLabel.isEmpty ? "قريبًا" : s.statusLabel
+    if kickoff > Date() { return s.statusLabel.isEmpty ? SpWidgetL("لم تبدأ") : s.statusLabel }
+    return s.statusLabel.isEmpty ? SpWidgetL("قريبًا") : s.statusLabel
 }
 
 // عرض الحالة الحيّة على الجزيرة الديناميكية — يعرض نصّ الدقيقة **كما يظهر داخل
@@ -217,7 +217,7 @@ private struct LockScreenView: View {
             Image(systemName: "trophy.fill")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(SpLA.accent)
-            Text(context.attributes.competition.isEmpty ? "مباراة مباشرة" : context.attributes.competition)
+            Text(context.attributes.competition.isEmpty ? SpWidgetL("مباراة مباشرة") : context.attributes.competition)
                 .font(.system(size: 13, weight: .heavy))
                 .foregroundStyle(SpLA.accent)
                 .lineLimit(1)
@@ -227,7 +227,7 @@ private struct LockScreenView: View {
 
     @ViewBuilder private var roundText: some View {
         if !context.attributes.competition.isEmpty {
-            Text(context.state.isLive ? "مباشر الآن" : context.state.statusLabel)
+            Text(context.state.isLive ? SpWidgetL("مباشر الآن") : context.state.statusLabel)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(SpLA.dim)
                 .lineLimit(1)
@@ -242,7 +242,7 @@ private struct LockScreenView: View {
                     .monospacedDigit()
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.white)
-                Text("على انطلاق المباراة")
+                Text(SpWidgetL("على انطلاق المباراة"))
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(SpLA.accent)
             }
@@ -303,12 +303,12 @@ private struct LockScreenView: View {
     /// السطر الأول: العدّاد إن وُجد، وإلا نصّ الحالة («مباشر»/«انتهت»/«قريبًا»).
     private var primaryStatusLine: String {
         let s = context.state
-        if s.isFinished { return "انتهت" }
+        if s.isFinished { return SpWidgetL("انتهت") }
         if s.isLive {
             if !s.minute.isEmpty { return s.minute }
-            return s.statusLabel.isEmpty ? "مباشر" : s.statusLabel
+            return s.statusLabel.isEmpty ? SpWidgetL("مباشر") : s.statusLabel
         }
-        return s.statusLabel.isEmpty ? "قريبًا" : s.statusLabel
+        return s.statusLabel.isEmpty ? SpWidgetL("قريبًا") : s.statusLabel
     }
 
     /// السطر الثاني: رقم الشوط/استراحة — يظهر فقط حين يكون السطر الأول عدّادًا

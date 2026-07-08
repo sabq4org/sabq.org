@@ -1398,7 +1398,7 @@ struct SpMatchCenter: View {
             commentaryIcon(kind)
                 .frame(width: 20)
                 .padding(.top, 1)
-            Text(item.textAr)
+            Text(item.displayText)
                 .font(SportsFonts.app(size: 13, weight: highlight ? .semibold : .regular))
                 .foregroundStyle(SpTheme.onDark)
                 .lineSpacing(3)
@@ -1423,21 +1423,20 @@ struct SpMatchCenter: View {
         return "\(item.minute)'"
     }
 
-    // نوع اللحظة يُستنتج من النصّ العربي (الخادم لا يرسل نوعًا صريحًا دائمًا، وقد لا
-    // يضبط is_goal لكل هدف) — نظير الويب مع كشف الأهداف من بداية النصّ أيضًا.
+    // نوع اللحظة من flags + نص العرض (عربي أو إنجليزي حسب اللغة).
     private func commentaryKind(_ item: SpCommentaryItem) -> String {
-        let t = item.textAr
-        if item.goal || t.hasPrefix("هدف") { return "goal" }
-        if t.contains("بطاقة حمراء") { return "red" }
-        if t.contains("بطاقة صفراء") { return "yellow" }
-        if t.contains("ضربة جزاء") || t.contains("ركلة جزاء") { return "penalty" }
-        if t.contains("ركلة ركنية") { return "corner" }
-        if t.contains("تبديل") { return "substitution" }
-        if t.hasPrefix("تصدٍّ") || t.contains("تصدّى") { return "shot-saved" }
-        if t.hasPrefix("تسديدة محالة") || t.hasPrefix("أهدر") { return "shot-missed" }
-        if t.contains("صافرة النهاية") { return "fulltime" }
-        if t.contains("الوقت بدل الضائع") { return "added-time" }
-        if t.contains("بداية الشوط") || t.contains("نهاية الشوط") { return "period" }
+        let t = item.displayText.lowercased()
+        if item.goal || t.hasPrefix("هدف") || t.hasPrefix("goal") { return "goal" }
+        if t.contains("بطاقة حمراء") || t.contains("red card") { return "red" }
+        if t.contains("بطاقة صفراء") || t.contains("yellow card") { return "yellow" }
+        if t.contains("ضربة جزاء") || t.contains("ركلة جزاء") || t.contains("penalty") { return "penalty" }
+        if t.contains("ركلة ركنية") || t.contains("corner") { return "corner" }
+        if t.contains("تبديل") || t.contains("substitution") { return "substitution" }
+        if t.hasPrefix("تصدٍّ") || t.contains("تصدّى") || t.contains("save") { return "shot-saved" }
+        if t.hasPrefix("تسديدة محالة") || t.hasPrefix("أهدر") || t.contains("miss") { return "shot-missed" }
+        if t.contains("صافرة النهاية") || t.contains("full time") || t.contains("full-time") { return "fulltime" }
+        if t.contains("الوقت بدل الضائع") || t.contains("added time") || t.contains("stoppage") { return "added-time" }
+        if t.contains("بداية الشوط") || t.contains("نهاية الشوط") || t.contains("half") || t.contains("kick-off") || t.contains("kick off") { return "period" }
         return "other"
     }
 

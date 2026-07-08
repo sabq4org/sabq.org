@@ -63,6 +63,16 @@ nonisolated struct SpFixture: Codable, Identifiable, Hashable {
 
     /// لحظة انطلاق المباراة (من الطابع الزمني) — أساس العدّاد التنازلي.
     var kickoff: Date { Date(timeIntervalSince1970: TimeInterval(timestamp)) }
+
+    /// يحتفظ بـ competition/competitionSlug من لقطة سابقة عند التحديث بمسار lite.
+    func preservingCompetition(from other: SpFixture) -> SpFixture {
+        SpFixture(
+            id: id, date: date, timestamp: timestamp, status: status, round: round,
+            venue: venue, home: home, away: away, goals: goals, penalties: penalties,
+            competition: competition ?? other.competition,
+            competitionSlug: competitionSlug ?? other.competitionSlug
+        )
+    }
 }
 
 nonisolated struct SpStandingRow: Decodable, Identifiable, Hashable {
@@ -540,6 +550,10 @@ nonisolated struct SpMatchDetail: Decodable {
     let leagueId: Int?
 }
 
+nonisolated struct SpMatchLiteResponse: Decodable {
+    let fixture: SpFixture
+}
+
 // MARK: - المصادقة (عضو سبق عبر Bearer — /api/v1/auth/apple)
 
 /// مفتاح ترميز ديناميكي للقراءة المرنة من JSON.
@@ -554,14 +568,53 @@ nonisolated struct SpFlexKey: CodingKey {
 nonisolated struct SpMember: Decodable, Hashable {
     let id: String
     let name: String?       // الاسم الكامل (firstName + lastName، أو name/fullName)
+    let firstName: String?
+    let lastName: String?
     let email: String?
+    let phone: String?      // phone / phoneNumber من /members/profile
     let avatar: String?     // profileImageUrl
+    let isProfileComplete: Bool?
     /// هل للحساب كلمة مرور؟ يقرّر هل نطلبها عند حذف الحساب (Apple/الجوال بلا كلمة
     /// مرور). يأتي من /members/profile؛ nil قبل تحميل الملف.
     let hasPassword: Bool?
 
-    init(id: String, name: String?, email: String?, avatar: String?, hasPassword: Bool? = nil) {
-        self.id = id; self.name = name; self.email = email; self.avatar = avatar
+    /// بريد اصطناعي لحسابات الجوال — لا يُعرض للمستخدم.
+    var isSyntheticEmail: Bool {
+        guard let email, !email.isEmpty else { return false }
+        return email.lowercased().hasSuffix("@phone.sabq.org")
+    }
+
+    /// بريد حقيقي للعرض؛ nil إن كان اصطناعيًا أو فارغًا.
+    var displayEmail: String? {
+        guard let email, !email.isEmpty, !isSyntheticEmail else { return nil }
+        return email
+    }
+
+    /// هل الاسم قابل للتعديل؟ (write-once على الخادم).
+    var canEditName: Bool {
+        let n = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty
+    }
+
+    init(
+        id: String,
+        name: String?,
+        email: String?,
+        avatar: String?,
+        hasPassword: Bool? = nil,
+        firstName: String? = nil,
+        lastName: String? = nil,
+        phone: String? = nil,
+        isProfileComplete: Bool? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.firstName = firstName
+        self.lastName = lastName
+        self.email = email
+        self.phone = phone
+        self.avatar = avatar
+        self.isProfileComplete = isProfileComplete
         self.hasPassword = hasPassword
     }
 
@@ -574,6 +627,8 @@ nonisolated struct SpMember: Decodable, Hashable {
         // الاسم الثنائي: firstName + lastName أولًا، ثم name/fullName.
         let first = (try? c.decode(String.self, forKey: SpFlexKey("firstName"))) ?? ""
         let last = (try? c.decode(String.self, forKey: SpFlexKey("lastName"))) ?? ""
+        firstName = first.isEmpty ? nil : first
+        lastName = last.isEmpty ? nil : last
         let combined = [first, last].filter { !$0.isEmpty }.joined(separator: " ")
         if !combined.isEmpty {
             name = combined
@@ -582,6 +637,10 @@ nonisolated struct SpMember: Decodable, Hashable {
                 ?? (try? c.decode(String.self, forKey: SpFlexKey("fullName")))
         }
         email = try? c.decode(String.self, forKey: SpFlexKey("email"))
+        let rawPhone = (try? c.decode(String.self, forKey: SpFlexKey("phone")))
+            ?? (try? c.decode(String.self, forKey: SpFlexKey("phoneNumber")))
+        phone = (rawPhone?.isEmpty == false) ? rawPhone : nil
+        isProfileComplete = try? c.decode(Bool.self, forKey: SpFlexKey("isProfileComplete"))
         let rawAvatar = (try? c.decode(String.self, forKey: SpFlexKey("profileImageUrl")))
             ?? (try? c.decode(String.self, forKey: SpFlexKey("profile_image_url")))
             ?? (try? c.decode(String.self, forKey: SpFlexKey("avatar")))
@@ -594,6 +653,18 @@ nonisolated struct SpMember: Decodable, Hashable {
         }
         hasPassword = try? c.decode(Bool.self, forKey: SpFlexKey("hasPassword"))
     }
+}
+
+/// طلب تحديث الملف الشخصي — يُرسل فقط الحقول غير الفارغة.
+nonisolated struct SpProfileUpdateRequest: Encodable {
+    var firstName: String?
+    var lastName: String?
+    var name: String?
+    var email: String?
+}
+
+nonisolated struct SpAvatarUploadBody: Encodable {
+    let image: String
 }
 
 nonisolated struct SpLoginResponse: Decodable {
@@ -924,17 +995,28 @@ nonisolated struct SpMatchFacts: Decodable {
     let halftime: SpHalftime?
 }
 
-// التعليق اللحظي المُعرَّب (أبرز اللحظات) — /sports/match/:id/commentary.
+// التعليق اللحظي (أبرز اللحظات) — /sports/match/:id/commentary.
+// الخادم يرسل textAr + textEn؛ نعرض حسب لغة الواجهة.
 nonisolated struct SpCommentaryItem: Decodable, Identifiable, Hashable {
     let minute: Int
     let extraMinute: Int?
     let goal: Bool
     let important: Bool
     let textAr: String
+    let textEn: String
     let order: Int
     var id: String { "\(order)-\(minute)-\(extraMinute ?? 0)" }
 
-    enum CodingKeys: String, CodingKey { case minute, extraMinute, goal, important, textAr, order }
+    /// النص المعروض حسب لغة الواجهة النشطة.
+    var displayText: String {
+        if spActiveLangCode == "en" {
+            let en = textEn.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !en.isEmpty { return en }
+        }
+        return textAr
+    }
+
+    enum CodingKeys: String, CodingKey { case minute, extraMinute, goal, important, textAr, textEn, order }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         minute = (try? c.decode(Int.self, forKey: .minute)) ?? 0
@@ -942,6 +1024,7 @@ nonisolated struct SpCommentaryItem: Decodable, Identifiable, Hashable {
         goal = (try? c.decode(Bool.self, forKey: .goal)) ?? false
         important = (try? c.decode(Bool.self, forKey: .important)) ?? false
         textAr = (try? c.decode(String.self, forKey: .textAr)) ?? ""
+        textEn = (try? c.decode(String.self, forKey: .textEn)) ?? ""
         order = (try? c.decode(Int.self, forKey: .order)) ?? 0
     }
 }
@@ -1463,6 +1546,12 @@ extension APIClient {
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
+    /// لقطة خفيفة (نتيجة/حالة فقط) — لتحديث «مبارياتي» بلا detail كامل.
+    func fetchMatchLite(id: Int, ignoreCache: Bool = false) async throws -> SpFixture {
+        try await get(SpMatchLiteResponse.self, path: "/sports/match/\(id)/lite",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).fixture
+    }
+
     /// تحديث لقطة مباراة متابَعة من مصدرها الصحيح؛ «مبارياتي» قد تجمع روشن،
     /// البطولات العالمية، وكأس العالم في مكان واحد.
     func fetchFollowedFixture(_ fixture: SpFixture, ignoreCache: Bool = false) async throws -> SpFixture {
@@ -1470,7 +1559,12 @@ extension APIClient {
             let detail = try await fetchWorldCupMatch(id: fixture.id, ignoreCache: ignoreCache)
             return SpFixture(worldCup: detail.fixture)
         }
+        // نفضّل المسار الخفيف — يكفي للنتيجة/الدقيقة دون events/stats/lineups.
+        if let lite = try? await fetchMatchLite(id: fixture.id, ignoreCache: ignoreCache) {
+            return lite.preservingCompetition(from: fixture)
+        }
         return try await fetchMatchDetail(id: fixture.id, ignoreCache: ignoreCache).fixture
+            .preservingCompetition(from: fixture)
     }
 
     // إثراء مركز المباراة: ملخّص ذكي + تقييمات اللاعبين + المواجهات.
@@ -1568,6 +1662,42 @@ extension APIClient {
     /// تحديث ملف العضو (صورة/اسم) من /members/profile.
     func fetchMemberProfile(ignoreCache: Bool = true) async throws -> SpMember? {
         try await get(SpProfileResponse.self, path: "/members/profile", ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).member
+    }
+
+    /// تحديث الاسم/البريد عبر PUT /members/profile (Bearer).
+    @discardableResult
+    func updateMemberProfile(_ body: SpProfileUpdateRequest) async throws -> SpMember? {
+        try await requestJSON(
+            SpProfileResponse.self,
+            method: "PUT",
+            path: "/members/profile",
+            body: body,
+            apiRoot: URLConstants.mobileAPI
+        ).member
+    }
+
+    /// رفع صورة شخصية (base64 data-URI) — تُحفظ في Cloudflare وتظهر على الويب وVARA معًا.
+    @discardableResult
+    func uploadMemberAvatar(imageData: Data) async throws -> SpMember? {
+        let mime = Self.detectImageMimeType(imageData) ?? "image/jpeg"
+        let body = SpAvatarUploadBody(image: "data:\(mime);base64,\(imageData.base64EncodedString())")
+        return try await post(
+            SpProfileResponse.self,
+            path: "/members/profile/image",
+            body: body,
+            apiRoot: URLConstants.mobileAPI
+        ).member
+    }
+
+    private static func detectImageMimeType(_ data: Data) -> String? {
+        guard data.count >= 12 else { return nil }
+        let b = [UInt8](data.prefix(12))
+        if b[0] == 0xFF, b[1] == 0xD8 { return "image/jpeg" }
+        if b[0] == 0x89, b[1] == 0x50, b[2] == 0x4E, b[3] == 0x47 { return "image/png" }
+        if b[0] == 0x52, b[1] == 0x49, b[2] == 0x46, b[3] == 0x46,
+           b[8] == 0x57, b[9] == 0x45, b[10] == 0x42, b[11] == 0x50 { return "image/webp" }
+        if b[0] == 0x47, b[1] == 0x49, b[2] == 0x46 { return "image/gif" }
+        return nil
     }
 
     // المتابعة + التفضيلات (Bearer، عبر mobileAPI).

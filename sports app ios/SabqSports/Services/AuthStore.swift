@@ -50,7 +50,14 @@ final class SpAuthStore {
         }
         if let data = UserDefaults.standard.data(forKey: memberKey),
            let stored = try? JSONDecoder().decode(SpStoredMember.self, from: data) {
-            member = SpMember(id: stored.id, name: stored.name, email: stored.email, avatar: stored.avatar)
+            member = SpMember(
+                id: stored.id,
+                name: stored.name,
+                email: stored.email,
+                avatar: stored.avatar,
+                phone: stored.phone,
+                isProfileComplete: stored.isProfileComplete
+            )
         }
         if isLoggedIn { await loadUserData() }
     }
@@ -84,10 +91,7 @@ final class SpAuthStore {
         guard isLoggedIn else { return }
         // تحديث ملف العضو (صورة/اسم) — الكاش المحلي قد يكون أقدم.
         if let m = try? await APIClient.shared.fetchMemberProfile(), !m.id.isEmpty {
-            member = m
-            if let data = try? JSONEncoder().encode(SpStoredMember(id: m.id, name: m.name, email: m.email, avatar: m.avatar)) {
-                UserDefaults.standard.set(data, forKey: memberKey)
-            }
+            persistMember(m)
         }
         if let f = try? await APIClient.shared.fetchFollows() {
             follows = f
@@ -258,14 +262,92 @@ final class SpAuthStore {
                           userInfo: [NSLocalizedDescriptionKey: resp.message ?? L("بيانات الدخول غير صحيحة")])
         }
         token = t
-        member = resp.member
+        if let m = resp.member { persistMember(m) }
         SpKeychain.save(tokenKey, value: t)
-        if let m = resp.member,
-           let data = try? JSONEncoder().encode(SpStoredMember(id: m.id, name: m.name, email: m.email, avatar: m.avatar)) {
-            UserDefaults.standard.set(data, forKey: memberKey)
-        }
         await APIClient.shared.setAuthToken(t)
         await loadUserData()
+    }
+
+    /// رفع صورة شخصية — نفس `profileImageUrl` على حساب سبق (ويب + VARA).
+    @discardableResult
+    func uploadAvatar(imageData: Data) async -> Bool {
+        guard isLoggedIn else { return false }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            if let updated = try await APIClient.shared.uploadMemberAvatar(imageData: imageData),
+               !updated.id.isEmpty {
+                persistMember(updated)
+                return true
+            }
+            await loadUserData()
+            return true
+        } catch let e as APIError {
+            switch e {
+            case .server(_, let msg): errorMessage = msg ?? L("تعذّر رفع الصورة")
+            default: errorMessage = e.errorDescription ?? L("تعذّر رفع الصورة")
+            }
+            return false
+        } catch {
+            errorMessage = L("تعذّر رفع الصورة")
+            return false
+        }
+    }
+
+    /// تحديث الاسم (مرة واحدة إن كان فارغًا) و/أو استبدال البريد الاصطناعي ببريد حقيقي.
+    @discardableResult
+    func updateProfile(firstName: String?, lastName: String?, email: String?) async -> Bool {
+        guard isLoggedIn else { return false }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            var body = SpProfileUpdateRequest()
+            let fn = firstName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let ln = lastName?.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let fn, !fn.isEmpty { body.firstName = fn }
+            if let ln, !ln.isEmpty { body.lastName = ln }
+            let em = email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if let em, !em.isEmpty { body.email = em }
+
+            guard body.firstName != nil || body.lastName != nil || body.email != nil else {
+                errorMessage = L("لا توجد تغييرات للحفظ")
+                return false
+            }
+
+            if let updated = try await APIClient.shared.updateMemberProfile(body), !updated.id.isEmpty {
+                persistMember(updated)
+                return true
+            }
+            // احتياط: أعد جلب الملف إن رجعت الاستجابة بلا user.
+            await loadUserData()
+            return errorMessage == nil
+        } catch let e as APIError {
+            switch e {
+            case .server(_, let msg): errorMessage = msg ?? L("تعذّر حفظ الملف الشخصي")
+            default: errorMessage = e.errorDescription ?? L("تعذّر حفظ الملف الشخصي")
+            }
+            return false
+        } catch {
+            errorMessage = L("تعذّر حفظ الملف الشخصي")
+            return false
+        }
+    }
+
+    private func persistMember(_ m: SpMember) {
+        member = m
+        let stored = SpStoredMember(
+            id: m.id,
+            name: m.name,
+            email: m.email,
+            avatar: m.avatar,
+            phone: m.phone,
+            isProfileComplete: m.isProfileComplete
+        )
+        if let data = try? JSONEncoder().encode(stored) {
+            UserDefaults.standard.set(data, forKey: memberKey)
+        }
     }
 
     private func friendly(_ error: Error) -> String {
@@ -335,6 +417,24 @@ struct SpStoredMember: Codable {
     let name: String?
     let email: String?
     let avatar: String?
+    let phone: String?
+    let isProfileComplete: Bool?
+
+    init(
+        id: String,
+        name: String?,
+        email: String?,
+        avatar: String?,
+        phone: String? = nil,
+        isProfileComplete: Bool? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.email = email
+        self.avatar = avatar
+        self.phone = phone
+        self.isProfileComplete = isProfileComplete
+    }
 }
 
 // MARK: - الفريق المفضّل (تخصيص محلّي خفيف)

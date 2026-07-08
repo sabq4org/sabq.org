@@ -1265,6 +1265,23 @@ export async function getMatchEventsOnly(fixtureId: number): Promise<SplMatchEve
   });
 }
 
+/**
+ * لقطة خفيفة للمباراة (fixture فقط) — لتحديث «مبارياتي»/الويدجت بلا سحب
+ * events/statistics/lineups الثقيلة. نداء fixtures?id= واحد فقط.
+ */
+export async function getMatchLite(fixtureId: number): Promise<SplFixture | null> {
+  if (isSyntheticFixtureId(fixtureId)) {
+    return (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId) ?? null;
+  }
+  return withSWR(`spl:match-lite:${fixtureId}`, MATCH_DETAIL_TTL, MATCH_DETAIL_TTL * 2, async () => {
+    const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
+    const item = rows[0];
+    if (!item) return null;
+    const fxTr = await fixtureTranslators(rows);
+    return localizeFixture(item, fxTr);
+  });
+}
+
 // ============================================================
 // الطبقة اللحظية الفائقة (TheSports) — تعميمها على البوابة (المرحلة 1)
 // ------------------------------------------------------------
