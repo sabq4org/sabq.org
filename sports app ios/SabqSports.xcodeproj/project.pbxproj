@@ -50,6 +50,7 @@
 		5B0000C2 /* EnglishStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000C2 /* EnglishStrings.swift */; };
 		5B0000D0 /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000D0 /* EditProfileView.swift */; };
 		5B0000D1 /* SpPhotoPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000D1 /* SpPhotoPermission.swift */; };
+		5B0000D2 /* FanDayHomeSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000D2 /* FanDayHomeSection.swift */; };
 		5B000102 /* SpMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000102 /* SpMatchActivity.swift */; };
 		5B000103 /* SpLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000103 /* SpLiveActivityManager.swift */; };
 		5B000104 /* SabqSportsWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000104 /* SabqSportsWidgetsBundle.swift */; };
@@ -130,6 +131,7 @@
 		5C0000C2 /* EnglishStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishStrings.swift; sourceTree = "<group>"; };
 		5C0000D0 /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
 		5C0000D1 /* SpPhotoPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpPhotoPermission.swift; sourceTree = "<group>"; };
+		5C0000D2 /* FanDayHomeSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FanDayHomeSection.swift; sourceTree = "<group>"; };
 		5C000100 /* SabqSportsWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SabqSportsWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5C000101 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5C000102 /* SpMatchActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpMatchActivity.swift; sourceTree = "<group>"; };
@@ -208,6 +210,7 @@
 			children = (
 				5C000007 /* SportsRTL.swift */,
 				5C000008 /* SportsComponents.swift */,
+				5C0000D2 /* FanDayHomeSection.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -404,6 +407,7 @@
 				5B00000F /* AccountView.swift in Sources */,
 				5B0000D0 /* EditProfileView.swift in Sources */,
 				5B0000D1 /* SpPhotoPermission.swift in Sources */,
+				5B0000D2 /* FanDayHomeSection.swift in Sources */,
 				5B000010 /* MatchCenterView.swift in Sources */,
 				5B000011 /* TeamPlayerPages.swift in Sources */,
 				5B000012 /* AuthStore.swift in Sources */,
