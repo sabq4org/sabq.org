@@ -33,6 +33,29 @@ nonisolated struct SpMatchReferee: Decodable {
     let stats: SpRefereeStats?
 }
 
+// MARK: - نماذج «تقديم» (المرحلة 2) — أفضل جهد للمباريات القادمة
+
+/// رؤية VARA — نص عربي ذكي يلخّص المباراة (/sports/match/:id/preview).
+nonisolated struct SpMatchPreview: Decodable {
+    let text: String
+    let generatedAt: Double?
+}
+
+/// القنوات الناقلة (/sports/match/:id/tv).
+nonisolated struct SpTvChannel: Decodable {
+    let name: String
+    let url: String?
+}
+nonisolated struct SpMatchTv: Decodable {
+    let available: Bool
+    let channels: [SpTvChannel]
+}
+
+/// هدّافو النادي (/sports/team/:id/scorers) — الغلاف بلا حقل configured.
+nonisolated struct SpTeamScorersResponse: Decodable {
+    let scorers: [SpScorer]
+}
+
 struct SpMatchCenter: View {
     /// صبغة بطولة المباراة — تصبغ المركز كاملًا بلونها في نمط «ألوان VARA».
     private var acc: Color { SpTheme.compAccent((detail?.fixture ?? preview)?.competitionSlug) }
@@ -78,12 +101,18 @@ struct SpMatchCenter: View {
     @State private var expectedLineup: SpExpectedLineups?
     // قوّة الفريقين من ترتيب البطولة — تغذّي «توقّع VARA» الديناميكي (أفضل جهد).
     @State private var strength: [Int: VaraTeamStrength] = [:]
+    // إثراء «تقديم» (المرحلة 2) — رؤية VARA + القنوات + هدّافو الفريقين (أفضل جهد).
+    @State private var previewNote: SpMatchPreview?
+    @State private var tv: SpMatchTv?
+    @State private var homeScorers: [SpScorer] = []
+    @State private var awayScorers: [SpScorer] = []
     @State private var recordedMatchView = false
 
     private enum Segment: String, CaseIterable {
-        case events, commentary, analysis, ratings, lineups, stats, h2h
+        case preview, events, commentary, analysis, ratings, lineups, stats, h2h
         var label: String {
             switch self {
+            case .preview: return "تقديم"
             case .events: return "الأحداث"
             case .commentary: return "التعليق"
             case .analysis: return "التحليل"
@@ -181,6 +210,8 @@ struct SpMatchCenter: View {
     private var segments: [Segment] {
         guard let d = detail else { return [] }
         var s: [Segment] = []
+        // «تقديم» يتصدّر تبويبات المباراة القادمة (قبل الانطلاق).
+        if let f = fixture, !f.started { s.append(.preview) }
         if !d.events.isEmpty { s.append(.events) }
         if hasCommentary { s.append(.commentary) }
         if hasAnalysis { s.append(.analysis) }
@@ -507,7 +538,16 @@ struct SpMatchCenter: View {
     }
 
     /// جلب حكم المباراة — أفضل جهد (لا يعطّل المركز إن غابت النقطة/الحكم).
+    /// نجرّب نقطة الدوري/الخليج الموحّدة أولًا (تغطّي روشن وغيرها)، ثم المونديال.
     private func loadReferee() async {
+        if let r = try? await APIClient.shared.get(
+            SpMatchReferee.self,
+            path: "/sports/match/\(fixtureId)/referee",
+            apiRoot: URLConstants.publicAPI
+        ), r.available {
+            referee = r
+            return
+        }
         referee = try? await APIClient.shared.get(
             SpMatchReferee.self,
             path: "/world-cup/match/\(fixtureId)/referee",
@@ -527,8 +567,8 @@ struct SpMatchCenter: View {
             neutralVenue: neutral, h2h: tuple)
     }
 
-    // بطاقتا توقّع VARA (النموذج + نتيجة التوقّعات) غير معروضتين بقرار المالك
-    // 2026-07-04 — لا تبويب توقّعات في التطبيق (الويب وحده). تُعادان عند إضافته.
+    // بطاقة «توقّع VARA» (من سيربح؟) — أُعيد تفعيلها ضمن تبويب «تقديم» للمباراة
+    // القادمة (قرار 2026-07-08). بطاقة verdict/predict العضو تبقى معطّلة.
     @ViewBuilder private var varaModelCard: some View {
         if let f = fixture, !f.started {
             let pick = varaPick(f)
@@ -594,6 +634,197 @@ struct SpMatchCenter: View {
                 .lineLimit(1).minimumScaleFactor(0.7).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - تبويب «تقديم» (المباراة القادمة) — يجمع رؤية VARA + التوقّع + الفورمة
+    // + المواجهات + هدّافي الفريقين + الأجواء (طقس/قنوات/حكم) في مكان واحد هادئ.
+    // كل بطاقة تدير هامشها الأفقي بنفسها (16) كبقية التبويبات.
+
+    @ViewBuilder private var previewView: some View {
+        if let f = fixture {
+            VStack(spacing: 16) {
+                varaVisionCard
+                varaModelCard
+                formCompareCard(f)
+                if let s = h2h?.summary, s.total > 0 {
+                    h2hSummaryCard(s, home: f.home, away: f.away)
+                        .padding(.horizontal, 16)
+                }
+                starVsStarCard
+                broadcastInfoCard(f)
+                refereeCard
+            }
+        }
+    }
+
+    // حارس المراهنات — نص «تقديم» من الخادم قد يتضمّن مصطلحات مراهنة (من توصية
+    // المزوّد). نشطب أي جملة تذكرها (حساسية أبل + غير لائق للسوق). إن أفرغت النص
+    // كلّه، تختفي البطاقة (توقّع VARA النظيف يكفي).
+    private func sanitizeVision(_ text: String) -> String {
+        let banned = ["رهان", "مراهن", "الرهان", "الرهانات", "bet", "odds", "توصية المزوّد"]
+        let kept = text.components(separatedBy: CharacterSet(charactersIn: ".\n"))
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { s in
+                guard !s.isEmpty else { return false }
+                let low = s.lowercased()
+                return !banned.contains { low.contains($0) }
+            }
+        let joined = kept.joined(separator: ". ")
+        return joined.isEmpty ? "" : joined + "."
+    }
+
+    // رؤية VARA — الجملة الذكية الافتتاحية (نص الخادم العربي، مُنقّى من المراهنات).
+    @ViewBuilder private var varaVisionCard: some View {
+        if let raw = previewNote?.text, case let text = sanitizeVision(raw), !text.isEmpty {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 8) {
+                    Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.gold)
+                    Text("رؤية VARA").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                    Spacer(minLength: 0)
+                }
+                Text(text)
+                    .font(SportsFonts.app(size: 13.5)).foregroundStyle(SpTheme.onDarkDim)
+                    .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.gold.opacity(0.06))
+                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.gold.opacity(0.28), lineWidth: 1))
+            )
+            .padding(.horizontal, 16)
+        }
+    }
+
+    // الفورمة الأخيرة — آخر 5 نتائج لكل فريق من سلسلة form في الترتيب (W/D/L).
+    @ViewBuilder private func formCompareCard(_ f: SpFixture) -> some View {
+        let homeForm = strength[f.home.id]?.form
+        let awayForm = strength[f.away.id]?.form
+        if (homeForm?.isEmpty == false) || (awayForm?.isEmpty == false) {
+            VStack(spacing: 12) {
+                sectionTitle("الفورمة الأخيرة", icon: "chart.line.uptrend.xyaxis")
+                formRow(f.home, homeForm)
+                divider
+                formRow(f.away, awayForm)
+            }
+            .padding(16).background(analysisCardBg).padding(.horizontal, 16)
+        }
+    }
+
+    private func formRow(_ team: SpTeam, _ form: String?) -> some View {
+        HStack(spacing: 10) {
+            SpTeamLogo(logo: team.logo, size: 26)
+            Text(team.name)
+                .font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark)
+                .lineLimit(1).minimumScaleFactor(0.8)
+            Spacer(minLength: 8)
+            HStack(spacing: 4) {
+                if let form, !form.isEmpty {
+                    ForEach(Array(form.suffix(5).enumerated()), id: \.offset) { _, ch in formChip(ch) }
+                } else {
+                    Text("—").font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
+                }
+            }
+            .environment(\.layoutDirection, .leftToRight)
+        }
+    }
+
+    private func formChip(_ c: Character) -> some View {
+        let up = Character(c.uppercased())
+        let (t, col): (String, Color) = up == "W" ? ("ف", SpTheme.green)
+            : up == "D" ? ("ت", SpTheme.onDarkDim)
+            : up == "L" ? ("خ", SpTheme.crimson)
+            : ("•", SpTheme.onDarkFaint)
+        return Text(t)
+            .font(SportsFonts.app(size: 10, weight: .heavy)).foregroundStyle(.white)
+            .frame(width: 20, height: 20).background(Circle().fill(col))
+    }
+
+    // نجما الفريقين — هدّاف كل فريق ومقارنته (أهداف/صناعة الموسم).
+    @ViewBuilder private var starVsStarCard: some View {
+        if let f = fixture, (homeScorers.first != nil || awayScorers.first != nil) {
+            let hs = homeScorers.first
+            let av = awayScorers.first
+            VStack(spacing: 12) {
+                sectionTitle("هدّافو الفريقين", icon: "star.circle.fill")
+                HStack(alignment: .top, spacing: 8) {
+                    scorerHead(hs, f.home)
+                    scorerHead(av, f.away)
+                }
+                if let hs, let av {
+                    divider
+                    compareRow("أهداف الموسم", home: Double(hs.goals), away: Double(av.goals), fmt: "%.0f")
+                    if hs.assists + av.assists > 0 {
+                        compareRow("صناعة", home: Double(hs.assists), away: Double(av.assists), fmt: "%.0f")
+                    }
+                }
+            }
+            .padding(16).background(analysisCardBg).padding(.horizontal, 16)
+        }
+    }
+
+    private func scorerHead(_ s: SpScorer?, _ team: SpTeam) -> some View {
+        VStack(spacing: 6) {
+            playerPhoto(s?.photo ?? "", size: 46)
+            Text(s?.name ?? "—")
+                .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                .lineLimit(1).minimumScaleFactor(0.75).multilineTextAlignment(.center)
+            Text(team.name)
+                .font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+                .lineLimit(1).minimumScaleFactor(0.75)
+            if let g = s?.goals {
+                Text("\(g) ⚽")
+                    .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(acc)
+                    .environment(\.layoutDirection, .leftToRight)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // أجواء المباراة — الطقس + القنوات الناقلة (الحكم في بطاقته المستقلّة أسفلها).
+    @ViewBuilder private func broadcastInfoCard(_ f: SpFixture) -> some View {
+        let weatherText = weatherLine()
+        let channels = (tv?.channels ?? []).map(\.name).filter { !$0.isEmpty }
+        if weatherText != nil || !channels.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionTitle("أجواء المباراة", icon: "cloud.sun.fill")
+                if let weatherText {
+                    HStack(spacing: 10) {
+                        Image(systemName: "thermometer.medium").font(.system(size: 14, weight: .semibold)).foregroundStyle(acc).frame(width: 22)
+                        Text("الطقس").font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim)
+                        Spacer(minLength: 8)
+                        Text(weatherText).font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                    }
+                }
+                if !channels.isEmpty {
+                    if weatherText != nil { divider }
+                    HStack(spacing: 8) {
+                        Image(systemName: "tv.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(acc).frame(width: 22)
+                        Text("القنوات الناقلة").font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim)
+                        Spacer(minLength: 0)
+                    }
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(Array(channels.prefix(12).enumerated()), id: \.offset) { _, ch in
+                                Text(ch)
+                                    .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                                    .lineLimit(1).padding(.horizontal, 9).padding(.vertical, 5)
+                                    .background(Capsule().fill(SpTheme.chipFill))
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading).background(analysisCardBg).padding(.horizontal, 16)
+        }
+    }
+
+    private func weatherLine() -> String? {
+        guard let w = facts?.weather else { return nil }
+        let parts = [w.temp.map { "\($0)°" }, w.description, w.humidity.map { "رطوبة \($0)" }]
+            .compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     // MARK: - التوقّع (مُعطّل مؤقتًا — النظام غير مكتمل؛ يُعاد تفعيله لاحقًا)
@@ -694,6 +925,7 @@ struct SpMatchCenter: View {
                 if segments.count > 1 { tabBar }
 
                 switch effectiveSegment {
+                case .preview: previewView
                 case .events: eventsView(d)
                 case .commentary: commentaryView
                 case .analysis: analysisView
@@ -1884,6 +2116,21 @@ struct SpMatchCenter: View {
         // المواجهات المباشرة — تحتاج معرّفَي الفريقين.
         if let f = preview ?? detail?.fixture {
             self.h2h = try? await APIClient.shared.fetchH2H(home: f.home.id, away: f.away.id)
+        }
+        // إثراء «تقديم» — للمباريات القادمة فقط (رؤية VARA + القنوات + هدّافو الفريقين).
+        if let f = preview ?? detail?.fixture, !f.started {
+            async let previewOpt = (try? APIClient.shared.get(
+                SpMatchPreview.self, path: "/sports/match/\(fixtureId)/preview", apiRoot: URLConstants.publicAPI))
+            async let tvOpt = (try? APIClient.shared.get(
+                SpMatchTv.self, path: "/sports/match/\(fixtureId)/tv", apiRoot: URLConstants.publicAPI))
+            async let homeScOpt = (try? APIClient.shared.get(
+                SpTeamScorersResponse.self, path: "/sports/team/\(f.home.id)/scorers", apiRoot: URLConstants.publicAPI))
+            async let awayScOpt = (try? APIClient.shared.get(
+                SpTeamScorersResponse.self, path: "/sports/team/\(f.away.id)/scorers", apiRoot: URLConstants.publicAPI))
+            self.previewNote = await previewOpt
+            self.tv = await tvOpt
+            self.homeScorers = (await homeScOpt)?.scorers ?? []
+            self.awayScorers = (await awayScOpt)?.scorers ?? []
         }
         // قوّة الفريقين من ترتيب البطولة (لتوقّع VARA) — أفضل جهد، يتراجع للمواجهات.
         if let slug = (detail?.fixture.competitionSlug ?? preview?.competitionSlug), !slug.isEmpty {
