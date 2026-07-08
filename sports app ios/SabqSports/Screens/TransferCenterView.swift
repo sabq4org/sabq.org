@@ -38,7 +38,7 @@ struct TcProbabilityMeter: View {
             }
             .environment(\.layoutDirection, .leftToRight)
             if showLabel {
-                Text(probability.label)
+                Text(L(probability.label))
                     .font(SportsFonts.app(size: 11, weight: .bold))
                     .foregroundStyle(color)
             }
@@ -82,7 +82,7 @@ struct TcCertaintyTag: View {
         HStack(spacing: 3) {
             Image(systemName: confirmed ? "checkmark.seal.fill" : "circle.dashed")
                 .font(.system(size: 9, weight: .bold))
-            Text(confirmed ? "مؤكّدة" : "إشاعة")
+            Text(confirmed ? L("مؤكّدة") : L("إشاعة"))
                 .font(SportsFonts.app(size: 10, weight: .heavy))
         }
         // نص + أيقونة بلا كبسولة — الحالة لمسة (أخضر مؤكّد / رمادي إشاعة).
@@ -209,9 +209,9 @@ struct TcConfirmedRow: View {
             VStack(alignment: .trailing, spacing: 4) {
                 TcCertaintyTag(confirmed: true)
                 if item.kind == .loan {
-                    Text("إعارة").font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.teal)
+                    Text(L("إعارة")).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.teal)
                 } else if item.kind == .free {
-                    Text("انتقال حر").font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.dyn(Color(red: 0.05, green: 0.55, blue: 0.35), Color(red: 0.30, green: 0.80, blue: 0.55)))
+                    Text(L("انتقال حر")).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.dyn(Color(red: 0.05, green: 0.55, blue: 0.35), Color(red: 0.30, green: 0.80, blue: 0.55)))
                 }
                 TcMoneyPill(amount: item.amount, currency: item.currency)
             }
@@ -320,7 +320,7 @@ struct TcFeaturedStoryCard: View {
                                   ring: SpTheme.cardStroke, placeholderFg: SpTheme.onDarkFaint, placeholderBg: SpTheme.chipFill)
                     VStack(alignment: .leading, spacing: 5) {
                         HStack(spacing: 7) {
-                            Text("القصة الأبرز")
+                            Text(L("القصة الأبرز"))
                                 .font(SportsFonts.app(size: 11, weight: .heavy))
                                 .foregroundStyle(SpTheme.green)
                             Text("#\(rank)")
@@ -354,10 +354,10 @@ struct TcFeaturedStoryCard: View {
 
                 HStack(alignment: .bottom) {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text("القيمة المتداولة")
+                        Text(L("القيمة المتداولة"))
                             .font(SportsFonts.app(size: 10.5, weight: .semibold))
                             .foregroundStyle(SpTheme.onDarkFaint)
-                        Text(TcMoney.format(rumour.amount, currency: rumour.currency) ?? "غير معلنة")
+                        Text(TcMoney.format(rumour.amount, currency: rumour.currency) ?? L("غير معلنة"))
                             .font(SportsFonts.app(size: 23, weight: .heavy))
                             .foregroundStyle(SpTheme.onDark)
                     }
@@ -438,21 +438,21 @@ struct TcWindowCountdown: View {
     private func remaining(_ target: Date) -> String {
         let secs = max(0, Int(target.timeIntervalSince(now)))
         let days = secs / 86_400, hours = (secs % 86_400) / 3_600
-        if days > 0 { return "\(days) يومًا و\(hours) ساعة" }
+        if days > 0 { return Lf("%d يومًا و%d ساعة", days, hours) }
         let mins = (secs % 3_600) / 60
-        return "\(hours) ساعة و\(mins) دقيقة"
+        return Lf("%d ساعة و%d دقيقة", hours, mins)
     }
 
     var body: some View {
         let opens = Self.iso.date(from: window.opensAt) ?? Date()
         let closes = Self.iso.date(from: window.closesAt) ?? Date()
         let (status, pct): (String, Double) = {
-            if now < opens { return ("تفتح بعد \(remaining(opens))", 0) }
+            if now < opens { return (Lf("تفتح بعد %@", remaining(opens)), 0) }
             if now < closes {
                 let p = closes.timeIntervalSince(opens) > 0 ? (now.timeIntervalSince(opens) / closes.timeIntervalSince(opens)) : 0
-                return ("تُغلق بعد \(remaining(closes))", min(1, max(0, p)))
+                return (Lf("تُغلق بعد %@", remaining(closes)), min(1, max(0, p)))
             }
-            return ("أُغلقت النافذة", 1)
+            return (L("أُغلقت النافذة"), 1)
         }()
 
         return VStack(alignment: .leading, spacing: 7) {
@@ -492,7 +492,7 @@ struct TcComparisonCard: View {
                 HStack(spacing: 5) {
                     Text(TcMoney.format(side.total, currency: "EUR") ?? "0 €")
                         .font(SportsFonts.app(size: 12, weight: .heavy)).foregroundStyle(SpTheme.onDark)
-                    Text("· \(side.deals) \(rumoured ? "إشاعة" : "صفقة")")
+                    Text(Lf("· %d %@", side.deals, rumoured ? L("إشاعة") : L("صفقة")))
                         .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
                 }
             }
@@ -512,15 +512,15 @@ struct TcComparisonCard: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 7) {
                 Image(systemName: "chart.bar.fill").font(.system(size: 14)).foregroundStyle(SpTheme.onDark)
-                Text(rumoured ? "قيم الميركاتو المتداولة: روشن مقابل البريميرليغ" : "إنفاق الميركاتو: روشن مقابل البريميرليغ")
+                Text(rumoured ? L("قيم الميركاتو المتداولة: روشن مقابل البريميرليغ") : L("إنفاق الميركاتو: روشن مقابل البريميرليغ"))
                     .font(SportsFonts.app(size: 14, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                 if rumoured { TcCertaintyTag(confirmed: false) }
             }
-            bar(label: "🇸🇦 دوري روشن السعودي", side: comparison.roshn, color: SpTheme.green, maxTotal: maxTotal)
-            bar(label: "🏴 البريميرليغ", side: comparison.premierLeague, color: SpTheme.dyn(Color(red: 0.42, green: 0.33, blue: 0.62), Color(red: 0.68, green: 0.58, blue: 0.87)), maxTotal: maxTotal)
+            bar(label: L("🇸🇦 دوري روشن السعودي"), side: comparison.roshn, color: SpTheme.green, maxTotal: maxTotal)
+            bar(label: L("🏴 البريميرليغ"), side: comparison.premierLeague, color: SpTheme.dyn(Color(red: 0.42, green: 0.33, blue: 0.62), Color(red: 0.68, green: 0.58, blue: 0.87)), maxTotal: maxTotal)
             Text(rumoured
-                 ? "قيم متداولة في إشاعات المصادر منذ مطلع يونيو — تتحوّل إلى الصفقات الرسمية فور توفّر سجل النافذة."
-                 : "الصفقات المُعلَنة المبالغ فقط منذ مطلع يونيو.")
+                 ? L("قيم متداولة في إشاعات المصادر منذ مطلع يونيو — تتحوّل إلى الصفقات الرسمية فور توفّر سجل النافذة.")
+                 : L("الصفقات المُعلَنة المبالغ فقط منذ مطلع يونيو."))
                 .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
         }
         .padding(15)
@@ -537,7 +537,7 @@ struct TcClubBalanceCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
                 Image(systemName: "arrow.left.arrow.right.circle.fill").font(.system(size: 14)).foregroundStyle(SpTheme.onDark)
-                Text("ميزان السوق — أندية روشن هذا الميركاتو")
+                Text(L("ميزان السوق — أندية روشن هذا الميركاتو"))
                     .font(SportsFonts.app(size: 14, weight: .heavy)).foregroundStyle(SpTheme.onDark)
             }
             ForEach(rows) { r in
@@ -554,8 +554,8 @@ struct TcClubBalanceCard: View {
                 }
             }
             HStack(spacing: 14) {
-                legend(color: SpTheme.crimson, text: "صرف")
-                legend(color: SpTheme.dyn(Color(red: 0.05, green: 0.55, blue: 0.35), Color(red: 0.30, green: 0.80, blue: 0.55)), text: "دخل")
+                legend(color: SpTheme.crimson, text: L("صرف"))
+                legend(color: SpTheme.dyn(Color(red: 0.05, green: 0.55, blue: 0.35), Color(red: 0.30, green: 0.80, blue: 0.55)), text: L("دخل"))
             }
         }
         .padding(15)
@@ -625,7 +625,7 @@ struct TransferCenterView: View {
             .padding(.vertical, 14)
         }
         .background(SpAmbientBackground())
-        .navigationTitle("مركز الانتقالات")
+        .navigationTitle(L("مركز الانتقالات"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(item: $selectedStory) { box in
             TransferStoryView(playerId: box.id)
@@ -642,10 +642,10 @@ struct TransferCenterView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("نبض سوق الانتقالات")
+                    Text(L("نبض سوق الانتقالات"))
                         .font(SportsFonts.app(size: 22, weight: .heavy))
                         .foregroundStyle(SpTheme.onDark)
-                    Text("الصفقات المؤكدة والإشاعات مرتبة حسب الحالة والمصدر.")
+                    Text(L("الصفقات المؤكدة والإشاعات مرتبة حسب الحالة والمصدر."))
                         .font(SportsFonts.app(size: 12.5, weight: .semibold))
                         .foregroundStyle(SpTheme.onDarkDim)
                         .fixedSize(horizontal: false, vertical: true)
@@ -659,15 +659,15 @@ struct TransferCenterView: View {
             HStack(spacing: 8) {
                 TcMarketMetric(icon: "checkmark.seal.fill",
                                value: "\(saudiConfirmed.count)",
-                               label: "مؤكدة",
+                               label: L("مؤكدة"),
                                tint: SpTheme.green)
                 TcMarketMetric(icon: "sparkles",
                                value: "\(rumours.count)",
-                               label: "إشاعات",
+                               label: L("إشاعات"),
                                tint: SpTheme.teal)
                 TcMarketMetric(icon: "flame.fill",
                                value: "\(overview?.hero?.count ?? 0)",
-                               label: "بارزة",
+                               label: L("بارزة"),
                                tint: SpTheme.crimson)
             }
 
@@ -684,7 +684,7 @@ struct TransferCenterView: View {
 
     private func heroStrip(_ hero: [TcRumour]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle(icon: "flame.fill", "القصص الأبرز")
+            sectionTitle(icon: "flame.fill", L("القصص الأبرز"))
             if let first = hero.first {
                 TcFeaturedStoryCard(rumour: first, rank: 1) {
                     selectedStory = IDBox(id: first.player.id)
@@ -718,7 +718,7 @@ struct TransferCenterView: View {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(SpTheme.green)
-                Text("تصفية السوق")
+                Text(L("تصفية السوق"))
                     .font(SportsFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
@@ -771,7 +771,7 @@ struct TransferCenterView: View {
             HStack(spacing: 8) {
                 ForEach(Tab.allCases, id: \.self) { t in
                     Button { tab = t } label: {
-                        Text(t.rawValue)
+                        Text(L(t.rawValue))
                             .font(SportsFonts.app(size: 13, weight: .bold))
                             .foregroundStyle(tab == t ? .white : SpTheme.onDarkDim)
                             .padding(.horizontal, 14).padding(.vertical, 8)
@@ -789,18 +789,18 @@ struct TransferCenterView: View {
         if showRumours {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    probChip("كل الدرجات", .all)
-                    probChip("وشيكة", .level(.imminent))
-                    probChip("قوية", .level(.high))
-                    probChip("متوسطة", .level(.medium))
-                    probChip("ضعيفة", .level(.low))
+                    probChip(L("كل الدرجات"), .all)
+                    probChip(L("وشيكة"), .level(.imminent))
+                    probChip(L("قوية"), .level(.high))
+                    probChip(L("متوسطة"), .level(.medium))
+                    probChip(L("ضعيفة"), .level(.low))
                 }
                 .padding(.horizontal, 1)
             }
         } else if showGlobalConfirmed {
             HStack(spacing: 8) {
-                majorChip("أبرز الأندية", true)
-                majorChip("كل الانتقالات", false)
+                majorChip(L("أبرز الأندية"), true)
+                majorChip(L("كل الانتقالات"), false)
                 Spacer(minLength: 0)
             }
         }
@@ -849,11 +849,11 @@ struct TransferCenterView: View {
         }
         return Group {
             if items.isEmpty {
-                SpEmptyState(icon: "arrow.left.arrow.right", title: "لا صفقات مؤكّدة",
-                             subtitle: "لا حركة انتقالات مؤكّدة في النافذة الحالية.")
+                SpEmptyState(icon: "arrow.left.arrow.right", title: L("لا صفقات مؤكّدة"),
+                             subtitle: L("لا حركة انتقالات مؤكّدة في النافذة الحالية."))
             } else {
                 VStack(spacing: 9) {
-                    listCount(items.count, "صفقة مؤكّدة")
+                    listCount(items.count, L("صفقة مؤكّدة"))
                     ForEach(items) { t in saudiRow(t) }
                 }
                 .padding(.horizontal, 16)
@@ -923,11 +923,11 @@ struct TransferCenterView: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     TcCertaintyTag(confirmed: true)
                     if item.kind == .loan {
-                        Text("إعارة")
+                        Text(L("إعارة"))
                             .font(SportsFonts.app(size: 11, weight: .bold))
                             .foregroundStyle(SpTheme.teal)
                     } else if item.kind == .free {
-                        Text("انتقال حر")
+                        Text(L("انتقال حر"))
                             .font(SportsFonts.app(size: 11, weight: .bold))
                             .foregroundStyle(SpTheme.green)
                     } else {
@@ -978,11 +978,11 @@ struct TransferCenterView: View {
             if !loadedGlobal {
                 SpLoading().padding(.top, 30)
             } else if items.isEmpty {
-                SpEmptyState(icon: "globe", title: "لا نتائج",
-                             subtitle: "جرّب «كل الانتقالات».")
+                SpEmptyState(icon: "globe", title: L("لا نتائج"),
+                             subtitle: L("جرّب «كل الانتقالات»."))
             } else {
                 VStack(spacing: 9) {
-                    listCount(items.count, "انتقالًا")
+                    listCount(items.count, L("انتقالًا"))
                     ForEach(items.prefix(60)) { globalRow($0) }
                 }
                 .padding(.horizontal, 16)
@@ -995,13 +995,13 @@ struct TransferCenterView: View {
         let items = filteredRumours
         return Group {
             if items.isEmpty {
-                SpEmptyState(icon: "sparkles", title: "لا إشاعات مطابقة",
+                SpEmptyState(icon: "sparkles", title: L("لا إشاعات مطابقة"),
                              subtitle: scope == .saudi
-                                ? "تغطية المصادر العالمية للدوري السعودي تتحرّك مع اشتعال السوق."
-                                : "جرّب تغيير الفلاتر.")
+                                ? L("تغطية المصادر العالمية للدوري السعودي تتحرّك مع اشتعال السوق.")
+                                : L("جرّب تغيير الفلاتر."))
             } else {
                 VStack(spacing: 11) {
-                    listCount(items.count, "إشاعة — كل إشاعة بمصدرها ودرجة احتمالها")
+                    listCount(items.count, L("إشاعة — كل إشاعة بمصدرها ودرجة احتمالها"))
                     ForEach(items.prefix(60)) { r in
                         TcRumourCard(rumour: r) { selectedStory = IDBox(id: r.player.id) }
                     }
@@ -1023,7 +1023,7 @@ struct TransferCenterView: View {
     }
 
     private var disclaimer: some View {
-        Text("الصفقات المؤكّدة من سجل API-Football، والإشاعات من رصد SportMonks لمصادر عالمية (فابريزيو رومانو، الغارديان، ESPN…) وتبقى إشاعةً حتى إعلانها رسميًّا. مؤشر الموثوقية تصنيف تحريري من سبق، ولا نعرض مبلغًا لم يُعلَن.")
+        Text(L("الصفقات المؤكّدة من سجل API-Football، والإشاعات من رصد SportMonks لمصادر عالمية (فابريزيو رومانو، الغارديان، ESPN…) وتبقى إشاعةً حتى إعلانها رسميًّا. مؤشر الموثوقية تصنيف تحريري من سبق، ولا نعرض مبلغًا لم يُعلَن."))
             .font(SportsFonts.app(size: 10.5))
             .foregroundStyle(SpTheme.onDarkFaint)
             .lineSpacing(3)
@@ -1034,8 +1034,8 @@ struct TransferCenterView: View {
 
     private func scopeTitle(_ s: Scope) -> String {
         switch s {
-        case .saudi: return "سعودية"
-        case .global: return "عالمية"
+        case .saudi: return L("سعودية")
+        case .global: return L("عالمية")
         }
     }
 
@@ -1071,16 +1071,16 @@ struct TransferCenterView: View {
 
     private var activeListCaption: String {
         if showSaudiConfirmed {
-            return "\(saudiConfirmed.count) صفقة"
+            return Lf("%d صفقة", saudiConfirmed.count)
         }
         if showGlobalConfirmed {
             let count = globalConfirmed
                 .filter { !$0.saudi }
                 .filter { majorsOnly ? $0.major : true }
                 .count
-            return loadedGlobal ? "\(count) انتقال" : "تحميل"
+            return loadedGlobal ? Lf("%d انتقال", count) : L("تحميل")
         }
-        return "\(filteredRumours.count) إشاعة"
+        return Lf("%d إشاعة", filteredRumours.count)
     }
 
     private var filteredRumours: [TcRumour] {
@@ -1104,7 +1104,7 @@ struct TransferCenterView: View {
     }
 
     private func listCount(_ n: Int, _ suffix: String) -> some View {
-        Text("\(n) \(suffix)")
+        Text(Lf("%d %@", n, suffix))
             .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -1162,8 +1162,8 @@ struct TransferStoryView: View {
                 if loading && story == nil {
                     SpLoading().padding(.top, 40)
                 } else if story?.found != true || player == nil || latest == nil {
-                    SpEmptyState(icon: "circle.dashed", title: "لا قصة موثّقة",
-                                 subtitle: "لا توجد قصة انتقال موثّقة لهذا اللاعب حاليًا.")
+                    SpEmptyState(icon: "circle.dashed", title: L("لا قصة موثّقة"),
+                                 subtitle: L("لا توجد قصة انتقال موثّقة لهذا اللاعب حاليًا."))
                         .padding(.top, 30)
                 } else {
                     profileHeader(player!)
@@ -1177,7 +1177,7 @@ struct TransferStoryView: View {
             .padding(.horizontal, 16)
         }
         .background(SpAmbientBackground())
-        .navigationTitle("قصة الانتقال")
+        .navigationTitle(L("قصة الانتقال"))
         .navigationBarTitleDisplayMode(.inline)
         .sheet(item: $readerLink) { link in SpSafariView(url: link.url).ignoresSafeArea() }
         .task { await load() }
@@ -1192,11 +1192,11 @@ struct TransferStoryView: View {
                 Text(p.name).font(SportsFonts.app(size: 22, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(2)
                 HStack(spacing: 10) {
                     if let pos = p.position { Text(pos).font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim) }
-                    if let age = p.age { Text("\(age) عامًا").font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim) }
+                    if let age = p.age { Text(Lf("%d عامًا", age)).font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim) }
                 }
                 HStack(spacing: 4) {
                     Image(systemName: "circle.dashed").font(.system(size: 10, weight: .bold))
-                    Text("قصة إشاعات — لم تتأكّد بعد").font(SportsFonts.app(size: 11, weight: .bold))
+                    Text(L("قصة إشاعات — لم تتأكّد بعد")).font(SportsFonts.app(size: 11, weight: .bold))
                 }
                 .foregroundStyle(SpTheme.dyn(Color(red: 0.66, green: 0.20, blue: 0.55), Color(red: 0.90, green: 0.52, blue: 0.80)))
             }
@@ -1228,7 +1228,7 @@ struct TransferStoryView: View {
                 TcProbabilityMeter(probability: r.probability)
                 TcSourceBadge(source: r.source)
                 Spacer(minLength: 0)
-                Text("آخر تحديث: \(TcDate.medium(r.date))").font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(Lf("آخر تحديث: %@", TcDate.medium(r.date))).font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
             }
         }
         .padding(16)
@@ -1257,7 +1257,7 @@ struct TransferStoryView: View {
     private func kindBadge(_ kind: TcRumourKind) -> some View {
         HStack(spacing: 3) {
             Image(systemName: kind.icon).font(.system(size: 9, weight: .bold))
-            Text(kind.label).font(SportsFonts.app(size: 10, weight: .bold))
+            Text(L(kind.label)).font(SportsFonts.app(size: 10, weight: .bold))
         }
         .foregroundStyle(SpTheme.onDarkDim)
         .padding(.horizontal, 8).padding(.vertical, 3)
@@ -1267,8 +1267,8 @@ struct TransferStoryView: View {
     // الخط الزمني
     private var timelineCard: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("تسلسل القصة").font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark)
-            Text("\(timeline.count) تطوّرًا — تصاعديًّا مع درجة احتمال كل مرحلة ومصدرها")
+            Text(L("تسلسل القصة")).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark)
+            Text(Lf("%d تطوّرًا — تصاعديًّا مع درجة احتمال كل مرحلة ومصدرها", timeline.count))
                 .font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkFaint)
                 .padding(.bottom, 8)
             VStack(alignment: .leading, spacing: 0) {
@@ -1302,7 +1302,7 @@ struct TransferStoryView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     Text(TcDate.medium(r.date)).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
-                    Text(r.probability.label).font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(dotColor(r.probability))
+                    Text(L(r.probability.label)).font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(dotColor(r.probability))
                     if r.hereWeGo { TcHereWeGoBadge() }
                 }
                 HStack(spacing: 6) {
@@ -1333,7 +1333,7 @@ struct TransferStoryView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 7) {
                 Image(systemName: "newspaper.fill").font(.system(size: 14)).foregroundStyle(SpTheme.onDark)
-                Text("أخبار ذات صلة").font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark)
+                Text(L("أخبار ذات صلة")).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark)
             }
             ForEach(related) { a in
                 Button { openArticle(a) } label: {
@@ -1365,7 +1365,7 @@ struct TransferStoryView: View {
     }
 
     private var storyDisclaimer: some View {
-        Text("درجة الاحتمال والمبلغ المتداول من المصدر المذكور في كل مرحلة (رصد SportMonks)، ومؤشر الموثوقية تصنيف تحريري من سبق. تبقى القصة إشاعةً حتى إعلانها رسميًّا من الناديين.")
+        Text(L("درجة الاحتمال والمبلغ المتداول من المصدر المذكور في كل مرحلة (رصد SportMonks)، ومؤشر الموثوقية تصنيف تحريري من سبق. تبقى القصة إشاعةً حتى إعلانها رسميًّا من الناديين."))
             .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint).lineSpacing(3)
             .padding(.top, 4)
     }

@@ -46,6 +46,7 @@ private struct SpAppEnvironmentRoot: View {
     @State private var accent = SpAccentTheme.shared
     @State private var liveStream = SpLiveStream.shared
     @State private var router = SpAppRouter.shared
+    @State private var language = SpLanguage.shared
 
     var body: some View {
         RootTabView()
@@ -59,10 +60,11 @@ private struct SpAppEnvironmentRoot: View {
             .environment(accent)
             .environment(liveStream)
             .environment(router)
-            // إعادة بناء الشجرة عند تبديل لون التطبيق كي تلتقط
+            .environment(language)
+            // إعادة بناء الشجرة عند تبديل لون التطبيق أو اللغة كي تلتقط
             // كل الشاشات القيم الجديدة فورًا (تُقرأ من الحوامل العامة أثناء الرسم).
-            .id("\(accent.paletteId)|\(accent.styleId)")
-            .sportsRTL()
+            .id("\(accent.paletteId)|\(accent.styleId)|\(language.lang.rawValue)")
+            .sportsRTL(language.lang)
             .preferredColorScheme(themeMode.colorScheme)
             .task {
                 await Task.yield()

@@ -29,35 +29,35 @@ struct RootTabView: View {
             SpLazyTab(active: router.selectedTab == .matches) {
                 MatchesCenterView()
             }
-                .tabItem { Label("المباريات", systemImage: "soccerball") }
+                .tabItem { Label(L("المباريات"), systemImage: "soccerball") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.matches)
 
             SpLazyTab(active: router.selectedTab == .roshn) {
                 HomeView()
             }
-                .tabItem { Label("روشن", systemImage: "trophy.fill") }
+                .tabItem { Label(L("روشن"), systemImage: "trophy.fill") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.roshn)
 
             SpLazyTab(active: router.selectedTab == .competitions) {
                 CompetitionsView()
             }
-                .tabItem { Label("البطولات", systemImage: "sportscourt.fill") }
+                .tabItem { Label(L("البطولات"), systemImage: "sportscourt.fill") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.competitions)
 
             SpLazyTab(active: router.selectedTab == .world) {
                 LiveView()
             }
-                .tabItem { Label("عالمية", systemImage: "globe") }
+                .tabItem { Label(L("عالمية"), systemImage: "globe") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.world)
 
             SpLazyTab(active: router.selectedTab == .account) {
                 AccountView()
             }
-                .tabItem { Label("حسابي", systemImage: "person.crop.circle") }
+                .tabItem { Label(L("حسابي"), systemImage: "person.crop.circle") }
                 .toolbar(tabBarVisibility, for: .tabBar)
                 .tag(SpTab.account)
         }
@@ -119,17 +119,19 @@ struct SpOnboardingView: View {
     let onFinish: () -> Void
     @State private var page = 0
 
-    private let pages: [SpOnboardPage] = [
-        SpOnboardPage(id: 1, icon: "soccerball.inverse",
-                      title: "كل المباريات في مكان واحد",
-                      subtitle: "جدول موحّد لكل البطولات، ومركز مباراة غنيّ بالأحداث والإحصائيات والتشكيلات والتقييمات."),
-        SpOnboardPage(id: 2, icon: "sparkles",
-                      title: "توقّع VARA الذكي",
-                      subtitle: "خوارزمية ديناميكية تحسب احتمالات النتيجة من الترتيب والفورمة وأفضلية الأرض — ونافس على لوحة المتصدّرين."),
-        SpOnboardPage(id: 3, icon: "bell.badge.fill",
-                      title: "تابع فريقك ولا تفوّت لحظة",
-                      subtitle: "تنبيهات فورية للأهداف والبطاقات وحالات الفار، وبطاقة «مبارياتي» بعدّاد تنازليّ حيّ."),
-    ]
+    private var pages: [SpOnboardPage] {
+        [
+            SpOnboardPage(id: 1, icon: "soccerball.inverse",
+                          title: L("كل المباريات في مكان واحد"),
+                          subtitle: L("جدول موحّد لكل البطولات، ومركز مباراة غنيّ بالأحداث والإحصائيات والتشكيلات والتقييمات.")),
+            SpOnboardPage(id: 2, icon: "sparkles",
+                          title: L("توقّع VARA الذكي"),
+                          subtitle: L("خوارزمية ديناميكية تحسب احتمالات النتيجة من الترتيب والفورمة وأفضلية الأرض — ونافس على لوحة المتصدّرين.")),
+            SpOnboardPage(id: 3, icon: "bell.badge.fill",
+                          title: L("تابع فريقك ولا تفوّت لحظة"),
+                          subtitle: L("تنبيهات فورية للأهداف والبطاقات وحالات الفار، وبطاقة «مبارياتي» بعدّاد تنازليّ حيّ.")),
+        ]
+    }
 
     private var isLast: Bool { page >= pages.count }
 
@@ -138,7 +140,7 @@ struct SpOnboardingView: View {
             SpAmbientBackground().ignoresSafeArea()
             VStack(spacing: 0) {
                 HStack {
-                    Button("تخطّي") { onFinish() }
+                    Button(L("تخطّي")) { onFinish() }
                         .font(SportsFonts.app(size: 13, weight: .bold))
                         .foregroundStyle(SpTheme.onDarkDim)
                     Spacer()
@@ -160,7 +162,7 @@ struct SpOnboardingView: View {
                     if isLast { onFinish() }
                     else { withAnimation(.easeInOut(duration: 0.3)) { page += 1 } }
                 } label: {
-                    Text(isLast ? "ابدأ الآن" : "التالي")
+                    Text(isLast ? L("ابدأ الآن") : L("التالي"))
                         .font(SportsFonts.app(size: 16, weight: .heavy))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity).frame(height: 52)
@@ -182,10 +184,10 @@ struct SpOnboardingView: View {
                 SpWordmark(size: 44)
             }
             VStack(spacing: 10) {
-                Text("مرحبًا بك في VARA")
+                Text(L("مرحبًا بك في VARA"))
                     .font(SportsFonts.headline(size: 26))
                     .foregroundStyle(SpTheme.onDark)
-                Text("دقّة الرياضة في راحة يدك — مباريات، بطولات، وتوقّعات ذكية في تطبيق واحد.")
+                Text(L("دقّة الرياضة في راحة يدك — مباريات، بطولات، وتوقّعات ذكية في تطبيق واحد."))
                     .font(SportsFonts.app(size: 15))
                     .foregroundStyle(SpTheme.onDarkDim)
                     .multilineTextAlignment(.center)
@@ -193,11 +195,11 @@ struct SpOnboardingView: View {
                     .padding(.horizontal, 34)
             }
             HStack(spacing: 7) {
-                Text("أحد منتجات")
+                Text(L("أحد منتجات"))
                     .font(SportsFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkFaint)
                 Rectangle().fill(SpTheme.outline).frame(width: 1, height: 12)
-                Text("صحيفة سبق")
+                Text(L("صحيفة سبق"))
                     .font(SportsFonts.app(size: 12, weight: .heavy))
                     .foregroundStyle(SpTheme.green)
             }

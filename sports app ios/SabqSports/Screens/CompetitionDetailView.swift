@@ -13,15 +13,15 @@ struct CompetitionDetailView: View {
         case overview, groups, standings, matches, bracket, scorers, assists, cards, transfers
         var label: String {
             switch self {
-            case .overview: return "نظرة"
-            case .groups: return "المجموعات"
-            case .standings: return "الترتيب"
-            case .bracket: return "الأدوار"
-            case .scorers: return "الهدّافون"
-            case .assists: return "الصنّاع"
-            case .cards: return "البطاقات"
-            case .matches: return "المباريات"
-            case .transfers: return "الانتقالات"
+            case .overview: return L("نظرة")
+            case .groups: return L("المجموعات")
+            case .standings: return L("الترتيب")
+            case .bracket: return L("الأدوار")
+            case .scorers: return L("الهدّافون")
+            case .assists: return L("الصنّاع")
+            case .cards: return L("البطاقات")
+            case .matches: return L("المباريات")
+            case .transfers: return L("الانتقالات")
             }
         }
     }
@@ -53,12 +53,12 @@ struct CompetitionDetailView: View {
     private var isWorldCup: Bool { comp.slug == "world-cup" }
     private var supportsTransfers: Bool { comp.slug == SportsConstants.defaultComp }
     private var competitionKindLabel: String {
-        comp.type == "cup" ? "كأس" : "دوري"
+        comp.type == "cup" ? L("كأس") : L("دوري")
     }
     private var competitionSummarySubtitle: String {
         comp.type == "cup"
-            ? "الأدوار والمواعيد من جدول البطولة"
-            : "الترتيب والمباريات من الاشتراكات المتاحة"
+            ? L("الأدوار والمواعيد من جدول البطولة")
+            : L("الترتيب والمباريات من الاشتراكات المتاحة")
     }
 
     private var hasWcBracket: Bool {
@@ -124,7 +124,7 @@ struct CompetitionDetailView: View {
                 if loading && !hasAnyData {
                     SpLoading().padding(.top, 20)
                 } else if let loadError, !hasAnyData {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                 } else {
                     tabBar
                     Group {
@@ -173,11 +173,11 @@ struct CompetitionDetailView: View {
                     statusBadge
                 }
                 if !standings.isEmpty {
-                    Label("\(standings.count) ناديًا", systemImage: "person.3.fill")
+                    Label(Lf("%d ناديًا", standings.count), systemImage: "person.3.fill")
                         .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
                         .labelStyle(.titleAndIcon)
                 } else if isWorldCup && !wcGroups.isEmpty {
-                    Label("\(wcGroups.reduce(0) { $0 + $1.rows.count }) منتخبًا", systemImage: "flag.fill")
+                    Label(Lf("%d منتخبًا", wcGroups.reduce(0) { $0 + $1.rows.count }), systemImage: "flag.fill")
                         .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
                         .labelStyle(.titleAndIcon)
                 }
@@ -216,9 +216,9 @@ struct CompetitionDetailView: View {
         // الحالة نص ملوّن هادئ بلا كبسولة — «منتهٍ» محايد لا ذهبي (ليس تميّزًا).
         let (text, color): (String, Color) = {
             switch comp.status {
-            case "finished": return ("منتهٍ", SpTheme.onDarkFaint)
-            case "ongoing": return ("جارٍ", SpTheme.green)
-            case "upcoming": return ("قادم", acc)
+            case "finished": return (L("منتهٍ"), SpTheme.onDarkFaint)
+            case "ongoing": return (L("جارٍ"), SpTheme.green)
+            case "upcoming": return (L("قادم"), acc)
             default: return ("", .clear)
             }
         }()
@@ -283,10 +283,10 @@ struct CompetitionDetailView: View {
         let finished = wcFixtures.filter { $0.status.finished }.count
         let upcoming = wcFixtures.filter { !$0.status.live && !$0.status.finished }.count
         HStack(spacing: 8) {
-            SpFactTile(value: "\(wcGroups.count)", label: "المجموعات", accent: acc)
-            SpFactTile(value: "\(live)", label: "مباشر الآن", accent: live > 0 ? SpTheme.crimson : nil)
-            SpFactTile(value: "\(finished)", label: "النتائج", accent: nil)
-            SpFactTile(value: "\(upcoming)", label: "قادمة", accent: nil)
+            SpFactTile(value: "\(wcGroups.count)", label: L("المجموعات"), accent: acc)
+            SpFactTile(value: "\(live)", label: L("مباشر الآن"), accent: live > 0 ? SpTheme.crimson : nil)
+            SpFactTile(value: "\(finished)", label: L("النتائج"), accent: nil)
+            SpFactTile(value: "\(upcoming)", label: L("قادمة"), accent: nil)
         }
     }
 
@@ -295,12 +295,12 @@ struct CompetitionDetailView: View {
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "square.grid.2x2.fill").font(.system(size: 13)).foregroundStyle(acc)
-                    Text("المجموعات").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
+                    Text(L("المجموعات")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
                 }
                 Spacer()
                 Button { withAnimation { segment = .groups } } label: {
                     HStack(spacing: 3) {
-                        Text("كل المجموعات").font(SportsFonts.app(size: 12, weight: .bold))
+                        Text(L("كل المجموعات")).font(SportsFonts.app(size: 12, weight: .bold))
                         Image(systemName: "chevron.left").font(.system(size: 9, weight: .bold))
                     }
                     .foregroundStyle(acc)
@@ -318,13 +318,13 @@ struct CompetitionDetailView: View {
         let assister = wcAssists.first
         if scorer != nil || assister != nil || !wcCards.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                SpSectionHeader(icon: "chart.bar.fill", title: "أرقام اللاعبين", count: nil, tint: acc)
+                SpSectionHeader(icon: "chart.bar.fill", title: L("أرقام اللاعبين"), count: nil, tint: acc)
                 HStack(spacing: 10) {
-                    if let s = scorer { wcScorerCard("الهداف", s, value: "\(s.goals)", unit: "هدف") }
-                    if let a = assister { wcLeaderCard("صانع اللعب", a, value: "\(a.assists)", unit: "صناعة") }
+                    if let s = scorer { wcScorerCard(L("الهداف"), s, value: "\(s.goals)", unit: L("هدف")) }
+                    if let a = assister { wcLeaderCard(L("صانع اللعب"), a, value: "\(a.assists)", unit: L("صناعة")) }
                 }
                 if let c = wcCards.first {
-                    wcLeaderLine(c, value: "\(c.yellow + c.red)", unit: "بطاقة", icon: "rectangle.fill.on.rectangle.fill")
+                    wcLeaderLine(c, value: "\(c.yellow + c.red)", unit: L("بطاقة"), icon: "rectangle.fill.on.rectangle.fill")
                 }
             }
         }
@@ -335,10 +335,10 @@ struct CompetitionDetailView: View {
         if !results.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    SpSectionHeader(icon: "checkmark.seal.fill", title: "آخر النتائج", count: min(results.count, 5), tint: acc)
+                    SpSectionHeader(icon: "checkmark.seal.fill", title: L("آخر النتائج"), count: min(results.count, 5), tint: acc)
                     Spacer()
                     Button { withAnimation { segment = .matches } } label: {
-                        Text("كل المباريات").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(acc)
+                        Text(L("كل المباريات")).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(acc)
                     }
                     .buttonStyle(.plain)
                 }
@@ -353,7 +353,7 @@ struct CompetitionDetailView: View {
             HStack(spacing: 14) {
                 Image(systemName: "crown.fill").font(.system(size: 26)).foregroundStyle(SpTheme.gold)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(seasonValue.map { "بطل موسم \(seasonLabel($0))" } ?? "بطل الموسم")
+                    Text(seasonValue.map { Lf("بطل موسم %@", seasonLabel($0)) } ?? L("بطل الموسم"))
                         .font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.goldDeep)
                     Text(champ.name).font(SportsFonts.app(size: 20, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                 }
@@ -372,9 +372,9 @@ struct CompetitionDetailView: View {
     @ViewBuilder private var quickFacts: some View {
         // أهداف/صناعة المتصدّر حُذفا — يعرضهما قسم «أبرز اللاعبين» أدناه أغنى.
         let facts: [(value: String, label: String, accent: Color?)] = [
-            seasonValue.map { (seasonLabel($0), "الموسم", acc as Color?) },
-            (competitionKindLabel, "النوع", nil),
-            standings.isEmpty ? nil : ("\(standings.count)", "الأندية", nil),
+            seasonValue.map { (seasonLabel($0), L("الموسم"), acc as Color?) },
+            (competitionKindLabel, L("النوع"), nil),
+            standings.isEmpty ? nil : ("\(standings.count)", L("الأندية"), nil),
         ].compactMap { $0 }
         if !facts.isEmpty {
             HStack(spacing: 8) {
@@ -388,7 +388,7 @@ struct CompetitionDetailView: View {
             VStack(alignment: .leading, spacing: 12) {
                 SpSectionHeader(
                     icon: comp.type == "cup" ? "trophy.fill" : "chart.bar.doc.horizontal",
-                    title: "ملخص البطولة",
+                    title: L("ملخص البطولة"),
                     subtitle: competitionSummarySubtitle,
                     tint: acc
                 )
@@ -396,12 +396,12 @@ struct CompetitionDetailView: View {
                 if !regularFixtures.isEmpty {
                     HStack(spacing: 8) {
                         if participatingTeamsCount > 0 {
-                            SpFactTile(value: "\(participatingTeamsCount)", label: comp.type == "cup" ? "فريق مشارك" : "فريق", accent: nil)
+                            SpFactTile(value: "\(participatingTeamsCount)", label: comp.type == "cup" ? L("فريق مشارك") : L("فريق"), accent: nil)
                         }
-                        SpFactTile(value: "\(futureFixtures.count)", label: "قادمة", accent: acc)
-                        SpFactTile(value: "\(resultFixtures.count)", label: "نتائج", accent: nil)
+                        SpFactTile(value: "\(futureFixtures.count)", label: L("قادمة"), accent: acc)
+                        SpFactTile(value: "\(resultFixtures.count)", label: L("نتائج"), accent: nil)
                         if let next = futureFixtures.first {
-                            SpFactTile(value: SpFormat.dayMonth(next.date), label: "أقرب موعد", accent: acc)
+                            SpFactTile(value: SpFormat.dayMonth(next.date), label: L("أقرب موعد"), accent: acc)
                         }
                     }
 
@@ -409,7 +409,7 @@ struct CompetitionDetailView: View {
                     HStack(spacing: 8) {
                         ForEach(providers.prefix(3)) { provider in
                             SpFactTile(
-                                value: provider.available ? "متاح" : "غير متاح",
+                                value: provider.available ? L("متاح") : L("غير متاح"),
                                 label: provider.label,
                                 accent: provider.available ? acc : nil
                             )
@@ -433,7 +433,7 @@ struct CompetitionDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 SpSectionHeader(
                     icon: "sparkles",
-                    title: "إشارات البطولة",
+                    title: L("إشارات البطولة"),
                     subtitle: insights.summary?.subtitle,
                     count: min(insights.signals.count, 6),
                     tint: acc
@@ -448,8 +448,8 @@ struct CompetitionDetailView: View {
             VStack(alignment: .leading, spacing: 10) {
                 SpSectionHeader(
                     icon: "externaldrive.badge.icloud",
-                    title: "بيانات البطولة",
-                    subtitle: "ستظهر المباريات والأرقام من الاشتراكات فور توفرها",
+                    title: L("بيانات البطولة"),
+                    subtitle: L("ستظهر المباريات والأرقام من الاشتراكات فور توفرها"),
                     tint: acc
                 )
                 if let providers = insights?.providers, !providers.isEmpty {
@@ -540,7 +540,7 @@ struct CompetitionDetailView: View {
                 Image(systemName: "clock.fill")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(acc)
-                Text("أقرب مباراة")
+                Text(L("أقرب مباراة"))
                     .font(SportsFonts.app(size: 13, weight: .heavy))
                     .foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
@@ -563,7 +563,7 @@ struct CompetitionDetailView: View {
                     Image(systemName: "list.bullet.rectangle")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(acc)
-                    Text("الأدوار القادمة")
+                    Text(L("الأدوار القادمة"))
                         .font(SportsFonts.app(size: 13, weight: .heavy))
                         .foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
@@ -579,7 +579,7 @@ struct CompetitionDetailView: View {
                                 .foregroundStyle(SpTheme.onDark)
                                 .lineLimit(1)
                             Spacer(minLength: 0)
-                            Text("\(group.fixtures.count) مباراة")
+                            Text(Lf("%d مباراة", group.fixtures.count))
                                 .font(SportsFonts.app(size: 11, weight: .semibold))
                                 .foregroundStyle(SpTheme.onDarkDim)
                             if let first = group.fixtures.first {
@@ -600,7 +600,7 @@ struct CompetitionDetailView: View {
 
     private func roundGroups(from fixtures: [SpFixture]) -> [(round: String, fixtures: [SpFixture])] {
         let groups = Dictionary(grouping: fixtures) { fixture in
-            fixture.round.isEmpty ? "الدور القادم" : fixture.round
+            fixture.round.isEmpty ? L("الدور القادم") : fixture.round
         }
         return groups
             .map { (round: $0.key, fixtures: $0.value.sorted { $0.timestamp < $1.timestamp }) }
@@ -618,12 +618,12 @@ struct CompetitionDetailView: View {
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "list.number").font(.system(size: 13)).foregroundStyle(acc)
-                    Text("الترتيب").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
+                    Text(L("الترتيب")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
                 }
                 Spacer()
                 Button { withAnimation { segment = .standings } } label: {
                     HStack(spacing: 3) {
-                        Text("الترتيب الكامل").font(SportsFonts.app(size: 12, weight: .bold))
+                        Text(L("الترتيب الكامل")).font(SportsFonts.app(size: 12, weight: .bold))
                         Image(systemName: "chevron.left").font(.system(size: 9, weight: .bold))
                     }
                     .foregroundStyle(acc)
@@ -646,8 +646,8 @@ struct CompetitionDetailView: View {
         let assister = assists.first
         if scorer != nil || assister != nil {
             HStack(spacing: 10) {
-                if let s = scorer { performerCard("هدّاف البطولة", s, value: "\(s.goals)", unit: "هدف") }
-                if let a = assister { performerCard("صانع البطولة", a, value: "\(a.assists)", unit: "صناعة") }
+                if let s = scorer { performerCard(L("هدّاف البطولة"), s, value: "\(s.goals)", unit: L("هدف")) }
+                if let a = assister { performerCard(L("صانع البطولة"), a, value: "\(a.assists)", unit: L("صناعة")) }
             }
         }
     }
@@ -684,12 +684,12 @@ struct CompetitionDetailView: View {
                 HStack {
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.seal.fill").font(.system(size: 13)).foregroundStyle(acc)
-                        Text("آخر النتائج").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
+                        Text(L("آخر النتائج")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
                     }
                     Spacer()
                     Button { withAnimation { segment = .matches } } label: {
                         HStack(spacing: 3) {
-                            Text("كل المباريات").font(SportsFonts.app(size: 12, weight: .bold))
+                            Text(L("كل المباريات")).font(SportsFonts.app(size: 12, weight: .bold))
                             Image(systemName: "chevron.left").font(.system(size: 9, weight: .bold))
                         }
                         .foregroundStyle(acc)
@@ -706,7 +706,7 @@ struct CompetitionDetailView: View {
 
     @ViewBuilder private var wcGroupsContent: some View {
         if wcGroups.isEmpty {
-            SpEmptyState(icon: "square.grid.2x2", title: "لا تتوفر المجموعات", subtitle: "ستظهر فور تحديث بيانات البطولة")
+            SpEmptyState(icon: "square.grid.2x2", title: L("لا تتوفر المجموعات"), subtitle: L("ستظهر فور تحديث بيانات البطولة"))
         } else {
             LazyVGrid(columns: [GridItem(.flexible())], spacing: 12) {
                 ForEach(wcGroups) { group in wcGroupCard(group, compact: false) }
@@ -722,7 +722,7 @@ struct CompetitionDetailView: View {
                     .foregroundStyle(acc)
                 Spacer(minLength: 0)
                 if group.rows.contains(where: { $0.live == true }) {
-                    Text("مباشر")
+                    Text(L("مباشر"))
                         .font(SportsFonts.app(size: 10, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 7).padding(.vertical, 2)
@@ -775,7 +775,7 @@ struct CompetitionDetailView: View {
         } else {
             let rounds = wcBracket?.rounds ?? []
             if rounds.isEmpty {
-                SpEmptyState(icon: "trophy", title: "الأدوار لم تكتمل", subtitle: "تظهر شجرة خروج المغلوب عند توفر مبارياتها")
+                SpEmptyState(icon: "trophy", title: L("الأدوار لم تكتمل"), subtitle: L("تظهر شجرة خروج المغلوب عند توفر مبارياتها"))
             } else {
                 VStack(alignment: .leading, spacing: 16) {
                     ForEach(rounds) { round in
@@ -792,11 +792,11 @@ struct CompetitionDetailView: View {
 
     @ViewBuilder private var wcCardsContent: some View {
         if wcCards.isEmpty {
-            SpEmptyState(icon: "rectangle.fill.on.rectangle.fill", title: "لا تتوفر البطاقات", subtitle: "ستظهر بعد بداية مباريات البطولة")
+            SpEmptyState(icon: "rectangle.fill.on.rectangle.fill", title: L("لا تتوفر البطاقات"), subtitle: L("ستظهر بعد بداية مباريات البطولة"))
         } else {
             VStack(spacing: 10) {
                 ForEach(wcCards) { leader in
-                    wcLeaderLine(leader, value: "\(leader.yellow + leader.red)", unit: "بطاقة", icon: "rectangle.fill.on.rectangle.fill")
+                    wcLeaderLine(leader, value: "\(leader.yellow + leader.red)", unit: L("بطاقة"), icon: "rectangle.fill.on.rectangle.fill")
                 }
             }
         }
@@ -862,7 +862,7 @@ struct CompetitionDetailView: View {
                     Text(p.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                     HStack(spacing: 6) {
                         SpTeamLogo(logo: p.team.logo, size: 14)
-                        Text("\(p.yellow) صفراء · \(p.red) حمراء")
+                        Text(Lf("%d صفراء · %d حمراء", p.yellow, p.red))
                             .font(SportsFonts.app(size: 11))
                             .foregroundStyle(SpTheme.onDarkDim)
                             .lineLimit(1)
@@ -884,7 +884,7 @@ struct CompetitionDetailView: View {
 
     @ViewBuilder private var standingsContent: some View {
         if standings.isEmpty {
-            SpEmptyState(icon: "list.number", title: "لا يتوفّر ترتيب", subtitle: "قد يكون الموسم لم يبدأ بعد")
+            SpEmptyState(icon: "list.number", title: L("لا يتوفّر ترتيب"), subtitle: L("قد يكون الموسم لم يبدأ بعد"))
         } else {
             VStack(spacing: 0) {
                 standingsHeader
@@ -900,11 +900,11 @@ struct CompetitionDetailView: View {
     private var standingsHeader: some View {
         HStack(spacing: 0) {
             Text("#").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 30)
-            Text("النادي").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
+            Text(L("النادي")).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text("لعب").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 36)
+            Text(L("لعب")).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 36)
             Text("+/-").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 40)
-            Text("نقاط").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 40)
+            Text(L("نقاط")).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 40)
         }
         .padding(.horizontal, 16).padding(.bottom, 6)
     }
@@ -947,23 +947,23 @@ struct CompetitionDetailView: View {
     @ViewBuilder private var scorersContent: some View {
         if isWorldCup {
             if wcScorers.isEmpty {
-                SpEmptyState(icon: "soccerball", title: "لا يتوفّر هدّافون", subtitle: "ستظهر القائمة بعد بداية البطولة")
+                SpEmptyState(icon: "soccerball", title: L("لا يتوفّر هدّافون"), subtitle: L("ستظهر القائمة بعد بداية البطولة"))
             } else {
                 VStack(spacing: 10) {
                     ForEach(wcScorers) { s in
                         Button { selectedPlayer = IDBox(id: s.id) } label: {
-                            wcScorerRow(s, value: s.goals, unit: "هدف", sub: "\(s.matches) مباراة · \(s.assists) صناعة")
+                            wcScorerRow(s, value: s.goals, unit: L("هدف"), sub: Lf("%d مباراة · %d صناعة", s.matches, s.assists))
                         }
                         .buttonStyle(SpPressStyle())
                     }
                 }
             }
         } else if scorers.isEmpty {
-            SpEmptyState(icon: "soccerball", title: "لا يتوفّر هدّافون", subtitle: "قد يكون الموسم لم يبدأ بعد")
+            SpEmptyState(icon: "soccerball", title: L("لا يتوفّر هدّافون"), subtitle: L("قد يكون الموسم لم يبدأ بعد"))
         } else {
             VStack(spacing: 10) {
                 ForEach(scorers) { s in
-                    Button { selectedPlayer = IDBox(id: s.id) } label: { rankedRow(s, value: s.goals, unit: "هدف", sub: "\(s.matches) مباراة · \(s.assists) صناعة") }
+                    Button { selectedPlayer = IDBox(id: s.id) } label: { rankedRow(s, value: s.goals, unit: L("هدف"), sub: Lf("%d مباراة · %d صناعة", s.matches, s.assists)) }
                         .buttonStyle(SpPressStyle())
                 }
             }
@@ -973,20 +973,20 @@ struct CompetitionDetailView: View {
     @ViewBuilder private var assistsContent: some View {
         if isWorldCup {
             if wcAssists.isEmpty {
-                SpEmptyState(icon: "hand.point.up.braille", title: "لا يتوفّر صنّاع", subtitle: "ستظهر القائمة بعد تسجيل أول صناعة")
+                SpEmptyState(icon: "hand.point.up.braille", title: L("لا يتوفّر صنّاع"), subtitle: L("ستظهر القائمة بعد تسجيل أول صناعة"))
             } else {
                 VStack(spacing: 10) {
                     ForEach(wcAssists) { s in
-                        wcLeaderLine(s, value: "\(s.assists)", unit: "صناعة", icon: "arrow.up.forward.circle.fill")
+                        wcLeaderLine(s, value: "\(s.assists)", unit: L("صناعة"), icon: "arrow.up.forward.circle.fill")
                     }
                 }
             }
         } else if assists.isEmpty {
-            SpEmptyState(icon: "hand.point.up.braille", title: "لا يتوفّر صنّاع", subtitle: "قد يكون الموسم لم يبدأ بعد")
+            SpEmptyState(icon: "hand.point.up.braille", title: L("لا يتوفّر صنّاع"), subtitle: L("قد يكون الموسم لم يبدأ بعد"))
         } else {
             VStack(spacing: 10) {
                 ForEach(assists) { s in
-                    Button { selectedPlayer = IDBox(id: s.id) } label: { rankedRow(s, value: s.assists, unit: "صناعة", sub: "\(s.matches) مباراة · \(s.goals) هدف") }
+                    Button { selectedPlayer = IDBox(id: s.id) } label: { rankedRow(s, value: s.assists, unit: L("صناعة"), sub: Lf("%d مباراة · %d هدف", s.matches, s.goals)) }
                         .buttonStyle(SpPressStyle())
                 }
             }
@@ -1047,18 +1047,18 @@ struct CompetitionDetailView: View {
             if hasAny {
                 VStack(alignment: .leading, spacing: 18) {
                     roundsBrowser
-                    matchBucket("مباشر", m.live, tint: SpTheme.crimson, icon: "dot.radiowaves.left.and.right")
-                    matchBucket("اليوم", m.today, tint: acc, icon: "calendar")
+                    matchBucket(L("مباشر"), m.live, tint: SpTheme.crimson, icon: "dot.radiowaves.left.and.right")
+                    matchBucket(L("اليوم"), m.today, tint: acc, icon: "calendar")
                     upcomingMatchBucket(m.upcoming, tint: acc, icon: "clock")
-                    matchBucket("النتائج", Array(m.results.reversed()), tint: SpTheme.onDarkDim, icon: "checkmark.seal")
+                    matchBucket(L("النتائج"), Array(m.results.reversed()), tint: SpTheme.onDarkDim, icon: "checkmark.seal")
                 }
             } else if !rounds.isEmpty {
                 roundsBrowser
             } else {
-                SpEmptyState(icon: "sportscourt", title: "لا مباريات", subtitle: "لا توجد مباريات متاحة حاليًا لهذه البطولة")
+                SpEmptyState(icon: "sportscourt", title: L("لا مباريات"), subtitle: L("لا توجد مباريات متاحة حاليًا لهذه البطولة"))
             }
         } else {
-            SpEmptyState(icon: "sportscourt", title: "تعذّر جلب المباريات", subtitle: "حاول التحديث بالسحب للأسفل")
+            SpEmptyState(icon: "sportscourt", title: L("تعذّر جلب المباريات"), subtitle: L("حاول التحديث بالسحب للأسفل"))
         }
     }
 
@@ -1068,11 +1068,11 @@ struct CompetitionDetailView: View {
                 HStack {
                     HStack(spacing: 6) {
                         Image(systemName: "trophy.fill").font(.system(size: 13)).foregroundStyle(acc)
-                        Text("أدوار البطولة").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
+                        Text(L("أدوار البطولة")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(acc)
                     }
                     Spacer(minLength: 0)
                     if currentRound != nil {
-                        Text("الجاري الآن")
+                        Text(L("الجاري الآن"))
                             .font(SportsFonts.app(size: 10, weight: .bold))
                             .foregroundStyle(acc)
                     }
@@ -1108,7 +1108,7 @@ struct CompetitionDetailView: View {
                         SpFlatMatchList(fixtures: roundFixtures)
                     }
                 } else if selectedRound != nil {
-                    SpEmptyState(icon: "calendar.badge.exclamationmark", title: "لا مباريات", subtitle: "لا توجد مباريات معتمدة لهذا الدور بعد")
+                    SpEmptyState(icon: "calendar.badge.exclamationmark", title: L("لا مباريات"), subtitle: L("لا توجد مباريات معتمدة لهذا الدور بعد"))
                 }
             }
             .padding(14)
@@ -1127,12 +1127,12 @@ struct CompetitionDetailView: View {
         let results = wcFixtures.filter { $0.status.finished }.sorted { $0.timestamp > $1.timestamp }
 
         return VStack(alignment: .leading, spacing: 18) {
-            wcMatchBucket("مباشر", live, tint: SpTheme.crimson, icon: "dot.radiowaves.left.and.right")
-            wcMatchBucket("اليوم", today, tint: acc, icon: "calendar")
+            wcMatchBucket(L("مباشر"), live, tint: SpTheme.crimson, icon: "dot.radiowaves.left.and.right")
+            wcMatchBucket(L("اليوم"), today, tint: acc, icon: "calendar")
             upcomingMatchBucket(upcoming.map { SpFixture(worldCup: $0) }, tint: acc, icon: "clock")
-            wcMatchBucket("النتائج", results, tint: SpTheme.onDarkDim, icon: "checkmark.seal")
+            wcMatchBucket(L("النتائج"), results, tint: SpTheme.onDarkDim, icon: "checkmark.seal")
             if wcFixtures.isEmpty {
-                SpEmptyState(icon: "sportscourt", title: "لا مباريات", subtitle: "لم تصل بيانات جدول كأس العالم بعد")
+                SpEmptyState(icon: "sportscourt", title: L("لا مباريات"), subtitle: L("لم تصل بيانات جدول كأس العالم بعد"))
             }
         }
     }
@@ -1163,7 +1163,7 @@ struct CompetitionDetailView: View {
     @ViewBuilder private func upcomingMatchBucket(_ items: [SpFixture], tint: Color, icon: String) -> some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
-                SpSectionHeader(icon: icon, title: "قادمة", count: items.count, tint: tint)
+                SpSectionHeader(icon: icon, title: L("قادمة"), count: items.count, tint: tint)
                 Rectangle().fill(SpTheme.outline).frame(height: 1).padding(.top, 8)
                 VStack(spacing: 14) {
                     ForEach(dayGroups(items)) { group in
@@ -1186,7 +1186,7 @@ struct CompetitionDetailView: View {
             Text(matchDayTitle(date))
                 .font(SportsFonts.app(size: 12, weight: .heavy))
                 .foregroundStyle(SpTheme.onDark)
-            Text(count == 1 ? "مباراة" : "\(count) مباريات")
+            Text(SpLanguage.shared.isEnglish ? Lf("%d مباراة", count) : (count == 1 ? "مباراة" : "\(count) مباريات"))
                 .font(SportsFonts.app(size: 9.5, weight: .bold))
                 .foregroundStyle(tint)
                 .padding(.horizontal, 7)
@@ -1206,9 +1206,9 @@ struct CompetitionDetailView: View {
         let diff = calendar.dateComponents([.day], from: today, to: day).day ?? 0
         let dateText = SpFormat.dayMonthLabel(day)
         switch diff {
-        case 0: return "اليوم \(dateText)"
-        case 1: return "غدًا \(dateText)"
-        case 2: return "بعد غد \(dateText)"
+        case 0: return Lf("اليوم %@", dateText)
+        case 1: return Lf("غدًا %@", dateText)
+        case 2: return Lf("بعد غد %@", dateText)
         default: return "\(SpFormat.weekdayName(day)) \(dateText)"
         }
     }
@@ -1237,7 +1237,7 @@ struct CompetitionDetailView: View {
 
     @ViewBuilder private var transfersContent: some View {
         if leagueTransfers.isEmpty {
-            SpEmptyState(icon: "arrow.left.arrow.right", title: "لا انتقالات", subtitle: "لا توجد صفقات معلنة حاليًا")
+            SpEmptyState(icon: "arrow.left.arrow.right", title: L("لا انتقالات"), subtitle: L("لا توجد صفقات معلنة حاليًا"))
         } else {
             VStack(spacing: 10) {
                 ForEach(leagueTransfers) { tr in transferRow(tr) }
@@ -1366,7 +1366,7 @@ struct CompetitionDetailView: View {
         self.wcScorers = scorersRes?.scorers ?? []
         self.wcAssists = assistsRes?.leaders ?? []
         self.wcCards = cardsRes?.leaders ?? []
-        self.loadError = hasAnyData ? nil : "تعذّر الاتصال بخادم بيانات كأس العالم"
+        self.loadError = hasAnyData ? nil : L("تعذّر الاتصال بخادم بيانات كأس العالم")
         self.loading = false
     }
 }

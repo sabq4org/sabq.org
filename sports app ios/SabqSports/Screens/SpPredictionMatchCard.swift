@@ -21,7 +21,7 @@ struct SpPredictionMatchCard: View {
     private var settled: Bool { match.settlement?.status == "settled" }
     private var hasMine: Bool { match.myPrediction != nil }
     private var drawNotAllowed: Bool { f.competitionSlug == "world-cup" && predHome == predAway }
-    private let drawNotAllowedMessage = "لا يمكن توقع التعادل في خروج المغلوب — اختر فائزًا للمباراة"
+    private var drawNotAllowedMessage: String { L("لا يمكن توقع التعادل في خروج المغلوب — اختر فائزًا للمباراة") }
 
     var body: some View {
         VStack(spacing: 11) {
@@ -84,8 +84,8 @@ struct SpPredictionMatchCard: View {
     }
 
     private var kickoffLabel: String {
-        if settled { return "انتهت" }
-        if match.locked { return "جارية / مقفلة" }
+        if settled { return L("انتهت") }
+        if match.locked { return L("جارية / مقفلة") }
         let iso = ISO8601DateFormatter().string(from: f.kickoff)
         let day = SpFormat.dayMonth(iso)
         let time = SpFormat.kickoffTime(iso)
@@ -120,7 +120,7 @@ struct SpPredictionMatchCard: View {
                 Text("\(fa) - \(fh)")
                     .font(SportsFonts.app(size: 22, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                     .monospacedDigit().environment(\.layoutDirection, .leftToRight)
-                Text("النتيجة").font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("النتيجة")).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
             }
         } else {
             Text("VS").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
@@ -155,14 +155,14 @@ struct SpPredictionMatchCard: View {
                 .frame(width: 34, height: 34).background(Circle().fill(SpTheme.green.opacity(0.12)))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(icon == "plus" ? "زيادة الأهداف" : "إنقاص الأهداف")
+        .accessibilityLabel(icon == "plus" ? L("زيادة الأهداف") : L("إنقاص الأهداف"))
     }
 
     private var submitButton: some View {
         Button { Task { await submit() } } label: {
             HStack(spacing: 8) {
                 if submitting { ProgressView().tint(.white) }
-                Text(justSaved ? "تم الحفظ ✓" : (hasMine ? "تعديل التوقّع" : "احفظ توقّعي"))
+                Text(justSaved ? L("تم الحفظ ✓") : (hasMine ? L("تعديل التوقّع") : L("احفظ توقّعي")))
                     .font(SportsFonts.app(size: 14, weight: .bold))
             }
             .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 44)
@@ -173,7 +173,7 @@ struct SpPredictionMatchCard: View {
     }
 
     private var signInHint: some View {
-        Text("سجّل الدخول للتوقّع على هذه المباراة")
+        Text(L("سجّل الدخول للتوقّع على هذه المباراة"))
             .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
             .frame(maxWidth: .infinity).padding(.vertical, 6)
     }
@@ -185,13 +185,13 @@ struct SpPredictionMatchCard: View {
             Image(systemName: "lock.fill").font(.system(size: 12)).foregroundStyle(SpTheme.onDarkDim)
             if let mine = match.myPrediction {
                 // عزل الأرقام LRI…PDI كي تُعرض «ضيف - مضيف» بثبات في سياق RTL (نفس عرف scoreBlock).
-                Text("توقّعك: ")
+                Text(L("توقّعك: "))
                     .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                 + Text(verbatim: "\u{2066}\(mine.predAway) - \(mine.predHome)\u{2069}")
                     .font(SportsFonts.app(size: 13, weight: .heavy)).foregroundStyle(SpTheme.onDark)
-                Text("· بانتظار النتيجة").font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("· بانتظار النتيجة")).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkFaint)
             } else {
-                Text("أُقفل التوقّع — انطلقت المباراة").font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
+                Text(L("أُقفل التوقّع — انطلقت المباراة")).font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
             }
             Spacer(minLength: 0)
         }
@@ -204,10 +204,10 @@ struct SpPredictionMatchCard: View {
             let win = mine.pointsAwarded > 0
             HStack(spacing: 8) {
                 Text("\(mine.tier.emoji)")
-                Text(verbatim: "توقّعك \u{2066}\(mine.predAway)-\(mine.predHome)\u{2069}")
+                Text(Lf("توقّعك %@", "\u{2066}\(mine.predAway)-\(mine.predHome)\u{2069}"))
                     .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
-                Text(win ? "+\(mine.pointsAwarded) نقطة" : "لم تُصب")
+                Text(win ? Lf("+%d نقطة", mine.pointsAwarded) : L("لم تُصب"))
                     .font(SportsFonts.app(size: 12, weight: .heavy))
                     .foregroundStyle(win ? SpTheme.leaf : SpTheme.onDarkFaint)
             }
@@ -216,7 +216,7 @@ struct SpPredictionMatchCard: View {
                 .fill((win ? SpTheme.leaf : SpTheme.onDarkFaint).opacity(0.10)))
         } else {
             HStack {
-                Text("انتهت المباراة — لم تتوقّع").font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("انتهت المباراة — لم تتوقّع")).font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 7).padding(.horizontal, 10)
@@ -230,7 +230,7 @@ struct SpPredictionMatchCard: View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "sparkles").font(.system(size: 10, weight: .bold)).foregroundStyle(SpTheme.green)
-                Text("توقّع VARA").font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
+                Text(L("توقّع VARA")).font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                 Spacer(minLength: 0)
             }
             // شريط مكدّس باتجاه RTL: المضيف أولًا (يمين) ثم التعادل ثم الضيف (يسار).
@@ -244,11 +244,11 @@ struct SpPredictionMatchCard: View {
             }
             .frame(height: 8)
             HStack {
-                probLabel("\(match.probs.home)٪", "فوز \(f.home.name)", SpTheme.green)
+                probLabel("\(match.probs.home)٪", Lf("فوز %@", f.home.name), SpTheme.green)
                 Spacer(minLength: 0)
-                probLabel("\(match.probs.draw)٪", "تعادل", SpTheme.onDarkDim)
+                probLabel("\(match.probs.draw)٪", L("تعادل"), SpTheme.onDarkDim)
                 Spacer(minLength: 0)
-                probLabel("\(match.probs.away)٪", "فوز \(f.away.name)", SpTheme.teal)
+                probLabel("\(match.probs.away)٪", Lf("فوز %@", f.away.name), SpTheme.teal)
             }
         }
     }
@@ -272,7 +272,7 @@ struct SpPredictionMatchCard: View {
     private var crowdLine: some View {
         HStack(spacing: 4) {
             Image(systemName: "person.3.fill").font(.system(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
-            Text("الجمهور (\(match.crowd.total)): \(match.crowd.home)٪ مضيف · \(match.crowd.draw)٪ تعادل · \(match.crowd.away)٪ ضيف")
+            Text(Lf("الجمهور (%d): %d٪ مضيف · %d٪ تعادل · %d٪ ضيف", match.crowd.total, match.crowd.home, match.crowd.draw, match.crowd.away))
                 .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1).minimumScaleFactor(0.8)
             Spacer(minLength: 0)
         }
@@ -282,10 +282,10 @@ struct SpPredictionMatchCard: View {
         VStack(spacing: 9) {
             HStack(spacing: 6) {
                 Image(systemName: "banknote").font(.system(size: 11)).foregroundStyle(SpTheme.gold)
-                Text("البركة المتاحة")
+                Text(L("البركة المتاحة"))
                     .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                 Spacer(minLength: 0)
-                Text("\(match.poolAvailable) نقطة")
+                Text(Lf("%d نقطة", match.poolAvailable))
                     .font(SportsFonts.app(size: 12, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                     .monospacedDigit().environment(\.layoutDirection, .leftToRight)
             }
@@ -339,19 +339,19 @@ struct SpPredictionMatchCard: View {
                 error = submitErrorMessage(reason: r.reason)
             }
         } catch let e as APIError {
-            if case .server(409, let msg) = e { error = msg ?? "أُقفل التوقّع — انطلقت المباراة" }
-            else { error = e.errorDescription ?? "تعذّر حفظ التوقّع" }
+            if case .server(409, let msg) = e { error = msg ?? L("أُقفل التوقّع — انطلقت المباراة") }
+            else { error = e.errorDescription ?? L("تعذّر حفظ التوقّع") }
         } catch {
-            self.error = "تعذّر حفظ التوقّع"
+            self.error = L("تعذّر حفظ التوقّع")
         }
         submitting = false
     }
 
     private func submitErrorMessage(reason: String?) -> String {
         switch reason {
-        case "LOCKED": return "أُقفل التوقّع — انطلقت المباراة"
+        case "LOCKED": return L("أُقفل التوقّع — انطلقت المباراة")
         case "DRAW_NOT_ALLOWED": return drawNotAllowedMessage
-        default: return "تعذّر حفظ التوقّع"
+        default: return L("تعذّر حفظ التوقّع")
         }
     }
 }

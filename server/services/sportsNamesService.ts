@@ -18,6 +18,7 @@
  */
 import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
+import { isEnglishSports } from "./sportsLang";
 import { aiGateway } from "../ai/gateway";
 import { sportsNameTranslations, wcPlayerNames } from "@shared/schema";
 
@@ -133,6 +134,8 @@ export async function resolveSportsNames(
   items: SportsNameItem[],
   opts?: ResolveOpts,
 ): Promise<NameLookup> {
+  // الوضع الإنجليزي: لا تعريب — أعِد اسم المزوّد الأصلي كما هو.
+  if (isEnglishSports()) return (name) => (name ?? "").toString();
   const provider = opts?.provider ?? "apifootball";
   // اسم → معرّف مزوّد (أول ظهور) لتخزينه مع الصف الجديد
   const idBySource = new Map<string, string>();

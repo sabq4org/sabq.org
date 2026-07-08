@@ -112,14 +112,14 @@ struct SpMatchCenter: View {
         case preview, events, commentary, analysis, ratings, lineups, stats, h2h
         var label: String {
             switch self {
-            case .preview: return "تقديم"
-            case .events: return "الأحداث"
-            case .commentary: return "التعليق"
-            case .analysis: return "التحليل"
-            case .ratings: return "التقييمات"
-            case .lineups: return "التشكيلة"
-            case .stats: return "الإحصاءات"
-            case .h2h: return "المواجهات"
+            case .preview: return L("تقديم")
+            case .events: return L("الأحداث")
+            case .commentary: return L("التعليق")
+            case .analysis: return L("التحليل")
+            case .ratings: return L("التقييمات")
+            case .lineups: return L("التشكيلة")
+            case .stats: return L("الإحصاءات")
+            case .h2h: return L("المواجهات")
             }
         }
     }
@@ -184,19 +184,19 @@ struct SpMatchCenter: View {
 
     /// عنوان المشاركة الاجتماعية — الفريقان + النتيجة/الموعد + البطولة عبر VARA.
     private var shareTitle: String {
-        guard let f = fixture else { return "مباراة عبر VARA" }
+        guard let f = fixture else { return L("مباراة عبر VARA") }
         let middle: String
         if f.started {
             var score = "\(f.goals.home ?? 0) - \(f.goals.away ?? 0)"
             if let p = f.penaltyScore, let h = p.home, let a = p.away {
-                score += " (ترجيح \(h)-\(a))"
+                score += Lf(" (ترجيح %d-%d)", h, a)
             }
             middle = score
         } else {
             middle = "×"
         }
-        let comp = f.competition?.isEmpty == false ? f.competition! : "دوري روشن"
-        return "\(f.home.name) \(middle) \(f.away.name) — \(comp) · عبر VARA"
+        let comp = f.competition?.isEmpty == false ? f.competition! : L("دوري روشن")
+        return "\(f.home.name) \(middle) \(f.away.name) — \(comp) · \(L("عبر VARA"))"
     }
 
     private var hasRatings: Bool { (ratings?.players.contains { ($0.rating ?? 0) > 0 }) ?? false }
@@ -238,7 +238,7 @@ struct SpMatchCenter: View {
                 if loading && detail == nil {
                     SpLoading()
                 } else if let loadError, detail == nil {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                 } else if let d = detail {
                     content(d)
                 }
@@ -247,7 +247,7 @@ struct SpMatchCenter: View {
             .padding(.bottom, 24)
         }
         .background(SpAmbientBackground())
-        .navigationTitle("مركز المباراة")
+        .navigationTitle(L("مركز المباراة"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let f = fixture {
@@ -319,7 +319,7 @@ struct SpMatchCenter: View {
             if f.status.finished, let p = f.penaltyScore,
                let h = p.home, let a = p.away, h != a {
                 HStack(spacing: 4) {
-                    Text("فاز \(h > a ? f.home.name : f.away.name) بركلات الترجيح")
+                    Text(Lf("فاز %@ بركلات الترجيح", h > a ? f.home.name : f.away.name))
                     Text("\(max(h, a))-\(min(h, a))")
                         .monospacedDigit()
                         .environment(\.layoutDirection, .leftToRight)
@@ -384,7 +384,7 @@ struct SpMatchCenter: View {
             // بسطر واحد كي لا تظهر «ترجيح» فوق و«ركلات» تحت.
             if f.shootoutLive, let p = f.penaltyScore {
                 HStack(spacing: 5) {
-                    Text("ركلات الترجيح")
+                    Text(L("ركلات الترجيح"))
                         .font(SportsFonts.app(size: 11, weight: .bold))
                     Text("\(p.away ?? 0) - \(p.home ?? 0)")
                         .font(SportsFonts.app(size: 16, weight: .heavy))
@@ -410,7 +410,7 @@ struct SpMatchCenter: View {
                 HStack(spacing: 8) {
                     Image(systemName: "hourglass")
                         .font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
-                    Text("الوقت المتبقّي على المباراة")
+                    Text(L("الوقت المتبقّي على المباراة"))
                         .font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
                 }
@@ -434,21 +434,21 @@ struct SpMatchCenter: View {
             let stadium = f.venue.city.isEmpty ? f.venue.name
                 : (f.venue.name.isEmpty ? f.venue.city : "\(f.venue.name) — \(f.venue.city)")
             VStack(spacing: 0) {
-                infoLine("calendar", "اليوم والتاريخ", SpFormat.kickoffDay(f.date))
+                infoLine("calendar", L("اليوم والتاريخ"), SpFormat.kickoffDay(f.date))
                 infoDivider
-                infoLine("clock", "التوقيت", SpFormat.kickoffTime(f.date))
+                infoLine("clock", L("التوقيت"), SpFormat.kickoffTime(f.date))
                 if !stadium.isEmpty {
                     infoDivider
-                    infoLine("mappin.and.ellipse", "الملعب", stadium)
+                    infoLine("mappin.and.ellipse", L("الملعب"), stadium)
                 }
                 let comp = [f.competition, preview?.competition].compactMap { $0 }.first { !$0.isEmpty } ?? ""
                 if !comp.isEmpty {
                     infoDivider
-                    infoLine("trophy.fill", "البطولة", comp)
+                    infoLine("trophy.fill", L("البطولة"), comp)
                 }
                 if !f.round.isEmpty {
                     infoDivider
-                    infoLine("flag.checkered", "الدور", f.round)
+                    infoLine("flag.checkered", L("الدور"), f.round)
                 }
             }
             .padding(.vertical, 4)
@@ -485,7 +485,7 @@ struct SpMatchCenter: View {
                 HStack(spacing: 11) {
                     SpAvatarImage(url: r.photo ?? "", size: 40, ring: SpTheme.cardStroke)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("حكم المباراة")
+                        Text(L("حكم المباراة"))
                             .font(SportsFonts.app(size: 11, weight: .heavy))
                             .foregroundStyle(acc)
                         Text(r.name)
@@ -500,7 +500,9 @@ struct SpMatchCenter: View {
                     }
                     Spacer(minLength: 0)
                     if let s = r.stats {
-                        Text("\(s.matches) \(s.matches == 1 ? "مباراة" : "مباريات") بالبطولة")
+                        Text(SpLanguage.shared.isEnglish
+                             ? Lf("%d مباراة بالبطولة", s.matches)
+                             : "\(s.matches) \(s.matches == 1 ? "مباراة" : "مباريات") بالبطولة")
                             .font(SportsFonts.app(size: 10.5, weight: .semibold))
                             .foregroundStyle(SpTheme.onDarkDim)
                     }
@@ -510,10 +512,14 @@ struct SpMatchCenter: View {
                         HStack(spacing: 7) {
                             let yellow = s.yellowCount ?? s.yellowAvg.map { Int(($0 * Double(s.matches)).rounded()) }
                             let pens = s.penaltiesCount ?? s.penaltiesAvg.map { Int(($0 * Double(s.matches)).rounded()) }
-                            if let yellow { refereeChip("🟨 \(yellow) صفراء") }
-                            refereeChip("🟥 \(s.redCount) حمراء")
-                            if let pens { refereeChip("⚽ \(pens) \(pens == 1 ? "ركلة جزاء" : "ركلات جزاء")") }
-                            if let v = s.varMoments { refereeChip("فار ×\(v)") }
+                            if let yellow { refereeChip(Lf("🟨 %d صفراء", yellow)) }
+                            refereeChip(Lf("🟥 %d حمراء", s.redCount))
+                            if let pens {
+                                refereeChip(SpLanguage.shared.isEnglish
+                                    ? Lf("⚽ %d ركلة جزاء", pens)
+                                    : "⚽ \(pens) \(pens == 1 ? "ركلة جزاء" : "ركلات جزاء")")
+                            }
+                            if let v = s.varMoments { refereeChip(Lf("فار ×%d", v)) }
                         }
                     }
                 }
@@ -575,9 +581,9 @@ struct SpMatchCenter: View {
             VStack(spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
-                    Text("توقّع VARA").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                    Text(L("توقّع VARA")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
-                    Text("الأرجح \(pick.scoreHome)-\(pick.scoreAway)")
+                    Text(Lf("الأرجح %d-%d", pick.scoreHome, pick.scoreAway))
                         .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(acc)
                         .monospacedDigit().environment(\.layoutDirection, .leftToRight)
                         .padding(.horizontal, 8).padding(.vertical, 3)
@@ -585,7 +591,7 @@ struct SpMatchCenter: View {
                 }
                 HStack(alignment: .top) {
                     varaStat("\(pick.home)٪", f.home.name, acc)
-                    varaStat("\(pick.draw)٪", "تعادل", SpTheme.onDarkDim)
+                    varaStat("\(pick.draw)٪", L("تعادل"), SpTheme.onDarkDim)
                     varaStat("\(pick.away)٪", f.away.name, SpTheme.onDark)
                 }
                 GeometryReader { geo in
@@ -679,7 +685,7 @@ struct SpMatchCenter: View {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.gold)
-                    Text("رؤية VARA").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                    Text(L("رؤية VARA")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
                 }
                 Text(text)
@@ -702,7 +708,7 @@ struct SpMatchCenter: View {
         let awayForm = strength[f.away.id]?.form
         if (homeForm?.isEmpty == false) || (awayForm?.isEmpty == false) {
             VStack(spacing: 12) {
-                sectionTitle("الفورمة الأخيرة", icon: "chart.line.uptrend.xyaxis")
+                sectionTitle(L("الفورمة الأخيرة"), icon: "chart.line.uptrend.xyaxis")
                 formRow(f.home, homeForm)
                 divider
                 formRow(f.away, awayForm)
@@ -731,9 +737,9 @@ struct SpMatchCenter: View {
 
     private func formChip(_ c: Character) -> some View {
         let up = Character(c.uppercased())
-        let (t, col): (String, Color) = up == "W" ? ("ف", SpTheme.green)
-            : up == "D" ? ("ت", SpTheme.onDarkDim)
-            : up == "L" ? ("خ", SpTheme.crimson)
+        let (t, col): (String, Color) = up == "W" ? (L("ف"), SpTheme.green)
+            : up == "D" ? (L("ت"), SpTheme.onDarkDim)
+            : up == "L" ? (L("خ"), SpTheme.crimson)
             : ("•", SpTheme.onDarkFaint)
         return Text(t)
             .font(SportsFonts.app(size: 10, weight: .heavy)).foregroundStyle(.white)
@@ -746,16 +752,16 @@ struct SpMatchCenter: View {
             let hs = homeScorers.first
             let av = awayScorers.first
             VStack(spacing: 12) {
-                sectionTitle("هدّافو الفريقين", icon: "star.circle.fill")
+                sectionTitle(L("هدّافو الفريقين"), icon: "star.circle.fill")
                 HStack(alignment: .top, spacing: 8) {
                     scorerHead(hs, f.home)
                     scorerHead(av, f.away)
                 }
                 if let hs, let av {
                     divider
-                    compareRow("أهداف الموسم", home: Double(hs.goals), away: Double(av.goals), fmt: "%.0f")
+                    compareRow(L("أهداف الموسم"), home: Double(hs.goals), away: Double(av.goals), fmt: "%.0f")
                     if hs.assists + av.assists > 0 {
-                        compareRow("صناعة", home: Double(hs.assists), away: Double(av.assists), fmt: "%.0f")
+                        compareRow(L("صناعة"), home: Double(hs.assists), away: Double(av.assists), fmt: "%.0f")
                     }
                 }
             }
@@ -787,11 +793,11 @@ struct SpMatchCenter: View {
         let channels = (tv?.channels ?? []).map(\.name).filter { !$0.isEmpty }
         if weatherText != nil || !channels.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                sectionTitle("أجواء المباراة", icon: "cloud.sun.fill")
+                sectionTitle(L("أجواء المباراة"), icon: "cloud.sun.fill")
                 if let weatherText {
                     HStack(spacing: 10) {
                         Image(systemName: "thermometer.medium").font(.system(size: 14, weight: .semibold)).foregroundStyle(acc).frame(width: 22)
-                        Text("الطقس").font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim)
+                        Text(L("الطقس")).font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim)
                         Spacer(minLength: 8)
                         Text(weatherText).font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark)
                             .lineLimit(1).minimumScaleFactor(0.7)
@@ -801,7 +807,7 @@ struct SpMatchCenter: View {
                     if weatherText != nil { divider }
                     HStack(spacing: 8) {
                         Image(systemName: "tv.fill").font(.system(size: 13, weight: .semibold)).foregroundStyle(acc).frame(width: 22)
-                        Text("القنوات الناقلة").font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim)
+                        Text(L("القنوات الناقلة")).font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim)
                         Spacer(minLength: 0)
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
@@ -822,7 +828,7 @@ struct SpMatchCenter: View {
 
     private func weatherLine() -> String? {
         guard let w = facts?.weather else { return nil }
-        let parts = [w.temp.map { "\($0)°" }, w.description, w.humidity.map { "رطوبة \($0)" }]
+        let parts = [w.temp.map { "\($0)°" }, w.description, w.humidity.map { "\(L("رطوبة")) \($0)" }]
             .compactMap { $0 }.filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
@@ -834,10 +840,10 @@ struct SpMatchCenter: View {
             VStack(spacing: 14) {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
-                    Text(myPrediction == nil ? "توقّع النتيجة" : "توقّعك")
+                    Text(myPrediction == nil ? L("توقّع النتيجة") : L("توقّعك"))
                         .font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
-                    Text("٣ نقاط للمطابقة").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
+                    Text(L("٣ نقاط للمطابقة")).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
                 }
                 HStack(alignment: .top, spacing: 8) {
                     scoreStepper(f.home, value: $predHome)
@@ -848,7 +854,7 @@ struct SpMatchCenter: View {
                 Button { Task { await submit(f) } } label: {
                     HStack(spacing: 8) {
                         if predicting { ProgressView().tint(.white) }
-                        Text(myPrediction == nil ? "احفظ توقّعي" : "تعديل التوقّع")
+                        Text(myPrediction == nil ? L("احفظ توقّعي") : L("تعديل التوقّع"))
                             .font(SportsFonts.app(size: 15, weight: .bold))
                     }
                     .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 46)
@@ -858,7 +864,7 @@ struct SpMatchCenter: View {
                 if let predictError {
                     Text(predictError).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.crimson)
                 } else if myPrediction != nil {
-                    Text("يمكنك التعديل حتى انطلاق المباراة")
+                    Text(L("يمكنك التعديل حتى انطلاق المباراة"))
                         .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
                 }
             }
@@ -907,7 +913,7 @@ struct SpMatchCenter: View {
         do {
             myPrediction = try await APIClient.shared.submitPrediction(body, matchId: f.id)
         } catch {
-            predictError = (error as? APIError)?.errorDescription ?? "تعذّر حفظ التوقّع"
+            predictError = (error as? APIError)?.errorDescription ?? L("تعذّر حفظ التوقّع")
         }
         predicting = false
     }
@@ -917,8 +923,8 @@ struct SpMatchCenter: View {
     @ViewBuilder private func content(_ d: SpMatchDetail) -> some View {
         if segments.isEmpty {
             SpEmptyState(icon: "hourglass",
-                         title: "لا تفاصيل بعد",
-                         subtitle: "ستظهر الأحداث والإحصاءات والتشكيلة فور توفّرها")
+                         title: L("لا تفاصيل بعد"),
+                         subtitle: L("ستظهر الأحداث والإحصاءات والتشكيلة فور توفّرها"))
                 .padding(.horizontal, 16)
         } else {
             VStack(spacing: 18) {
@@ -1018,7 +1024,7 @@ struct SpMatchCenter: View {
             let maxMin = barMaxMinute(d.events)
             let marks: [Int] = maxMin > 95 ? [0, 45, 90, maxMin] : [0, 45, 90]
             VStack(alignment: .leading, spacing: 10) {
-                Text("خطّ زمن المباراة")
+                Text(L("خطّ زمن المباراة"))
                     .font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(acc)
 
                 GeometryReader { geo in
@@ -1055,12 +1061,12 @@ struct SpMatchCenter: View {
                 HStack(spacing: 10) {
                     HStack(spacing: 5) {
                         Circle().fill(acc).frame(width: 7, height: 7)
-                        Text("\(d.fixture.home.name) · أعلى")
+                        Text("\(d.fixture.home.name) · \(L("أعلى"))")
                             .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
                     }
                     Spacer(minLength: 8)
                     HStack(spacing: 5) {
-                        Text("\(d.fixture.away.name) · أسفل")
+                        Text("\(d.fixture.away.name) · \(L("أسفل"))")
                             .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
                         Circle().fill(SpTheme.onDarkDim).frame(width: 7, height: 7)
                     }
@@ -1224,7 +1230,7 @@ struct SpMatchCenter: View {
     // فاصل «نتيجة الشوط الأول» (النص: ضيف - مضيف مع فرض LTR كبقية النتائج) يغطّي المحور في موضع الدقيقة 45.
     private func halftimeMarker(home: Int, away: Int) -> some View {
         HStack(spacing: 7) {
-            Text("نتيجة الشوط الأول")
+            Text(L("نتيجة الشوط الأول"))
                 .font(SportsFonts.app(size: 11, weight: .bold))
                 .foregroundStyle(SpTheme.onDarkDim)
             Text("\(away) - \(home)")
@@ -1303,10 +1309,10 @@ struct SpMatchCenter: View {
     private func detailSubtitle(_ e: SpMatchEvent) -> String? {
         switch e.type {
         case "substitution":
-            if let a = e.assist, !a.isEmpty { return "بديلًا عن: \(a)" }
+            if let a = e.assist, !a.isEmpty { return Lf("بديلًا عن: %@", a) }
             return nil
         case "goal":
-            if let a = e.assist, !a.isEmpty { return "صناعة: \(a)" }
+            if let a = e.assist, !a.isEmpty { return Lf("صناعة: %@", a) }
             return nil
         default:
             if !e.label.isEmpty, e.label != e.player { return e.label }
@@ -1366,7 +1372,7 @@ struct SpMatchCenter: View {
                 if c.live {
                     HStack(spacing: 6) {
                         Circle().fill(SpTheme.crimson).frame(width: 7, height: 7)
-                        Text("التعليق يتحدّث مباشرةً")
+                        Text(L("التعليق يتحدّث مباشرةً"))
                             .font(SportsFonts.app(size: 11.5, weight: .bold))
                             .foregroundStyle(SpTheme.crimson)
                         Spacer(minLength: 0)
@@ -1539,12 +1545,12 @@ struct SpMatchCenter: View {
     private var expectedBadge: some View {
         // «تشكيلة متوقعة» — رقاقة محايدة بلا برتقالي (لون محوري واحد للتطبيق).
         HStack(spacing: 8) {
-            Text("تشكيلة متوقعة")
+            Text(L("تشكيلة متوقعة"))
                 .font(SportsFonts.app(size: 11, weight: .heavy))
                 .foregroundStyle(SpTheme.onDark)
                 .padding(.horizontal, 10).padding(.vertical, 3)
                 .background(Capsule().fill(SpTheme.chipFill))
-            Text("ترشيح المزوّد قبل الإعلان الرسمي — قد تتغيّر")
+            Text(L("ترشيح المزوّد قبل الإعلان الرسمي — قد تتغيّر"))
                 .font(SportsFonts.app(size: 11))
                 .foregroundStyle(SpTheme.onDarkDim)
                 .lineLimit(1).minimumScaleFactor(0.8)
@@ -1604,7 +1610,7 @@ struct SpMatchCenter: View {
             }
 
             if let coach = lu.coach, !coach.isEmpty {
-                Label("المدرب: \(coach)", systemImage: "person.fill")
+                Label(Lf("المدرب: %@", coach), systemImage: "person.fill")
                     .font(SportsFonts.app(size: 11))
                     .foregroundStyle(SpTheme.onDarkDim)
             }
@@ -1674,7 +1680,7 @@ struct SpMatchCenter: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "figure.seated.side").font(.system(size: 11, weight: .bold)).foregroundStyle(acc)
-                Text("دكة البدلاء").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(acc)
+                Text(L("دكة البدلاء")).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(acc)
                 Text("(\(subs.count))").font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 8)], alignment: .leading, spacing: 8) {
@@ -1739,9 +1745,9 @@ struct SpMatchCenter: View {
 
     private func xgCard(_ x: SpXg) -> some View {
         VStack(spacing: 12) {
-            sectionTitle("الأهداف المتوقّعة (xG)", icon: "scope")
+            sectionTitle(L("الأهداف المتوقّعة (xG)"), icon: "scope")
             compareRow("xG", home: x.home.xg, away: x.away.xg, fmt: "%.2f")
-            compareRow("على المرمى (xGOT)", home: x.home.xgot, away: x.away.xgot, fmt: "%.2f")
+            compareRow(L("على المرمى (xGOT)"), home: x.home.xgot, away: x.away.xgot, fmt: "%.2f")
             if !x.topPlayers.isEmpty {
                 divider
                 ForEach(Array(x.topPlayers.prefix(4).enumerated()), id: \.offset) { _, p in
@@ -1761,7 +1767,7 @@ struct SpMatchCenter: View {
     private func momentumCard(_ m: SpMomentum) -> some View {
         // الاستحواذ يُعرض في تبويب «الإحصاءات» — لا نكرّره هنا؛ الرسم للزخم وحده.
         VStack(spacing: 12) {
-            sectionTitle("الزخم", icon: "waveform.path.ecg")
+            sectionTitle(L("الزخم"), icon: "waveform.path.ecg")
             if !m.points.isEmpty {
                 SpFlowChart(points: m.points, homeColor: acc)
                 chartLegend
@@ -1772,7 +1778,7 @@ struct SpMatchCenter: View {
 
     private func pressureCard(_ p: SpPressure) -> some View {
         VStack(spacing: 12) {
-            sectionTitle("مؤشّر الضغط", icon: "gauge.with.dots.needle.50percent")
+            sectionTitle(L("مؤشّر الضغط"), icon: "gauge.with.dots.needle.50percent")
             SpFlowChart(points: downsample(p.points, maxCount: 24), homeColor: acc)
             chartLegend
         }
@@ -1781,18 +1787,18 @@ struct SpMatchCenter: View {
 
     private func factsCard(_ f: SpMatchFacts) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("وقائع المباراة", icon: "sparkles")
+            sectionTitle(L("وقائع المباراة"), icon: "sparkles")
             if let ht = f.halftime, let h = ht.home, let a = ht.away {
-                factRow("نتيجة الشوط الأول", "\(h) - \(a)", ltr: true)
+                factRow(L("نتيجة الشوط الأول"), "\(h) - \(a)", ltr: true)
             }
             if let w = f.weather {
-                let txt = [w.temp.map { "\($0)°" }, w.description, w.humidity.map { "رطوبة \($0)" }]
+                let txt = [w.temp.map { "\($0)°" }, w.description, w.humidity.map { "\(L("رطوبة")) \($0)" }]
                     .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-                if !txt.isEmpty { factRow("الطقس", txt) }
+                if !txt.isEmpty { factRow(L("الطقس"), txt) }
             }
             if !f.absentees.isEmpty {
                 divider
-                Text("الغيابات").font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.emeraldDeep)
+                Text(L("الغيابات")).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.emeraldDeep)
                 ForEach(Array(f.absentees.prefix(6).enumerated()), id: \.offset) { _, ab in
                     HStack(spacing: 8) {
                         Circle().fill(ab.location == "home" ? acc : SpTheme.onDarkDim).frame(width: 7, height: 7)
@@ -1848,8 +1854,8 @@ struct SpMatchCenter: View {
 
     private var chartLegend: some View {
         HStack(spacing: 16) {
-            legendDot(acc, detail?.fixture.home.name ?? "المضيف")
-            legendDot(SpTheme.onDarkDim, detail?.fixture.away.name ?? "الضيف")
+            legendDot(acc, detail?.fixture.home.name ?? L("المضيف"))
+            legendDot(SpTheme.onDarkDim, detail?.fixture.away.name ?? L("الضيف"))
             Spacer(minLength: 0)
         }
     }
@@ -1902,7 +1908,7 @@ struct SpMatchCenter: View {
                     // «أفضل لاعب» تميّز — بذهبيّ التميّز لا اللون المحوري.
                     HStack(spacing: 5) {
                         Image(systemName: "star.fill").font(.system(size: 10, weight: .bold)).foregroundStyle(SpTheme.excellence)
-                        Text("أفضل لاعب في المباراة").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.excellence)
+                        Text(L("أفضل لاعب في المباراة")).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.excellence)
                     }
                     Text(m.name).font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                     Text(m.team).font(SportsFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
@@ -1984,9 +1990,9 @@ struct SpMatchCenter: View {
         let total = max(1, s.total)
         return VStack(spacing: 12) {
             HStack(alignment: .top) {
-                h2hStat("\(s.homeWins)", home?.name ?? "المضيف", acc)
-                h2hStat("\(s.draws)", "تعادل", SpTheme.onDarkDim)
-                h2hStat("\(s.awayWins)", away?.name ?? "الضيف", SpTheme.onDark)
+                h2hStat("\(s.homeWins)", home?.name ?? L("المضيف"), acc)
+                h2hStat("\(s.draws)", L("تعادل"), SpTheme.onDarkDim)
+                h2hStat("\(s.awayWins)", away?.name ?? L("الضيف"), SpTheme.onDark)
             }
             GeometryReader { geo in
                 HStack(spacing: 2) {
@@ -1995,7 +2001,7 @@ struct SpMatchCenter: View {
                     Capsule().fill(SpTheme.onDarkDim).frame(width: geo.size.width * CGFloat(s.awayWins) / CGFloat(total))
                 }
             }.frame(height: 8)
-            Text("آخر \(s.total) لقاءات بين الفريقين")
+            Text(Lf("آخر %d لقاءات بين الفريقين", s.total))
                 .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
         }
         .padding(15).frame(maxWidth: .infinity)

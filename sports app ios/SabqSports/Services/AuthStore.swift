@@ -163,7 +163,7 @@ final class SpAuthStore {
     private func handleApple(_ credential: ASAuthorizationAppleIDCredential) {
         guard let data = credential.identityToken,
               let identityToken = String(data: data, encoding: .utf8) else {
-            errorMessage = "تعذّر قراءة بيانات Apple"
+            errorMessage = L("تعذّر قراءة بيانات Apple")
             errorSource = .apple
             return
         }
@@ -176,7 +176,7 @@ final class SpAuthStore {
 
     private func handleAppleFailure(_ error: Error) {
         if let asError = error as? ASAuthorizationError, asError.code == .canceled { return }
-        errorMessage = "تعذّر تسجيل الدخول عبر Apple"
+        errorMessage = L("تعذّر تسجيل الدخول عبر Apple")
         errorSource = .apple
     }
 
@@ -201,7 +201,7 @@ final class SpAuthStore {
     func loginWithCredentials(identifier: String, password: String) async {
         let id = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !id.isEmpty, !password.isEmpty else {
-            errorMessage = "أدخل البريد/الجوال وكلمة المرور"
+            errorMessage = L("أدخل البريد/الجوال وكلمة المرور")
             errorSource = .credentials
             return
         }
@@ -222,7 +222,7 @@ final class SpAuthStore {
     private func applySession(_ resp: SpLoginResponse) async throws {
         guard let t = resp.token, !t.isEmpty else {
             throw NSError(domain: "sabqsports", code: 401,
-                          userInfo: [NSLocalizedDescriptionKey: resp.message ?? "بيانات الدخول غير صحيحة"])
+                          userInfo: [NSLocalizedDescriptionKey: resp.message ?? L("بيانات الدخول غير صحيحة")])
         }
         token = t
         member = resp.member
@@ -238,10 +238,10 @@ final class SpAuthStore {
     private func friendly(_ error: Error) -> String {
         if let e = error as? APIError {
             switch e {
-            case .unauthorized: return "البريد/الجوال أو كلمة المرور غير صحيحة"
-            case .forbidden: return "هذا الحساب غير مفعّل أو محظور"
-            case .rateLimited: return "محاولات كثيرة، حاول بعد قليل"
-            default: return e.errorDescription ?? "تعذّر تسجيل الدخول"
+            case .unauthorized: return L("البريد/الجوال أو كلمة المرور غير صحيحة")
+            case .forbidden: return L("هذا الحساب غير مفعّل أو محظور")
+            case .rateLimited: return L("محاولات كثيرة، حاول بعد قليل")
+            default: return e.errorDescription ?? L("تعذّر تسجيل الدخول")
             }
         }
         return error.localizedDescription
@@ -283,13 +283,13 @@ final class SpAuthStore {
             return true
         } catch let e as APIError {
             switch e {
-            case .unauthorized: errorMessage = "كلمة المرور غير صحيحة"
-            case .server(_, let msg): errorMessage = msg ?? "تعذّر حذف الحساب"
-            default: errorMessage = e.errorDescription ?? "تعذّر حذف الحساب"
+            case .unauthorized: errorMessage = L("كلمة المرور غير صحيحة")
+            case .server(_, let msg): errorMessage = msg ?? L("تعذّر حذف الحساب")
+            default: errorMessage = e.errorDescription ?? L("تعذّر حذف الحساب")
             }
             return false
         } catch {
-            errorMessage = "تعذّر حذف الحساب"
+            errorMessage = L("تعذّر حذف الحساب")
             return false
         }
     }
@@ -706,7 +706,7 @@ final class SpMatchFollows {
         let preDate = fixture.kickoff.addingTimeInterval(-10 * 60)
         if preDate > Date() {
             schedule(center, id: "match-\(fixture.id)-pre", at: preDate,
-                     title: title, body: "تبدأ المباراة بعد ١٠ دقائق ⚽")
+                     title: title, body: L("تبدأ المباراة بعد ١٠ دقائق ⚽"))
         }
     }
 

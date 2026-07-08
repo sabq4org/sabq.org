@@ -8,6 +8,7 @@ struct AccountView: View {
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpThemeMode.self) private var themeMode
     @Environment(SpAccentTheme.self) private var accent
+    @Environment(SpLanguage.self) private var language
     @Environment(SpAppRouter.self) private var router
     @Environment(\.openURL) private var openURL
     @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
@@ -41,6 +42,7 @@ struct AccountView: View {
                     }
 
                     predictionsSection
+                    languageSection
                     appearanceSection
                     notificationsSection
                     transfersNotificationsSection
@@ -51,7 +53,7 @@ struct AccountView: View {
 
                     HStack(spacing: 7) {
                         SpWordmark(size: 11, color: SpTheme.onDarkFaint)
-                        Text("· دقّة الرياضة")
+                        Text(L("· دقّة الرياضة"))
                             .font(SportsFonts.app(size: 11, weight: .semibold))
                             .foregroundStyle(SpTheme.onDarkFaint)
                     }
@@ -63,14 +65,14 @@ struct AccountView: View {
             .refreshable { await auth.loadUserData() }
             .autoHideTabBar()
             .background(SpAmbientBackground())
-            .navigationTitle("حسابي")
+            .navigationTitle(L("حسابي"))
             .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
-            .alert("تسجيل الخروج", isPresented: $showSignOutConfirm) {
-                Button("تسجيل الخروج", role: .destructive) { auth.signOut() }
-                Button("إلغاء", role: .cancel) {}
+            .alert(L("تسجيل الخروج"), isPresented: $showSignOutConfirm) {
+                Button(L("تسجيل الخروج"), role: .destructive) { auth.signOut() }
+                Button(L("إلغاء"), role: .cancel) {}
             } message: {
-                Text("سيتم إنهاء جلستك على هذا الجهاز. يبقى فريقك المفضّل ومبارياتك المتابَعة كما هي.")
+                Text(L("سيتم إنهاء جلستك على هذا الجهاز. يبقى فريقك المفضّل ومبارياتك المتابَعة كما هي."))
             }
             // بعد تسجيل الخروج: اقفز لأعلى الصفحة فتظهر بطاقة الدخول فورًا بدل
             // البقاء عند موضع زر الخروج بالأسفل.
@@ -94,7 +96,7 @@ struct AccountView: View {
             HStack(spacing: 14) {
                 avatarView
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(auth.member?.name ?? "عضو VARA")
+                    Text(auth.member?.name ?? L("عضو VARA"))
                         .font(SportsFonts.app(size: 18, weight: .heavy))
                         .foregroundStyle(SpTheme.onDark)
                         .lineLimit(1)
@@ -126,7 +128,7 @@ struct AccountView: View {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill")
                     .font(.system(size: 13, weight: .bold))
-                Text("عضو سبق")
+                Text(L("عضو سبق"))
                     .font(SportsFonts.app(size: 12, weight: .heavy))
             }
             .foregroundStyle(SpTheme.gold)
@@ -135,7 +137,7 @@ struct AccountView: View {
 
             Button { openURL(URL(string: "https://sabq.org/profile")!) } label: {
                 HStack(spacing: 3) {
-                    Text("إدارة حساب سبق")
+                    Text(L("إدارة حساب سبق"))
                         .font(SportsFonts.app(size: 11.5, weight: .bold))
                     Image(systemName: "chevron.backward")
                         .font(.system(size: 9, weight: .bold))
@@ -153,16 +155,16 @@ struct AccountView: View {
 
     private var loyaltyLine: String {
         let teams = followedTeams.count
-        if let fav = favorites.team { return "مشجّع \(fav.name)" }
-        if teams > 0 { return "تتابع \(teams) فريقًا" }
-        return "أهلًا بك في VARA"
+        if let fav = favorites.team { return Lf("مشجّع %@", fav.name) }
+        if teams > 0 { return Lf("تتابع %d فريقًا", teams) }
+        return L("أهلًا بك في VARA")
     }
 
     // MARK: - التوقّعات (نظام البركة المتدرّجة المعمّم — يُفتح من هنا)
 
     private var predictionsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("التوقّعات")
+            sectionHeader(L("التوقّعات"))
             NavigationLink {
                 PredictionsHubView()
             } label: {
@@ -173,10 +175,10 @@ struct AccountView: View {
                         .frame(width: 48, height: 48)
                         .background(Circle().fill(SpTheme.gold.opacity(0.14)))
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("توقّعات VARA")
+                        Text(L("توقّعات VARA"))
                             .font(SportsFonts.app(size: 16, weight: .heavy))
                             .foregroundStyle(SpTheme.onDark)
-                        Text("توقّع نتائج كأس العالم والبطولات وتنافس على النقاط والجوائز")
+                        Text(L("توقّع نتائج كأس العالم والبطولات وتنافس على النقاط والجوائز"))
                             .font(SportsFonts.app(size: 11.5, weight: .semibold))
                             .foregroundStyle(SpTheme.onDarkDim)
                             .lineLimit(2)
@@ -198,17 +200,53 @@ struct AccountView: View {
         }
     }
 
+    // MARK: - اللغة (عربي / إنجليزي)
+
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader(L("اللغة"))
+            HStack(spacing: 8) {
+                ForEach(SpLanguage.Lang.allCases) { lang in
+                    languageChip(lang)
+                }
+            }
+            hint(L("اختر لغة الواجهة. قد تبقى بيانات المباريات بالعربية حتى تدعمها البوابة بالإنجليزية."))
+        }
+    }
+
+    private func languageChip(_ lang: SpLanguage.Lang) -> some View {
+        let active = language.lang == lang
+        return Button {
+            withAnimation(.easeInOut(duration: 0.25)) { language.lang = lang }
+        } label: {
+            VStack(spacing: 7) {
+                Text(lang.flag).font(.system(size: 20))
+                Text(lang.nativeName).font(SportsFonts.app(size: 12.5, weight: .bold))
+            }
+            .foregroundStyle(active ? .white : SpTheme.onDarkDim)
+            .frame(maxWidth: .infinity).frame(height: 66)
+            .background(
+                RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                    .fill(active ? SpTheme.green : SpTheme.card)
+                    .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                        .stroke(active ? Color.clear : SpTheme.cardStroke, lineWidth: 1))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous))
+        }
+        .buttonStyle(SpPressStyle())
+    }
+
     // MARK: - المظهر (تلقائي / فاتح / داكن + لون التطبيق)
 
     private var appearanceSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("المظهر")
+            sectionHeader(L("المظهر"))
             HStack(spacing: 8) {
                 ForEach(SpThemeMode.Mode.allCases) { m in
                     appearanceChip(m)
                 }
             }
-            hint("«تلقائي» يتبع إعداد جهازك؛ أو اختر الفاتح/الداكن يدويًّا.")
+            hint(L("«تلقائي» يتبع إعداد جهازك؛ أو اختر الفاتح/الداكن يدويًّا."))
             appColorPicker
         }
     }
@@ -216,13 +254,13 @@ struct AccountView: View {
     // مُنتقي لون التطبيق — المستخدم يختار لونًا محوريًا بدون صبغ البطولات بألوان مختلفة.
     private var appColorPicker: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("لون التطبيق")
+            Text(L("لون التطبيق"))
                 .font(SportsFonts.app(size: 12.5, weight: .bold))
                 .foregroundStyle(SpTheme.onDarkDim)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 5), spacing: 14) {
                 ForEach(SpTeamPalette.all) { p in colorSwatch(p) }
             }
-            hint("اختر لونك المفضل للأزرار والأيقونات والترويسات؛ البطولات تبقى بنفس قالب التطبيق.")
+            hint(L("اختر لونك المفضل للأزرار والأيقونات والترويسات؛ البطولات تبقى بنفس قالب التطبيق."))
         }
         .padding(.top, 6)
     }
@@ -257,7 +295,7 @@ struct AccountView: View {
         } label: {
             VStack(spacing: 7) {
                 Image(systemName: m.icon).font(.system(size: 18, weight: .bold))
-                Text(m.label).font(SportsFonts.app(size: 12.5, weight: .bold))
+                Text(L(m.label)).font(SportsFonts.app(size: 12.5, weight: .bold))
             }
             .foregroundStyle(active ? .white : SpTheme.onDarkDim)
             .frame(maxWidth: .infinity).frame(height: 66)
@@ -279,7 +317,7 @@ struct AccountView: View {
 
     private var teamsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("فِرقي")
+            sectionHeader(L("فِرقي"))
             settingsCard {
                 favoriteRow
                 if auth.isLoggedIn && !followedTeams.isEmpty {
@@ -288,7 +326,7 @@ struct AccountView: View {
                 }
             }
             if !auth.isLoggedIn {
-                hint("الفريق المفضّل يعمل بلا تسجيل دخول ويتصدّر صفحتك الرئيسية. سجّل الدخول لمتابعة عدّة فِرق وتلقّي تنبيهاتها.")
+                hint(L("الفريق المفضّل يعمل بلا تسجيل دخول ويتصدّر صفحتك الرئيسية. سجّل الدخول لمتابعة عدّة فِرق وتلقّي تنبيهاتها."))
             }
         }
     }
@@ -302,10 +340,10 @@ struct AccountView: View {
                 HStack(spacing: 12) {
                     iconTile("star.fill", SpTheme.green)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("الفريق المفضّل")
+                        Text(L("الفريق المفضّل"))
                             .font(SportsFonts.app(size: 14.5, weight: .bold))
                             .foregroundStyle(SpTheme.onDark)
-                        Text(favorites.team?.name ?? "اختره من نجمة صفحة أي نادٍ")
+                        Text(favorites.team?.name ?? L("اختره من نجمة صفحة أي نادٍ"))
                             .font(SportsFonts.app(size: 11.5, weight: .semibold))
                             .foregroundStyle(favorites.team == nil ? SpTheme.onDarkFaint : SpTheme.green)
                             .lineLimit(1)
@@ -325,7 +363,7 @@ struct AccountView: View {
                         .foregroundStyle(SpTheme.onDarkFaint)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("إزالة الفريق المفضّل")
+                .accessibilityLabel(L("إزالة الفريق المفضّل"))
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
@@ -336,7 +374,7 @@ struct AccountView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 iconTile("heart.fill", SpTheme.green)
-                Text("الفِرق المتابَعة")
+                Text(L("الفِرق المتابَعة"))
                     .font(SportsFonts.app(size: 14.5, weight: .bold))
                     .foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
@@ -370,32 +408,32 @@ struct AccountView: View {
 
     @ViewBuilder private var notificationsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("تنبيهات المباريات")
+            sectionHeader(L("تنبيهات المباريات"))
             if auth.isLoggedIn {
                 settingsCard {
-                    alertRow("بداية المباراة", "play.circle.fill", \.kickoff)
+                    alertRow(L("بداية المباراة"), "play.circle.fill", \.kickoff)
                     rowDivider
-                    alertRow("الأهداف", "soccerball", \.goals)
+                    alertRow(L("الأهداف"), "soccerball", \.goals)
                     rowDivider
-                    alertRow("البطاقات", "rectangle.portrait.fill", \.cards)
+                    alertRow(L("البطاقات"), "rectangle.portrait.fill", \.cards)
                     rowDivider
-                    alertRow("حالات الفار (VAR)", "tv.fill", \.varReview)
+                    alertRow(L("حالات الفار (VAR)"), "tv.fill", \.varReview)
                     rowDivider
-                    alertRow("نهاية المباراة", "flag.checkered", \.fulltime)
+                    alertRow(L("نهاية المباراة"), "flag.checkered", \.fulltime)
                     rowDivider
-                    alertRow("لقطات ذكية", "sparkles", \.smartSnaps)
+                    alertRow(L("لقطات ذكية"), "sparkles", \.smartSnaps)
                     rowDivider
                     localSmartSnapsRow
                 }
                 hint(followedTeams.isEmpty
-                     ? "تابع فريقًا ليصلك تنبيه عند أحداث مبارياته."
-                     : "تصلك هذه التنبيهات عن مباريات فِرقك المتابَعة.")
+                     ? L("تابع فريقًا ليصلك تنبيه عند أحداث مبارياته.")
+                     : L("تصلك هذه التنبيهات عن مباريات فِرقك المتابَعة."))
             } else {
                 settingsCard {
                     Button { router.requestLogin() } label: {
                         HStack(spacing: 12) {
                             iconTile("bell.badge.fill", SpTheme.green)
-                            Text("سجّل الدخول بعضوية سبق لتفعيل تنبيهات فِرقك")
+                            Text(L("سجّل الدخول بعضوية سبق لتفعيل تنبيهات فِرقك"))
                                 .font(SportsFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SpTheme.onDark)
                             Spacer(minLength: 0)
@@ -416,20 +454,20 @@ struct AccountView: View {
 
     @ViewBuilder private var transfersNotificationsSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("تنبيهات الانتقالات")
+            sectionHeader(L("تنبيهات الانتقالات"))
             if auth.isLoggedIn {
                 settingsCard {
-                    alertRow("انتقالات سعودية", "flag.fill", \.transfersSaudi)
+                    alertRow(L("انتقالات سعودية"), "flag.fill", \.transfersSaudi)
                     rowDivider
-                    alertRow("انتقالات عالمية بارزة", "globe", \.transfersGlobal)
+                    alertRow(L("انتقالات عالمية بارزة"), "globe", \.transfersGlobal)
                 }
-                hint("تصلك الصفقات المؤكّدة فور تأكيدها — تنبيهات سوق عامّة لا تتطلّب متابعة فريق.")
+                hint(L("تصلك الصفقات المؤكّدة فور تأكيدها — تنبيهات سوق عامّة لا تتطلّب متابعة فريق."))
             } else {
                 settingsCard {
                     Button { router.requestLogin() } label: {
                         HStack(spacing: 12) {
                             iconTile("bell.badge.fill", SpTheme.green)
-                            Text("سجّل الدخول بعضوية سبق لتفعيل تنبيهات الانتقالات")
+                            Text(L("سجّل الدخول بعضوية سبق لتفعيل تنبيهات الانتقالات"))
                                 .font(SportsFonts.app(size: 14, weight: .semibold))
                                 .foregroundStyle(SpTheme.onDark)
                             Spacer(minLength: 0)
@@ -464,7 +502,7 @@ struct AccountView: View {
                     Circle()
                         .fill(active ? SpTheme.green : SpTheme.onDarkFaint)
                         .frame(width: 7, height: 7)
-                    Text(active ? "مفعّل" : "متوقف")
+                    Text(active ? L("مفعّل") : L("متوقف"))
                         .font(SportsFonts.app(size: 11.5, weight: .bold))
                 }
                 .foregroundStyle(active ? SpTheme.green : SpTheme.onDarkFaint)
@@ -479,17 +517,17 @@ struct AccountView: View {
 
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader("عن التطبيق")
+            sectionHeader(L("عن التطبيق"))
             settingsCard {
-                navRow("info.circle.fill", "عن التطبيق") { AboutAppView() }
+                navRow("info.circle.fill", L("عن التطبيق")) { AboutAppView() }
                 rowDivider
-                navRow("checkmark.shield.fill", "سياسة الاستخدام") { UsagePolicyView() }
+                navRow("checkmark.shield.fill", L("سياسة الاستخدام")) { UsagePolicyView() }
                 rowDivider
-                navRow("doc.text.fill", "شروط الاستخدام") { TermsView() }
+                navRow("doc.text.fill", L("شروط الاستخدام")) { TermsView() }
                 rowDivider
-                linkRow("questionmark.circle.fill", "الدعم", "https://sabq.org/contact")
+                linkRow("questionmark.circle.fill", L("الدعم"), "https://sabq.org/contact")
                 rowDivider
-                infoRow("number", "الإصدار", appVersion)
+                infoRow("number", L("الإصدار"), appVersion)
             }
         }
     }
@@ -500,7 +538,7 @@ struct AccountView: View {
         } label: {
             HStack(spacing: 12) {
                 iconTile("eye", showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
-                Text("إظهار اللقطات داخل التطبيق")
+                Text(L("إظهار اللقطات داخل التطبيق"))
                     .font(SportsFonts.app(size: 14.5, weight: .semibold))
                     .foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
@@ -508,7 +546,7 @@ struct AccountView: View {
                     Circle()
                         .fill(showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
                         .frame(width: 7, height: 7)
-                    Text(showSmartSnaps ? "ظاهر" : "مخفي")
+                    Text(showSmartSnaps ? L("ظاهر") : L("مخفي"))
                         .font(SportsFonts.app(size: 11.5, weight: .bold))
                 }
                 .foregroundStyle(showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
@@ -563,11 +601,11 @@ struct AccountView: View {
     @ViewBuilder private var dangerZoneSection: some View {
         if auth.isLoggedIn {
             VStack(alignment: .leading, spacing: 10) {
-                sectionHeader("منطقة الخطر")
+                sectionHeader(L("منطقة الخطر"))
                 settingsCard {
-                    navRow("trash.fill", "حذف الحساب", SpTheme.crimson) { DeleteAccountView() }
+                    navRow("trash.fill", L("حذف الحساب"), SpTheme.crimson) { DeleteAccountView() }
                 }
-                hint("حذف الحساب يزيل ملفّك وبياناتك نهائيًّا ولا يمكن التراجع عنه.")
+                hint(L("حذف الحساب يزيل ملفّك وبياناتك نهائيًّا ولا يمكن التراجع عنه."))
             }
         }
     }
@@ -576,7 +614,7 @@ struct AccountView: View {
 
     private var signOutButton: some View {
         Button { showSignOutConfirm = true } label: {
-            Text("تسجيل الخروج")
+            Text(L("تسجيل الخروج"))
                 .font(SportsFonts.app(size: 14.5, weight: .bold))
                 .foregroundStyle(SpTheme.crimson)
                 .frame(maxWidth: .infinity)
@@ -751,31 +789,31 @@ struct SpMembershipLogin: View {
     var body: some View {
         VStack(spacing: 14) {
             HStack(spacing: 6) {
-                Text("مرحبًا بك في")
+                Text(L("مرحبًا بك في"))
                     .font(SportsFonts.app(size: 20, weight: .heavy))
                     .foregroundStyle(SpTheme.onDark)
                 SpWordmark(size: 20)
             }
             // ختم «من سبق» أسفل الترحيب مباشرةً — الرعاية الخفيفة أعلى البطاقة.
             HStack(spacing: 7) {
-                Text("أحد منتجات")
+                Text(L("أحد منتجات"))
                     .font(SportsFonts.app(size: 11, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkFaint)
                 Rectangle().fill(SpTheme.outline).frame(width: 1, height: 11)
-                Text("صحيفة سبق")
+                Text(L("صحيفة سبق"))
                     .font(SportsFonts.app(size: 11, weight: .heavy))
                     .foregroundStyle(SpTheme.green)
             }
             .padding(.top, -4)
-            Text("سجّل بعضويتك في سبق لتحفظ فريقك، وترسل توقّعاتك، وتصلك تنبيهات المباريات على كل أجهزتك.")
+            Text(L("سجّل بعضويتك في سبق لتحفظ فريقك، وترسل توقّعاتك، وتصلك تنبيهات المباريات على كل أجهزتك."))
                 .font(SportsFonts.app(size: 13))
                 .foregroundStyle(SpTheme.onDarkDim)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(spacing: 10) {
-                field(text: $identifier, placeholder: "البريد الإلكتروني أو الجوال", icon: "person", secure: false)
-                field(text: $password, placeholder: "كلمة المرور", icon: "lock", secure: true)
+                field(text: $identifier, placeholder: L("البريد الإلكتروني أو الجوال"), icon: "person", secure: false)
+                field(text: $password, placeholder: L("كلمة المرور"), icon: "lock", secure: true)
             }
 
             // الزر الأساسي — الدخول بعضوية سبق (نفس حساب سبق).
@@ -786,12 +824,12 @@ struct SpMembershipLogin: View {
                     if auth.isLoading {
                         ProgressView().tint(.white)
                     } else {
-                        Text("سبق")
+                        Text(L("سبق"))
                             .font(SportsFonts.app(size: 11, weight: .heavy))
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(Capsule().fill(Color.white.opacity(0.18)))
                     }
-                    Text("الدخول بعضوية سبق").font(SportsFonts.app(size: 16, weight: .bold))
+                    Text(L("الدخول بعضوية سبق")).font(SportsFonts.app(size: 16, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity).frame(height: 50)
@@ -810,7 +848,7 @@ struct SpMembershipLogin: View {
             Button { auth.startAppleSignIn() } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "applelogo").font(.system(size: 18, weight: .semibold))
-                    Text("المتابعة عبر Apple").font(SportsFonts.app(size: 15, weight: .semibold))
+                    Text(L("المتابعة عبر Apple")).font(SportsFonts.app(size: 15, weight: .semibold))
                 }
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity).frame(height: 48)
@@ -866,7 +904,7 @@ struct SpMembershipLogin: View {
     private var dividerOr: some View {
         HStack(spacing: 12) {
             Rectangle().fill(SpTheme.outline).frame(height: 1)
-            Text("أو").font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
+            Text(L("أو")).font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
             Rectangle().fill(SpTheme.outline).frame(height: 1)
         }
         .padding(.vertical, 2)

@@ -167,7 +167,7 @@ final class SpLiveActivityManager {
             homePenaltyScore: f.penaltyScore?.home,
             awayPenaltyScore: f.penaltyScore?.away,
             minute: minute,
-            statusLabel: f.status.finished ? "انتهت" : f.status.label,
+            statusLabel: f.status.finished ? L("انتهت") : f.status.label,
             isLive: f.status.live,
             isFinished: f.status.finished,
             lastEvent: nil,
@@ -180,19 +180,19 @@ final class SpLiveActivityManager {
             return name
         }
         switch fixture.competitionSlug {
-        case "pro-league": return "دوري روشن"
-        case "kings-cup": return "كأس الملك"
-        case "super-cup": return "كأس السوبر السعودي"
-        case "division-1": return "دوري يلو"
-        case "division-2": return "دوري الدرجة الثانية"
-        case "womens-league": return "الدوري السعودي للسيدات"
-        case "world-cup": return "كأس العالم"
-        case "premier-league": return "الدوري الإنجليزي"
-        case "laliga": return "الدوري الإسباني"
-        case "serie-a": return "الدوري الإيطالي"
-        case "bundesliga": return "الدوري الألماني"
-        case "ligue-1": return "الدوري الفرنسي"
-        default: return "مباراة مباشرة"
+        case "pro-league": return L("دوري روشن")
+        case "kings-cup": return L("كأس الملك")
+        case "super-cup": return L("كأس السوبر السعودي")
+        case "division-1": return L("دوري يلو")
+        case "division-2": return L("دوري الدرجة الثانية")
+        case "womens-league": return L("الدوري السعودي للسيدات")
+        case "world-cup": return L("كأس العالم")
+        case "premier-league": return L("الدوري الإنجليزي")
+        case "laliga": return L("الدوري الإسباني")
+        case "serie-a": return L("الدوري الإيطالي")
+        case "bundesliga": return L("الدوري الألماني")
+        case "ligue-1": return L("الدوري الفرنسي")
+        default: return L("مباراة مباشرة")
         }
     }
 

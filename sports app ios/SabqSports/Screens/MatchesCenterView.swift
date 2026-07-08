@@ -290,9 +290,11 @@ struct MatchesCenterView: View {
                 Image(systemName: "soccerball")
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(accent)
-                Text("المباريات")
+                Text(L("المباريات"))
                     .font(SportsFonts.headline(size: 22))
                     .foregroundStyle(SpTheme.onDark)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
             Spacer(minLength: 0)
             manageButton
@@ -330,7 +332,7 @@ struct MatchesCenterView: View {
             } else {
                 HStack(spacing: 5) {
                     Image(systemName: "person.crop.circle").font(.system(size: 14, weight: .bold))
-                    Text("دخول").font(SportsFonts.app(size: 12.5, weight: .heavy))
+                    Text(L("دخول")).font(SportsFonts.app(size: 12.5, weight: .heavy))
                 }
                 .foregroundStyle(Color(red: 0.11, green: 0.08, blue: 0.02))
                 .padding(.horizontal, 11).frame(height: 34)
@@ -338,7 +340,7 @@ struct MatchesCenterView: View {
             }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(auth.isLoggedIn ? "حسابي" : "تسجيل الدخول بعضوية سبق")
+        .accessibilityLabel(auth.isLoggedIn ? L("حسابي") : L("تسجيل الدخول بعضوية سبق"))
     }
 
     private var memberInitial: String {
@@ -359,7 +361,7 @@ struct MatchesCenterView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("اختيار البطولات")
+        .accessibilityLabel(L("اختيار البطولات"))
     }
 
     private var calendarButton: some View {
@@ -374,7 +376,7 @@ struct MatchesCenterView: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("اختيار التاريخ")
+        .accessibilityLabel(L("اختيار التاريخ"))
     }
 
     // زرّ «مباشر» — نقطة + نص بلا كبسولة؛ القرمزي لمسة الحالة النشطة فقط.
@@ -386,7 +388,7 @@ struct MatchesCenterView: View {
                 Circle()
                     .fill(liveOnly ? SpTheme.crimson : SpTheme.onDarkFaint)
                     .frame(width: 7, height: 7)
-                Text("مباشر")
+                Text(L("مباشر"))
                     .font(SportsFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(liveOnly ? SpTheme.crimson : SpTheme.onDarkDim)
             }
@@ -478,15 +480,15 @@ struct MatchesCenterView: View {
 
     private var lensPill: some View {
         Menu {
-            Picker("عدسة", selection: lensBinding) {
+            Picker(L("عدسة"), selection: lensBinding) {
                 ForEach(lensList, id: \.key) { item in
-                    Label(item.title, systemImage: item.icon).tag(item.key)
+                    Label(L(item.title), systemImage: item.icon).tag(item.key)
                 }
             }
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: activeLens.icon).font(.system(size: 11, weight: .bold))
-                Text(activeLens.title)
+                Text(L(activeLens.title))
                     .font(SportsFonts.app(size: 12.5, weight: .bold))
                     .lineLimit(1)
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .heavy))
@@ -497,7 +499,7 @@ struct MatchesCenterView: View {
             .overlay(Capsule().stroke(isLensActive ? Color.clear : SpTheme.green.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("عدسة العرض: \(activeLens.title)")
+        .accessibilityLabel("\(L("عدسة العرض")): \(L(activeLens.title))")
     }
 
     private func filterChip(slug: String, name: String, logo: String?) -> some View {
@@ -595,7 +597,7 @@ struct MatchesCenterView: View {
         if loading && fixtures.isEmpty {
             SpLoading().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let loadError, fixtures.isEmpty {
-            SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ZStack(alignment: .bottom) {
@@ -671,7 +673,7 @@ struct MatchesCenterView: View {
                     if hasLive {
                         Circle().fill(SpTheme.crimson).frame(width: 5, height: 5)
                     }
-                    Text(isToday ? "اليوم" : SpFormat.weekdayName(day.date))
+                    Text(isToday ? L("اليوم") : SpFormat.weekdayName(day.date))
                         .font(SportsFonts.app(size: 10.5, weight: .semibold))
                         .foregroundStyle(active ? accent : SpTheme.onDarkDim)
                         .lineLimit(1)
@@ -824,15 +826,15 @@ struct MatchesCenterView: View {
         if selection == "all", favorites.items.isEmpty {
             SpEmptyState(
                 icon: "slider.horizontal.3",
-                title: "اختر بطولاتك",
-                subtitle: "فعّل البطولات التي تهمّك من أيقونة الضبط أعلى الشاشة ليظهر جدولها الموحّد هنا"
+                title: L("اختر بطولاتك"),
+                subtitle: L("فعّل البطولات التي تهمّك من أيقونة الضبط أعلى الشاشة ليظهر جدولها الموحّد هنا")
             )
             .padding(.top, 40)
         } else {
             SpEmptyState(
                 icon: liveOnly ? "dot.radiowaves.left.and.right" : "calendar",
-                title: liveOnly ? "لا مباريات مباشرة الآن" : "لا مباريات في هذه الفترة",
-                subtitle: liveOnly ? "أوقف فلتر «مباشر» لعرض الجدول كاملًا" : "جرّب بطولة أخرى أو عد لاحقًا"
+                title: liveOnly ? L("لا مباريات مباشرة الآن") : L("لا مباريات في هذه الفترة"),
+                subtitle: liveOnly ? L("أوقف فلتر «مباشر» لعرض الجدول كاملًا") : L("جرّب بطولة أخرى أو عد لاحقًا")
             )
             .padding(.top, 40)
         }
@@ -849,7 +851,7 @@ struct MatchesCenterView: View {
                     Image(systemName: "trophy.fill")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(SpTheme.gold)
-                    Text("الأدوار الإقصائية")
+                    Text(L("الأدوار الإقصائية"))
                         .font(SportsFonts.headline(size: 18))
                         .foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
@@ -915,7 +917,7 @@ struct MatchesCenterView: View {
                 goToDay(todayDayId)
             } label: {
                 HStack(spacing: 0) {
-                    Text(todayHasMatches ? "مباريات اليوم" : "الأقرب")
+                    Text(todayHasMatches ? L("مباريات اليوم") : L("الأقرب"))
                         .font(SportsFonts.app(size: 13, weight: .bold))
                 }
                 .foregroundStyle(.white)
@@ -1025,9 +1027,9 @@ struct MatchesCenterView: View {
         let cal = Self.riyadhCal
         let weekday = SpFormat.weekdayName(d)
         let dm = SpFormat.dayMonthLabel(d)
-        if cal.isDateInToday(d) { return "اليوم · \(weekday) \(dm)" }
-        if cal.isDateInTomorrow(d) { return "غدًا · \(weekday) \(dm)" }
-        if cal.isDateInYesterday(d) { return "أمس · \(weekday) \(dm)" }
+        if cal.isDateInToday(d) { return "\(L("اليوم")) · \(weekday) \(dm)" }
+        if cal.isDateInTomorrow(d) { return "\(L("غدًا")) · \(weekday) \(dm)" }
+        if cal.isDateInYesterday(d) { return "\(L("أمس")) · \(weekday) \(dm)" }
         return "\(weekday) · \(dm)"
     }
 
@@ -1044,9 +1046,9 @@ struct MatchesCenterView: View {
     /// وصف حالة البطولة في صف الاختيار — يطمئن المستخدم أن الجدول سيمتلئ لاحقًا.
     private func compStatusHint(_ comp: SpCompetition) -> String? {
         switch comp.status {
-        case "ongoing": return "جارية الآن"
-        case "upcoming": return "تنطلق قريبًا"
-        case "finished": return "انتهت"
+        case "ongoing": return L("جارية الآن")
+        case "upcoming": return L("تنطلق قريبًا")
+        case "finished": return L("انتهت")
         default: return nil
         }
     }
@@ -1055,7 +1057,7 @@ struct MatchesCenterView: View {
         NavigationStack {
             List {
                 Section {
-                    Text("ما تفعّله هنا يظهر جدوله في «الكل» وفي بلوك «بطولاتي» بتبويب البطولات — مصدر واحد للمفضّلة.")
+                    Text(L("ما تفعّله هنا يظهر جدوله في «الكل» وفي بلوك «بطولاتي» بتبويب البطولات — مصدر واحد للمفضّلة."))
                         .font(SportsFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(SpTheme.onDarkDim)
                         .listRowBackground(Color.clear)
@@ -1068,11 +1070,11 @@ struct MatchesCenterView: View {
                     }
                 }
             }
-            .navigationTitle("بطولات الجدول")
+            .navigationTitle(L("بطولات الجدول"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("تم") { showCompsManager = false }
+                    Button(L("تم")) { showCompsManager = false }
                 }
             }
         }
@@ -1118,15 +1120,15 @@ struct MatchesCenterView: View {
                 .datePickerStyle(.graphical)
                 .tint(accent)
                 .environment(\.calendar, Calendar(identifier: .gregorian))
-                .environment(\.locale, Locale(identifier: "ar"))
+                .environment(\.locale, SpLanguage.shared.lang.locale)
                 .padding()
                 Spacer(minLength: 0)
             }
-            .navigationTitle("اذهب إلى تاريخ")
+            .navigationTitle(L("اذهب إلى تاريخ"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("اذهب") {
+                    Button(L("اذهب")) {
                         let id = nearestDayId(to: pickedDate)
                         showDatePicker = false
                         guard !id.isEmpty else { return }
@@ -1137,7 +1139,7 @@ struct MatchesCenterView: View {
                     }
                 }
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("إلغاء") { showDatePicker = false }
+                    Button(L("إلغاء")) { showDatePicker = false }
                 }
             }
         }
@@ -1230,7 +1232,7 @@ struct MatchesCenterView: View {
             wcBracket = bracket
             loadError = nil
         } catch {
-            if fixtures.isEmpty { loadError = (error as? LocalizedError)?.errorDescription ?? "تعذّر الاتصال بخادم البيانات" }
+            if fixtures.isEmpty { loadError = (error as? LocalizedError)?.errorDescription ?? L("تعذّر الاتصال بخادم البيانات") }
             if selection != "world-cup" { wcBracket = nil }
         }
         loading = false
@@ -1356,6 +1358,6 @@ private struct SpCenterMatchRow: View {
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.impact(weight: .light), trigger: following)
-        .accessibilityLabel(following ? "إلغاء متابعة المباراة" : "متابعة المباراة")
+        .accessibilityLabel(following ? L("إلغاء متابعة المباراة") : L("متابعة المباراة"))
     }
 }

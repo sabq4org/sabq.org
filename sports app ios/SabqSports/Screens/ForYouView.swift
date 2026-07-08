@@ -20,29 +20,29 @@ struct SpForYouView: View {
                 SpMyMatchesCard()
 
                 if !followedTeams.isEmpty {
-                    SpSectionHeader(icon: "star.fill", title: "فِرقك")
+                    SpSectionHeader(icon: "star.fill", title: L("فِرقك"))
                     teamsStrip
                 }
 
                 if auth.isLoggedIn {
-                    SpSectionHeader(icon: "sparkles", title: "آخر توقّعاتك")
+                    SpSectionHeader(icon: "sparkles", title: L("آخر توقّعاتك"))
                     if loadingMine {
                         SpLoading()
                     } else if mine.isEmpty {
-                        SpEmptyState(icon: "soccerball", title: "لم تتوقّع بعد",
-                                     subtitle: "ابدأ من تبويب «روشن» ← التوقّعات")
+                        SpEmptyState(icon: "soccerball", title: L("لم تتوقّع بعد"),
+                                     subtitle: L("ابدأ من تبويب «روشن» ← التوقّعات"))
                     } else {
                         SpMyPredictionsList(rows: Array(mine.prefix(6)))
                     }
                 } else {
-                    SpEmptyState(icon: "person.crop.circle.badge.plus", title: "سجّل الدخول",
-                                 subtitle: "لتظهر هنا توقّعاتك وفرقك وتنبيهاتك")
+                    SpEmptyState(icon: "person.crop.circle.badge.plus", title: L("سجّل الدخول"),
+                                 subtitle: L("لتظهر هنا توقّعاتك وفرقك وتنبيهاتك"))
                 }
             }
             .padding(16)
         }
         .background(SpAmbientBackground())
-        .navigationTitle("لك")
+        .navigationTitle(L("لك"))
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .refreshable { await load(force: true) }

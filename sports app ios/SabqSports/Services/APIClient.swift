@@ -16,6 +16,9 @@ actor APIClient {
     private let decoder: JSONDecoder
     private var authToken: String?
     private var csrfToken: String?
+    // لغة الواجهة الحالية — تُمرَّر كـ Accept-Language لكل طلب فتُفضّل البوابة
+    // المحتوى الإنجليزي عند دعمه. تُحدَّث من SpLanguage عبر setPreferredLanguage.
+    private var preferredLanguage: String = "ar"
 
     private init() {
         let config = URLSessionConfiguration.default
@@ -50,6 +53,7 @@ actor APIClient {
 
     func setAuthToken(_ token: String?) { authToken = token }
     func setCsrfToken(_ token: String?) { csrfToken = token }
+    func setPreferredLanguage(_ code: String) { preferredLanguage = code }
 
     func get<T: Decodable>(
         _ type: T.Type,
@@ -161,6 +165,8 @@ actor APIClient {
     }
 
     private func applyHeaders(_ request: inout URLRequest) {
+        // يتجاوز الـ Accept-Language الثابت في إعداد الجلسة باللغة النشطة.
+        request.setValue(preferredLanguage, forHTTPHeaderField: "Accept-Language")
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

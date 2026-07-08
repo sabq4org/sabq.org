@@ -23,7 +23,7 @@ struct CompetitionsView: View {
     }
 
     private var availableFilters: [(String, String, String)] {
-        var filters: [(String, String, String)] = [("all", "الكل", "square.grid.2x2.fill")]
+        var filters: [(String, String, String)] = [("all", L("الكل"), "square.grid.2x2.fill")]
         for cat in SportsConstants.categoryOrder where competitions.contains(where: { $0.category == cat }) {
             filters.append((cat, SportsConstants.categoryLabel(cat), categoryIcon(cat)))
         }
@@ -37,7 +37,7 @@ struct CompetitionsView: View {
                     if loading {
                         SpLoading()
                     } else if let loadError {
-                        SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+                        SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                     } else {
                         // بطاقة «دليل البطولات» حُذفت — كانت تكرّر عنوان الشريط
                         // وأعداد الأقسام والفلاتر. القائمة تبدأ مباشرة بالفلاتر.
@@ -52,7 +52,7 @@ struct CompetitionsView: View {
             }
             .autoHideTabBar()
             .background(SpAmbientBackground())
-            .navigationTitle("البطولات")
+            .navigationTitle(L("البطولات"))
             .navigationBarTitleDisplayMode(.inline)
         }
         .task { await load() }
@@ -95,7 +95,7 @@ struct CompetitionsView: View {
         if !favs.isEmpty {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 8) {
-                    Text("بطولاتي")
+                    Text(L("بطولاتي"))
                         .font(SportsFonts.app(size: 16, weight: .heavy))
                         .foregroundStyle(SpTheme.onDark)
                     Text("\(favs.count)")
@@ -236,7 +236,7 @@ struct CompetitionRow: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isFavorite ? "إزالة من بطولاتي" : "إضافة إلى بطولاتي")
+                .accessibilityLabel(isFavorite ? L("إزالة من بطولاتي") : L("إضافة إلى بطولاتي"))
             }
             Image(systemName: "chevron.left")
                 .font(.system(size: 12, weight: .semibold))
@@ -275,9 +275,9 @@ struct CompetitionRow: View {
     private func statusBadge(_ status: String) -> some View {
         let (label, color): (String, Color) = {
             switch status {
-            case "ongoing": return ("جارٍ", SpTheme.leaf)
-            case "upcoming": return ("قريبًا", accent)
-            case "finished": return ("انتهى", SpTheme.onDarkFaint)
+            case "ongoing": return (L("جارٍ"), SpTheme.leaf)
+            case "upcoming": return (L("قريبًا"), accent)
+            case "finished": return (L("انتهى"), SpTheme.onDarkFaint)
             default: return ("", SpTheme.onDarkFaint)
             }
         }()

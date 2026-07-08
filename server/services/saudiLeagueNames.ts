@@ -6,6 +6,7 @@
  * المعرّفات مأخوذة من /teams?league=307&season=2025 (18 ناديًا).
  */
 import { localizePlayerName, WC_TEAM_AR } from "./worldCupNames";
+import { isEnglishSports } from "./sportsLang";
 export const SPL_TEAM_AR: Record<number, string> = {
   2928: "الخليج", // Al Khaleej Saihat
   2929: "الأهلي", // Al-Ahli Jeddah
@@ -182,6 +183,8 @@ export const ARAB_TEAM_AR: Record<number, string> = {
 };
 
 export function localizeSplTeamName(id: number | null | undefined, fallback: string): string {
+  // الوضع الإنجليزي: أعِد اسم المزوّد الأصلي (إنجليزي) بلا تعريب.
+  if (isEnglishSports()) return fallback;
   if (id != null) {
     if (SPL_TEAM_AR[id]) return SPL_TEAM_AR[id];
     if (SPL_DIV1_TEAM_AR[id]) return SPL_DIV1_TEAM_AR[id];
@@ -252,6 +255,12 @@ const SPL_GROUP_ROUND_AR: Record<string, string> = {
 /** "Regular Season - 12" → "الجولة 12"؛ وأدوار الكؤوس والمجموعات → عربي */
 export function localizeSplRound(round: string): string {
   const r = round ?? "";
+  // الوضع الإنجليزي: صيغة إنجليزية نظيفة (المصدر إنجليزي أصلًا؛ نلطّف «Regular
+  // Season - N» فقط، والبقية «Final / Round of 16 / …» جاهزة للعرض).
+  if (isEnglishSports()) {
+    const rs = r.match(/Regular Season\s*-\s*(\d+)/i);
+    return rs ? `Round ${rs[1]}` : r;
+  }
   const league = r.match(/Regular Season\s*-\s*(\d+)/i);
   if (league) return `الجولة ${league[1]}`;
   if (SPL_ROUND_AR[r]) return SPL_ROUND_AR[r];
@@ -743,6 +752,7 @@ export function localizeSplPlayerName(
   fallback: string,
   tr?: NameTranslator,
 ): string {
+  if (isEnglishSports()) return fallback; // اسم اللاعب الأصلي (إنجليزي)
   if (id != null && SPL_PLAYER_AR[id]) return SPL_PLAYER_AR[id];
   if (tr) return rejectMixedScript(tr(fallback) || "", fallback) || fallback || "";
   return rejectMixedScript(localizePlayerName(fallback) || "", fallback) || fallback || "";
@@ -753,6 +763,7 @@ export function localizeSplCoachName(
   fallback: string,
   tr?: NameTranslator,
 ): string {
+  if (isEnglishSports()) return fallback; // اسم المدرّب الأصلي (إنجليزي)
   if (id != null && SPL_COACH_AR[id]) return SPL_COACH_AR[id];
   if (tr) return rejectMixedScript(tr(fallback) || "", fallback) || fallback || "";
   return rejectMixedScript(localizePlayerName(fallback) || "", fallback) || fallback || "";

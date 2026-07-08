@@ -75,7 +75,7 @@ private struct SpMyPredictionRowCard: View {
                     .font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
                     .monospacedDigit().environment(\.layoutDirection, .leftToRight)
             } else {
-                Text("توقّعي").font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("توقّعي")).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
             }
         }
         .frame(width: 64)
@@ -93,13 +93,13 @@ private struct SpMyPredictionRowCard: View {
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Capsule().fill(SpTheme.leaf.opacity(0.12)))
             } else {
-                Text("لم تُصب")
+                Text(L("لم تُصب"))
                     .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Capsule().fill(SpTheme.chipFill))
             }
         } else {
-            Text("بانتظار النتيجة")
+            Text(L("بانتظار النتيجة"))
                 .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.green)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Capsule().fill(SpTheme.green.opacity(0.10)))
@@ -110,12 +110,12 @@ private struct SpMyPredictionRowCard: View {
 // أسماء بطولات مختصرة من الـ slug (احتياط حين لا يرسل الخادم اسمًا).
 func prettyComp(_ slug: String) -> String {
     switch slug {
-    case "gulf-cup-27", "gulf-cup": return "خليجي 27"
-    case "saudi-league", "roshn-league": return "دوري روشن"
-    case "world-cup": return "كأس العالم"
-    case "champions-league": return "دوري الأبطال"
-    case "afc-champions-league", "afc-champions": return "أبطال آسيا"
-    case "pro-league": return "دوري روشن"
+    case "gulf-cup-27", "gulf-cup": return L("خليجي 27")
+    case "saudi-league", "roshn-league": return L("دوري روشن")
+    case "world-cup": return L("كأس العالم")
+    case "champions-league": return L("دوري الأبطال")
+    case "afc-champions-league", "afc-champions": return L("أبطال آسيا")
+    case "pro-league": return L("دوري روشن")
     default: return slug.replacingOccurrences(of: "-", with: " ")
     }
 }
@@ -147,10 +147,10 @@ private struct SpLeaderRow: View {
                           placeholderFg: SpTheme.green,
                           placeholderBg: SpTheme.green.opacity(0.12))
             VStack(alignment: .leading, spacing: 2) {
-                Text(isMe ? "\(leader.name) (أنت)" : leader.name)
+                Text(isMe ? Lf("%@ (أنت)", leader.name) : leader.name)
                     .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     .lineLimit(1)
-                Text("\(leader.exactCount) دقيقة · دقّة \(leader.accuracy)٪ · \(leader.playedCount) توقّع")
+                Text(Lf("%d دقيقة · دقّة %d٪ · %d توقّع", leader.exactCount, leader.accuracy, leader.playedCount))
                     .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
             }
             Spacer(minLength: 0)
@@ -158,7 +158,7 @@ private struct SpLeaderRow: View {
                 Text("\(leader.totalPoints)")
                     .font(SportsFonts.app(size: 16, weight: .heavy)).foregroundStyle(SpTheme.green)
                     .monospacedDigit().environment(\.layoutDirection, .leftToRight)
-                Text("نقطة").font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("نقطة")).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
             }
         }
         .padding(11)
@@ -209,13 +209,13 @@ struct SpLongPredictionsView: View {
             if loading {
                 SpLoading()
             } else if let error {
-                SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: error)
+                SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: error)
             } else if let data {
                 championCard(data)
                 scorerCard(data)
             } else {
-                SpEmptyState(icon: "trophy", title: "لا بطولات متاحة",
-                             subtitle: "توقّعات البطل والهدّاف تظهر للبطولات الجارية")
+                SpEmptyState(icon: "trophy", title: L("لا بطولات متاحة"),
+                             subtitle: L("توقّعات البطل والهدّاف تظهر للبطولات الجارية"))
             }
         }
         .task { await loadComps() }
@@ -250,10 +250,10 @@ struct SpLongPredictionsView: View {
         let myChampion = d.mine.first { $0.kind == "champion" }
         let totalVotes = max(1, d.championVotes.reduce(0) { $0 + $1.n })
         return VStack(alignment: .leading, spacing: 12) {
-            longHeader(emoji: "🏆", title: "توقّع البطل", pool: d.pools.champion,
+            longHeader(emoji: "🏆", title: L("توقّع البطل"), pool: d.pools.champion,
                        locked: d.locked, mineText: myChampion?.teamName)
             if d.teams.isEmpty {
-                Text("قوائم الفرق غير متاحة بعد لهذه البطولة")
+                Text(L("قوائم الفرق غير متاحة بعد لهذه البطولة"))
                     .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
             } else {
                 let cols = [GridItem(.adaptive(minimum: 96), spacing: 10)]
@@ -297,13 +297,13 @@ struct SpLongPredictionsView: View {
     private func scorerCard(_ d: SpLongResponse) -> some View {
         let myScorer = d.mine.first { $0.kind == "top_scorer" }
         return VStack(alignment: .leading, spacing: 12) {
-            longHeader(emoji: "⚽️", title: "توقّع الهدّاف", pool: d.pools.topScorer,
+            longHeader(emoji: "⚽️", title: L("توقّع الهدّاف"), pool: d.pools.topScorer,
                        locked: d.locked, mineText: myScorer?.playerName)
             if d.locked {
-                Text("أُقفلت التوقّعات — انطلقت البطولة")
+                Text(L("أُقفلت التوقّعات — انطلقت البطولة"))
                     .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
             } else if auth.isLoggedIn {
-                TextField("اكتب اسم اللاعب…", text: $scorerName)
+                TextField(L("اكتب اسم اللاعب…"), text: $scorerName)
                     .font(SportsFonts.app(size: 14)).foregroundStyle(SpTheme.onDark)
                     .padding(.horizontal, 14).frame(height: 46)
                     .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous)
@@ -314,7 +314,7 @@ struct SpLongPredictionsView: View {
                     await submitScorer()
                 }
             } else {
-                Text("سجّل الدخول لتوقّع الهدّاف")
+                Text(L("سجّل الدخول لتوقّع الهدّاف"))
                     .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
             }
         }
@@ -328,14 +328,14 @@ struct SpLongPredictionsView: View {
                 Text(emoji).font(.system(size: 18))
                 Text(title).font(SportsFonts.subhead(size: 16)).foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
-                Text("\(pool) نقطة")
+                Text(Lf("%d نقطة", pool))
                     .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.gold)
                     .monospacedDigit().environment(\.layoutDirection, .leftToRight)
                     .padding(.horizontal, 9).padding(.vertical, 4)
                     .background(Capsule().fill(SpTheme.gold.opacity(0.12)))
             }
             if let mineText, !mineText.isEmpty {
-                Text("اختيارك الحالي: \(mineText)")
+                Text(Lf("اختيارك الحالي: %@", mineText))
                     .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.green)
             }
         }
@@ -345,7 +345,7 @@ struct SpLongPredictionsView: View {
         Button { Task { await action() } } label: {
             HStack(spacing: 8) {
                 if submitting { ProgressView().tint(.white) }
-                Text(savedKind == kind ? "تم الحفظ ✓" : "احفظ توقّعي")
+                Text(savedKind == kind ? L("تم الحفظ ✓") : L("احفظ توقّعي"))
                     .font(SportsFonts.app(size: 14, weight: .bold))
             }
             .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 44)
@@ -387,7 +387,7 @@ struct SpLongPredictionsView: View {
             selected = comps.first
             if selected != nil { await loadLong() } else { loading = false }
         } catch {
-            self.error = (error as? APIError)?.errorDescription ?? "تعذّر التحميل"
+            self.error = (error as? APIError)?.errorDescription ?? L("تعذّر التحميل")
             loading = false
         }
     }
@@ -398,7 +398,7 @@ struct SpLongPredictionsView: View {
         do {
             data = try await APIClient.shared.fetchPoolLong(comp: slug)
         } catch {
-            self.error = (error as? APIError)?.errorDescription ?? "تعذّر التحميل"
+            self.error = (error as? APIError)?.errorDescription ?? L("تعذّر التحميل")
         }
         loading = false
     }
@@ -411,7 +411,7 @@ struct SpLongPredictionsView: View {
             _ = try await APIClient.shared.submitPoolLong(body)
             savedKind = "champion"
             await loadLong()
-        } catch { self.error = "تعذّر حفظ التوقّع" }
+        } catch { self.error = L("تعذّر حفظ التوقّع") }
         submitting = false
     }
 
@@ -425,7 +425,7 @@ struct SpLongPredictionsView: View {
             _ = try await APIClient.shared.submitPoolLong(body)
             savedKind = "top_scorer"
             await loadLong()
-        } catch { self.error = "تعذّر حفظ التوقّع" }
+        } catch { self.error = L("تعذّر حفظ التوقّع") }
         submitting = false
     }
 }
@@ -456,7 +456,7 @@ struct SpBadgesGrid: View {
     var body: some View {
         VStack(spacing: 14) {
             HStack {
-                Text("جمعت \(earned.count) من \(spBadgeCatalog.count) شارة")
+                Text(Lf("جمعت %d من %d شارة", earned.count, spBadgeCatalog.count))
                     .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                 Spacer(minLength: 0)
             }
@@ -477,16 +477,16 @@ struct SpBadgesGrid: View {
                 Text(b.emoji).font(.system(size: 28))
                     .grayscale(unlocked ? 0 : 1).opacity(unlocked ? 1 : 0.5)
             }
-            Text(b.title)
+            Text(L(b.title))
                 .font(SportsFonts.app(size: 13, weight: .bold))
                 .foregroundStyle(unlocked ? SpTheme.onDark : SpTheme.onDarkDim)
-            Text(b.desc)
+            Text(L(b.desc))
                 .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
                 .multilineTextAlignment(.center).lineLimit(2).frame(height: 26)
             if unlocked {
-                Text("مكتمل ✓").font(SportsFonts.app(size: 10, weight: .heavy)).foregroundStyle(SpTheme.leaf)
+                Text(L("مكتمل ✓")).font(SportsFonts.app(size: 10, weight: .heavy)).foregroundStyle(SpTheme.leaf)
             } else {
-                Text("مقفل").font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("مقفل")).font(SportsFonts.app(size: 10, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
             }
         }
         .frame(maxWidth: .infinity).padding(.vertical, 16)
@@ -512,22 +512,22 @@ struct SpWinCelebration: View {
             SpConfettiView().allowsHitTesting(false)
             VStack(spacing: 18) {
                 Text(row.tier.emoji).font(.system(size: 64))
-                Text("توقّع موفّق! 🎉")
+                Text(L("توقّع موفّق! 🎉"))
                     .font(SportsFonts.headline(size: 24)).foregroundStyle(SpTheme.onDark)
-                Text("\(row.homeTeamName) ضد \(row.awayTeamName)")
+                Text(Lf("%@ ضد %@", row.homeTeamName, row.awayTeamName))
                     .font(SportsFonts.app(size: 14, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                     .multilineTextAlignment(.center)
                 VStack(spacing: 4) {
                     Text("+\(row.pointsAwarded)")
                         .font(SportsFonts.app(size: 40, weight: .heavy)).foregroundStyle(SpTheme.green)
                         .monospacedDigit().environment(\.layoutDirection, .leftToRight)
-                    Text("نقطة من \(row.tier.labelAr)")
+                    Text(Lf("نقطة من %@", L(row.tier.labelAr)))
                         .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
                 }
                 .padding(.vertical, 6)
 
                 Button(action: onClose) {
-                    Text("رائع!")
+                    Text(L("رائع!"))
                         .font(SportsFonts.app(size: 16, weight: .bold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).frame(height: 50)
                         .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous)
@@ -538,10 +538,10 @@ struct SpWinCelebration: View {
                 // مشاركة الإنجاز كصورة جاهزة (تُصيَّر من بطاقة SpPredictionShareCard).
                 if let ui = shareImage {
                     ShareLink(item: Image(uiImage: ui),
-                              preview: SharePreview("توقّعي في VARA", image: Image(uiImage: ui))) {
+                              preview: SharePreview(L("توقّعي في VARA"), image: Image(uiImage: ui))) {
                         HStack(spacing: 7) {
                             Image(systemName: "square.and.arrow.up").font(.system(size: 14, weight: .semibold))
-                            Text("شارك إنجازك").font(SportsFonts.app(size: 14, weight: .bold))
+                            Text(L("شارك إنجازك")).font(SportsFonts.app(size: 14, weight: .bold))
                         }
                         .foregroundStyle(SpTheme.green)
                         .frame(maxWidth: .infinity).frame(height: 44)
@@ -578,10 +578,10 @@ struct SpPredictionShareCard: View {
             }
             .foregroundStyle(SpTheme.green)
 
-            Text(row.exactHit ? "أصبت النتيجة بدقّة 🎯" : "توقّع موفّق! 🎉")
+            Text(row.exactHit ? L("أصبت النتيجة بدقّة 🎯") : L("توقّع موفّق! 🎉"))
                 .font(SportsFonts.headline(size: 21)).foregroundStyle(SpTheme.onDark)
 
-            Text("\(row.homeTeamName) ضد \(row.awayTeamName)")
+            Text(Lf("%@ ضد %@", row.homeTeamName, row.awayTeamName))
                 .font(SportsFonts.app(size: 14, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                 .multilineTextAlignment(.center)
 
@@ -591,17 +591,17 @@ struct SpPredictionShareCard: View {
                 .monospacedDigit().environment(\.layoutDirection, .leftToRight)
 
             if let fh = row.finalHome, let fa = row.finalAway {
-                Text("النتيجة النهائية ") .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("النتيجة النهائية ")) .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
                 + Text(verbatim: "\u{2066}\(fa) - \(fh)\u{2069}")
                     .font(SportsFonts.app(size: 13, weight: .heavy)).foregroundStyle(SpTheme.onDark)
             }
 
-            Text("+\(row.pointsAwarded) نقطة · \(row.tier.labelAr)")
+            Text(Lf("+%d نقطة · %@", row.pointsAwarded, L(row.tier.labelAr)))
                 .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(.white)
                 .padding(.horizontal, 14).padding(.vertical, 7)
                 .background(Capsule().fill(SpTheme.green))
 
-            Text("توقّع معي في تطبيق VARA الرياضي")
+            Text(L("توقّع معي في تطبيق VARA الرياضي"))
                 .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
         }
         .padding(30)
@@ -689,7 +689,7 @@ private struct SpMyScorerPickCard: View {
         VStack(spacing: 9) {
             HStack(spacing: 8) {
                 if let k = kind {
-                    Text("\(k.emoji) \(k.labelAr)")
+                    Text("\(k.emoji) \(L(k.labelAr))")
                         .font(SportsFonts.app(size: 10.5, weight: .semibold))
                         .foregroundStyle(SpTheme.gold)
                         .padding(.horizontal, 8).padding(.vertical, 3)
@@ -709,7 +709,7 @@ private struct SpMyScorerPickCard: View {
                         .font(SportsFonts.app(size: 13.5, weight: .bold)).foregroundStyle(SpTheme.onDark)
                         .lineLimit(1)
                     if let home = row.homeTeamName, let away = row.awayTeamName {
-                        Text("\(home) ضد \(away)")
+                        Text(Lf("%@ ضد %@", home, away))
                             .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
                             .lineLimit(1)
                     }
@@ -720,7 +720,7 @@ private struct SpMyScorerPickCard: View {
             if row.settled, let scorers = row.actualScorers, !scorers.isEmpty {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal").font(.system(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
-                    Text("الهداف الفعلي: " + scorers.prefix(3).map(\.name).joined(separator: "، "))
+                    Text(Lf("الهداف الفعلي: %@", scorers.prefix(3).map(\.name).joined(separator: "، ")))
                         .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
                         .lineLimit(2)
                     Spacer(minLength: 0)
@@ -739,13 +739,13 @@ private struct SpMyScorerPickCard: View {
     @ViewBuilder private var statusBadge: some View {
         if row.settled {
             let won = row.won
-            Text(won ? "+\(row.pointsAwarded) نقطة" : "لم تُصب")
+            Text(won ? Lf("+%d نقطة", row.pointsAwarded) : L("لم تُصب"))
                 .font(SportsFonts.app(size: 11, weight: .heavy))
                 .foregroundStyle(won ? SpTheme.leaf : SpTheme.onDarkFaint)
                 .padding(.horizontal, 10).padding(.vertical, 4)
                 .background(Capsule().fill((won ? SpTheme.leaf : SpTheme.onDarkFaint).opacity(0.10)))
         } else {
-            Text("بانتظار المباراة")
+            Text(L("بانتظار المباراة"))
                 .font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkFaint)
                 .padding(.horizontal, 10).padding(.vertical, 4)
                 .background(Capsule().fill(SpTheme.chipFill))
@@ -776,7 +776,7 @@ struct SpScorerPickSection: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text("⚽").font(.system(size: 14))
-                Text("توقّع هدّاف المباراة")
+                Text(L("توقّع هدّاف المباراة"))
                     .font(SportsFonts.app(size: 12.5, weight: .bold))
                     .foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
@@ -813,7 +813,7 @@ struct SpScorerPickSection: View {
     private var poolChip: some View {
         HStack(spacing: 3) {
             Image(systemName: "banknote").font(.system(size: 9))
-            Text("بركة \(kind.pool)")
+            Text(Lf("بركة %d", kind.pool))
                 .font(SportsFonts.app(size: 10, weight: .semibold))
         }
         .foregroundStyle(SpTheme.gold)
@@ -825,7 +825,7 @@ struct SpScorerPickSection: View {
         Button { showPicker = true } label: {
             HStack(spacing: 6) {
                 Image(systemName: "plus.circle.fill").font(.system(size: 13))
-                Text("اختر هدّافًا")
+                Text(L("اختر هدّافًا"))
                     .font(SportsFonts.app(size: 12.5, weight: .semibold))
                 Spacer(minLength: 0)
             }
@@ -845,7 +845,7 @@ struct SpScorerPickSection: View {
                 Text(t).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).lineLimit(1)
             }
             Spacer(minLength: 0)
-            Button("تغيير") { showPicker = true }
+            Button(L("تغيير")) { showPicker = true }
                 .font(SportsFonts.app(size: 11, weight: .semibold)).foregroundStyle(SpTheme.gold)
         }
     }
@@ -854,11 +854,11 @@ struct SpScorerPickSection: View {
         HStack(spacing: 8) {
             Image(systemName: "lock.fill").font(.system(size: 11)).foregroundStyle(SpTheme.onDarkDim)
             if let pick = existingPick {
-                Text("توقّعت: \(pick.playerName)")
+                Text(Lf("توقّعت: %@", pick.playerName))
                     .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
                     .lineLimit(1)
             } else {
-                Text("أُقفل التوقّع — انطلقت المباراة")
+                Text(L("أُقفل التوقّع — انطلقت المباراة"))
                     .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
             }
             Spacer(minLength: 0)
@@ -875,12 +875,12 @@ struct SpScorerPickSection: View {
                 Text(pick.playerName)
                     .font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                 Spacer(minLength: 0)
-                Text(won ? "+\(pick.pointsAwarded) نقطة" : "لم تُصب")
+                Text(won ? Lf("+%d نقطة", pick.pointsAwarded) : L("لم تُصب"))
                     .font(SportsFonts.app(size: 11.5, weight: .heavy))
                     .foregroundStyle(won ? SpTheme.leaf : SpTheme.onDarkFaint)
             }
             if let scorers = pick.actualScorers, !scorers.isEmpty {
-                Text("الهداف الفعلي: " + scorers.prefix(3).map(\.name).joined(separator: "، "))
+                Text(Lf("الهداف الفعلي: %@", scorers.prefix(3).map(\.name).joined(separator: "، ")))
                     .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint).lineLimit(2)
             }
         }
@@ -905,20 +905,20 @@ struct SpScorerPickSection: View {
                 error = pickErrorMessage(reason: r.reason)
             }
         } catch let e as APIError {
-            if case .server(409, let msg) = e { error = msg ?? "تعذّر حفظ التوقّع" }
-            else { error = e.errorDescription ?? "تعذّر حفظ التوقّع" }
+            if case .server(409, let msg) = e { error = msg ?? L("تعذّر حفظ التوقّع") }
+            else { error = e.errorDescription ?? L("تعذّر حفظ التوقّع") }
         } catch {
-            self.error = "تعذّر حفظ التوقّع"
+            self.error = L("تعذّر حفظ التوقّع")
         }
         submitting = false
     }
 
     private func pickErrorMessage(reason: String?) -> String {
         switch reason {
-        case "LOCKED": return "أُقفل التوقّع — انطلقت المباراة"
-        case "NOT_IN_LINEUP": return "هذا اللاعب ليس ضمن قائمة المباراة"
-        case "NOT_OPEN": return "هذه المباراة غير متاحة للتوقّع"
-        default: return "تعذّر حفظ التوقّع"
+        case "LOCKED": return L("أُقفل التوقّع — انطلقت المباراة")
+        case "NOT_IN_LINEUP": return L("هذا اللاعب ليس ضمن قائمة المباراة")
+        case "NOT_OPEN": return L("هذه المباراة غير متاحة للتوقّع")
+        default: return L("تعذّر حفظ التوقّع")
         }
     }
 }
@@ -953,30 +953,30 @@ struct SpScorerPickerSheet: View {
                 if loading {
                     SpLoading()
                 } else if let loadError {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                 } else if let players, !players.lineupsReady {
                     lineupPending
                 } else {
                     ScrollView {
                         VStack(spacing: 16) {
                             if !filteredHome.isEmpty {
-                                sideSection(title: players?.home.teamName ?? "المضيف", players: filteredHome)
+                                sideSection(title: players?.home.teamName ?? L("المضيف"), players: filteredHome)
                             }
                             if !filteredAway.isEmpty {
-                                sideSection(title: players?.away.teamName ?? "الضيف", players: filteredAway)
+                                sideSection(title: players?.away.teamName ?? L("الضيف"), players: filteredAway)
                             }
                         }
                         .padding(16)
                     }
                 }
             }
-            .navigationTitle("اختر \(kind.labelAr)")
+            .navigationTitle(Lf("اختر %@", L(kind.labelAr)))
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: "ابحث عن لاعب")
+                        prompt: L("ابحث عن لاعب"))
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("إلغاء") { dismiss() }
+                    Button(L("إلغاء")) { dismiss() }
                         .font(SportsFonts.app(size: 13, weight: .semibold))
                 }
             }
@@ -1002,7 +1002,7 @@ struct SpScorerPickerSheet: View {
                             Text(p.name)
                                 .font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark)
                                 .lineLimit(1)
-                            Text(p.starter ? "أساسي" : "احتياط")
+                            Text(p.starter ? L("أساسي") : L("احتياط"))
                                 .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
                         }
                         Spacer(minLength: 0)
@@ -1021,8 +1021,8 @@ struct SpScorerPickerSheet: View {
     private var lineupPending: some View {
         SpEmptyState(
             icon: "clock",
-            title: "التشكيلات لم تُعلَن بعد",
-            subtitle: "تنزل تشكيلتا الفريقين عادةً قبل المباراة بساعة. عُد لاحقًا لاختيار الهداف."
+            title: L("التشكيلات لم تُعلَن بعد"),
+            subtitle: L("تنزل تشكيلتا الفريقين عادةً قبل المباراة بساعة. عُد لاحقًا لاختيار الهداف.")
         )
         .padding(20)
     }
@@ -1033,9 +1033,9 @@ struct SpScorerPickerSheet: View {
             players = try await APIClient.shared.fetchMatchScorers(fixtureId: fixtureId)
             loadError = nil
         } catch let e as APIError {
-            loadError = e.errorDescription ?? "تعذّر تحميل اللاعبين"
+            loadError = e.errorDescription ?? L("تعذّر تحميل اللاعبين")
         } catch {
-            loadError = "تعذّر تحميل اللاعبين"
+            loadError = L("تعذّر تحميل اللاعبين")
         }
         loading = false
     }
