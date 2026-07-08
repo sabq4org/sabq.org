@@ -144,6 +144,11 @@ struct DeleteAccountView: View {
     @State private var password = ""
     @State private var confirming = false
 
+    // حسابات Apple/الجوال بلا كلمة مرور → تُحذف بالجلسة (امتثال أبل 5.1.1(v)).
+    // nil (قبل تحميل الملف) نعامله كـ«يحتاج» احتياطًا؛ .task يحدّثه فورًا.
+    private var needsPassword: Bool { auth.member?.hasPassword ?? true }
+    private var deleteDisabled: Bool { (needsPassword && password.isEmpty) || auth.isLoading }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -186,18 +191,21 @@ struct DeleteAccountView: View {
                     .fill(SpTheme.crimson.opacity(0.05))
                     .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.crimson.opacity(0.30), lineWidth: 1)))
 
-                // تأكيد كلمة المرور
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(L("أدخل كلمة المرور للتأكيد"))
-                        .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
-                    HStack(spacing: 10) {
-                        Image(systemName: "lock").font(.system(size: 14)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 18)
-                        SecureField("", text: $password, prompt: Text(L("كلمة المرور")).foregroundStyle(SpTheme.onDarkFaint))
-                            .font(SportsFonts.app(size: 15)).foregroundStyle(SpTheme.onDark).tint(SpTheme.green)
+                // تأكيد كلمة المرور — لأصحاب كلمة المرور فقط. حسابات Apple/الجوال
+                // (بلا كلمة مرور) تُحذف مباشرةً بالجلسة.
+                if needsPassword {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(L("أدخل كلمة المرور للتأكيد"))
+                            .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
+                        HStack(spacing: 10) {
+                            Image(systemName: "lock").font(.system(size: 14)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 18)
+                            SecureField("", text: $password, prompt: Text(L("كلمة المرور")).foregroundStyle(SpTheme.onDarkFaint))
+                                .font(SportsFonts.app(size: 15)).foregroundStyle(SpTheme.onDark).tint(SpTheme.green)
+                        }
+                        .padding(.horizontal, 14).padding(.vertical, 13)
+                        .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.cardFill)
+                            .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1)))
                     }
-                    .padding(.horizontal, 14).padding(.vertical, 13)
-                    .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.cardFill)
-                        .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1)))
                 }
 
                 if let err = auth.errorMessage {
@@ -211,10 +219,10 @@ struct DeleteAccountView: View {
                     }
                     .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 50)
                     .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous)
-                        .fill(password.isEmpty ? SpTheme.crimson.opacity(0.4) : SpTheme.crimson))
+                        .fill(deleteDisabled ? SpTheme.crimson.opacity(0.4) : SpTheme.crimson))
                 }
                 .buttonStyle(.plain)
-                .disabled(password.isEmpty || auth.isLoading)
+                .disabled(deleteDisabled)
             }
             .padding(16)
             .padding(.bottom, 24)
@@ -222,6 +230,8 @@ struct DeleteAccountView: View {
         .background(SpAmbientBackground())
         .navigationTitle(L("حذف الحساب"))
         .navigationBarTitleDisplayMode(.inline)
+        // نحدّث الملف لنعرف hasPassword بدقّة (Apple/الجوال بلا كلمة مرور).
+        .task { await auth.loadUserData() }
         .confirmationDialog(L("تأكيد حذف الحساب"), isPresented: $confirming, titleVisibility: .visible) {
             Button(L("حذف نهائيّ"), role: .destructive) {
                 Task { if await auth.deleteAccount(password: password) { dismiss() } }

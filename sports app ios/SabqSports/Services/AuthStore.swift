@@ -302,8 +302,9 @@ final class SpAuthStore {
         Task { await APIClient.shared.setAuthToken(nil) }
     }
 
-    /// حذف الحساب نهائيًّا — يتطلّب كلمة المرور للتأكيد (Apple 5.1.1(v)). عند النجاح
-    /// يُنهي الجلسة محلّيًّا. الخادم: DELETE /api/v1/members/account.
+    /// حذف الحساب نهائيًّا (Apple 5.1.1(v)). أصحاب كلمة المرور: تُطلب للتأكيد؛
+    /// حسابات Apple/الجوال (بلا كلمة مرور): تُمرَّر "" ويحذف الخادم بالجلسة. عند
+    /// النجاح يُنهي الجلسة محلّيًّا. الخادم: DELETE /api/v1/members/account.
     func deleteAccount(password: String) async -> Bool {
         guard isLoggedIn else { return false }
         isLoading = true; errorMessage = nil
