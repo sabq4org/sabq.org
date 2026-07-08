@@ -556,9 +556,13 @@ nonisolated struct SpMember: Decodable, Hashable {
     let name: String?       // الاسم الكامل (firstName + lastName، أو name/fullName)
     let email: String?
     let avatar: String?     // profileImageUrl
+    /// هل للحساب كلمة مرور؟ يقرّر هل نطلبها عند حذف الحساب (Apple/الجوال بلا كلمة
+    /// مرور). يأتي من /members/profile؛ nil قبل تحميل الملف.
+    let hasPassword: Bool?
 
-    init(id: String, name: String?, email: String?, avatar: String?) {
+    init(id: String, name: String?, email: String?, avatar: String?, hasPassword: Bool? = nil) {
         self.id = id; self.name = name; self.email = email; self.avatar = avatar
+        self.hasPassword = hasPassword
     }
 
     init(from decoder: Decoder) throws {
@@ -588,6 +592,7 @@ nonisolated struct SpMember: Decodable, Hashable {
         } else {
             avatar = nil
         }
+        hasPassword = try? c.decode(Bool.self, forKey: SpFlexKey("hasPassword"))
     }
 }
 

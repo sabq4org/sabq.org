@@ -11,6 +11,8 @@ import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
+import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
+import { normalizeSaudiPhone, findOrCreatePhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
@@ -132,6 +134,17 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
   skipSuccessfulRequests: true,
   keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+});
+
+// إرسال رمز الجوال (SMS) — أصرم: 5 لكل رقم/نافذة (منع قصف الرسائل والتكلفة).
+const phoneOtpSendLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // ساعة
+  max: 5,
+  message: { message: "تجاوزت الحد المسموح لإرسال الرموز. حاول بعد قليل." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => normalizeSaudiPhone(req.body?.phone) || cfKeyGenerator(req),
   validate: cfValidate,
 });
 
@@ -877,6 +890,62 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     } catch (error) {
       console.error("Registration error:", error);
       res.status(500).json({ message: "خطأ في إنشاء الحساب" });
+    }
+  });
+
+  // ==========================================
+  // دخول/تسجيل بالجوال (Twilio Verify) — جلسة كوكيز عبر req.logIn (نفس آلية الويب).
+  // يعيد استخدام منطق OTP وإنشاء المستخدم المشترك مع الموبايل (services/phoneAuth).
+  // ==========================================
+  app.post("/api/auth/phone/send", phoneOtpSendLimiter, async (req, res) => {
+    try {
+      const e164 = normalizeSaudiPhone(req.body?.phone);
+      if (!e164) {
+        return res.status(400).json({
+          message: "رقم جوال سعودي غير صحيح. أدخل رقمك بدون صفر (مثال: 5XXXXXXXX).",
+        });
+      }
+      const result = await varaSendOtp(e164);
+      return res.status(result.success ? 200 : 502).json(result);
+    } catch (error) {
+      console.error("❌ /api/auth/phone/send error:", error);
+      return res.status(500).json({ message: "تعذّر إرسال رمز التحقق" });
+    }
+  });
+
+  app.post("/api/auth/phone/verify", authLimiter, async (req, res) => {
+    try {
+      const e164 = normalizeSaudiPhone(req.body?.phone);
+      const code = String(req.body?.code ?? "").replace(/[^0-9]/g, "");
+      if (!e164) return res.status(400).json({ message: "رقم جوال غير صحيح" });
+      if (code.length < 4) return res.status(400).json({ message: "رمز التحقق غير صحيح" });
+
+      const check = await varaVerifyOtp(e164, code);
+      if (!check.valid) return res.status(401).json({ message: check.message });
+
+      const result = await findOrCreatePhoneUser(e164);
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+
+      // جلسة كوكيز عبر Passport (نفس نمط /api/register).
+      req.logIn(result.user as any, (err) => {
+        if (err) {
+          console.error("❌ phone login session error:", err);
+          return res.status(500).json({ message: "تم التحقق ولكن فشل تسجيل الدخول" });
+        }
+        return res.json({
+          message: "تم تسجيل الدخول عبر الجوال",
+          user: {
+            id: result.user.id,
+            email: result.user.email,
+            firstName: result.user.firstName,
+            lastName: result.user.lastName,
+            phone: result.user.phoneNumber,
+          },
+        });
+      });
+    } catch (error) {
+      console.error("❌ /api/auth/phone/verify error:", error);
+      return res.status(500).json({ message: "خطأ داخلي في الخادم" });
     }
   });
 

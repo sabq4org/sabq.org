@@ -1690,6 +1690,9 @@ router.get("/members/profile", async (req: Request, res: Response) => {
         // The OAuth login endpoints set this to "apple" or "google" — iOS
         // shows different copy depending on the provider when present.
         authProvider: users.authProvider,
+        // نُشتقّ منه hasPassword فقط (لا نُعيده) — يقرّر التطبيق هل يطلب كلمة
+        // المرور عند حذف الحساب (Apple/الجوال بلا كلمة مرور).
+        passwordHash: users.passwordHash,
       })
       .from(users)
       .where(eq(users.id, session.userId))
@@ -1728,12 +1731,15 @@ router.get("/members/profile", async (req: Request, res: Response) => {
       .leftJoin(categories, eq(userInterests.categoryId, categories.id))
       .where(eq(userInterests.userId, session.userId));
 
+    // نستبعد passwordHash من الاستجابة ونُبقي إشارة hasPassword فقط.
+    const { passwordHash, ...safeUser } = user;
     res.json({
       success: true,
       user: {
-        ...user,
+        ...safeUser,
         ...rolePayload,
         phone: user.phoneNumber,
+        hasPassword: !!passwordHash,
         interests: interests.map(i => ({
           id: i.categoryId,
           name: i.categoryName,
@@ -2383,14 +2389,7 @@ router.delete("/members/account", async (req: Request, res: Response) => {
 
     const { password } = req.body;
 
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: "كلمة المرور مطلوبة لتأكيد الحذف",
-      });
-    }
-
-    // Verify password (and capture profile image URL for Cloudflare cleanup).
+    // (نلتقط أيضًا رابط صورة الملف لتنظيف Cloudflare لاحقًا.)
     const [user] = await db
       .select({
         passwordHash: users.passwordHash,
@@ -2400,19 +2399,30 @@ router.delete("/members/account", async (req: Request, res: Response) => {
       .where(eq(users.id, session.userId))
       .limit(1);
 
-    if (!user?.passwordHash) {
-      return res.status(401).json({
+    if (!user) {
+      return res.status(404).json({
         success: false,
-        message: "كلمة المرور غير صحيحة",
+        message: "الحساب غير موجود",
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        message: "كلمة المرور غير صحيحة",
-      });
+    // المستخدمون بكلمة مرور: نتحقّق منها. أمّا حسابات Apple/الجوال (بلا passwordHash)
+    // فالجلسة (Bearer) إثبات هوية كافٍ — إلزام كلمة مرور غير موجودة كان يمنعهم من
+    // الحذف ويخالف بند أبل 5.1.1(v). المطلوب فقط أن يكون الحذف ممكنًا داخل التطبيق.
+    if (user.passwordHash) {
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          message: "كلمة المرور مطلوبة لتأكيد الحذف",
+        });
+      }
+      const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+      if (!isPasswordValid) {
+        return res.status(401).json({
+          success: false,
+          message: "كلمة المرور غير صحيحة",
+        });
+      }
     }
 
     const userId = session.userId;

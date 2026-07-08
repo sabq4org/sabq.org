@@ -12,6 +12,7 @@ import {
 } from "@shared/schema";
 import { db } from "../../db";
 import { varaSendOtp, varaVerifyOtp } from "../../services/varaPhoneOtp";
+import { normalizeSaudiPhone, findOrCreatePhoneUser } from "../../services/phoneAuth";
 
 const router = Router();
 
@@ -100,25 +101,7 @@ async function issueSession(
 }
 
 // MARK: - دخول/تسجيل بالجوال (Twilio Verify) — السعودية +966 افتراضيًا
-
-/// يُطبّع أي إدخال سعودي إلى صيغة E.164 (+9665XXXXXXXX). يقبل: 564255999،
-/// 0564255999، 966564255999، 00966…، +966 56 425 5999. يرجع null لغير الصالح.
-function normalizeSaudiPhone(input: string | undefined | null): string | null {
-  if (!input) return null;
-  let d = String(input).replace(/[^0-9]/g, "");
-  if (d.startsWith("00966")) d = d.slice(5);
-  else if (d.startsWith("966")) d = d.slice(3);
-  if (d.startsWith("0")) d = d.slice(1);
-  // رقم المشترك السعودي: 9 أرقام تبدأ بـ5.
-  if (!/^5\d{8}$/.test(d)) return null;
-  return "+966" + d;
-}
-
-/// صيغ الجوال المحتملة في قاعدة البيانات (لربط حسابات موقع سبق القديمة).
-function phoneCandidates(e164: string): string[] {
-  const local = e164.replace("+966", ""); // 5XXXXXXXX
-  return [e164, "966" + local, "0" + local, local];
-}
+// (التطبيع + إنشاء/ربط المستخدم في services/phoneAuth.ts — مشترك مع الويب.)
 
 // حدّ إرسال الرمز — يحمي من قصف الرسائل والتكلفة: 5 إرسالات/نافذة لكل رقم (أو IP).
 const phoneSendLimiter = rateLimit({
@@ -453,50 +436,12 @@ router.post("/auth/phone/verify", async (req: Request, res: Response) => {
 
     const deviceInfo: DeviceInfo | undefined = req.body?.deviceInfo;
 
-    // البحث عن مستخدم بأي صيغة جوال محفوظة (ربط حسابات سبق الحالية).
-    const [existing] = await db
-      .select()
-      .from(users)
-      .where(or(...phoneCandidates(e164).map((p) => eq(users.phoneNumber, p))))
-      .limit(1);
-
-    let user: typeof users.$inferSelect;
-
-    if (existing) {
-      if (!canUserLogin(existing)) {
-        return res.status(403).json({
-          success: false,
-          message: getUserStatusMessage(existing) || "لا يمكنك تسجيل الدخول بسبب حالة حسابك",
-        });
-      }
-      const updates: Partial<typeof users.$inferInsert> = {};
-      if (!existing.phoneVerified) updates.phoneVerified = true;
-      if (!existing.phoneNumber) updates.phoneNumber = e164;
-      if (Object.keys(updates).length > 0) {
-        await db.update(users).set(updates).where(eq(users.id, existing.id));
-      }
-      user = { ...existing, ...updates };
-    } else {
-      // بريد اصطناعي فريد (العمود notNull().unique()) مشتقّ من الجوال.
-      const local = e164.replace("+966", "");
-      const syntheticEmail = `p966${local}@phone.sabq.org`;
-      const { nanoid } = await import("nanoid");
-      const [created] = await db
-        .insert(users)
-        .values({
-          id: nanoid(),
-          email: syntheticEmail,
-          phoneNumber: e164,
-          role: "reader",
-          authProvider: "phone",
-          phoneVerified: true,
-          emailVerified: false,
-          status: "active",
-          isProfileComplete: false,
-        })
-        .returning();
-      user = created;
+    // البحث عن المستخدم أو إنشاؤه (منطق مشترك مع الويب).
+    const result = await findOrCreatePhoneUser(e164);
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
     }
+    const user = result.user;
 
     const { token, expiresAt } = await issueSession(user.id, deviceInfo, req.ip);
 
