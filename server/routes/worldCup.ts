@@ -3,7 +3,8 @@
  * البيانات من API-Football عبر worldCupService خلف كاش SWR،
  * مع Cache-Control متدرّج حسب سخونة البيانات.
  */
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
+import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
 import {
   getTournamentBlockSettings,
   isBlockHidden,
@@ -269,6 +270,14 @@ async function overlayLiveDetail(detail: WcMatchDetail): Promise<WcMatchDetail> 
 }
 
 export function registerWorldCupRoutes(app: Express) {
+  // نفس middleware لغة /api/sports — يفعّل isEnglishSports() في worldCupNames
+  // عند Accept-Language: en (أو ?lang=en) بدل التعريب الدائم.
+  const withLang = (req: Request, res: Response, next: () => void) => {
+    res.vary("Accept-Language");
+    runWithSportsLang(sportsLangFromReq(req), () => next());
+  };
+  app.use("/api/world-cup", withLang);
+
   const guard = (res: any): boolean => {
     if (!isWorldCupConfigured()) {
       res.status(503).json(NOT_CONFIGURED);

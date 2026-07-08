@@ -11,6 +11,7 @@
  * فتُخفي الواجهة الأقسام بسلاسة بدل أن تتعطّل. لا يستورد db (ADR-001).
  */
 import type { Express, Request, Response } from "express";
+import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
 import {
   getGlobalConfirmed,
   getMarketOverview,
@@ -20,6 +21,13 @@ import {
 } from "../services/transferCenterService";
 
 export function registerTransferCenterRoutes(app: Express): void {
+  // يفعّل isEnglishSports() لنوافذ الانتقالات وتسميات الأندية عند EN.
+  const withLang = (req: Request, res: Response, next: () => void) => {
+    res.vary("Accept-Language");
+    runWithSportsLang(sportsLangFromReq(req), () => next());
+  };
+  app.use("/api/transfer-center", withLang);
+
   // موجز الإشاعات — الفلترة (سعودي/عالمي، النوع، الدوري) تتم في الواجهة
   // لأن filters= عند المزوّد يُتجاهَل صامتًا (فخ مُثبَت).
   app.get("/api/transfer-center/rumours", async (_req: Request, res: Response) => {

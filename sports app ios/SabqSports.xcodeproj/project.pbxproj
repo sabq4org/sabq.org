@@ -49,6 +49,7 @@
 		5B0000C1 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000C1 /* Localization.swift */; };
 		5B0000C2 /* EnglishStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000C2 /* EnglishStrings.swift */; };
 		5B0000D0 /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000D0 /* EditProfileView.swift */; };
+		5B0000D1 /* SpPhotoPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000D1 /* SpPhotoPermission.swift */; };
 		5B000102 /* SpMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000102 /* SpMatchActivity.swift */; };
 		5B000103 /* SpLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000103 /* SpLiveActivityManager.swift */; };
 		5B000104 /* SabqSportsWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000104 /* SabqSportsWidgetsBundle.swift */; };
@@ -128,6 +129,7 @@
 		5C0000C1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		5C0000C2 /* EnglishStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishStrings.swift; sourceTree = "<group>"; };
 		5C0000D0 /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
+		5C0000D1 /* SpPhotoPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpPhotoPermission.swift; sourceTree = "<group>"; };
 		5C000100 /* SabqSportsWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SabqSportsWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5C000101 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5C000102 /* SpMatchActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpMatchActivity.swift; sourceTree = "<group>"; };
@@ -226,6 +228,7 @@
 				5C0000A2 /* VaraInsights.swift */,
 				5C0000C1 /* Localization.swift */,
 				5C0000C2 /* EnglishStrings.swift */,
+				5C0000D1 /* SpPhotoPermission.swift */,
 				5C0000A4 /* SpWidgetBridge.swift */,
 				5C0000A7 /* SpLiveStream.swift */,
 				5C0000B0 /* TransferCenterModels.swift */,
@@ -400,6 +403,7 @@
 				5B00000E /* CommunityView.swift in Sources */,
 				5B00000F /* AccountView.swift in Sources */,
 				5B0000D0 /* EditProfileView.swift in Sources */,
+				5B0000D1 /* SpPhotoPermission.swift in Sources */,
 				5B000010 /* MatchCenterView.swift in Sources */,
 				5B000011 /* TeamPlayerPages.swift in Sources */,
 				5B000012 /* AuthStore.swift in Sources */,
@@ -522,7 +526,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070807;
+				CURRENT_PROJECT_VERSION = 2026070808;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
@@ -553,7 +557,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070807;
+				CURRENT_PROJECT_VERSION = 2026070808;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;

@@ -19,6 +19,7 @@
  * كل شيء «أفضل جهد»: غياب أي مفتاح يرجّع { configured:false } بلا عطل.
  */
 import { withSWR } from "../memoryCache";
+import { isEnglishSports } from "./sportsLang";
 import { resolveNames } from "./worldCupNameTranslator";
 import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
 import { apiFootballGet } from "./apiFootballClient";
@@ -47,6 +48,15 @@ export const TRANSFER_WINDOWS: { saudi: TransferWindow; europe: TransferWindow }
   saudi: { label: "نافذة روشن الصيفية", opensAt: "2026-07-22T00:00:00Z", closesAt: "2026-10-12T20:59:00Z" },
   europe: { label: "النافذة الأوروبية الصيفية", opensAt: "2026-06-15T00:00:00Z", closesAt: "2026-09-01T22:00:00Z" },
 };
+
+const TRANSFER_WINDOWS_EN: { saudi: TransferWindow; europe: TransferWindow } = {
+  saudi: { label: "Roshn summer window", opensAt: "2026-07-22T00:00:00Z", closesAt: "2026-10-12T20:59:00Z" },
+  europe: { label: "European summer window", opensAt: "2026-06-15T00:00:00Z", closesAt: "2026-09-01T22:00:00Z" },
+};
+
+function transferWindowsForLang(): typeof TRANSFER_WINDOWS {
+  return isEnglishSports() ? TRANSFER_WINDOWS_EN : TRANSFER_WINDOWS;
+}
 /** بداية «هذا الميركاتو» لأغراض جمع الإنفاق — مطلع يونيو يغطي الصفقات المبكرة. */
 const MERCATO_START = "2026-06-01";
 
@@ -64,6 +74,26 @@ const LEAGUE_AR: Record<number, string> = {
   600: "الدوري التركي",
   944: "دوري روشن السعودي",
 };
+
+const LEAGUE_EN: Record<number, string> = {
+  8: "Premier League",
+  9: "Championship",
+  12: "League One",
+  82: "Bundesliga",
+  301: "Ligue 1",
+  384: "Serie A",
+  462: "Primeira Liga",
+  501: "Scottish Premiership",
+  564: "La Liga",
+  600: "Süper Lig",
+  944: "Roshn Saudi League",
+};
+
+function leagueName(id: number | null | undefined): string | null {
+  if (id == null) return null;
+  return (isEnglishSports() ? LEAGUE_EN[id] : LEAGUE_AR[id]) ?? null;
+}
+
 /** الخمسة الكبار — تُستخدم كرقائق فلترة في تبويب «عالمية» */
 export const BIG_FIVE_LEAGUES = [
   { id: 8, name: "البريميرليغ" },
@@ -73,6 +103,18 @@ export const BIG_FIVE_LEAGUES = [
   { id: 301, name: "ليغ 1" },
 ];
 
+const BIG_FIVE_LEAGUES_EN = [
+  { id: 8, name: "Premier League" },
+  { id: 564, name: "La Liga" },
+  { id: 384, name: "Serie A" },
+  { id: 82, name: "Bundesliga" },
+  { id: 301, name: "Ligue 1" },
+];
+
+function bigFiveForLang(): typeof BIG_FIVE_LEAGUES {
+  return isEnglishSports() ? BIG_FIVE_LEAGUES_EN : BIG_FIVE_LEAGUES;
+}
+
 // ---------- تعريب المراكز (position_id عند SportMonks) ----------
 const POSITION_AR: Record<number, string> = {
   24: "حارس مرمى",
@@ -80,6 +122,18 @@ const POSITION_AR: Record<number, string> = {
   26: "لاعب وسط",
   27: "مهاجم",
 };
+
+const POSITION_EN: Record<number, string> = {
+  24: "Goalkeeper",
+  25: "Defender",
+  26: "Midfielder",
+  27: "Attacker",
+};
+
+function positionName(id: number | null | undefined): string | null {
+  if (id == null) return null;
+  return (isEnglishSports() ? POSITION_EN[id] : POSITION_AR[id]) ?? null;
+}
 
 // ---------- تعريب الأندية (جدول قابل للتوسعة، fallback للاسم الإنجليزي) ----------
 // أسماء SportMonks الإنجليزية كما ترد حرفيًّا → عربي سبق. الأندية غير المدرجة
@@ -266,6 +320,8 @@ const CLUB_AR: Record<string, string> = {
 function arClubName(raw: string | null | undefined, tr?: NameLookup): string {
   const s = (raw ?? "").trim();
   if (!s) return "—";
+  // في EN نُبقي اسم المزوّد الإنجليزي (أو طبقة الأسماء الموحّدة إن وُجدت).
+  if (isEnglishSports()) return tr ? tr(s) : s;
   // القاموس الثابت أولًا، ثم الطبقة الموحّدة (المعبّأة بالخلفية) للأندية غير المدرجة
   return CLUB_AR[s] ?? (tr ? tr(s) : s);
 }
@@ -460,7 +516,7 @@ function normalizeParty(team: any, leagueId: number | null, roshnIds: Set<number
     name: arClubName(team?.name, trClub),
     image: team?.image_path ?? null,
     leagueId,
-    leagueName: leagueId != null ? (LEAGUE_AR[leagueId] ?? null) : saudi ? LEAGUE_AR[SM_SAUDI_LEAGUE_ID] : null,
+    leagueName: leagueId != null ? leagueName(leagueId) : saudi ? leagueName(SM_SAUDI_LEAGUE_ID) : null,
     saudi,
   };
 }
@@ -487,7 +543,7 @@ function normalizePlayer(p: any, arName: (n: string | null | undefined) => strin
     id: p?.id ?? 0,
     name: arName(playerRawName(p)),
     image: p?.image_path ?? null,
-    position: POSITION_AR[p?.position_id] ?? null,
+    position: positionName(p?.position_id),
     birthdate: p?.date_of_birth ?? null,
   };
 }
@@ -575,7 +631,7 @@ export async function getTransferRumours(): Promise<TcRumoursFeed> {
       .filter((r) => r.id && r.date && r.player.id)
       .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
 
-    return { rumours, leagues: BIG_FIVE_LEAGUES };
+    return { rumours, leagues: bigFiveForLang() };
   });
 }
 
@@ -993,7 +1049,7 @@ export async function getMarketOverview(): Promise<TcOverview> {
     pulse: pulseTop,
     dealOfDay,
     hero,
-    windows: TRANSFER_WINDOWS,
+    windows: transferWindowsForLang(),
     comparison,
     clubBalance,
   };

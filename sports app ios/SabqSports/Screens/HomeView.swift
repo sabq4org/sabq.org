@@ -23,6 +23,7 @@ struct HomeView: View {
     @Environment(SpMatchFollows.self) private var matchFollows
     @Environment(SpAuthStore.self) private var auth
     @Environment(SpAppRouter.self) private var router
+    @Environment(SpLanguage.self) private var language
     @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
 
     @State private var comp: SpCompetition?
@@ -493,9 +494,9 @@ struct HomeView: View {
         guard let items = featuredCommentary?.items, !items.isEmpty else { return nil }
         let sorted = items.sorted { ($0.order, $0.minute) > ($1.order, $1.minute) }
         let pick = sorted.prefix(6).first(where: { $0.important || $0.goal }) ?? sorted.first
-        guard let c = pick, !c.textAr.isEmpty else { return nil }
+        guard let c = pick, !c.displayText.isEmpty else { return nil }
         let minute = c.extraMinute.flatMap { $0 > 0 ? "\(c.minute)+\($0)′" : nil } ?? "\(c.minute)′"
-        return "\(minute) · \(c.textAr)"
+        return "\(minute) · \(c.displayText)"
     }
 
     private func findStat(_ keys: [String]) -> String? {
@@ -548,7 +549,7 @@ struct HomeView: View {
         // فراغ واضح بين بطاقات روشن بدون فصل بصري زائد.
         // (بطاقة «فريقي المفضّل» المصغّرة حُذفت — بلوك «فريقي» أعلى الواجهة يغنيها.)
         VStack(spacing: 28) {
-            if showSmartSnaps {
+            if showSmartSnaps, !language.isEnglish {
                 VaraInsightCard(context: varaInsightContext)
                     .padding(.horizontal, 16)
             }
@@ -1138,8 +1139,8 @@ struct HomeView: View {
         }
         self.loading = false
 
-        // تحديث حالة/نتيجة المباريات المتابَعة (بطاقة «مبارياتي») من الخادم.
-        await matchFollows.refresh()
+        // لا نستدعي matchFollows.refresh() هنا — auto-refresh + SSE يغطيان الحالة
+        // وتكرار detail كامل لكل مباراة متابَعة يضاعف زمن التحميل.
         await loadSmartSnaps(force: force)
 
         // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + آخر مجريات.
@@ -1161,7 +1162,8 @@ struct HomeView: View {
     }
 
     private func loadSmartSnaps(force: Bool = false) async {
-        guard showSmartSnaps else {
+        // اللقطات مولَّدة بالعربية حاليًا — نخفيها في EN حتى يتوفر مسار إنجليزي.
+        guard showSmartSnaps, !SpLanguage.shared.isEnglish else {
             serverSnaps = []
             return
         }
@@ -1178,6 +1180,7 @@ struct HomeView: View {
 // MARK: - تبويب الأخبار (كما هو — يبقى الملف بديلاً مباشرًا) + بحث
 
 struct NewsView: View {
+    @Environment(SpLanguage.self) private var language
     @State private var news: [SpArticle] = []
     @State private var query = ""
     @State private var loading = true
@@ -1193,16 +1196,24 @@ struct NewsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    searchField
-
-                    if loading {
-                        SpLoading()
-                    } else if let loadError {
-                        SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
-                    } else if filtered.isEmpty {
-                        SpEmptyState(icon: "newspaper", title: L("لا نتائج"), subtitle: query.isEmpty ? L("لا أخبار حاليًا") : L("جرّب كلمة بحث أخرى"))
+                    if language.isEnglish {
+                        SpEmptyState(
+                            icon: "newspaper",
+                            title: L("الأخبار الرياضية"),
+                            subtitle: L("الأخبار الرياضية متوفرة بالعربية حاليًا")
+                        )
                     } else {
-                        ForEach(filtered.prefix(40)) { a in SpNewsCard(article: a) }
+                        searchField
+
+                        if loading {
+                            SpLoading()
+                        } else if let loadError {
+                            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
+                        } else if filtered.isEmpty {
+                            SpEmptyState(icon: "newspaper", title: L("لا نتائج"), subtitle: query.isEmpty ? L("لا أخبار حاليًا") : L("جرّب كلمة بحث أخرى"))
+                        } else {
+                            ForEach(filtered.prefix(40)) { a in SpNewsCard(article: a) }
+                        }
                     }
                 }
                 .padding(16)
@@ -1212,8 +1223,8 @@ struct NewsView: View {
             .navigationTitle(L("الأخبار الرياضية"))
             .navigationBarTitleDisplayMode(.inline)
         }
-        .task { await load() }
-        .refreshable { await load(force: true) }
+        .task { if !language.isEnglish { await load() } }
+        .refreshable { if !language.isEnglish { await load(force: true) } }
     }
 
     private var searchField: some View {

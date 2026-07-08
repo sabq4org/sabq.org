@@ -11,6 +11,7 @@ struct AccountView: View {
     @Environment(SpLanguage.self) private var language
     @Environment(SpAppRouter.self) private var router
     @Environment(\.openURL) private var openURL
+    @Environment(SpLanguage.self) private var language
     @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
     @State private var selectedTeam: IDBox?
     @State private var showSignOutConfirm = false
@@ -33,7 +34,7 @@ struct AccountView: View {
 
                     teamsSection
 
-                    if showSmartSnaps {
+                    if showSmartSnaps, !language.isEnglish {
                         VaraInsightCard(context: VaraInsightContext(
                             isLoggedIn: auth.isLoggedIn,
                             favoriteName: favorites.team?.name,
@@ -122,6 +123,36 @@ struct AccountView: View {
 
             membershipRow
 
+            // حسابات الجوال تُنشأ بلا اسم — نحثّ على إكماله داخل التطبيق (نفس حقل الويب).
+            if needsNameCompletion {
+                Button { showEditProfile = true } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "person.crop.circle.badge.exclamationmark")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(SpTheme.gold)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("أكمل اسمك"))
+                                .font(SportsFonts.app(size: 13, weight: .heavy))
+                                .foregroundStyle(SpTheme.onDark)
+                            Text(L("حسابك بلا اسم — أضفه ليظهر في عضويتك"))
+                                .font(SportsFonts.app(size: 11, weight: .semibold))
+                                .foregroundStyle(SpTheme.onDarkDim)
+                                .lineLimit(2)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.backward")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(SpTheme.onDarkFaint)
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(SpTheme.gold.opacity(0.10))
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+
         }
         .padding(16)
         .frame(maxWidth: .infinity)
@@ -130,6 +161,11 @@ struct AccountView: View {
             EditProfileView()
                 .environment(auth)
         }
+    }
+
+    private var needsNameCompletion: Bool {
+        let n = (auth.member?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty
     }
 
     // شارة العضوية «عضو سبق» + تعديل الملف داخل التطبيق.

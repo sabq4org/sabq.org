@@ -85,7 +85,7 @@ struct SpNextMatchWidgetView: View {
     private var emptyState: some View {
         VStack(spacing: 6) {
             Image(systemName: "soccerball").font(.system(size: 22)).foregroundStyle(SpHW.faint)
-            Text("افتح VARA لتحميل مبارياتك")
+            Text(SpWidgetL("افتح VARA لتحميل مبارياتك"))
                 .font(.system(size: 11, weight: .semibold)).foregroundStyle(SpHW.dim)
                 .multilineTextAlignment(.center)
         }
@@ -117,7 +117,7 @@ struct SpNextMatchWidgetView: View {
                                 .foregroundStyle(SpHW.green)
                                 .environment(\.layoutDirection, .leftToRight)
                         } else {
-                            Text("انطلقت")
+                            Text(SpWidgetL("انطلقت"))
                                 .font(.system(size: 15, weight: .heavy))
                                 .foregroundStyle(SpHW.green)
                         }
@@ -148,7 +148,7 @@ struct SpNextMatchWidgetView: View {
         HStack(spacing: 5) {
             Image(systemName: s.isFavoriteTeam ? "star.fill" : "trophy.fill")
                 .font(.system(size: 9, weight: .bold)).foregroundStyle(SpHW.green)
-            Text(s.isFavoriteTeam ? "مباراة فريقك" : s.competition)
+            Text(s.isFavoriteTeam ? SpWidgetL("مباراة فريقك") : s.competition)
                 .font(.system(size: 10, weight: .bold)).foregroundStyle(SpHW.green)
                 .lineLimit(1)
             Spacer(minLength: 0)
@@ -177,7 +177,7 @@ struct SpNextMatchWidgetView: View {
 
     @ViewBuilder private func kickoffLine(_ s: SpWidgetSnapshot) -> some View {
         if started(s) {
-            Text(s.isFinished == true ? "انتهت" : (s.statusLabel?.isEmpty == false ? s.statusLabel! : "مباشر الآن"))
+            Text(s.isFinished == true ? SpWidgetL("انتهت") : (s.statusLabel?.isEmpty == false ? s.statusLabel! : SpWidgetL("مباشر الآن")))
                 .font(.system(size: 10.5, weight: .heavy))
                 .foregroundStyle(s.isLive == true ? SpHW.live : SpHW.green)
                 .lineLimit(1).minimumScaleFactor(0.8)
@@ -228,8 +228,8 @@ struct SpNextMatchWidgetView: View {
     private func dayLabel(_ d: Date) -> String {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone(identifier: "Asia/Riyadh") ?? .current
-        if cal.isDateInToday(d) { return "اليوم" }
-        if cal.isDateInTomorrow(d) { return "غدًا" }
+        if cal.isDateInToday(d) { return SpWidgetL("اليوم") }
+        if cal.isDateInTomorrow(d) { return SpWidgetL("غدًا") }
         let fmt = DateFormatter()
         fmt.locale = Locale(identifier: "ar")
         fmt.timeZone = cal.timeZone

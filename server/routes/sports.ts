@@ -28,6 +28,7 @@ import {
   getHeadToHead,
   getLiveFixtures,
   getMatchDetail,
+  getMatchLite,
   getMatchPlayerRatings,
   getMatchTeamStats,
   getMatchTvChannels,
@@ -569,6 +570,32 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] match detail failed:", error);
       res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });
+    }
+  });
+
+  // لقطة خفيفة (fixture فقط) — لتحديث «مبارياتي» بلا events/stats/lineups.
+  app.get("/api/sports/match/:id/lite", async (req, res) => {
+    if (!isSaudiLeagueConfigured()) {
+      res.status(404).json({ message: "المباراة غير موجودة" });
+      return;
+    }
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صحيح" });
+      return;
+    }
+    try {
+      const fixture = await getMatchLite(id);
+      if (!fixture) {
+        res.status(404).json({ message: "المباراة غير موجودة" });
+        return;
+      }
+      const ttl = fixture.status.live ? "max-age=10, s-maxage=15" : "max-age=60, s-maxage=120";
+      res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=60`);
+      res.json({ fixture });
+    } catch (error) {
+      console.error("[Sports] match lite failed:", error);
+      res.status(502).json({ message: "تعذر جلب المباراة حاليًا" });
     }
   });
 

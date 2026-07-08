@@ -1983,7 +1983,7 @@ struct WcMatchCenter: View {
             } else {
                 Image(systemName: "dot.radiowaves.left.and.right").font(.system(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDarkFaint)
             }
-            Text(item.textAr)
+            Text(item.displayText)
                 .font(SportsFonts.app(size: 14, weight: item.goal || item.important ? .bold : .regular))
                 .foregroundStyle(SpTheme.onDark)
                 .frame(maxWidth: .infinity, alignment: .leading)

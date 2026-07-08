@@ -268,6 +268,33 @@ final class SpAuthStore {
         await loadUserData()
     }
 
+    /// رفع صورة شخصية — نفس `profileImageUrl` على حساب سبق (ويب + VARA).
+    @discardableResult
+    func uploadAvatar(imageData: Data) async -> Bool {
+        guard isLoggedIn else { return false }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            if let updated = try await APIClient.shared.uploadMemberAvatar(imageData: imageData),
+               !updated.id.isEmpty {
+                persistMember(updated)
+                return true
+            }
+            await loadUserData()
+            return true
+        } catch let e as APIError {
+            switch e {
+            case .server(_, let msg): errorMessage = msg ?? L("تعذّر رفع الصورة")
+            default: errorMessage = e.errorDescription ?? L("تعذّر رفع الصورة")
+            }
+            return false
+        } catch {
+            errorMessage = L("تعذّر رفع الصورة")
+            return false
+        }
+    }
+
     /// تحديث الاسم (مرة واحدة إن كان فارغًا) و/أو استبدال البريد الاصطناعي ببريد حقيقي.
     @discardableResult
     func updateProfile(firstName: String?, lastName: String?, email: String?) async -> Bool {

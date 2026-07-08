@@ -1,6 +1,9 @@
 import SwiftUI
+import PhotosUI
+import UIKit
 
-/// تعديل الملف الشخصي داخل VARA — الاسم (مرة واحدة) + استبدال البريد الاصطناعي.
+/// تعديل الملف الشخصي داخل VARA — صورة + اسم (مرة واحدة) + بريد بدل الاصطناعي.
+/// الصورة تُحفظ في نفس `profileImageUrl` لحساب سبق فتظهر على الويب فورًا.
 struct EditProfileView: View {
     @Environment(SpAuthStore.self) private var auth
     @Environment(\.dismiss) private var dismiss
@@ -12,16 +15,28 @@ struct EditProfileView: View {
     @State private var lastNameLocked = false
     @State private var emailLocked = false
     @State private var saved = false
+    @State private var avatarUploaded = false
     @State private var localError: String?
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var showAvatarPicker = false
+    @State private var selectedImage: UIImage?
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    avatarSection
+
                     if saved {
                         statusBanner(
                             icon: "checkmark.circle.fill",
                             text: L("تم حفظ التغييرات بنجاح"),
+                            color: SpTheme.green
+                        )
+                    } else if avatarUploaded {
+                        statusBanner(
+                            icon: "checkmark.circle.fill",
+                            text: L("تم تحديث الصورة الشخصية"),
                             color: SpTheme.green
                         )
                     }
@@ -39,6 +54,8 @@ struct EditProfileView: View {
                         }
                         if firstNameLocked || lastNameLocked {
                             helperRow(L("لا يمكن تعديل الاسم بعد تعيينه لاعتبارات أمنية ومصداقية التعليقات"))
+                        } else {
+                            helperRow(L("أضف اسمك ليظهر في عضويتك على سبق وVARA"))
                         }
 
                         if let phone = auth.member?.phone, !phone.isEmpty {
@@ -98,7 +115,64 @@ struct EditProfileView: View {
                 }
             }
             .onAppear { hydrate() }
+            .photosPicker(isPresented: $showAvatarPicker, selection: $selectedPhoto, matching: .images)
+            .onChange(of: selectedPhoto) { _, newValue in
+                Task { await handlePickedPhoto(newValue) }
+            }
         }
+    }
+
+    private var avatarSection: some View {
+        VStack(spacing: 12) {
+            ZStack(alignment: .bottomTrailing) {
+                Group {
+                    if let selectedImage {
+                        Image(uiImage: selectedImage)
+                            .resizable()
+                            .scaledToFill()
+                    } else if let url = auth.member?.avatar, !url.isEmpty {
+                        SpAvatarImage(url: url, size: 90, ring: SpTheme.green.opacity(0.35),
+                                      placeholderFg: SpTheme.onDarkFaint, placeholderBg: SpTheme.chipFill)
+                    } else {
+                        Circle()
+                            .fill(SpTheme.green.opacity(0.14))
+                            .overlay {
+                                Text(String((auth.member?.name ?? L("عضو VARA")).prefix(1)))
+                                    .font(SportsFonts.app(size: 34, weight: .heavy))
+                                    .foregroundStyle(SpTheme.green)
+                            }
+                    }
+                }
+                .frame(width: 90, height: 90)
+                .clipShape(Circle())
+                .overlay(Circle().stroke(SpTheme.green.opacity(0.35), lineWidth: 2))
+
+                Button {
+                    Task {
+                        await SpPhotoPermission.ensureRequested()
+                        showAvatarPicker = true
+                    }
+                } label: {
+                    Circle()
+                        .fill(SpTheme.green)
+                        .frame(width: 30, height: 30)
+                        .overlay {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .shadow(color: .black.opacity(0.18), radius: 3, y: 1)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Text(L("الصورة تظهر في حسابك على سبق وVARA"))
+                .font(SportsFonts.app(size: 11, weight: .semibold))
+                .foregroundStyle(SpTheme.onDarkFaint)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 4)
     }
 
     private var canSave: Bool {
@@ -110,7 +184,6 @@ struct EditProfileView: View {
             let em = email.trimmingCharacters(in: .whitespacesAndNewlines)
             if !em.isEmpty && !em.contains("@") { return false }
         }
-        // يجب وجود شيء قابل للحفظ: اسم غير مقفول أو بريد جديد.
         if !firstNameLocked || !lastNameLocked { return true }
         if !emailLocked {
             let em = email.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -137,6 +210,36 @@ struct EditProfileView: View {
         } else {
             email = ""
             emailLocked = false
+        }
+    }
+
+    private func handlePickedPhoto(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        localError = nil
+        auth.errorMessage = nil
+        guard let data = try? await item.loadTransferable(type: Data.self),
+              let uiImage = UIImage(data: data) else {
+            localError = L("تعذّر قراءة الصورة")
+            return
+        }
+        selectedImage = uiImage
+        let maxDim: CGFloat = 1024
+        let longest = max(uiImage.size.width, uiImage.size.height)
+        var upload = uiImage
+        if longest > maxDim, longest > 0 {
+            let scale = maxDim / longest
+            let target = CGSize(width: uiImage.size.width * scale, height: uiImage.size.height * scale)
+            upload = await uiImage.byPreparingThumbnail(ofSize: target) ?? uiImage
+        }
+        guard let jpeg = upload.jpegData(compressionQuality: 0.85) else {
+            localError = L("تعذّر تجهيز الصورة")
+            return
+        }
+        let ok = await auth.uploadAvatar(imageData: jpeg)
+        if ok {
+            withAnimation { avatarUploaded = true }
+        } else {
+            selectedImage = nil
         }
     }
 

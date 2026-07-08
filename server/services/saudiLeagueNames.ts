@@ -580,7 +580,8 @@ export const SPL_TRANSFER_TYPE_AR: Record<string, string> = {
 
 export function localizeSplTransferType(type: string | null | undefined): string {
   const raw = (type ?? "").trim();
-  if (!raw) return "غير معلوم";
+  if (!raw) return isEnglishSports() ? "Unknown" : "غير معلوم";
+  if (isEnglishSports()) return raw;
   const key = raw.toLowerCase();
   if (SPL_TRANSFER_TYPE_AR[key]) return SPL_TRANSFER_TYPE_AR[key];
   // مطابقة بالكلمة للصيغ المركّبة (Free agent / Loan / End of loan / Transfer)
@@ -604,6 +605,7 @@ export const SPL_INJURY_TYPE_AR: Record<string, string> = {
 export function localizeSplInjuryType(type: string | null | undefined): string {
   const raw = (type ?? "").trim();
   if (!raw) return "";
+  if (isEnglishSports()) return raw;
   return SPL_INJURY_TYPE_AR[raw.toLowerCase()] ?? raw;
 }
 
@@ -646,6 +648,8 @@ export function localizeSplInjuryReason(en: string | null | undefined): string |
   if (!en) return null;
   const low = en.toLowerCase().trim();
   if (!low) return null;
+  // في EN نُبقي نص المزوّد الإنجليزي كما هو.
+  if (isEnglishSports()) return en;
   if (SPL_INJURY_WHOLE_AR[low]) return SPL_INJURY_WHOLE_AR[low];
   const m = low.match(/^(.+?)\s+(injury|problem|strain|knock|surgery)$/);
   if (m && SPL_INJURY_PART_AR[m[1]]) return `إصابة في ${SPL_INJURY_PART_AR[m[1]]}`;

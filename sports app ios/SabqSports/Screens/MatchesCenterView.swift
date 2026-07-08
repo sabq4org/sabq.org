@@ -35,7 +35,13 @@ extension APIClient {
     }
 
     /// يجزّئ أي عدد بطولات إلى طلبات من 8 (حد الخادم) بالتوازي ثم يدمج ويرتّب.
-    func fetchUnifiedFixturesChunked(comps: [String], from: String, to: String) async throws -> [SpFixture] {
+    /// `ignoreCache` يُمرَّر فقط عند التحديث الإجباري (سحب/استطلاع حيّ) — لا يُفرض دائمًا.
+    func fetchUnifiedFixturesChunked(
+        comps: [String],
+        from: String,
+        to: String,
+        ignoreCache: Bool = false
+    ) async throws -> [SpFixture] {
         guard !comps.isEmpty else { return [] }
         var chunks: [[String]] = []
         var i = 0
@@ -47,7 +53,9 @@ extension APIClient {
         try await withThrowingTaskGroup(of: [SpFixture].self) { group in
             for chunk in chunks {
                 group.addTask {
-                    try await APIClient.shared.fetchUnifiedFixtures(comps: chunk, from: from, to: to, ignoreCache: true).fixtures
+                    try await APIClient.shared.fetchUnifiedFixtures(
+                        comps: chunk, from: from, to: to, ignoreCache: ignoreCache
+                    ).fixtures
                 }
             }
             for try await part in group { all.append(contentsOf: part) }
@@ -1214,9 +1222,9 @@ struct MatchesCenterView: View {
         let window = requestWindow()
         do {
             async let mergedTask = APIClient.shared.fetchUnifiedFixturesChunked(
-                comps: comps, from: window.from, to: window.to)
+                comps: comps, from: window.from, to: window.to, ignoreCache: force)
             async let bracketTask: SpWcBracket? = comps.contains("world-cup")
-                ? (try? await APIClient.shared.fetchWorldCupBracket(ignoreCache: true))
+                ? (try? await APIClient.shared.fetchWorldCupBracket(ignoreCache: force))
                 : nil
 
             let unified = try await mergedTask
@@ -1284,7 +1292,8 @@ struct MatchesCenterView: View {
             let delay: UInt64 = (hasLive || nearKickoff) ? 10_000_000_000 : 45_000_000_000
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
-            await load(force: true)
+            // في الوضع الخامل نسمح بـ HTTP/URL cache (s-maxage≈30–60ث) بدل تجاهله دائمًا.
+            await load(force: hasLive || nearKickoff)
         }
     }
 }
