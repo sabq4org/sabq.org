@@ -1380,6 +1380,10 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
     const fixture: SplFixture = {
       ...fx,
       goals: { home: ts.home, away: ts.away },
+      penalties:
+        ts.penHome != null || ts.penAway != null
+          ? { home: ts.penHome, away: ts.penAway }
+          : fx.penalties,
       status: { ...fx.status, live: ts.live, finished: ts.finished || fx.status.finished },
     };
     const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fx) : detail.events;

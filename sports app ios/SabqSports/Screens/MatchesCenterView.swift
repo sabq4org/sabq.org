@@ -168,6 +168,13 @@ struct MatchesCenterView: View {
     @State private var loadError: String?
     @State private var liveOnly = false
     @State private var selection = SpCenterFilter.load()
+    // نطاق «العدسة» — يُفلتر شرائح البطولات الظاهرة ويُميّز الحبّة المتصدّرة.
+    // مستقلّ عن selection: عند التعمّق في بطولة واحدة يبقى النطاق كما هو فتظلّ
+    // الشرائح مفلترة عليه والحبّة تعرضه.
+    @State private var lensScope: String = {
+        let s = SpCenterFilter.load()
+        return (s == "all" || s.hasPrefix("lens:")) ? s : "all"
+    }()
     @State private var showCompsManager = false
 
     /// «بطولاتي المفضّلة» — المصدر الموحّد مع تبويب البطولات.
@@ -269,7 +276,6 @@ struct MatchesCenterView: View {
     private var header: some View {
         VStack(spacing: 14) {
             toolbar
-            lensStrip
             compsStrip
             if singleCupRounds.count > 1 { roundStrip }
         }
@@ -391,17 +397,27 @@ struct MatchesCenterView: View {
         .buttonStyle(.plain)
     }
 
-    /// شرائح البطولات = «بطولاتي المفضّلة» مرتّبة بالفئة (السعودية أولًا) —
-    /// الكؤوس المنتهية تسقط من الشرائح تلقائيًّا (المونديال بعد النهائي).
+    /// شرائح البطولات = «بطولاتي المفضّلة» ضمن نطاق العدسة المختار، مرتّبة بالفئة
+    /// (السعودية أولًا). الكؤوس المنتهية تسقط تلقائيًّا (المونديال بعد النهائي).
     private var chipComps: [SpCompetition] {
-        favorites.items
-            .filter { !($0.type == "cup" && $0.status == "finished") }
-            .sorted { a, b in
-                let ra = SportsConstants.categoryRank(a.category)
-                let rb = SportsConstants.categoryRank(b.category)
-                if ra != rb { return ra < rb }
-                return a.name < b.name
-            }
+        let base = favorites.items.filter { !($0.type == "cup" && $0.status == "finished") }
+        let scoped: [SpCompetition]
+        switch lensScope {
+        case "lens:important":
+            let important = Set(SpCenterFilter.defaultSlugs)
+            scoped = base.filter { important.contains($0.slug) }
+        case let s where s.hasPrefix("lens:category:"):
+            let category = String(s.dropFirst("lens:category:".count))
+            scoped = base.filter { $0.category == category }
+        default: // "all"
+            scoped = base
+        }
+        return scoped.sorted { a, b in
+            let ra = SportsConstants.categoryRank(a.category)
+            let rb = SportsConstants.categoryRank(b.category)
+            if ra != rb { return ra < rb }
+            return a.name < b.name
+        }
     }
 
     /// مفتاح إعادة التحميل: الاختيار + بصمة المفضّلة (تبديل بطولة = تحديث فوري).
@@ -409,10 +425,17 @@ struct MatchesCenterView: View {
         selection + "|" + favorites.items.map(\.slug).sorted().joined(separator: ",")
     }
 
+    // صفّ فلترة واحد: حبّة «العدسة» (قائمة النطاق) تتصدّره، يليها فاصل رفيع ثم
+    // شرائح البطولات ضمن النطاق. دمج صفّ العدسة القديم فيه وفّر صفًّا كاملًا وألغى
+    // تكرار «الكل»: العدسة = النطاق، الشرائح = التنقّل داخله.
     private var compsStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 7) {
-                filterChip(slug: "all", name: "الكل", logo: nil)
+                lensPill
+                Rectangle()
+                    .fill(SpTheme.outline)
+                    .frame(width: 1, height: 20)
+                    .padding(.horizontal, 1)
                 ForEach(chipComps) { comp in
                     filterChip(slug: comp.slug, name: comp.name, logo: comp.logo)
                 }
@@ -421,41 +444,60 @@ struct MatchesCenterView: View {
         }
     }
 
-    private var lensStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
-                Text("عدسة")
-                    .font(SportsFonts.app(size: 11, weight: .heavy))
-                    .foregroundStyle(SpTheme.green)
-                    .padding(.horizontal, 9).padding(.vertical, 6)
-                    .background(Capsule().fill(SpTheme.green.opacity(0.10)))
-                lensChip(key: "all", title: "الكل", systemImage: "circle.grid.2x2.fill")
-                lensChip(key: "lens:important", title: "الأهم", systemImage: "sparkles")
-                lensChip(key: "lens:category:saudi", title: "السعودية", systemImage: "flag.fill")
-                lensChip(key: "lens:category:european", title: "أوروبا", systemImage: "globe.europe.africa.fill")
-                lensChip(key: "lens:category:world", title: "العالمية", systemImage: "globe")
-            }
-            .padding(.horizontal, 1)
-        }
+    /// عدسات النطاق — الكل/الأهم + فئات جغرافية. القيَم مطابقة لما يفهمه
+    /// effectiveCompetitionSlugs، فتغيير العدسة يحمّل جدول النطاق مباشرة.
+    private let lensList: [(key: String, title: String, icon: String)] = [
+        ("all", "الكل", "circle.grid.2x2.fill"),
+        ("lens:important", "الأهم", "sparkles"),
+        ("lens:category:saudi", "السعودية", "flag.fill"),
+        ("lens:category:european", "أوروبا", "globe.europe.africa.fill"),
+        ("lens:category:world", "العالمية", "globe"),
+    ]
+
+    /// العدسة الفعّالة (للعنوان والأيقونة على الحبّة).
+    private var activeLens: (key: String, title: String, icon: String) {
+        lensList.first(where: { $0.key == lensScope }) ?? lensList[0]
     }
 
-    private func lensChip(key: String, title: String, systemImage: String) -> some View {
-        let active = selection == key || (key == "all" && selection == "all")
-        return Button {
-            withAnimation(.easeOut(duration: 0.2)) { selection = key }
-            SpCenterFilter.save(key)
+    /// الحبّة مملوءة عندما يكون العرض على نطاق العدسة نفسه (لا تعمّق في بطولة)؛
+    /// وتصير محيطة عند اختيار شريحة بطولة محدّدة (فالتمييز يذهب لتلك الشريحة).
+    private var isLensActive: Bool { selection == lensScope }
+
+    private var lensBinding: Binding<String> {
+        Binding(
+            get: { lensScope },
+            set: { newScope in
+                withAnimation(.easeOut(duration: 0.2)) {
+                    lensScope = newScope
+                    selection = newScope
+                }
+                SpCenterFilter.save(newScope)
+            }
+        )
+    }
+
+    private var lensPill: some View {
+        Menu {
+            Picker("عدسة", selection: lensBinding) {
+                ForEach(lensList, id: \.key) { item in
+                    Label(item.title, systemImage: item.icon).tag(item.key)
+                }
+            }
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: systemImage).font(.system(size: 11, weight: .bold))
-                Text(title)
-                    .font(SportsFonts.app(size: 12.5, weight: active ? .bold : .semibold))
+                Image(systemName: activeLens.icon).font(.system(size: 11, weight: .bold))
+                Text(activeLens.title)
+                    .font(SportsFonts.app(size: 12.5, weight: .bold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .heavy))
             }
-            .foregroundStyle(active ? .white : SpTheme.onDarkDim)
+            .foregroundStyle(isLensActive ? .white : SpTheme.green)
             .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(Capsule().fill(active ? SpTheme.green : SpTheme.chipFill))
-            .overlay(Capsule().stroke(active ? SpTheme.green.opacity(0.55) : SpTheme.outline, lineWidth: 1))
+            .background(Capsule().fill(isLensActive ? SpTheme.green : SpTheme.green.opacity(0.10)))
+            .overlay(Capsule().stroke(isLensActive ? Color.clear : SpTheme.green.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("عدسة العرض: \(activeLens.title)")
     }
 
     private func filterChip(slug: String, name: String, logo: String?) -> some View {
@@ -1223,7 +1265,7 @@ struct MatchesCenterView: View {
 
     private func visualSignature(_ rows: [SpFixture]) -> String {
         rows.map { f in
-            "\(f.id):\(f.timestamp):\(f.status.code):\(f.status.elapsed ?? -1):\(f.status.extra ?? -1):\(f.status.live):\(f.status.finished):\(f.goals.home ?? -1)-\(f.goals.away ?? -1):\(f.home.id)-\(f.away.id):\(f.competitionSlug ?? "")"
+            "\(f.id):\(f.timestamp):\(f.status.code):\(f.status.elapsed ?? -1):\(f.status.extra ?? -1):\(f.status.live):\(f.status.finished):\(f.goals.home ?? -1)-\(f.goals.away ?? -1):p\(f.penaltyScore?.home ?? -1)-\(f.penaltyScore?.away ?? -1):\(f.home.id)-\(f.away.id):\(f.competitionSlug ?? "")"
         }
         .joined(separator: "|")
     }

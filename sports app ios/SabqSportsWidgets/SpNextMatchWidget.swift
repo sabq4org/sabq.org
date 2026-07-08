@@ -42,7 +42,10 @@ extension SpWidgetSnapshot {
     static let spPreview = SpWidgetSnapshot(
         fixtureId: 0, homeName: "الهلال", awayName: "النصر",
         homeLogoFile: nil, awayLogoFile: nil, competition: "دوري روشن",
-        kickoff: .now.addingTimeInterval(26 * 3600), isFavoriteTeam: true)
+        kickoff: .now.addingTimeInterval(26 * 3600), isFavoriteTeam: true,
+        homeScore: nil, awayScore: nil,
+        homePenaltyScore: nil, awayPenaltyScore: nil,
+        statusLabel: nil, isLive: nil, isFinished: nil)
 }
 
 // ألوان متكيّفة خاصة بودجت الشاشة الرئيسية (أبيض نظيف نهارًا، فحمي ليلًا) —
@@ -60,6 +63,7 @@ private enum SpHW {
                                 UIColor(white: 1, alpha: 0.42))
     static let chip = adaptive(UIColor(red: 0.95, green: 0.96, blue: 0.97, alpha: 1),
                                UIColor(white: 1, alpha: 0.10))
+    static let live = Color(red: 1.0, green: 0.40, blue: 0.34)
 }
 
 struct SpNextMatchWidgetView: View {
@@ -107,7 +111,23 @@ struct SpNextMatchWidgetView: View {
                 teamColumn(name: s.homeName, file: s.homeLogoFile)
                 VStack(spacing: 4) {
                     if started(s) {
-                        Text("انطلقت").font(.system(size: 15, weight: .heavy)).foregroundStyle(SpHW.green)
+                        if let score = scoreLine(s) {
+                            Text(score)
+                                .font(.system(size: 20, weight: .heavy).monospacedDigit())
+                                .foregroundStyle(SpHW.green)
+                                .environment(\.layoutDirection, .leftToRight)
+                        } else {
+                            Text("انطلقت")
+                                .font(.system(size: 15, weight: .heavy))
+                                .foregroundStyle(SpHW.green)
+                        }
+                        if let pens = penaltyLine(s) {
+                            Text(pens)
+                                .font(.system(size: 10.5, weight: .bold))
+                                .foregroundStyle(SpHW.live)
+                                .lineLimit(1)
+                                .environment(\.layoutDirection, .leftToRight)
+                        }
                     } else {
                         Text(s.kickoff, style: .timer)
                             .font(.system(size: 19, weight: .heavy).monospacedDigit())
@@ -157,8 +177,9 @@ struct SpNextMatchWidgetView: View {
 
     @ViewBuilder private func kickoffLine(_ s: SpWidgetSnapshot) -> some View {
         if started(s) {
-            Text("انطلقت — تابعها في VARA")
-                .font(.system(size: 10.5, weight: .heavy)).foregroundStyle(SpHW.green)
+            Text(s.isFinished == true ? "انتهت" : (s.statusLabel?.isEmpty == false ? s.statusLabel! : "مباشر الآن"))
+                .font(.system(size: 10.5, weight: .heavy))
+                .foregroundStyle(s.isLive == true ? SpHW.live : SpHW.green)
                 .lineLimit(1).minimumScaleFactor(0.8)
         } else {
             HStack(spacing: 5) {
@@ -192,6 +213,16 @@ struct SpNextMatchWidgetView: View {
     }
 
     private func started(_ s: SpWidgetSnapshot) -> Bool { entry.date >= s.kickoff }
+
+    private func scoreLine(_ s: SpWidgetSnapshot) -> String? {
+        guard let home = s.homeScore, let away = s.awayScore else { return nil }
+        return "\(away) - \(home)"
+    }
+
+    private func penaltyLine(_ s: SpWidgetSnapshot) -> String? {
+        guard let home = s.homePenaltyScore, let away = s.awayPenaltyScore else { return nil }
+        return "ترجيح \(away)-\(home)"
+    }
 
     /// «اليوم» / «غدًا» / اسم اليوم — بتقويم الرياض.
     private func dayLabel(_ d: Date) -> String {

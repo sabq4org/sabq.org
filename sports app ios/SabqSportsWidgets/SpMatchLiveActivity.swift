@@ -29,6 +29,12 @@ struct SpMatchLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.center) {
                     VStack(spacing: 2) {
                         centerValue(context, dark: true)
+                        if let pens = penaltyScoreText(context.state) {
+                            Text(pens)
+                                .font(.system(size: 10.5, weight: .heavy))
+                                .foregroundStyle(SpLA.liveDot)
+                                .lineLimit(1)
+                        }
                         liveStatusContent(context.state, kickoff: context.attributes.kickoff)
                             .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white.opacity(0.85))
@@ -165,6 +171,11 @@ private func scoreText(_ state: SpMatchActivityAttributes.ContentState) -> some 
         .environment(\.layoutDirection, .leftToRight)
 }
 
+private func penaltyScoreText(_ state: SpMatchActivityAttributes.ContentState) -> String? {
+    guard let home = state.homePenaltyScore, let away = state.awayPenaltyScore else { return nil }
+    return "ترجيح \(away)-\(home)"
+}
+
 enum SpSide { case home, away }
 
 // شاشة القفل / مركز الإشعارات — نفس توزيع ويدجت سبق، بثيم رياضي داكن.
@@ -239,6 +250,14 @@ private struct LockScreenView: View {
             VStack(spacing: 4) {
                 scoreText(context.state)
                     .font(.system(size: 38, weight: .black, design: .rounded))
+                if let pens = penaltyScoreText(context.state) {
+                    Text(pens)
+                        .font(.system(size: 14, weight: .heavy, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(SpLA.liveDot)
+                        .lineLimit(1)
+                        .environment(\.layoutDirection, .leftToRight)
+                }
                 statusBadge
             }
         }

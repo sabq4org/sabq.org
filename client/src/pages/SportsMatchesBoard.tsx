@@ -31,6 +31,15 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import {
@@ -719,6 +728,19 @@ export default function SportsMatchesBoard() {
     });
   }, [allMatches, compMeta]);
 
+  // شرائح البطولات ضمن نطاق العدسة المختار — العدسة = النطاق، الشرائح = التنقّل
+  // داخله (نفس نموذج تطبيق iOS: صفّ فلترة واحد بلا تكرار).
+  const scopedCompetitions = useMemo(() => {
+    return presentCompetitions.filter((c) => {
+      if (lens === "all") return true;
+      if (lens === "live") return c.live > 0;
+      if (lens === "favorites") return IMPORTANT_COMP_SET.has(c.slug);
+      return compMeta.get(c.slug)?.category === lens;
+    });
+  }, [presentCompetitions, lens, compMeta]);
+
+  const activeLensLabel = LENSES.find((l) => l.key === lens)?.label ?? "الكل";
+
   const toggle = (id: number) =>
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -840,36 +862,51 @@ export default function SportsMatchesBoard() {
           {/* شريط الفلاتر وحده لاصق أعلى الشاشة — يبقى عند النزول لتحرير المساحة */}
           <div className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
             <div className="mx-auto max-w-[1200px] px-4 py-2 sm:px-6 sm:py-2.5">
+              {/* صفّ فلترة واحد: قائمة «العدسة» تتصدّره ثم شرائح البطولات ضمن نطاقها.
+                  دمج صفّ العدسة المنفصل هنا وفّر صفًّا كاملًا وألغى تكرار «الكل». */}
               <div className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-card px-3 py-1.5 text-[11px] font-black text-primary ring-1 ring-border">
-                  <SlidersHorizontal className="h-3.5 w-3.5" /> عدسة المباريات
-                </span>
-                {LENSES.map((item) => {
-                  const count = matchLensCount(item.key);
-                  const active = lens === item.key;
-                  return (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
                     <button
-                      key={item.key}
                       type="button"
-                      onClick={() => {
-                        setLens(item.key);
-                        setCompFilter("all");
-                        if (item.key !== "all" && item.key !== "live" && item.key !== "favorites") setCatFilter("all");
-                      }}
                       className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-black transition-colors sm:min-h-0 ${
-                        active ? "bg-primary text-white shadow-sm" : "bg-card text-muted-foreground ring-1 ring-border hover:text-primary"
+                        lens !== "all"
+                          ? "bg-primary text-white shadow-sm"
+                          : "bg-card text-primary ring-1 ring-border hover:bg-primary/10"
                       }`}
                     >
-                      {item.label}
-                      <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${active ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"}`}>
-                        {count.toLocaleString("en")}
-                      </span>
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      {activeLensLabel}
+                      <ChevronDown className="h-3 w-3 opacity-80" />
                     </button>
-                  );
-                })}
-              </div>
-              {presentCompetitions.length > 1 && (
-                <div className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-[11rem]">
+                    <DropdownMenuLabel className="text-[11px] font-black text-primary">عدسة المباريات</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuRadioGroup
+                      value={lens}
+                      onValueChange={(v) => {
+                        const key = v as (typeof LENSES)[number]["key"];
+                        setLens(key);
+                        setCompFilter("all");
+                        if (key !== "all" && key !== "live" && key !== "favorites") setCatFilter("all");
+                      }}
+                    >
+                      {LENSES.map((item) => (
+                        <DropdownMenuRadioItem key={item.key} value={item.key} className="text-xs font-bold">
+                          <span className="flex-1">{item.label}</span>
+                          <span className="ml-2 rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-muted-foreground">
+                            {matchLensCount(item.key).toLocaleString("en")}
+                          </span>
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {scopedCompetitions.length > 0 && <span className="mx-0.5 h-5 w-px shrink-0 bg-border" />}
+
+                {scopedCompetitions.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setCompFilter("all")}
@@ -879,30 +916,27 @@ export default function SportsMatchesBoard() {
                   >
                     كل البطولات
                   </button>
-                  {presentCompetitions.map((comp) => {
-                    const active = compFilter === comp.slug;
-                    return (
-                      <button
-                        key={comp.slug}
-                        type="button"
-                        onClick={() => {
-                          setCompFilter(comp.slug);
-                          setLens("all");
-                        }}
-                        className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${
-                          active ? "bg-foreground text-background" : "bg-card text-muted-foreground ring-1 ring-border hover:text-foreground"
-                        }`}
-                      >
-                        {comp.logo && <img src={comp.logo} alt="" className="h-4 w-4 object-contain" loading="lazy" />}
-                        {comp.name}
-                        <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${active ? "bg-white/15" : "bg-muted"}`}>
-                          {comp.live > 0 ? `${comp.live} مباشر` : comp.count.toLocaleString("en")}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+                )}
+                {scopedCompetitions.map((comp) => {
+                  const active = compFilter === comp.slug;
+                  return (
+                    <button
+                      key={comp.slug}
+                      type="button"
+                      onClick={() => setCompFilter(comp.slug)}
+                      className={`inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition-colors sm:min-h-0 ${
+                        active ? "bg-foreground text-background" : "bg-card text-muted-foreground ring-1 ring-border hover:text-foreground"
+                      }`}
+                    >
+                      {comp.logo && <img src={comp.logo} alt="" className="h-4 w-4 object-contain" loading="lazy" />}
+                      {comp.name}
+                      <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${active ? "bg-white/15" : "bg-muted"}`}>
+                        {comp.live > 0 ? `${comp.live} مباشر` : comp.count.toLocaleString("en")}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
               {/* الحالة + الفئة + طريقة العرض */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:pb-0">
                 <div className="flex items-center gap-1 rounded-[10px] bg-muted p-0.5 shrink-0">
