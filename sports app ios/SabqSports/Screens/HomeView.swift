@@ -25,8 +25,6 @@ struct HomeView: View {
     @Environment(SpAppRouter.self) private var router
     @Environment(SpLanguage.self) private var language
     @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
-    /// تجربة «يوم المشجع» — إيقافها من حسابي يعيد الرئيسية القديمة فورًا.
-    @AppStorage("vara.fanDay.enabled") private var fanDayEnabled = true
 
     @State private var comp: SpCompetition?
     @State private var outlook: SpOutlook?
@@ -51,21 +49,16 @@ struct HomeView: View {
     @State private var showSearch = false
     @State private var showForYou = false
     @State private var showTransferCenter = false
-    @State private var showPredictions = false
-    @State private var openPrediction: SpPredictableMatch?
     @State private var loading = true
     @State private var loadError: String?
     @State private var serverSnaps: [SpSnap] = []
 
     enum ScorerMode { case goals, assists }
 
-    /// مباراة الواجهة: في «يوم المشجع» أولوية لمباراة فريقي (مباشر→اليوم→قادم→آخر نتيجة).
-    /// في الوضع القديم: آخر نتيجة للمفضّل إن وُجدت، وإلا أبرز مباراة الدوري.
+    /// مباراة الواجهة: إن اختار العضو فريقًا مفضّلًا فالأولوية لمباراته (مباشر/اليوم/
+    /// قادم/آخر نتيجة)، وإلا فمباراة الدوري الأبرز بنفس الترتيب.
     private var featured: SpFixture? {
         guard let m = matches else { return nil }
-        if fanDayEnabled, let favId = favorites.team?.id, let fm = favoriteMatch(m, favId) {
-            return fm
-        }
         if let favId = favorites.team?.id, let fm = favoriteLastResult(m, favId) { return fm }
         return m.live.first ?? m.today.first ?? m.upcoming.first ?? m.results.first
     }
@@ -142,7 +135,6 @@ struct HomeView: View {
             .navigationDestination(isPresented: $showSearch) { SpSearchView() }
             .navigationDestination(isPresented: $showForYou) { SpForYouView() }
             .navigationDestination(isPresented: $showTransferCenter) { TransferCenterView() }
-            .navigationDestination(isPresented: $showPredictions) { PredictionsHubView() }
         }
         .task { await loadAll() }
         .task { await pollHero() }
@@ -197,52 +189,27 @@ struct HomeView: View {
     @ViewBuilder private var heroSection: some View {
         VStack(spacing: 14) {
             topBar
-            if fanDayEnabled {
-                FanDayHomeSection(
-                    fixture: featured,
-                    favoriteName: favoriteTeamName,
-                    standing: favoriteTeamId.flatMap { id in standings.first { $0.team.id == id } },
-                    leader: standings.first,
-                    runnerUp: standings.count > 1 ? standings[1] : nil,
-                    openPrediction: openPrediction,
-                    headline: fanDayHeadline,
-                    isFavoriteMatch: heroIsFavorite,
-                    onOpenMatch: { selectedMatch = $0 },
-                    onOpenPredictions: { showPredictions = true },
-                    onPickTeam: { showAllStandings = true }
-                )
-                .transition(.opacity)
-            } else {
-                leagueStrip
-                if let f = featured {
-                    heroMatch(f)
-                        .transition(.opacity)
-                } else if let o = outlook, !loading {
-                    // البطاقة الاحتياطية «بطل الموسم» — تظهر فقط بعد استقرار التحميل
-                    // ووجود يقينٍ بعدم توفّر مباراة مميّزة. لولا قيد !loading لومضت لحظيًّا
-                    // قبل أن يُحسم featured ثم قفزت لبطاقة المباراة (الوميض المُبلَّغ عنه).
-                    SpOutlookCard(outlook: o)
-                        .transition(.opacity)
-                }
-                // أثناء التحميل: لا هيرو احتياطي — مؤشّر SpLoading أسفل القسم يكفي، بلا قفز.
-                // بلوك «فريقي» بعد الهيرو — الهيرو يتصدّر الواجهة ومباريات المفضّل تليه.
-                SpMyTeamCard(
-                    standings: standings,
-                    onOpenMatch: { selectedMatch = $0 },
-                    onOpenTeam: { selectedTeam = IDBox(id: $0) },
-                    onPickTeam: { showAllStandings = true }
-                )
+            leagueStrip
+            if let f = featured {
+                heroMatch(f)
+                    .transition(.opacity)
+            } else if let o = outlook, !loading {
+                // البطاقة الاحتياطية «بطل الموسم» — تظهر فقط بعد استقرار التحميل
+                // ووجود يقينٍ بعدم توفّر مباراة مميّزة. لولا قيد !loading لومضت لحظيًّا
+                // قبل أن يُحسم featured ثم قفزت لبطاقة المباراة (الوميض المُبلَّغ عنه).
+                SpOutlookCard(outlook: o)
+                    .transition(.opacity)
             }
+            // أثناء التحميل: لا هيرو احتياطي — مؤشّر SpLoading أسفل القسم يكفي، بلا قفز.
+            // بلوك «فريقي» بعد الهيرو — الهيرو يتصدّر الواجهة ومباريات المفضّل تليه.
+            SpMyTeamCard(
+                standings: standings,
+                onOpenMatch: { selectedMatch = $0 },
+                onOpenTeam: { selectedTeam = IDBox(id: $0) },
+                onPickTeam: { showAllStandings = true }
+            )
         }
         .animation(.easeInOut(duration: 0.25), value: loading)
-        .animation(.easeInOut(duration: 0.25), value: fanDayEnabled)
-    }
-
-    /// خبر واحد من لقطات الفريق — أول عنوان غير فارغ.
-    private var fanDayHeadline: String? {
-        guard !language.isEnglish else { return nil }
-        let snap = serverSnaps.first { !$0.headline.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-        return snap?.headline
     }
 
     // شريط علوي واحد — علامة VARA يمينًا والأدوات (بحث/لك/الحساب) يسارًا.
@@ -581,13 +548,12 @@ struct HomeView: View {
     @ViewBuilder private var dashboardContent: some View {
         // فراغ واضح بين بطاقات روشن بدون فصل بصري زائد.
         // (بطاقة «فريقي المفضّل» المصغّرة حُذفت — بلوك «فريقي» أعلى الواجهة يغنيها.)
-        // في «يوم المشجع»: نخفّف الأعلى (النبض/اللقطات مكرّرة مع الهيرو) ونبقي الجولة والنتائج.
         VStack(spacing: 28) {
-            if !fanDayEnabled, showSmartSnaps, !language.isEnglish {
+            if showSmartSnaps, !language.isEnglish {
                 VaraInsightCard(context: varaInsightContext)
                     .padding(.horizontal, 16)
             }
-            if !fanDayEnabled, !standings.isEmpty || !scorers.isEmpty { leaguePulse }
+            if !standings.isEmpty || !scorers.isEmpty { leaguePulse }
             if !(matches?.upcoming.isEmpty ?? true) || !(matches?.today.isEmpty ?? true) {
                 gameweekStrip
             }
@@ -1176,7 +1142,6 @@ struct HomeView: View {
         // لا نستدعي matchFollows.refresh() هنا — auto-refresh + SSE يغطيان الحالة
         // وتكرار detail كامل لكل مباراة متابَعة يضاعف زمن التحميل.
         await loadSmartSnaps(force: force)
-        if fanDayEnabled { await loadOpenPrediction() }
 
         // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + آخر مجريات.
         if let f = featured, f.started {
@@ -1208,25 +1173,6 @@ struct HomeView: View {
             serverSnaps = (try? await APIClient.shared.fetchTeamSnaps(teamId: favId, ignoreCache: force)) ?? []
         } else {
             serverSnaps = []
-        }
-    }
-
-    /// أول مباراة مفتوحة للتوقّع — يفضّل مباراة الفريق المفضّل إن وُجدت.
-    private func loadOpenPrediction() async {
-        guard auth.isLoggedIn else {
-            openPrediction = nil
-            return
-        }
-        guard let pool = try? await APIClient.shared.fetchPoolToday() else {
-            openPrediction = nil
-            return
-        }
-        let open = pool.matches.filter { !$0.locked && !$0.fixture.status.finished }
-        if let favId = favorites.team?.id,
-           let fav = open.first(where: { $0.fixture.home.id == favId || $0.fixture.away.id == favId }) {
-            openPrediction = fav
-        } else {
-            openPrediction = open.first
         }
     }
 }
