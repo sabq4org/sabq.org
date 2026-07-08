@@ -11,7 +11,6 @@ struct AccountView: View {
     @Environment(SpLanguage.self) private var language
     @Environment(SpAppRouter.self) private var router
     @Environment(\.openURL) private var openURL
-    @Environment(SpLanguage.self) private var language
     @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
     @State private var selectedTeam: IDBox?
     @State private var showSignOutConfirm = false
