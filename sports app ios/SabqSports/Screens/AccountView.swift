@@ -992,9 +992,10 @@ struct SpPhoneLoginFlow: View {
                     .font(SportsFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(SpTheme.onDark)
                     .tint(SpTheme.green)
-                    .environment(\.layoutDirection, .leftToRight)
                     .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(9)) }
             }
+            // الصفّ كاملًا LTR: المفتاح +966 يسار، الرقم يمينه (كالويب).
+            .environment(\.layoutDirection, .leftToRight)
             .padding(.horizontal, 14).padding(.vertical, 13)
             .background(fieldBg)
 

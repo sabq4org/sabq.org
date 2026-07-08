@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -66,23 +66,7 @@ export default function Login() {
         return;
       }
 
-      // Fetch user data to determine redirect path. staleTime:0 forces a fresh
-      // request: the cached value here is the pre-login one (often null), and a
-      // stale read sends staff to "/" instead of "/dashboard".
-      const userData = await queryClient.fetchQuery<User>({
-        queryKey: ["/api/auth/user"],
-        staleTime: 0,
-      });
-
-      toast({
-        title: "مرحباً بك!",
-        description: "تم تسجيل الدخول بنجاح",
-      });
-      trackLogin("email");
-
-      // Smart redirect based on user role
-      const redirectPath = getDefaultRedirectPath(userData);
-      navigate(redirectPath);
+      await completeLogin("email");
     } catch (error: any) {
       setIsLoading(false);
       toast({
@@ -90,6 +74,92 @@ export default function Login() {
         description: error.message || "البريد الإلكتروني أو كلمة المرور غير صحيحة",
         variant: "destructive",
       });
+    }
+  };
+
+  // بعد أي مسار دخول ناجح: جلب المستخدم + إعادة التوجيه الذكي حسب الدور.
+  const completeLogin = async (method: string) => {
+    const userData = await queryClient.fetchQuery<User>({
+      queryKey: ["/api/auth/user"],
+      staleTime: 0,
+    });
+    toast({ title: "مرحباً بك!", description: "تم تسجيل الدخول بنجاح" });
+    trackLogin(method);
+    navigate(getDefaultRedirectPath(userData));
+  };
+
+  // ===== دخول/تسجيل بالجوال (OTP) =====
+  const [authTab, setAuthTab] = useState<"phone" | "email">("phone");
+  const [phoneStep, setPhoneStep] = useState<"phone" | "code">("phone");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [otp, setOtp] = useState("");
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [resend, setResend] = useState(0);
+  const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const phoneValid = /^5\d{8}$/.test(phoneNumber);
+
+  const startResend = () => {
+    setResend(60);
+    const t = setInterval(() => {
+      setResend((r) => {
+        if (r <= 1) { clearInterval(t); return 0; }
+        return r - 1;
+      });
+    }, 1000);
+  };
+
+  const sendPhoneCode = async () => {
+    if (!phoneValid) {
+      toast({ title: "رقم غير صحيح", description: "أدخل رقم جوال سعودي يبدأ بـ5.", variant: "destructive" });
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      await apiRequest("/api/auth/phone/send", { method: "POST", body: JSON.stringify({ phone: phoneNumber }) });
+      setPhoneStep("code");
+      setOtp("");
+      startResend();
+      setTimeout(() => otpRefs.current[0]?.focus(), 60);
+    } catch (error: any) {
+      toast({ title: "تعذّر الإرسال", description: error.message || "حاول مرة أخرى", variant: "destructive" });
+    }
+    setPhoneLoading(false);
+  };
+
+  const verifyPhoneCode = async (codeVal?: string) => {
+    const code = (codeVal ?? otp).replace(/\D/g, "");
+    if (code.length !== 6) return;
+    setPhoneLoading(true);
+    try {
+      await apiRequest("/api/auth/phone/verify", { method: "POST", body: JSON.stringify({ phone: phoneNumber, code }) });
+      await completeLogin("phone");
+    } catch (error: any) {
+      toast({ title: "فشل التحقق", description: error.message || "الرمز غير صحيح أو منتهي", variant: "destructive" });
+      setPhoneLoading(false);
+    }
+  };
+
+  // خانات الرمز: box 0 يقبل التعبئة الآلية (one-time-code) ويوزّع 6 أرقام.
+  const handleOtpChange = (i: number, raw: string) => {
+    const v = raw.replace(/\D/g, "");
+    if (v.length > 1) {
+      const full = v.slice(0, 6);
+      setOtp(full);
+      otpRefs.current[Math.min(full.length, 5)]?.focus();
+      if (full.length === 6) verifyPhoneCode(full);
+      return;
+    }
+    const next = (otp.slice(0, i) + v).slice(0, 6);
+    setOtp(next);
+    if (v && i < 5) otpRefs.current[i + 1]?.focus();
+    if (next.length === 6) verifyPhoneCode(next);
+  };
+
+  const handleOtpKey = (i: number, e: React.KeyboardEvent) => {
+    if (e.key === "Backspace" && !otp[i] && i > 0) {
+      otpRefs.current[i - 1]?.focus();
+      setOtp(otp.slice(0, i - 1));
     }
   };
 
@@ -113,7 +183,7 @@ export default function Login() {
               تسجيل الدخول
             </h1>
             <p className="text-sm text-muted-foreground text-right">
-              أدخل بريدك الإلكتروني وكلمة المرور لتسجيل الدخول!
+              سجّل دخولك برقم جوالك أو بريدك الإلكتروني.
             </p>
           </div>
           
@@ -156,6 +226,94 @@ export default function Login() {
               </div>
             </div>
 
+          {/* تبويبات الدخول: الجوال / البريد */}
+          <div className="flex p-1 rounded-lg bg-muted mb-5">
+            {([["phone", "الجوال"], ["email", "البريد الإلكتروني"]] as const).map(([k, label]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setAuthTab(k)}
+                className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors ${authTab === k ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                data-testid={`tab-${k}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {authTab === "phone" ? (
+            <div className="space-y-4">
+              {phoneStep === "phone" ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5 text-right">رقم الجوال</label>
+                    {/* خانة LTR: المفتاح +966 يسار، الرقم يمينه */}
+                    <div dir="ltr" className="flex items-stretch rounded-md border border-input bg-background overflow-hidden focus-within:ring-2 focus-within:ring-ring focus-within:border-ring transition">
+                      <span className="flex items-center gap-1.5 px-3 bg-muted/60 text-sm font-semibold border-r border-input select-none whitespace-nowrap">
+                        🇸🇦 +966
+                      </span>
+                      <input
+                        dir="ltr"
+                        inputMode="numeric"
+                        autoComplete="tel-national"
+                        maxLength={9}
+                        value={phoneNumber}
+                        onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                        onKeyDown={(e) => { if (e.key === "Enter" && phoneValid) sendPhoneCode(); }}
+                        placeholder="5XXXXXXXX"
+                        disabled={phoneLoading}
+                        data-testid="input-phone"
+                        className="flex-1 min-w-0 px-3 py-2.5 bg-transparent outline-none text-base tracking-widest placeholder:tracking-normal placeholder:text-muted-foreground"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1.5 text-right">سنرسل رمز تحقّق برسالة نصية إلى جوالك.</p>
+                  </div>
+                  <Button type="button" onClick={sendPhoneCode} disabled={!phoneValid || phoneLoading} className="w-full min-h-11 text-base font-medium" data-testid="button-send-otp">
+                    {phoneLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+                    إرسال رمز التحقق
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <div className="text-center space-y-1">
+                    <p className="text-sm text-muted-foreground">أدخل رمز التحقق المُرسل إلى</p>
+                    <p dir="ltr" className="text-sm font-bold">
+                      +966 {phoneNumber}
+                      <button type="button" onClick={() => { setPhoneStep("phone"); setOtp(""); }} className="text-primary hover:underline text-xs mr-2">تعديل</button>
+                    </p>
+                  </div>
+                  <div dir="ltr" className="flex items-center justify-center gap-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <input
+                        key={i}
+                        ref={(el) => (otpRefs.current[i] = el)}
+                        inputMode="numeric"
+                        autoComplete={i === 0 ? "one-time-code" : "off"}
+                        maxLength={i === 0 ? 6 : 1}
+                        value={otp[i] ?? ""}
+                        onChange={(e) => handleOtpChange(i, e.target.value)}
+                        onKeyDown={(e) => handleOtpKey(i, e)}
+                        disabled={phoneLoading}
+                        data-testid={`input-otp-${i}`}
+                        className="w-11 h-14 text-center text-xl font-bold rounded-lg border border-input bg-background outline-none focus:border-ring focus:ring-2 focus:ring-ring transition"
+                      />
+                    ))}
+                  </div>
+                  <Button type="button" onClick={() => verifyPhoneCode()} disabled={otp.length !== 6 || phoneLoading} className="w-full min-h-11 text-base font-medium" data-testid="button-verify-otp">
+                    {phoneLoading && <Loader2 className="ml-2 h-4 w-4 animate-spin" />}
+                    تحقّق ودخول
+                  </Button>
+                  <div className="text-center">
+                    {resend > 0 ? (
+                      <p className="text-xs text-muted-foreground">إعادة الإرسال خلال {resend} ثانية</p>
+                    ) : (
+                      <button type="button" onClick={sendPhoneCode} className="text-sm text-primary hover:underline font-medium">إعادة إرسال الرمز</button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <FormField
@@ -234,8 +392,9 @@ export default function Login() {
 
             </form>
           </Form>
+          )}
           </div>
-          
+
           <div className="mt-5">
             <p className="text-sm font-normal text-center text-gray-700 dark:text-gray-400">
               ليس لديك حساب؟{" "}
