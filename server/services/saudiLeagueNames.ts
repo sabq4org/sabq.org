@@ -525,10 +525,12 @@ export const SPL_CITY_AR: Record<string, string> = {
 };
 
 export function localizeSplCompetition(name: string): string {
+  if (isEnglishSports()) return name;
   return SPL_COMPETITION_AR[name] ?? name;
 }
 
 export function localizeSplCountry(name: string): string {
+  if (isEnglishSports()) return name;
   if (!name) return "";
   return SPL_COUNTRY_AR[name] ?? name;
 }

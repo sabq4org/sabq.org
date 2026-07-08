@@ -636,6 +636,7 @@ function localizeWorldLeagueName(name: string, country: string, tr?: NameLookup)
   const trimmed = (name || "").trim();
   const countryName = (country || "").trim().toLowerCase();
   if (!trimmed) return "";
+  if (isEnglishSports()) return trimmed;
 
   // Names like "Premier League" are reused in many countries. The generic
   // SPL dictionary maps it to England, which is only safe with country context.

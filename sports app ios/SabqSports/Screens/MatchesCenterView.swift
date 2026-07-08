@@ -637,9 +637,10 @@ struct MatchesCenterView: View {
     // (علاج فساد إزاحة RTL الموثّق في MatchesView — لا تغيّره).
     private var dateRail: some View {
         ScrollViewReader { proxy in
+            let railDays = SpLanguage.shared.isEnglish ? visibleDays : Array(visibleDays.reversed())
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(Array(visibleDays.reversed())) { day in dateChip(day).id(day.id) }
+                    ForEach(railDays) { day in dateChip(day).id(day.id) }
                 }
                 .padding(.horizontal, 16).padding(.top, 4).padding(.bottom, 8)
             }
