@@ -765,18 +765,22 @@ export interface SplH2H {
  * تُعرّب عبر الخريطة. يعمل عبر كل البطولات (لا يقتصر على بطولة واحدة).
  */
 export async function getHeadToHead(homeId: number, awayId: number, last = 8): Promise<SplH2H> {
-  return withSWR(`spl:h2h:${homeId}-${awayId}`, H2H_TTL, H2H_TTL * 2, async () => {
+  const english = isEnglishSports();
+  return withSWR(`spl:h2h:${homeId}-${awayId}:${english ? "en" : "ar"}`, H2H_TTL, H2H_TTL * 2, async () => {
     const rows = await apiGet("fixtures/headtohead", { h2h: `${homeId}-${awayId}`, last, timezone: TIMEZONE });
     const meetings: SplH2HMeeting[] = (Array.isArray(rows) ? rows : [])
-      .map((r: any): SplH2HMeeting => ({
-        id: r.fixture?.id ?? 0,
-        timestamp: r.fixture?.timestamp ?? 0,
-        date: r.fixture?.date ?? "",
-        competition: localizeSplCompetition(r.league?.name ?? ""),
-        home: { id: r.teams?.home?.id ?? 0, name: localizeSplTeamName(r.teams?.home?.id, r.teams?.home?.name ?? ""), logo: r.teams?.home?.logo ?? "" },
-        away: { id: r.teams?.away?.id ?? 0, name: localizeSplTeamName(r.teams?.away?.id, r.teams?.away?.name ?? ""), logo: r.teams?.away?.logo ?? "" },
-        goals: { home: r.goals?.home ?? null, away: r.goals?.away ?? null },
-      }))
+      .map((r: any): SplH2HMeeting => {
+        const competitionName = r.league?.name ?? "";
+        return {
+          id: r.fixture?.id ?? 0,
+          timestamp: r.fixture?.timestamp ?? 0,
+          date: r.fixture?.date ?? "",
+          competition: english ? competitionName : localizeSplCompetition(competitionName),
+          home: { id: r.teams?.home?.id ?? 0, name: localizeSplTeamName(r.teams?.home?.id, r.teams?.home?.name ?? ""), logo: r.teams?.home?.logo ?? "" },
+          away: { id: r.teams?.away?.id ?? 0, name: localizeSplTeamName(r.teams?.away?.id, r.teams?.away?.name ?? ""), logo: r.teams?.away?.logo ?? "" },
+          goals: { home: r.goals?.home ?? null, away: r.goals?.away ?? null },
+        };
+      })
       .sort((a, b) => b.timestamp - a.timestamp);
 
     let total = 0, homeWins = 0, draws = 0, awayWins = 0;
