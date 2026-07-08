@@ -14,9 +14,9 @@ struct CommunityView: View {
         case all, month, week
         var label: String {
             switch self {
-            case .all: return "الكل"
-            case .month: return "هذا الشهر"
-            case .week: return "هذا الأسبوع"
+            case .all: return L("الكل")
+            case .month: return L("هذا الشهر")
+            case .week: return L("هذا الأسبوع")
             }
         }
     }
@@ -37,10 +37,10 @@ struct CommunityView: View {
                     if loading {
                         SpLoading()
                     } else if let loadError {
-                        SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+                        SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                     } else if entries.isEmpty {
-                        SpEmptyState(icon: "trophy", title: "لا متصدّرين بعد",
-                                     subtitle: "كن أول من يتصدّر بتوقّعاتك هذا الموسم")
+                        SpEmptyState(icon: "trophy", title: L("لا متصدّرين بعد"),
+                                     subtitle: L("كن أول من يتصدّر بتوقّعاتك هذا الموسم"))
                     } else {
                         leaderboardList
                     }
@@ -50,7 +50,7 @@ struct CommunityView: View {
                 .padding(16)
             }
             .background(SpAmbientBackground())
-            .navigationTitle("المجتمع")
+            .navigationTitle(L("المجتمع"))
             .navigationBarTitleDisplayMode(.inline)
         }
         .task { await load() }
@@ -66,10 +66,12 @@ struct CommunityView: View {
                 .font(.system(size: 20))
                 .foregroundStyle(SpTheme.green)
             VStack(alignment: .leading, spacing: 2) {
-                Text("لوحة المتصدّرين")
+                Text(L("لوحة المتصدّرين"))
                     .font(SportsFonts.headline(size: 22))
                     .foregroundStyle(SpTheme.onDark)
-                Text("نافِس الجمهور بتوقّعاتك واصعد القمة")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(L("نافِس الجمهور بتوقّعاتك واصعد القمة"))
                     .font(SportsFonts.app(size: 11.5, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkDim)
             }
@@ -91,7 +93,7 @@ struct CommunityView: View {
     @ViewBuilder private var standingCard: some View {
         if !auth.isLoggedIn {
             promptCard(icon: "person.crop.circle.badge.plus",
-                       text: "سجّل الدخول من «حسابي» للمنافسة على لوحة المتصدّرين.")
+                       text: L("سجّل الدخول من «حسابي» للمنافسة على لوحة المتصدّرين."))
         } else if let me = myEntry {
             HStack(spacing: 14) {
                 VStack(spacing: 1) {
@@ -99,13 +101,13 @@ struct CommunityView: View {
                         .font(SportsFonts.app(size: 22, weight: .heavy))
                         .foregroundStyle(SpTheme.green)
                         .environment(\.layoutDirection, .leftToRight)
-                    Text("ترتيبك").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
+                    Text(L("ترتيبك")).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
                 }
                 .frame(width: 64)
                 Rectangle().fill(SpTheme.outline).frame(width: 1, height: 40)
-                statCell("\(me.totalPoints)", "نقطة")
-                statCell("\(me.predictions)", "توقّع")
-                statCell("\(me.correct)", "صحيح")
+                statCell("\(me.totalPoints)", L("نقطة"))
+                statCell("\(me.predictions)", L("توقّع"))
+                statCell("\(me.correct)", L("صحيح"))
             }
             .padding(14)
             .frame(maxWidth: .infinity)
@@ -116,7 +118,7 @@ struct CommunityView: View {
             )
         } else {
             promptCard(icon: "soccerball",
-                       text: "لم تتوقّع بعد — ستظهر هنا بمجرد أول توقّع لك. (التوقّع قريبًا)")
+                       text: L("لم تتوقّع بعد — ستظهر هنا بمجرد أول توقّع لك. (التوقّع قريبًا)"))
         }
     }
 
@@ -163,13 +165,13 @@ struct CommunityView: View {
                 Text(entry.name)
                     .font(SportsFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SpTheme.onDark).lineLimit(1)
-                Text("\(entry.predictions) توقّع · \(entry.correct) صحيح · \(entry.exact) مطابق")
+                Text(Lf("%d توقّع · %d صحيح · %d مطابق", entry.predictions, entry.correct, entry.exact))
                     .font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
             }
             Spacer(minLength: 0)
             VStack(spacing: 1) {
                 Text("\(entry.totalPoints)").font(SportsFonts.app(size: 18, weight: .bold)).foregroundStyle(SpTheme.green).monospacedDigit()
-                Text("نقطة").font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("نقطة")).font(SportsFonts.app(size: 9)).foregroundStyle(SpTheme.onDarkFaint)
             }
         }
         .padding(12)
@@ -209,12 +211,12 @@ struct CommunityView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
                 Image(systemName: "info.circle.fill").font(.system(size: 14)).foregroundStyle(SpTheme.greenSoft)
-                Text("كيف تُحتسب النقاط؟").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                Text(L("كيف تُحتسب النقاط؟")).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
             }
-            pointRule("نتيجة مطابقة تمامًا", "٣ نقاط", SpTheme.green)
-            pointRule("اتجاه صحيح (فوز/تعادل/خسارة)", "نقطة واحدة", SpTheme.greenSoft)
-            pointRule("توقّع خاطئ", "٠", SpTheme.onDarkFaint)
+            pointRule(L("نتيجة مطابقة تمامًا"), L("٣ نقاط"), SpTheme.green)
+            pointRule(L("اتجاه صحيح (فوز/تعادل/خسارة)"), L("نقطة واحدة"), SpTheme.greenSoft)
+            pointRule(L("توقّع خاطئ"), L("٠"), SpTheme.onDarkFaint)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

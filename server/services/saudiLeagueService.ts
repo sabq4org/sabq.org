@@ -9,6 +9,7 @@
  * من طلب واحد للمزود.
  */
 import { withSWR, CACHE_TTL } from "../memoryCache";
+import { isEnglishSports } from "./sportsLang";
 import pLimit from "p-limit";
 import { apiFootballGet } from "./apiFootballClient";
 import { aiManager, AI_MODELS } from "../ai-manager";
@@ -16,6 +17,7 @@ import {
   WC_FINISHED_STATUSES,
   WC_LIVE_STATUSES,
   WC_STATUS_AR,
+  WC_STATUS_EN,
   localizeEvent,
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
@@ -161,10 +163,54 @@ export function getCompetition(slug: string): SaudiCompetition | undefined {
   return SAUDI_COMPETITIONS.find((c) => c.slug === slug);
 }
 
+/** أسماء البطولات بالإنجليزية (لوضع en) — المفتاح slug. الناقص يسقط للعربي. */
+const COMP_NAME_EN: Record<string, string> = {
+  "pro-league": "Roshn Saudi League",
+  "division-1": "Saudi First Division",
+  "division-2": "Saudi Second Division",
+  "kings-cup": "King's Cup",
+  "super-cup": "Saudi Super Cup",
+  "womens-league": "Saudi Women's Premier League",
+  "world-cup": "World Cup",
+  "afc-champions-league": "AFC Champions League Elite",
+  "club-world-cup": "FIFA Club World Cup",
+  "premier-league": "Premier League",
+  "la-liga": "La Liga",
+  "serie-a": "Serie A",
+  bundesliga: "Bundesliga",
+  "ligue-1": "Ligue 1",
+  "champions-league": "UEFA Champions League",
+  "europa-league": "UEFA Europa League",
+  "conference-league": "UEFA Conference League",
+  "segunda-division": "Segunda División",
+  "primera-rfef-1": "Primera Federación - Group 1",
+  "primera-rfef-2": "Primera Federación - Group 2",
+  "gulf-cup": "Arabian Gulf Cup",
+  "uae-pro-league": "UAE Pro League",
+  "qatar-stars-league": "Qatar Stars League",
+  "kuwait-premier-league": "Kuwait Premier League",
+  "bahrain-premier-league": "Bahrain Premier League",
+  "oman-pro-league": "Oman Professional League",
+  "gulf-club-champions": "Gulf Club Champions Cup",
+  "egypt-premier-league": "Egyptian Premier League",
+  "morocco-botola": "Botola Pro",
+  "tunisia-ligue-1": "Tunisian Ligue 1",
+  "algeria-ligue-1": "Algerian Ligue 1",
+  "iraq-stars-league": "Iraq Stars League",
+  "jordan-league": "Jordanian Pro League",
+  "lebanon-premier-league": "Lebanese Premier League",
+  "syria-premier-league": "Syrian Premier League",
+};
+
+/** اسم البطولة حسب لغة الطلب (إنجليزي في وضع en، وإلا العربي المعتمد). */
+export function compDisplayName(comp: SaudiCompetition): string {
+  return isEnglishSports() ? COMP_NAME_EN[comp.slug] ?? comp.name : comp.name;
+}
+
 export function listCompetitions() {
   return SAUDI_COMPETITIONS.map(({ slug, name, type, hasStandings, hasScorers, hasStats, category }) => ({
     slug,
-    name,
+    name: isEnglishSports() ? COMP_NAME_EN[slug] ?? name : name,
     type,
     hasStandings,
     hasScorers,
@@ -316,14 +362,19 @@ function localizeFixture(item: any, tr: FxTranslators = FX_NOOP_TR): SplFixture 
     timestamp: fx.timestamp,
     status: {
       code: statusCode,
-      label: WC_STATUS_AR[statusCode] ?? statusCode,
+      label: isEnglishSports()
+        ? WC_STATUS_EN[statusCode] ?? statusCode
+        : WC_STATUS_AR[statusCode] ?? statusCode,
       elapsed: fx.status?.elapsed ?? null,
       extra: fx.status?.extra ?? null,
       live: WC_LIVE_STATUSES.has(statusCode),
       finished: WC_FINISHED_STATUSES.has(statusCode),
     },
     round: localizeSplRound(item.league?.round ?? ""),
-    venue: { name: tr.venue(fx.venue?.name), city: tr.city(fx.venue?.city) },
+    // الوضع الإنجليزي: اسم الملعب/المدينة الأصلي من المزوّد بلا تعريب.
+    venue: isEnglishSports()
+      ? { name: fx.venue?.name ?? "", city: fx.venue?.city ?? "" }
+      : { name: tr.venue(fx.venue?.name), city: tr.city(fx.venue?.city) },
     home: localizeTeam(item.teams?.home, tr),
     away: localizeTeam(item.teams?.away, tr),
     goals: { home: item.goals?.home ?? null, away: item.goals?.away ?? null },
@@ -426,7 +477,7 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
     return ours
       .map((r: any): SplLiveBoardItem => {
         const comp = byId.get(r.league.id)!;
-        return { ...localizeFixture(r, tr), competition: comp.name, competitionSlug: comp.slug };
+        return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
       })
       .sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => a.timestamp - b.timestamp);
   });
@@ -456,7 +507,7 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
     const tr = await fixtureTranslators(ours);
     let items = ours.map((r: any): SplLiveBoardItem => {
       const comp = byId.get(r.league.id)!;
-      return { ...localizeFixture(r, tr), competition: comp.name, competitionSlug: comp.slug };
+      return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
     });
     // المونديال: استبدال صفوف المزوّد الخام بجدول worldCupService المُكمّل ليوم
     // التاريخ نفسه — فتظهر مباريات الأدوار الإقصائية بالمتأهلين المُرقّين ورموز
@@ -466,7 +517,8 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
         (fx) => riyadhKeyOf(fx.timestamp) === dateKey,
       );
       if (wcDay.length) {
-        const wcName = byId.get(1)?.name ?? "كأس العالم";
+        const wcComp = byId.get(1);
+        const wcName = wcComp ? compDisplayName(wcComp) : (isEnglishSports() ? "World Cup" : "كأس العالم");
         items = [
           ...items.filter((i) => i.competitionSlug !== "world-cup"),
           ...wcDay.map(
@@ -517,7 +569,7 @@ export async function getUnifiedFixtures(
               return key >= fromKey && key <= toKey;
             })
             .map(
-              (fx): SplLiveBoardItem => ({ ...fx, competition: comp.name, competitionSlug: comp.slug }),
+              (fx): SplLiveBoardItem => ({ ...fx, competition: compDisplayName(comp), competitionSlug: comp.slug }),
             ),
         )
         .catch(() => [] as SplLiveBoardItem[]), // بطولة متعثرة لا تُسقط الجدول
@@ -1145,7 +1197,7 @@ function localizeStats(rows: any[]): SplMatchDetail["statistics"] {
     away: { id: away.team?.id ?? 0, name: localizeSplTeamName(away.team?.id, away.team?.name ?? "") },
     rows: types.map((t) => ({
       type: t,
-      label: SPL_STAT_AR[t] ?? t,
+      label: isEnglishSports() ? t : SPL_STAT_AR[t] ?? t,
       home: homeMap.get(t) ?? null,
       away: awayMap.get(t) ?? null,
     })),
@@ -1787,7 +1839,7 @@ export async function getSquad(teamId: number): Promise<SplSquad | null> {
         id: p.id ?? 0,
         name: localizeSplPlayerName(p.id, p.name ?? "", tr),
         number: p.number ?? null,
-        position: SPL_POSITION_AR[p.position] ?? p.position ?? "",
+        position: isEnglishSports() ? (p.position ?? "") : (SPL_POSITION_AR[p.position] ?? p.position ?? ""),
         positionEn: p.position ?? "",
         age: p.age ?? null,
         photo: p.photo ?? "",
@@ -2112,7 +2164,7 @@ export async function getPlayerCard(playerId: number): Promise<SplPlayerCard | n
       name: displayName,
       fullName: translatedFull && translatedFull !== displayName ? translatedFull : null,
       photo: p.photo ?? "",
-      position: SPL_POSITION_AR[p.position] ?? p.position ?? "",
+      position: isEnglishSports() ? (p.position ?? "") : (SPL_POSITION_AR[p.position] ?? p.position ?? ""),
       number: p.number ?? null,
       age: p.age ?? null,
       birthDate: p.birth?.date ?? null,

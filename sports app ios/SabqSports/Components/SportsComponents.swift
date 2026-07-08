@@ -220,13 +220,13 @@ struct SpStatusPill: View {
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(SpTheme.crimson))
         } else if fixture.status.finished {
-            Text("انتهت")
+            Text(L("انتهت"))
                 .font(SportsFonts.app(size: 11, weight: .bold))
                 .foregroundStyle(SpTheme.crimson)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Capsule().fill(SpTheme.crimson.opacity(0.12)))
         } else {
-            Text("قادمة")
+            Text(L("قادمة"))
                 .font(SportsFonts.app(size: 11, weight: .bold))
                 .foregroundStyle(SpTheme.green)
                 .padding(.horizontal, 8).padding(.vertical, 3)
@@ -237,11 +237,11 @@ struct SpStatusPill: View {
     private var elapsedText: String {
         // أوقات بلا عدّاد دقائق: الاستراحة/ركلات الترجيح → ليبل قصير بدل الدقيقة.
         switch fixture.status.code {
-        case "HT": return "استراحة"
-        case "BT": return "استراحة إضافي"
-        case "P", "PEN": return "ركلات"
-        case "SUSP": return "موقوفة"
-        case "INT": return "متوقّفة"
+        case "HT": return L("استراحة")
+        case "BT": return L("استراحة إضافي")
+        case "P", "PEN": return L("ركلات")
+        case "SUSP": return L("موقوفة")
+        case "INT": return L("متوقّفة")
         default: break
         }
         guard let e = fixture.status.elapsed else { return fixture.status.label }
@@ -398,7 +398,7 @@ struct SpScoreRow: View {
                     .foregroundStyle(SpTheme.green)
                     .lineLimit(1).minimumScaleFactor(0.6)
             } else {
-                Text("انتهت")
+                Text(L("انتهت"))
                     .font(SportsFonts.app(size: 10.5, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkDim)
                     .lineLimit(1).minimumScaleFactor(0.6)
@@ -414,11 +414,11 @@ struct SpScoreRow: View {
 
     private var liveMinute: String {
         switch fixture.status.code {
-        case "HT": return "استراحة"
-        case "BT": return "استراحة إضافي"
-        case "P", "PEN": return "ركلات"
-        case "SUSP": return "موقوفة"
-        case "INT": return "متوقّفة"
+        case "HT": return L("استراحة")
+        case "BT": return L("استراحة إضافي")
+        case "P", "PEN": return L("ركلات")
+        case "SUSP": return L("موقوفة")
+        case "INT": return L("متوقّفة")
         default: break
         }
         guard let e = fixture.status.elapsed else { return fixture.status.label }
@@ -430,7 +430,7 @@ struct SpScoreRow: View {
     /// مستقل مفروض LTR — دمجها بسلسلة عربية واحدة يقلب الأرقام في التصيير (بيدي).
     private func penaltyDigits(_ p: SpScore) -> some View {
         HStack(spacing: 3) {
-            Text("ترجيح")
+            Text(L("ترجيح"))
             Text("\(p.away ?? 0)-\(p.home ?? 0)")
                 .monospacedDigit()
                 .environment(\.layoutDirection, .leftToRight)
@@ -531,7 +531,7 @@ struct SpMyMatchesCard: View {
         HStack(spacing: 7) {
             Image(systemName: "bell.badge")
                 .font(.system(size: 11, weight: .semibold)).foregroundStyle(SpTheme.green)
-            Text("سجّل الدخول لتصلك إشعارات الأهداف والنتيجة لحظيًّا")
+            Text(L("سجّل الدخول لتصلك إشعارات الأهداف والنتيجة لحظيًّا"))
                 .font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkDim)
                 .lineLimit(2)
             Spacer(minLength: 0)
@@ -542,7 +542,7 @@ struct SpMyMatchesCard: View {
 
     private func header(count: Int) -> some View {
         HStack(spacing: 8) {
-            Text("مبارياتي")
+            Text(L("مبارياتي"))
                 .font(SportsFonts.app(size: 16, weight: .heavy))
                 .foregroundStyle(SpTheme.onDark)
             Text("\(count)")
@@ -553,7 +553,7 @@ struct SpMyMatchesCard: View {
             Image(systemName: "rectangle.stack.badge.play")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(SpTheme.onDarkFaint)
-                .accessibilityLabel("مباريات من بطولات مختلفة")
+                .accessibilityLabel(L("مباريات من بطولات مختلفة"))
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)
@@ -617,17 +617,19 @@ struct SpMyMatchesCard: View {
         let day = calendar.startOfDay(for: date)
         let diff = calendar.dateComponents([.day], from: today, to: day).day ?? 0
         switch diff {
-        case -1: return "أمس"
-        case 0: return "اليوم"
-        case 1: return "غدًا"
-        case 2: return "بعد غد"
+        case -1: return L("أمس")
+        case 0: return L("اليوم")
+        case 1: return L("غدًا")
+        case 2: return L("بعد غد")
         default:
             return "\(SpFormat.weekdayName(day)) \(SpFormat.dayMonthLabel(day))"
         }
     }
 
     private func matchesCountLabel(_ count: Int) -> String {
-        count == 1 ? "مباراة" : "\(count) مباريات"
+        SpLanguage.shared.isEnglish
+            ? Lf("%d مباراة", count)
+            : (count == 1 ? "مباراة" : "\(count) مباريات")
     }
 
     // صفّ موحّد مطابق لشاشة «المباريات» عبر SpScoreRow + نجمة إلغاء المتابعة.
@@ -707,7 +709,7 @@ struct SpMyMatchesCard: View {
                     .foregroundStyle(SpTheme.green)
                     .monospacedDigit()
                     .environment(\.layoutDirection, .leftToRight)
-                Text("تبدأ بعد")
+                Text(L("تبدأ بعد"))
                     .font(SportsFonts.app(size: 9))
                     .foregroundStyle(SpTheme.onDarkFaint)
             }
@@ -739,7 +741,7 @@ struct SpMyMatchesCard: View {
                     .environment(\.layoutDirection, .leftToRight)
             }
         } else {
-            Text(f.status.finished ? "انتهت · تختفي بعد قليل" : "انتهت")
+            Text(f.status.finished ? L("انتهت · تختفي بعد قليل") : L("انتهت"))
                 .font(SportsFonts.app(size: 9.5, weight: .bold))
                 .foregroundStyle(SpTheme.onDarkDim)
         }
@@ -752,7 +754,7 @@ struct SpMyMatchesCard: View {
             let extra = (f.status.extra ?? 0) > 0 ? "+\(f.status.extra!)" : ""
             return "\(m)\(extra)'"
         }
-        return f.status.label.isEmpty ? "مباشر" : f.status.label
+        return f.status.label.isEmpty ? L("مباشر") : f.status.label
     }
 
     // عدّاد تنازليّ بأرقام لاتينية: «2ي 04س» إن بقي أكثر من يوم، وإلا «HH:MM:SS».
@@ -762,7 +764,7 @@ struct SpMyMatchesCard: View {
         let h = (total % 86_400) / 3_600
         let m = (total % 3_600) / 60
         let s = total % 60
-        if days > 0 { return "\(days)ي \(h)س" }
+        if days > 0 { return Lf("%dي %dس", days, h) }
         return String(format: "%02d:%02d:%02d", h, m, s)
     }
 }
@@ -835,7 +837,7 @@ struct SpMyTeamCard: View {
                     }
                 }
             } else if loaded {
-                Text("لا مباريات قادمة مجدولة حاليًا")
+                Text(L("لا مباريات قادمة مجدولة حاليًا"))
                     .font(SportsFonts.app(size: 11.5, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkDim)
                     .padding(.horizontal, 14).padding(.vertical, 12)
@@ -855,13 +857,13 @@ struct SpMyTeamCard: View {
         Button { onOpenTeam(fav.id) } label: {
             HStack(spacing: 8) {
                 SpTeamLogo(logo: fav.logo ?? "", size: 22)
-                Text("مباريات \(fav.name) القادمة")
+                Text(Lf("مباريات %@ القادمة", fav.name))
                     .font(SportsFonts.app(size: 16, weight: .heavy))
                     .foregroundStyle(SpTheme.onDark)
                     .lineLimit(1).minimumScaleFactor(0.8)
                 Spacer(minLength: 0)
                 HStack(spacing: 3) {
-                    Text("صفحة الفريق")
+                    Text(L("صفحة الفريق"))
                         .font(SportsFonts.app(size: 10.5, weight: .bold))
                     Image(systemName: "chevron.backward")
                         .font(.system(size: 9, weight: .bold))
@@ -879,7 +881,7 @@ struct SpMyTeamCard: View {
     /// آخر النتائج — شرائح مضغوطة: حرف النتيجة + الخصم + النتيجة.
     private func resultsStrip(_ results: [SpFixture], favId: Int) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("آخر النتائج")
+            Text(L("آخر النتائج"))
                 .font(SportsFonts.app(size: 10.5, weight: .bold))
                 .foregroundStyle(SpTheme.onDarkDim)
                 .padding(.horizontal, 14)
@@ -923,9 +925,9 @@ struct SpMyTeamCard: View {
         let isHome = f.home.id == favId
         let ours = (isHome ? f.goals.home : f.goals.away) ?? 0
         let theirs = (isHome ? f.goals.away : f.goals.home) ?? 0
-        if ours > theirs { return ("ف", SpTheme.green) }
-        if ours < theirs { return ("خ", SpTheme.crimson) }
-        return ("ت", SpTheme.onDarkFaint)
+        if ours > theirs { return (L("ف"), SpTheme.green) }
+        if ours < theirs { return (L("خ"), SpTheme.crimson) }
+        return (L("ت"), SpTheme.onDarkFaint)
     }
 
     // MARK: بطاقة الدعوة (بلا فريق مفضّل)
@@ -937,10 +939,10 @@ struct SpMyTeamCard: View {
                     .font(.system(size: 34))
                     .foregroundStyle(SpTheme.green)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("اختر فريقك المفضّل")
+                    Text(L("اختر فريقك المفضّل"))
                         .font(SportsFonts.app(size: 15, weight: .heavy))
                         .foregroundStyle(SpTheme.onDark)
-                    Text("تابع مبارياته عبر كل البطولات من هنا — النجمة في صفحة النادي")
+                    Text(L("تابع مبارياته عبر كل البطولات من هنا — النجمة في صفحة النادي"))
                         .font(SportsFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(SpTheme.onDarkDim)
                         .lineLimit(2)
@@ -1001,7 +1003,7 @@ struct SpCountdownChips: View {
             if total <= 0 {
                 HStack(spacing: 6) {
                     Circle().fill(SpTheme.greenSoft).frame(width: 8, height: 8)
-                    Text("انطلق الموسم — تابع المباريات الآن")
+                    Text(L("انطلق الموسم — تابع المباريات الآن"))
                         .font(SportsFonts.app(size: 13, weight: .bold))
                         .foregroundStyle(SpTheme.onDark)
                 }
@@ -1011,7 +1013,7 @@ struct SpCountdownChips: View {
                 let mins = (Int(total) % 3_600) / 60
                 let secs = Int(total) % 60
                 HStack(spacing: 8) {
-                    chip(days, "يوم"); chip(hours, "ساعة"); chip(mins, "دقيقة"); chip(secs, "ثانية")
+                    chip(days, L("يوم")); chip(hours, L("ساعة")); chip(mins, L("دقيقة")); chip(secs, L("ثانية"))
                 }
             }
         }
@@ -1047,7 +1049,7 @@ struct SpOutlookCard: View {
                 Image(systemName: "trophy.fill")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(SpTheme.green)
-                Text("دوري روشن")
+                Text(L("دوري روشن"))
                     .font(SportsFonts.headline(size: 19))
                     .foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
@@ -1066,7 +1068,7 @@ struct SpOutlookCard: View {
 
             if let ts = outlook.firstKickoff {
                 VStack(spacing: 8) {
-                    Text("انطلاق الموسم القادم")
+                    Text(L("انطلاق الموسم القادم"))
                         .font(SportsFonts.app(size: 12, weight: .bold))
                         .foregroundStyle(SpTheme.onDarkDim)
                     SpCountdownChips(timestampMs: ts)
@@ -1075,7 +1077,7 @@ struct SpOutlookCard: View {
 
             if !outlook.openers.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("مباريات الافتتاح")
+                    Text(L("مباريات الافتتاح"))
                         .font(SportsFonts.app(size: 12, weight: .bold))
                         .foregroundStyle(SpTheme.onDarkDim)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1095,9 +1097,9 @@ struct SpOutlookCard: View {
     private var statusPill: some View {
         let info: (String, String) = {
             switch outlook.phase {
-            case "off-season": return ("في العطلة", "sun.max.fill")
-            case "pre-season": return ("استعداد للموسم", "calendar.badge.clock")
-            default: return ("نظرة الموسم", "sportscourt.fill")
+            case "off-season": return (L("في العطلة"), "sun.max.fill")
+            case "pre-season": return (L("استعداد للموسم"), "calendar.badge.clock")
+            default: return (L("نظرة الموسم"), "sportscourt.fill")
             }
         }()
         return HStack(spacing: 5) {
@@ -1129,7 +1131,7 @@ struct SpOutlookCard: View {
             }
             .padding(.top, 10)
 
-            Text("بطل موسم \(seasonLabel(outlook.season))")
+            Text(Lf("بطل موسم %@", seasonLabel(outlook.season)))
                 .font(SportsFonts.app(size: 11, weight: .bold))
                 .foregroundStyle(SpTheme.green)
                 .padding(.horizontal, 12).padding(.vertical, 4)
@@ -1145,9 +1147,9 @@ struct SpOutlookCard: View {
 
     private var subtitle: String {
         switch outlook.phase {
-        case "off-season": return "بانتظار جدول الموسم الجديد — وإليك بطل الموسم الماضي."
-        case "pre-season": return "العدّ التنازلي لانطلاق الموسم الجديد ومبارياته الأولى."
-        default: return "كل ما يخصّ الموسم في مكان واحد."
+        case "off-season": return L("بانتظار جدول الموسم الجديد — وإليك بطل الموسم الماضي.")
+        case "pre-season": return L("العدّ التنازلي لانطلاق الموسم الجديد ومبارياته الأولى.")
+        default: return L("كل ما يخصّ الموسم في مكان واحد.")
         }
     }
 
@@ -1196,7 +1198,7 @@ struct SpNewsCard: View {
             thumb
             VStack(alignment: .leading, spacing: 6) {
                 if article.isBreaking == true {
-                    Text("عاجل")
+                    Text(L("عاجل"))
                         .font(SportsFonts.app(size: 10, weight: .bold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 8).padding(.vertical, 2)
@@ -1208,11 +1210,11 @@ struct SpNewsCard: View {
                     .lineLimit(3).multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
-                    Text(article.author ?? "VARA الرياضي")
+                    Text(article.author ?? L("VARA الرياضي"))
                         .font(SportsFonts.app(size: 11, weight: .semibold))
                         .foregroundStyle(SpTheme.emeraldDeep)
                     if let m = article.readingMinutes, m > 0 {
-                        Text("· \(m) دقيقة")
+                        Text(Lf("· %d دقيقة", m))
                             .font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkFaint)
                     }
                     Spacer(minLength: 0)

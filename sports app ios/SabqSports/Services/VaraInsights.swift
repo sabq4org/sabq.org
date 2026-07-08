@@ -176,7 +176,7 @@ struct VaraInsightCard: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 6) {
                         Image(systemName: "sparkles").font(.system(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
-                        Text("ذكاء VARA").font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.green)
+                        Text(L("ذكاء VARA")).font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(SpTheme.green)
                             .environment(\.layoutDirection, .leftToRight)
                         Spacer(minLength: 0)
                         if items.count > 1 {

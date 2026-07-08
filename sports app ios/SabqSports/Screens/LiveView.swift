@@ -46,11 +46,11 @@ struct LiveView: View {
         if loading {
             SpLoading()
         } else if let loadError {
-            SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
         } else if world.isEmpty {
             SpEmptyState(icon: "globe",
-                         title: "لا مباريات مباشرة عالميًا الآن",
-                         subtitle: "ستظهر هنا أي مباراة جارية الآن حول العالم")
+                         title: L("لا مباريات مباشرة عالميًا الآن"),
+                         subtitle: L("ستظهر هنا أي مباراة جارية الآن حول العالم"))
         } else {
             VStack(spacing: 12) {
                 ForEach(worldCategorySections) { section in
@@ -69,10 +69,12 @@ struct LiveView: View {
                 .background(Circle().fill(SpTheme.green.opacity(0.12)))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("عالمية")
+                Text(L("عالمية"))
                     .font(SportsFonts.headline(size: 25))
                     .foregroundStyle(SpTheme.onDark)
-                Text("المباريات الجارية حول العالم")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Text(L("المباريات الجارية حول العالم"))
                     .font(SportsFonts.app(size: 12.5, weight: .semibold))
                     .foregroundStyle(SpTheme.onDarkDim)
                     .lineLimit(1)
@@ -211,7 +213,7 @@ struct LiveView: View {
             Spacer(minLength: 0)
             HStack(spacing: 5) {
                 Circle().fill(SpTheme.crimson).frame(width: 6, height: 6)
-                Text("\(section.matchCount) مباشرة")
+                Text(Lf("%d مباشرة", section.matchCount))
                     .font(SportsFonts.app(size: 11.5, weight: .bold))
                     .foregroundStyle(SpTheme.onDarkDim)
                     .monospacedDigit()
@@ -294,7 +296,7 @@ struct LiveView: View {
     }
 
     private func categoryTitle(_ category: String) -> String {
-        category == "other" ? "بطولات أخرى" : SportsConstants.categoryLabel(category)
+        category == "other" ? L("بطولات أخرى") : SportsConstants.categoryLabel(category)
     }
 
     private func categoryTint(_ category: String) -> Color {
@@ -309,7 +311,7 @@ struct LiveView: View {
     private func liveBadge(_ value: String) -> some View {
         HStack(spacing: 6) {
             Circle().fill(SpTheme.crimson).frame(width: 6, height: 6)
-            Text("\(value) مباشرة")
+            Text(Lf("%@ مباشرة", value))
                 .font(SportsFonts.app(size: 12, weight: .heavy))
                 .foregroundStyle(SpTheme.crimson)
                 .monospacedDigit()
@@ -330,7 +332,7 @@ struct LiveView: View {
         }
         let worldResp = await worldOpt
         self.world = worldResp?.matches ?? []
-        self.loadError = worldResp == nil ? "تعذّر الاتصال بخادم البيانات" : nil
+        self.loadError = worldResp == nil ? L("تعذّر الاتصال بخادم البيانات") : nil
         self.loading = false
     }
 

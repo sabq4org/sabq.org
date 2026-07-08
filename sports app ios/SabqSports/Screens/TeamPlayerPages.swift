@@ -34,7 +34,7 @@ struct SpTeamPage: View {
                 if loading && profile == nil {
                     SpLoading().padding(.top, 20)
                 } else if let loadError, profile == nil {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                 } else if let p = profile {
                     content(p)
                 }
@@ -42,13 +42,13 @@ struct SpTeamPage: View {
             .padding(.vertical, 8).padding(.bottom, 24)
         }
         .background(SpAmbientBackground())
-        .navigationTitle(profile?.team.name ?? previewName ?? "النادي")
+        .navigationTitle(profile?.team.name ?? previewName ?? L("النادي"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let url = URLConstants.teamShareURL(teamId) {
                 ToolbarItem(placement: .topBarTrailing) {
-                    let nm = profile?.team.name ?? previewName ?? "النادي"
-                    ShareLink(item: url, subject: Text(nm), message: Text("\(nm) — عبر VARA")) {
+                    let nm = profile?.team.name ?? previewName ?? L("النادي")
+                    ShareLink(item: url, subject: Text(nm), message: Text(Lf("%@ — عبر VARA", nm))) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(SpTheme.green)
@@ -110,7 +110,7 @@ struct SpTeamPage: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: fav ? "star.fill" : "star").font(.system(size: 13, weight: .bold))
-                Text(fav ? "المفضّل" : "اجعله المفضّل").font(SportsFonts.app(size: 13, weight: .heavy))
+                Text(fav ? L("المفضّل") : L("اجعله المفضّل")).font(SportsFonts.app(size: 13, weight: .heavy))
             }
             // النشط أخضر مملوء؛ الخامل مفرّغ بحدّ أخضر (لمسة محورية أهدأ).
             .foregroundStyle(fav ? .white : SpTheme.green)
@@ -133,7 +133,7 @@ struct SpTeamPage: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: following ? "bell.fill" : "bell").font(.system(size: 13, weight: .semibold))
-                Text(following ? "تتابع التنبيهات" : "تابع التنبيهات").font(SportsFonts.app(size: 13, weight: .heavy))
+                Text(following ? L("تتابع التنبيهات") : L("تابع التنبيهات")).font(SportsFonts.app(size: 13, weight: .heavy))
             }
             .foregroundStyle(following ? .white : SpTheme.green)
             .padding(.horizontal, 14).padding(.vertical, 10)
@@ -164,10 +164,10 @@ struct SpTeamPage: View {
 
     @ViewBuilder private func quickFacts(_ p: SpTeamProfile) -> some View {
         let facts: [(value: String, label: String, accent: Color?)] = [
-            p.standing.map { ("#\($0.rank)", "المركز", SpTheme.green as Color?) },
-            p.standing.map { ("\($0.points)", "نقطة", nil) },
-            p.team.founded.map { ("\($0)", "التأسيس", nil) },
-            p.squad.isEmpty ? nil : ("\(p.squad.count)", "حجم القائمة", nil),
+            p.standing.map { ("#\($0.rank)", L("المركز"), SpTheme.green as Color?) },
+            p.standing.map { ("\($0.points)", L("نقطة"), nil) },
+            p.team.founded.map { ("\($0)", L("التأسيس"), nil) },
+            p.squad.isEmpty ? nil : ("\(p.squad.count)", L("حجم القائمة"), nil),
         ].compactMap { $0 }
         if !facts.isEmpty {
             HStack(spacing: 8) {
@@ -184,9 +184,9 @@ struct SpTeamPage: View {
         HStack(spacing: 12) {
             photoCircle(c.photo, size: 52, fallback: "person.crop.square.fill")
             VStack(alignment: .leading, spacing: 3) {
-                Text("المدرّب").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("المدرّب")).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
                 Text(c.name).font(SportsFonts.app(size: 15, weight: .heavy)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                let sub = [c.nationality, c.age.map { "\($0) سنة" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+                let sub = [c.nationality, c.age.map { Lf("%d سنة", $0) }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
                 if !sub.isEmpty {
                     Text(sub).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim)
                 }
@@ -205,7 +205,7 @@ struct SpTeamPage: View {
                 .frame(width: 44, height: 44)
                 .background(RoundedRectangle(cornerRadius: 12).fill(SpTheme.chipFill))
             VStack(alignment: .leading, spacing: 3) {
-                Text("الملعب").font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("الملعب")).font(SportsFonts.app(size: 11, weight: .bold)).foregroundStyle(SpTheme.green)
                 Text(v.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                 HStack(spacing: 8) {
                     if !v.city.isEmpty {
@@ -231,7 +231,7 @@ struct SpTeamPage: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "bandage.fill").font(.system(size: 13)).foregroundStyle(SpTheme.crimson)
-                Text("الإصابات والغيابات").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.crimson)
+                Text(L("الإصابات والغيابات")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.crimson)
             }
             ForEach(injuries) { inj in
                 HStack(spacing: 10) {
@@ -244,7 +244,7 @@ struct SpTeamPage: View {
                     }
                     Spacer()
                     if let u = inj.until, !u.isEmpty {
-                        Text("العودة: \(u)").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
+                        Text(Lf("العودة: %@", u)).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
                     }
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8).background(softTile)
@@ -256,21 +256,21 @@ struct SpTeamPage: View {
 
     private func teamStatsGrid(_ st: SpTeamStats) -> some View {
         var tiles: [(String, String)] = [
-            ("\(st.fixtures.played.total)", "مباريات"),
-            ("\(st.fixtures.wins.total)", "فوز"),
-            ("\(st.fixtures.draws.total)", "تعادل"),
-            ("\(st.fixtures.loses.total)", "خسارة"),
-            ("\(st.goals.for.total)", "أهداف له"),
-            ("\(st.goals.against.total)", "أهداف عليه"),
-            ("\(st.summary.cleanSheets.total)", "شِباك نظيفة"),
-            ("\(st.summary.cards.yellowTotal)/\(st.summary.cards.redTotal)", "بطاقات"),
+            ("\(st.fixtures.played.total)", L("مباريات")),
+            ("\(st.fixtures.wins.total)", L("فوز")),
+            ("\(st.fixtures.draws.total)", L("تعادل")),
+            ("\(st.fixtures.loses.total)", L("خسارة")),
+            ("\(st.goals.for.total)", L("أهداف له")),
+            ("\(st.goals.against.total)", L("أهداف عليه")),
+            ("\(st.summary.cleanSheets.total)", L("شِباك نظيفة")),
+            ("\(st.summary.cards.yellowTotal)/\(st.summary.cards.redTotal)", L("بطاقات")),
         ]
-        if let f = st.summary.mostUsedFormation, !f.isEmpty { tiles.append((f, "التشكيل الأكثر")) }
-        if let b = st.biggest, let s = b.streakWin, s > 0 { tiles.append(("\(s)", "أطول سلسلة فوز")) }
+        if let f = st.summary.mostUsedFormation, !f.isEmpty { tiles.append((f, L("التشكيل الأكثر"))) }
+        if let b = st.biggest, let s = b.streakWin, s > 0 { tiles.append(("\(s)", L("أطول سلسلة فوز"))) }
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "chart.bar.fill").font(.system(size: 13)).foregroundStyle(SpTheme.green)
-                Text("أرقام الفريق في الموسم").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("أرقام الفريق في الموسم")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.green)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
                 ForEach(tiles, id: \.1) { t in SpFactTile(value: t.0, label: t.1) }
@@ -284,10 +284,10 @@ struct SpTeamPage: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "arrow.left.arrow.right").font(.system(size: 13)).foregroundStyle(SpTheme.green)
-                Text("آخر الانتقالات").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("آخر الانتقالات")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.green)
             }
-            if !t.arrivals.isEmpty { transferGroup("واصلون", t.arrivals, toClub: true) }
-            if !t.departures.isEmpty { transferGroup("مغادرون", t.departures, toClub: false) }
+            if !t.arrivals.isEmpty { transferGroup(L("واصلون"), t.arrivals, toClub: true) }
+            if !t.departures.isEmpty { transferGroup(L("مغادرون"), t.departures, toClub: false) }
         }
     }
 
@@ -299,7 +299,7 @@ struct SpTeamPage: View {
                     SpTeamLogo(logo: tr.teamLogo, size: 26)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(tr.player).font(SportsFonts.app(size: 13.5, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                        Text((toClub ? "من " : "إلى ") + tr.team).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
+                        Text((toClub ? L("من ") : L("إلى ")) + tr.team).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
                     }
                     Spacer(minLength: 0)
                     if !tr.type.isEmpty {
@@ -318,15 +318,15 @@ struct SpTeamPage: View {
         let upcoming = Array(fixtures.filter { !$0.started }.prefix(6))
         let finished = Array(fixtures.filter { $0.status.finished }.suffix(8).reversed())
         return VStack(alignment: .leading, spacing: 12) {
-            Text("المباريات").font(SportsFonts.app(size: 17, weight: .bold)).foregroundStyle(SpTheme.onDark)
+            Text(L("المباريات")).font(SportsFonts.app(size: 17, weight: .bold)).foregroundStyle(SpTheme.onDark)
             if fixtures.isEmpty {
-                Text("لا توجد مباريات معلنة بعد")
+                Text(L("لا توجد مباريات معلنة بعد"))
                     .font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim)
                     .frame(maxWidth: .infinity).padding(.vertical, 20)
             } else {
-                matchGroup("مباشر الآن", live)
-                matchGroup("المباريات القادمة", upcoming)
-                matchGroup("النتائج", finished)
+                matchGroup(L("مباشر الآن"), live)
+                matchGroup(L("المباريات القادمة"), upcoming)
+                matchGroup(L("النتائج"), finished)
             }
         }
     }
@@ -351,7 +351,7 @@ struct SpTeamPage: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "soccerball").font(.system(size: 13)).foregroundStyle(SpTheme.green)
-                Text("هدّافو الفريق").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("هدّافو الفريق")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.green)
             }
             ForEach(scorers) { s in
                 Button { selectedPlayer = IDBox(id: s.id) } label: { scorerRow(s) }.buttonStyle(SpPressStyle())
@@ -366,7 +366,7 @@ struct SpTeamPage: View {
             photoCircle(s.photo, size: 36, fallback: "person.fill")
             VStack(alignment: .leading, spacing: 1) {
                 Text(s.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
-                Text("\(s.matches) مباراة · \(s.assists) صناعة").font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim)
+                Text(Lf("%d مباراة · %d صناعة", s.matches, s.assists)).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim)
             }
             Spacer(minLength: 0)
             HStack(spacing: 4) {
@@ -384,9 +384,9 @@ struct SpTeamPage: View {
         let byPos = Dictionary(grouping: squad) { $0.positionEn }
         let groups = byPos.keys.sorted { (squadOrder.firstIndex(of: $0) ?? 9) < (squadOrder.firstIndex(of: $1) ?? 9) }
         return VStack(alignment: .leading, spacing: 12) {
-            Text("القائمة").font(SportsFonts.app(size: 17, weight: .bold)).foregroundStyle(SpTheme.onDark)
+            Text(L("القائمة")).font(SportsFonts.app(size: 17, weight: .bold)).foregroundStyle(SpTheme.onDark)
             if squad.isEmpty {
-                Text("القائمة الرسمية لم تُعلن بعد")
+                Text(L("القائمة الرسمية لم تُعلن بعد"))
                     .font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim)
                     .frame(maxWidth: .infinity).padding(.vertical, 20)
             } else {
@@ -409,7 +409,7 @@ struct SpTeamPage: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(p.name).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                 if let a = p.age {
-                    Text("\(a) سنة").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
+                    Text(Lf("%d سنة", a)).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
                 }
             }
             Spacer()
@@ -461,7 +461,7 @@ struct SpPlayerPage: View {
                 if loading && card == nil {
                     SpLoading().padding(.top, 30)
                 } else if let loadError, card == nil {
-                    SpEmptyState(icon: "wifi.exclamationmark", title: "تعذّر التحميل", subtitle: loadError)
+                    SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                 } else if let c = card {
                     identityHeader(c)
                     factTiles(c)
@@ -478,13 +478,13 @@ struct SpPlayerPage: View {
             .padding(.bottom, 16)
         }
         .background(SpAmbientBackground())
-        .navigationTitle("بطاقة اللاعب")
+        .navigationTitle(L("بطاقة اللاعب"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let url = URLConstants.playerShareURL(playerId) {
                 ToolbarItem(placement: .topBarTrailing) {
-                    let nm = card?.name ?? "اللاعب"
-                    ShareLink(item: url, subject: Text(nm), message: Text("\(nm) — عبر VARA")) {
+                    let nm = card?.name ?? L("اللاعب")
+                    ShareLink(item: url, subject: Text(nm), message: Text(Lf("%@ — عبر VARA", nm))) {
                         Image(systemName: "square.and.arrow.up")
                             .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(SpTheme.green)
@@ -539,9 +539,9 @@ struct SpPlayerPage: View {
 
     @ViewBuilder private func factTiles(_ c: SpPlayerCard) -> some View {
         let facts: [(value: String, label: String)] = [
-            c.age.map { ("\($0) سنة", "العمر") },
-            c.height.map { ("\($0) سم", "الطول") },
-            c.weight.map { ("\($0) كجم", "الوزن") },
+            c.age.map { (Lf("%d سنة", $0), L("العمر")) },
+            c.height.map { (Lf("%d سم", $0), L("الطول")) },
+            c.weight.map { (Lf("%d كجم", $0), L("الوزن")) },
         ].compactMap { $0 }
         if !facts.isEmpty {
             HStack(spacing: 8) {
@@ -586,7 +586,7 @@ struct SpPlayerPage: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.green)
-                Text("القيمة السوقية").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("القيمة السوقية")).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
                 Spacer()
                 Text(formatMoney(m.value, m.currency))
                     .font(SportsFonts.app(size: 15, weight: .heavy)).foregroundStyle(SpTheme.onDark)
@@ -594,7 +594,7 @@ struct SpPlayerPage: View {
             }
             if let p = m.peak, p > 0, p != m.value {
                 HStack {
-                    Text("الذروة").font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim)
+                    Text(L("الذروة")).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.onDarkDim)
                     Spacer()
                     Text(formatMoney(p, m.currency)).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
                         .environment(\.layoutDirection, .leftToRight)
@@ -609,8 +609,8 @@ struct SpPlayerPage: View {
     private func formatMoney(_ v: Double?, _ cur: String?) -> String {
         guard let v, v > 0 else { return "—" }
         let c = cur ?? "€"
-        if v >= 1_000_000 { return String(format: "%.1f مليون %@", v / 1_000_000, c) }
-        if v >= 1_000 { return String(format: "%.0f ألف %@", v / 1_000, c) }
+        if v >= 1_000_000 { return Lf("%.1f مليون %@", v / 1_000_000, c) }
+        if v >= 1_000 { return Lf("%.0f ألف %@", v / 1_000, c) }
         return String(format: "%.0f %@", v, c)
     }
 
@@ -620,7 +620,7 @@ struct SpPlayerPage: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "chart.bar.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.green)
-                Text("أرقام الموسم").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("أرقام الموسم")).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
             }
             ForEach(Array(stats.enumerated()), id: \.offset) { _, s in
                 VStack(alignment: .leading, spacing: 8) {
@@ -631,17 +631,17 @@ struct SpPlayerPage: View {
                         if let r = s.rating { ratingBadge(r) }
                     }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], spacing: 8) {
-                        SpFactTile(value: "\(s.matches)", label: "مباريات")
-                        SpFactTile(value: "\(s.minutes)", label: "دقائق")
-                        SpFactTile(value: "\(s.lineups)", label: "أساسي")
-                        SpFactTile(value: "\(s.goals)", label: "أهداف")
-                        SpFactTile(value: "\(s.assists)", label: "صناعة")
+                        SpFactTile(value: "\(s.matches)", label: L("مباريات"))
+                        SpFactTile(value: "\(s.minutes)", label: L("دقائق"))
+                        SpFactTile(value: "\(s.lineups)", label: L("أساسي"))
+                        SpFactTile(value: "\(s.goals)", label: L("أهداف"))
+                        SpFactTile(value: "\(s.assists)", label: L("صناعة"))
                         if s.saves > 0 || s.conceded > 0 {
-                            SpFactTile(value: "\(s.saves)", label: "تصديات")
-                            SpFactTile(value: "\(s.conceded)", label: "استقبلها")
+                            SpFactTile(value: "\(s.saves)", label: L("تصديات"))
+                            SpFactTile(value: "\(s.conceded)", label: L("استقبلها"))
                         }
                         if s.yellow > 0 || s.red > 0 {
-                            SpFactTile(value: "\(s.yellow)/\(s.red)", label: "بطاقات")
+                            SpFactTile(value: "\(s.yellow)/\(s.red)", label: L("بطاقات"))
                         }
                     }
                 }
@@ -672,9 +672,9 @@ struct SpPlayerPage: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.green)
-                Text(hasXg ? "الفورمة الأخيرة · xG" : "الفورمة الأخيرة").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(hasXg ? L("الفورمة الأخيرة · xG") : L("الفورمة الأخيرة")).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
                 Spacer()
-                Text("آخر \(matches.count)").font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
+                Text(Lf("آخر %d", matches.count)).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
                     .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(SpTheme.chipFill))
                     .environment(\.layoutDirection, .leftToRight)
             }
@@ -699,7 +699,7 @@ struct SpPlayerPage: View {
 
     private func xgChart(_ matches: [SpFormMatch]) -> some View {
         Chart(Array(matches.prefix(10))) { m in
-            BarMark(x: .value("الخصم", m.opponent), y: .value("xG", m.xg ?? 0))
+            BarMark(x: .value(L("الخصم"), m.opponent), y: .value("xG", m.xg ?? 0))
                 .foregroundStyle(SpTheme.green)
                 .cornerRadius(3)
         }
@@ -734,7 +734,7 @@ struct SpPlayerPage: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(m.opponent.isEmpty ? "—" : m.opponent).font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                 HStack(spacing: 6) {
-                    Text(m.homeAway == "home" ? "أرضه" : "خارج أرضه").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
+                    Text(m.homeAway == "home" ? L("أرضه") : L("خارج أرضه")).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim)
                     if let l = m.league, !l.isEmpty {
                         Text("· \(l)").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkDim).lineLimit(1)
                     }
@@ -774,7 +774,7 @@ struct SpPlayerPage: View {
     }
 
     private func resultAr(_ r: String) -> String {
-        switch r.uppercased() { case "W": return "ف"; case "L": return "خ"; default: return "ت" }
+        switch r.uppercased() { case "W": return L("ف"); case "L": return L("خ"); default: return L("ت") }
     }
     private func resultColor(_ r: String) -> Color {
         switch r.uppercased() { case "W": return SpTheme.greenDeep; case "L": return SpTheme.crimson; default: return SpTheme.onDarkFaint }
@@ -786,7 +786,7 @@ struct SpPlayerPage: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "calendar").font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.green)
-                Text("سجل المواسم").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("سجل المواسم")).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
             }
             ForEach(history.prefix(12)) { h in
                 HStack(spacing: 10) {
@@ -794,9 +794,9 @@ struct SpPlayerPage: View {
                         .monospacedDigit().frame(width: 42).environment(\.layoutDirection, .leftToRight)
                     Text(h.competition).font(SportsFonts.app(size: 12.5, weight: .semibold)).foregroundStyle(SpTheme.onDark).lineLimit(1)
                     Spacer(minLength: 0)
-                    historyStat("\(h.matches)", "مباراة")
-                    historyStat("\(h.goals)", "هدف")
-                    historyStat("\(h.assists)", "صناعة")
+                    historyStat("\(h.matches)", L("مباراة"))
+                    historyStat("\(h.goals)", L("هدف"))
+                    historyStat("\(h.assists)", L("صناعة"))
                 }
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SpTheme.card))
@@ -819,7 +819,7 @@ struct SpPlayerPage: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "clock.arrow.circlepath").font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.green)
-                Text("المسيرة").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("المسيرة")).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
             }
             ForEach(career) { stop in
                 HStack(spacing: 10) {
@@ -849,9 +849,9 @@ struct SpPlayerPage: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "trophy.fill").font(.system(size: 12, weight: .semibold)).foregroundStyle(SpTheme.green)
-                Text("الألقاب").font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
+                Text(L("الألقاب")).font(SportsFonts.app(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
                 if titles > 0 {
-                    Text("\(titles) بطولة").font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
+                    Text(Lf("%d بطولة", titles)).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
                         .padding(.horizontal, 7).padding(.vertical, 2).background(Capsule().fill(SpTheme.chipFill))
                 }
             }

@@ -27,15 +27,15 @@ struct SpSearchView: View {
                     let mc = matchedComps
                     let mt = matchedTeams
                     if mc.isEmpty && mt.isEmpty {
-                        SpEmptyState(icon: "magnifyingglass", title: "لا نتائج",
-                                     subtitle: "جرّب اسمًا آخر — نبحث في البطولات وأندية روشن ومنتخبات المونديال")
+                        SpEmptyState(icon: "magnifyingglass", title: L("لا نتائج"),
+                                     subtitle: L("جرّب اسمًا آخر — نبحث في البطولات وأندية روشن ومنتخبات المونديال"))
                     } else {
                         if !mt.isEmpty {
-                            sectionHeader("أندية ومنتخبات")
+                            sectionHeader(L("أندية ومنتخبات"))
                             flatList(mt.indices.map { i in AnyView(teamRow(mt[i])) })
                         }
                         if !mc.isEmpty {
-                            sectionHeader("بطولات")
+                            sectionHeader(L("بطولات"))
                             flatList(mc.indices.map { i in AnyView(compRow(mc[i])) })
                         }
                     }
@@ -44,7 +44,7 @@ struct SpSearchView: View {
             .padding(16)
         }
         .background(SpAmbientBackground())
-        .navigationTitle("بحث")
+        .navigationTitle(L("بحث"))
         .navigationBarTitleDisplayMode(.inline)
         .task { await load() }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
@@ -57,7 +57,7 @@ struct SpSearchView: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").foregroundStyle(SpTheme.onDarkFaint)
             TextField("", text: $query,
-                      prompt: Text("ابحث عن نادٍ أو منتخب أو بطولة").foregroundStyle(SpTheme.onDarkFaint))
+                      prompt: Text(L("ابحث عن نادٍ أو منتخب أو بطولة")).foregroundStyle(SpTheme.onDarkFaint))
                 .font(SportsFonts.app(size: 15)).foregroundStyle(SpTheme.onDark).tint(SpTheme.green)
                 .autocorrectionDisabled()
                 .focused($focused)
@@ -65,7 +65,7 @@ struct SpSearchView: View {
                 Button { query = "" } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(SpTheme.onDarkFaint)
                 }
-                .accessibilityLabel("مسح البحث")
+                .accessibilityLabel(L("مسح البحث"))
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
@@ -77,12 +77,12 @@ struct SpSearchView: View {
 
     private var hint: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("اكتب للبحث في:")
+            Text(L("اكتب للبحث في:"))
                 .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
             ForEach(["كل البطولات المتاحة", "أندية دوري روشن", "منتخبات كأس العالم 2026"], id: \.self) { line in
                 HStack(spacing: 7) {
                     Circle().fill(SpTheme.green).frame(width: 5, height: 5)
-                    Text(line).font(SportsFonts.app(size: 12.5)).foregroundStyle(SpTheme.onDarkDim)
+                    Text(L(line)).font(SportsFonts.app(size: 12.5)).foregroundStyle(SpTheme.onDarkDim)
                 }
             }
         }
@@ -167,11 +167,11 @@ struct SpSearchView: View {
         comps = (await compsOpt)?.competitions ?? []
         var t: [SpSearchTeam] = []
         for r in (await roshnOpt)?.standings ?? [] {
-            t.append(SpSearchTeam(id: r.team.id, name: r.team.name, logo: r.team.logo, context: "دوري روشن"))
+            t.append(SpSearchTeam(id: r.team.id, name: r.team.name, logo: r.team.logo, context: L("دوري روشن")))
         }
         for g in (await wcOpt)?.groups ?? [] {
             for r in g.rows {
-                t.append(SpSearchTeam(id: r.team.id, name: r.team.name, logo: r.team.logo, context: "كأس العالم 2026"))
+                t.append(SpSearchTeam(id: r.team.id, name: r.team.name, logo: r.team.logo, context: L("كأس العالم 2026")))
             }
         }
         teams = t

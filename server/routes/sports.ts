@@ -93,6 +93,7 @@ import {
 } from "../services/sportsPredictionsService";
 import { getSportsSummary } from "../services/sportsSummaryService";
 import { requireAuth } from "../rbac";
+import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
 
 const RIYADH_TZ = "Asia/Riyadh";
 const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
@@ -140,6 +141,17 @@ function bucketFixtures(fixtures: SplFixture[]) {
 }
 
 export function registerSportsRoutes(app: Express) {
+  // Middleware: يضبط لغة الاستجابة (ar/en) لكل الطلب عبر AsyncLocalStorage —
+  // فتقرؤها دوال التعريب المنخفضة، ويفصل withSWR كاش الإنجليزية تلقائيًا (:en).
+  // نضيف Vary: Accept-Language كي تُفصل الوسائط بين اللغتين. مسجَّل قبل تعريفات
+  // المسارات فيغطّي كل /api/sports (الجدول/روشن/الترتيب/الهدّافون + مركز
+  // المباراة/الفريق/اللاعب).
+  const withLang = (req: Request, res: Response, next: () => void) => {
+    res.vary("Accept-Language");
+    runWithSportsLang(sportsLangFromReq(req), () => next());
+  };
+  app.use("/api/sports", withLang);
+
   // يحوّل :comp إلى بطولة معروفة (افتراضيًا دوري روشن)، أو يرد 404.
   const resolve = (req: Request, res: Response): SaudiCompetition | null => {
     const slug = String(req.params.comp || "pro-league");

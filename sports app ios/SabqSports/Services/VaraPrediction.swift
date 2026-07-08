@@ -145,20 +145,20 @@ nonisolated enum VaraPredict {
         let top = max(hp, max(dp, ap))
         let second = [hp, dp, ap].sorted(by: >)[1]
         let basis = dataBacked
-            ? (neutral ? "بحسب الترتيب والفورمة" : "بحسب الترتيب والفورمة وأفضلية الأرض")
-            : (neutral ? "مباراة مفتوحة بلا بيانات كافية" : "أفضلية الأرض فقط")
+            ? (neutral ? L("بحسب الترتيب والفورمة") : L("بحسب الترتيب والفورمة وأفضلية الأرض"))
+            : (neutral ? L("مباراة مفتوحة بلا بيانات كافية") : L("أفضلية الأرض فقط"))
         // متقاربة؟ (أعلى احتمالين متلاصقان)
         if top - second <= 6 {
             switch favored {
-            case .draw: return "مباراة متكافئة مرشّحة للتعادل · \(basis)."
-            case .home: return "مباراة متقاربة وترجيح طفيف لـ\(homeName) · \(basis)."
-            case .away: return "مباراة متقاربة وترجيح طفيف لـ\(awayName) · \(basis)."
+            case .draw: return Lf("مباراة متكافئة مرشّحة للتعادل · %@.", basis)
+            case .home: return Lf("مباراة متقاربة وترجيح طفيف لـ%@ · %@.", homeName, basis)
+            case .away: return Lf("مباراة متقاربة وترجيح طفيف لـ%@ · %@.", awayName, basis)
             }
         }
         switch favored {
-        case .home: return "الأفضلية لـ\(homeName) (\(hp)٪) · \(basis)."
-        case .away: return "الأفضلية لـ\(awayName) (\(ap)٪) · \(basis)."
-        case .draw: return "التعادل هو الأرجح (\(dp)٪) · \(basis)."
+        case .home: return Lf("الأفضلية لـ%@ (%d٪) · %@.", homeName, hp, basis)
+        case .away: return Lf("الأفضلية لـ%@ (%d٪) · %@.", awayName, ap, basis)
+        case .draw: return Lf("التعادل هو الأرجح (%d٪) · %@.", dp, basis)
         }
     }
 
@@ -243,16 +243,16 @@ struct VaraVerdictCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.seal").font(.system(size: 14, weight: .bold)).foregroundStyle(SpTheme.green)
-                Text("نتيجة التوقّعات").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                Text(L("نتيجة التوقّعات")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                 Spacer(minLength: 0)
-                Text("النتيجة").font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("النتيجة")).font(SportsFonts.app(size: 10.5)).foregroundStyle(SpTheme.onDarkFaint)
                 score(finalHome, finalAway)
             }
             if let vara {
-                verdictRow(label: "توقّع VARA", h: vara.scoreHome, a: vara.scoreAway)
+                verdictRow(label: L("توقّع VARA"), h: vara.scoreHome, a: vara.scoreAway)
             }
             if let mine {
-                verdictRow(label: "توقّعك", h: mine.predHome, a: mine.predAway)
+                verdictRow(label: L("توقّعك"), h: mine.predHome, a: mine.predAway)
             }
         }
         .padding(16)
@@ -286,11 +286,11 @@ struct VaraVerdictCard: View {
     }
 
     private func verdict(predH: Int, predA: Int) -> (text: String, hit: Bool) {
-        if predH == finalHome && predA == finalAway { return ("أصاب النتيجة بدقّة", true) }
+        if predH == finalHome && predA == finalAway { return (L("أصاب النتيجة بدقّة"), true) }
         let ps = (predH - predA).signum()
         let fs = (finalHome - finalAway).signum()
-        if ps == fs { return ("أصاب الاتجاه", true) }
-        return ("لم يُصب", false)
+        if ps == fs { return (L("أصاب الاتجاه"), true) }
+        return (L("لم يُصب"), false)
     }
 }
 

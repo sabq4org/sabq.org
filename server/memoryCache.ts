@@ -1,6 +1,7 @@
 import memoizee from 'memoizee';
 import type { Response } from 'express';
 import Redis from 'ioredis';
+import { isEnglishSports } from './services/sportsLang';
 
 interface CacheEntry<T> {
   data: T;
@@ -683,6 +684,10 @@ export async function withSWR<T>(
   fetcher: () => Promise<T>,
   forceFresh: boolean = false
 ): Promise<T> {
+  // فصل كاش بوابة الرياضة بالإنجليزية: لاحقة ":en" تُضاف فقط داخل سياق لغة
+  // إنجليزية (يضبطه middleware في مسارات /api/sports). العربية والكرون وبقية
+  // التطبيق تبقى مفاتيحها كما هي تمامًا — توافق رجعي كامل، بلا تبريد كاش.
+  if (isEnglishSports()) cacheKey = `${cacheKey}:en`;
   // Explicit force-refresh (e.g. the native iOS pull-to-refresh, which sends a
   // cache-buster query param + `Cache-Control: no-cache`). Recompute past the
   // cache so a just-published/featured carousel item shows on the FIRST pull

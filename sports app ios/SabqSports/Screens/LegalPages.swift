@@ -91,17 +91,17 @@ struct AboutAppView: View {
     }
 
     var body: some View {
-        LegalScaffold(title: "عن التطبيق", icon: "info.circle.fill",
-                      intro: "VARA تطبيقٌ رياضيٌّ عربيّ يجمع المباريات والبطولات والتوقّعات الذكية في مكانٍ واحد — بتصميمٍ نظيف وأرقام حيّة.") {
-            LegalSection(heading: "ما الذي يقدّمه VARA؟", text: "", bullets: [
-                "جدول المباريات بالتواريخ مع التنقّل الزمني السلس بين الأدوار والأيام.",
-                "مركز مباراة غنيّ: الأحداث، الإحصائيات، التشكيلات، التقييمات، والمواجهات.",
-                "«توقّع VARA» الذكي: خوارزمية ديناميكية تحسب احتمالات النتيجة من الترتيب والفورمة وأفضلية الأرض.",
-                "تنبيهات لحظية لمبارياتك وفِرقك (أهداف، بطاقات، فار، بداية ونهاية).",
-                "متابعة الفِرق والمباريات + بطاقة «مبارياتي» مع عدّاد تنازليّ حيّ.",
+        LegalScaffold(title: L("عن التطبيق"), icon: "info.circle.fill",
+                      intro: L("VARA تطبيقٌ رياضيٌّ عربيّ يجمع المباريات والبطولات والتوقّعات الذكية في مكانٍ واحد — بتصميمٍ نظيف وأرقام حيّة.")) {
+            LegalSection(heading: L("ما الذي يقدّمه VARA؟"), text: "", bullets: [
+                L("جدول المباريات بالتواريخ مع التنقّل الزمني السلس بين الأدوار والأيام."),
+                L("مركز مباراة غنيّ: الأحداث، الإحصائيات، التشكيلات، التقييمات، والمواجهات."),
+                L("«توقّع VARA» الذكي: خوارزمية ديناميكية تحسب احتمالات النتيجة من الترتيب والفورمة وأفضلية الأرض."),
+                L("تنبيهات لحظية لمبارياتك وفِرقك (أهداف، بطاقات، فار، بداية ونهاية)."),
+                L("متابعة الفِرق والمباريات + بطاقة «مبارياتي» مع عدّاد تنازليّ حيّ."),
             ])
-            LegalSection(heading: "مصادر البيانات", text: "تُجمع نتائج المباريات والإحصاءات من مزوّدي بيانات رياضية متخصّصين، وقد تتأخّر أو تختلف قليلًا عن المصادر الرسمية. توقّعات VARA تقديرية للمتعة والتحليل فقط.")
-            LegalSection(heading: "الإصدار", text: "النسخة الحالية: \(version).")
+            LegalSection(heading: L("مصادر البيانات"), text: L("تُجمع نتائج المباريات والإحصاءات من مزوّدي بيانات رياضية متخصّصين، وقد تتأخّر أو تختلف قليلًا عن المصادر الرسمية. توقّعات VARA تقديرية للمتعة والتحليل فقط."))
+            LegalSection(heading: L("الإصدار"), text: Lf("النسخة الحالية: %@.", version))
         }
     }
 }
@@ -110,13 +110,13 @@ struct AboutAppView: View {
 
 struct UsagePolicyView: View {
     var body: some View {
-        LegalScaffold(title: "سياسة الاستخدام", icon: "checkmark.shield.fill",
-                      intro: "تنظّم هذه السياسة طريقة استخدامك لتطبيق VARA لضمان تجربة عادلة وآمنة للجميع.") {
-            LegalSection(heading: "الاستخدام المقبول", text: "VARA متاحٌ للاستخدام الشخصي غير التجاري. يُمنع إساءة استخدام الخدمة أو محاولة تعطيلها أو استخراج بياناتها آليًّا دون إذن.")
-            LegalSection(heading: "التوقّعات للمتعة فقط", text: "نظام «توقّع VARA» ولوحة المتصدّرين للمنافسة والتسلية فقط — لا رهان ولا مقابل ماديّ، والنقاط رمزية ولا تمثّل قيمة نقدية.")
-            LegalSection(heading: "دقّة المحتوى", text: "نسعى لعرض بيانات دقيقة وحيّة، لكنّنا لا نضمن خلوّها من الأخطاء أو التأخّر. القرارات المبنية على هذه البيانات تقع على مسؤوليتك.")
-            LegalSection(heading: "الحساب والخصوصية", text: "أنت مسؤول عن الحفاظ على سرّية بيانات حسابك. تُستخدم بياناتك لتقديم الخدمة وتخصيص التنبيهات والتوقّعات، ويمكنك حذف حسابك وبياناتك في أي وقت من الإعدادات.")
-            LegalSection(heading: "الإشعارات", text: "بتفعيلك للتنبيهات توافق على استقبال إشعارات عن مبارياتك وفِرقك. يمكنك إيقافها في أي وقت من إعدادات التطبيق أو النظام.")
+        LegalScaffold(title: L("سياسة الاستخدام"), icon: "checkmark.shield.fill",
+                      intro: L("تنظّم هذه السياسة طريقة استخدامك لتطبيق VARA لضمان تجربة عادلة وآمنة للجميع.")) {
+            LegalSection(heading: L("الاستخدام المقبول"), text: L("VARA متاحٌ للاستخدام الشخصي غير التجاري. يُمنع إساءة استخدام الخدمة أو محاولة تعطيلها أو استخراج بياناتها آليًّا دون إذن."))
+            LegalSection(heading: L("التوقّعات للمتعة فقط"), text: L("نظام «توقّع VARA» ولوحة المتصدّرين للمنافسة والتسلية فقط — لا رهان ولا مقابل ماديّ، والنقاط رمزية ولا تمثّل قيمة نقدية."))
+            LegalSection(heading: L("دقّة المحتوى"), text: L("نسعى لعرض بيانات دقيقة وحيّة، لكنّنا لا نضمن خلوّها من الأخطاء أو التأخّر. القرارات المبنية على هذه البيانات تقع على مسؤوليتك."))
+            LegalSection(heading: L("الحساب والخصوصية"), text: L("أنت مسؤول عن الحفاظ على سرّية بيانات حسابك. تُستخدم بياناتك لتقديم الخدمة وتخصيص التنبيهات والتوقّعات، ويمكنك حذف حسابك وبياناتك في أي وقت من الإعدادات."))
+            LegalSection(heading: L("الإشعارات"), text: L("بتفعيلك للتنبيهات توافق على استقبال إشعارات عن مبارياتك وفِرقك. يمكنك إيقافها في أي وقت من إعدادات التطبيق أو النظام."))
         }
     }
 }
@@ -125,13 +125,13 @@ struct UsagePolicyView: View {
 
 struct TermsView: View {
     var body: some View {
-        LegalScaffold(title: "شروط الاستخدام", icon: "doc.text.fill",
-                      intro: "باستخدامك تطبيق VARA فإنك توافق على الشروط التالية.") {
-            LegalSection(heading: "قبول الشروط", text: "يُعدّ تنزيلك أو استخدامك للتطبيق موافقةً على هذه الشروط. إن لم توافق عليها، يُرجى التوقّف عن استخدام التطبيق.")
-            LegalSection(heading: "الحساب", text: "تلتزم بتقديم معلومات صحيحة عند إنشاء الحساب، وبعدم انتحال هويّة الغير. نحتفظ بحقّ تعليق الحسابات المخالفة.")
-            LegalSection(heading: "الملكية الفكرية", text: "علامة VARA وتصميم التطبيق وواجهاته مملوكة لمالك التطبيق. لا يجوز نسخها أو إعادة نشرها دون إذن. تبقى حقوق بيانات المباريات لمزوّديها.")
-            LegalSection(heading: "حدود المسؤولية", text: "يُقدَّم التطبيق «كما هو» دون ضمانات. لا نتحمّل مسؤولية أي خسارة ناتجة عن انقطاع الخدمة أو أخطاء البيانات أو التوقّعات.")
-            LegalSection(heading: "تعديل الشروط", text: "قد نحدّث هذه الشروط من وقتٍ لآخر، ويسري التعديل فور نشره داخل التطبيق.")
+        LegalScaffold(title: L("شروط الاستخدام"), icon: "doc.text.fill",
+                      intro: L("باستخدامك تطبيق VARA فإنك توافق على الشروط التالية.")) {
+            LegalSection(heading: L("قبول الشروط"), text: L("يُعدّ تنزيلك أو استخدامك للتطبيق موافقةً على هذه الشروط. إن لم توافق عليها، يُرجى التوقّف عن استخدام التطبيق."))
+            LegalSection(heading: L("الحساب"), text: L("تلتزم بتقديم معلومات صحيحة عند إنشاء الحساب، وبعدم انتحال هويّة الغير. نحتفظ بحقّ تعليق الحسابات المخالفة."))
+            LegalSection(heading: L("الملكية الفكرية"), text: L("علامة VARA وتصميم التطبيق وواجهاته مملوكة لمالك التطبيق. لا يجوز نسخها أو إعادة نشرها دون إذن. تبقى حقوق بيانات المباريات لمزوّديها."))
+            LegalSection(heading: L("حدود المسؤولية"), text: L("يُقدَّم التطبيق «كما هو» دون ضمانات. لا نتحمّل مسؤولية أي خسارة ناتجة عن انقطاع الخدمة أو أخطاء البيانات أو التوقّعات."))
+            LegalSection(heading: L("تعديل الشروط"), text: L("قد نحدّث هذه الشروط من وقتٍ لآخر، ويسري التعديل فور نشره داخل التطبيق."))
         }
     }
 }
@@ -153,10 +153,10 @@ struct DeleteAccountView: View {
                         .foregroundStyle(SpTheme.crimson)
                         .frame(width: 52, height: 52)
                         .background(Circle().fill(SpTheme.crimson.opacity(0.12)))
-                    Text("حذف الحساب")
+                    Text(L("حذف الحساب"))
                         .font(SportsFonts.headline(size: 24))
                         .foregroundStyle(SpTheme.onDark)
-                    Text("إجراء نهائيّ لا يمكن التراجع عنه.")
+                    Text(L("إجراء نهائيّ لا يمكن التراجع عنه."))
                         .font(SportsFonts.app(size: 13, weight: .bold))
                         .foregroundStyle(SpTheme.crimson)
                 }
@@ -164,13 +164,13 @@ struct DeleteAccountView: View {
 
                 // ماذا سيُحذف
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("عند الحذف سيتمّ:")
+                    Text(L("عند الحذف سيتمّ:"))
                         .font(SportsFonts.app(size: 14, weight: .heavy)).foregroundStyle(SpTheme.onDark)
                     ForEach([
-                        "حذف ملفّك الشخصي وبيانات دخولك نهائيًّا.",
-                        "حذف فِرقك المتابَعة وتفضيلات التنبيهات.",
-                        "حذف توقّعاتك ونقاطك في لوحة المتصدّرين.",
-                        "إلغاء تسجيل أجهزتك من الإشعارات.",
+                        L("حذف ملفّك الشخصي وبيانات دخولك نهائيًّا."),
+                        L("حذف فِرقك المتابَعة وتفضيلات التنبيهات."),
+                        L("حذف توقّعاتك ونقاطك في لوحة المتصدّرين."),
+                        L("إلغاء تسجيل أجهزتك من الإشعارات."),
                     ], id: \.self) { line in
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "xmark.circle.fill")
@@ -188,11 +188,11 @@ struct DeleteAccountView: View {
 
                 // تأكيد كلمة المرور
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("أدخل كلمة المرور للتأكيد")
+                    Text(L("أدخل كلمة المرور للتأكيد"))
                         .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
                     HStack(spacing: 10) {
                         Image(systemName: "lock").font(.system(size: 14)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 18)
-                        SecureField("", text: $password, prompt: Text("كلمة المرور").foregroundStyle(SpTheme.onDarkFaint))
+                        SecureField("", text: $password, prompt: Text(L("كلمة المرور")).foregroundStyle(SpTheme.onDarkFaint))
                             .font(SportsFonts.app(size: 15)).foregroundStyle(SpTheme.onDark).tint(SpTheme.green)
                     }
                     .padding(.horizontal, 14).padding(.vertical, 13)
@@ -207,7 +207,7 @@ struct DeleteAccountView: View {
                 Button { confirming = true } label: {
                     HStack(spacing: 8) {
                         if auth.isLoading { ProgressView().tint(.white) }
-                        Text("حذف حسابي نهائيًّا").font(SportsFonts.app(size: 15, weight: .bold))
+                        Text(L("حذف حسابي نهائيًّا")).font(SportsFonts.app(size: 15, weight: .bold))
                     }
                     .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 50)
                     .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous)
@@ -220,15 +220,15 @@ struct DeleteAccountView: View {
             .padding(.bottom, 24)
         }
         .background(SpAmbientBackground())
-        .navigationTitle("حذف الحساب")
+        .navigationTitle(L("حذف الحساب"))
         .navigationBarTitleDisplayMode(.inline)
-        .confirmationDialog("تأكيد حذف الحساب", isPresented: $confirming, titleVisibility: .visible) {
-            Button("حذف نهائيّ", role: .destructive) {
+        .confirmationDialog(L("تأكيد حذف الحساب"), isPresented: $confirming, titleVisibility: .visible) {
+            Button(L("حذف نهائيّ"), role: .destructive) {
                 Task { if await auth.deleteAccount(password: password) { dismiss() } }
             }
-            Button("إلغاء", role: .cancel) {}
+            Button(L("إلغاء"), role: .cancel) {}
         } message: {
-            Text("سيتمّ حذف حسابك وكل بياناتك نهائيًّا ولا يمكن استرجاعها.")
+            Text(L("سيتمّ حذف حسابك وكل بياناتك نهائيًّا ولا يمكن استرجاعها."))
         }
     }
 }

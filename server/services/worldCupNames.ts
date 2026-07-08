@@ -2,7 +2,9 @@
  * تعريب بيانات كأس العالم 2026 القادمة من API-Football.
  * كل ما يصل للقارئ عربي — الإنجليزية تبقى داخلية فقط.
  * المنتخبات مربوطة بـ team id (وليس الاسم) حتى لا تنكسر لو غيّر المزود التسمية.
+ * وضع اللغة الإنجليزية (isEnglishSports) يتخطّى التعريب ويُعيد مصدر المزوّد.
  */
+import { isEnglishSports } from "./sportsLang";
 
 export const WC_TEAM_AR: Record<number, string> = {
   1: "بلجيكا",
@@ -119,6 +121,29 @@ export const WC_STATUS_AR: Record<string, string> = {
   LIVE: "مباشر",
 };
 
+/** نظير إنجليزي لـ WC_STATUS_AR (وضع لغة en في بوابة الرياضة). */
+export const WC_STATUS_EN: Record<string, string> = {
+  TBD: "Time TBD",
+  NS: "Not Started",
+  "1H": "First Half",
+  HT: "Half-Time",
+  "2H": "Second Half",
+  ET: "Extra Time",
+  BT: "Extra-Time Break",
+  P: "Penalty Shootout",
+  SUSP: "Suspended",
+  INT: "Interrupted",
+  FT: "Full-Time",
+  AET: "After Extra Time",
+  PEN: "After Penalties",
+  PST: "Postponed",
+  CANC: "Cancelled",
+  ABD: "Abandoned",
+  AWD: "Awarded",
+  WO: "Walkover",
+  LIVE: "Live",
+};
+
 export const WC_LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "LIVE", "INT", "SUSP"]);
 export const WC_FINISHED_STATUSES = new Set(["FT", "AET", "PEN", "AWD", "WO"]);
 
@@ -139,6 +164,7 @@ const KNOCKOUT_ROUND_AR: Record<string, string> = {
 };
 
 export function localizeRound(round: string): string {
+  if (isEnglishSports()) return round; // المصدر إنجليزي (Quarter-finals / Round of 16)
   return GROUP_STAGE_ROUND_AR[round] ?? KNOCKOUT_ROUND_AR[round] ?? round;
 }
 
@@ -149,12 +175,43 @@ export function localizeRound(round: string): string {
  */
 export function localizeGroup(group: string): string {
   const m = group.match(/Group\s+([A-L])\s*$/i);
+  if (isEnglishSports()) return m ? `Group ${m[1].toUpperCase()}` : group;
   return m ? `المجموعة ${m[1].toUpperCase()}` : group;
 }
 
-/** أحداث المباراة: النوع + التفصيل → وصف عربي */
+/** أحداث المباراة: النوع + التفصيل → وصف (عربي، أو إنجليزي في وضع en) */
 export function localizeEvent(type: string, detail: string): { type: string; label: string } {
   const t = type.toLowerCase();
+  if (isEnglishSports()) {
+    if (t === "goal") {
+      if (detail === "Own Goal") return { type: "goal", label: "Own Goal" };
+      if (detail === "Penalty") return { type: "goal", label: "Penalty Goal" };
+      if (detail === "Missed Penalty") return { type: "missed-penalty", label: "Missed Penalty" };
+      return { type: "goal", label: "Goal" };
+    }
+    if (t === "card") {
+      if (detail === "Red Card") return { type: "red-card", label: "Red Card" };
+      return { type: "yellow-card", label: "Yellow Card" };
+    }
+    if (t === "subst") return { type: "substitution", label: "Substitution" };
+    if (t === "var") {
+      const en: Record<string, string> = {
+        "Goal cancelled": "Goal cancelled (VAR)",
+        "Goal confirmed": "Goal confirmed (VAR)",
+        "Penalty confirmed": "Penalty confirmed (VAR)",
+        "Penalty cancelled": "Penalty cancelled (VAR)",
+        "Goal Disallowed - offside": "Goal disallowed — offside",
+        "Goal Disallowed - Foul": "Goal disallowed — foul",
+        "Goal Disallowed - Handball": "Goal disallowed — handball",
+        "Penalty - Foul": "Penalty awarded (VAR)",
+        "Red card": "Red card (VAR)",
+        "Red Card": "Red card (VAR)",
+        "Card upgrade": "Card upgrade (VAR)",
+      };
+      return { type: "var", label: en[detail] ?? "VAR Review" };
+    }
+    return { type: t, label: detail || type };
+  }
   if (t === "goal") {
     if (detail === "Own Goal") return { type: "goal", label: "هدف عكسي" };
     if (detail === "Penalty") return { type: "goal", label: "هدف من ركلة جزاء" };
@@ -370,10 +427,12 @@ export const WC_PLAYER_AR: Record<string, string> = {
 
 export function localizePlayerName(name: string | null | undefined): string {
   if (!name) return "";
+  if (isEnglishSports()) return name;
   return WC_PLAYER_AR[name] ?? name;
 }
 
 export function localizeTeamName(id: number | null | undefined, fallback: string): string {
+  if (isEnglishSports()) return fallback;
   if (id != null && WC_TEAM_AR[id]) return WC_TEAM_AR[id];
   return fallback;
 }
@@ -382,6 +441,7 @@ export function localizeVenue(name: string | null | undefined, city: string | nu
   name: string;
   city: string;
 } {
+  if (isEnglishSports()) return { name: name ?? "", city: city ?? "" };
   const mapped = name ? WC_VENUE_AR[name] : undefined;
   return { name: mapped?.name ?? name ?? "", city: mapped?.city ?? city ?? "" };
 }

@@ -210,31 +210,31 @@ nonisolated struct SpRound: Decodable, Identifiable, Hashable {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = value.lowercased()
         if lower.range(of: #"^1st\s+qualifying\s+round"#, options: .regularExpression) != nil {
-            return "الدور التأهيلي الأول"
+            return L("الدور التأهيلي الأول")
         }
         if lower.range(of: #"^2nd\s+qualifying\s+round"#, options: .regularExpression) != nil {
-            return "الدور التأهيلي الثاني"
+            return L("الدور التأهيلي الثاني")
         }
         if lower.range(of: #"^3rd\s+qualifying\s+round"#, options: .regularExpression) != nil {
-            return "الدور التأهيلي الثالث"
+            return L("الدور التأهيلي الثالث")
         }
         if lower.contains("play-off") || lower.contains("playoff") {
-            return "الملحق"
+            return L("الملحق")
         }
         if let match = value.range(of: #"^(League Stage|League Phase)\s*-\s*(\d+)"#, options: [.regularExpression, .caseInsensitive]) {
             let text = String(value[match])
             let number = text.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }.last ?? ""
-            return number.isEmpty ? "مرحلة الدوري" : "الجولة \(number) — مرحلة الدوري"
+            return number.isEmpty ? L("مرحلة الدوري") : Lf("الجولة %@ — مرحلة الدوري", number)
         }
         if let match = value.range(of: #"^Group Stage\s*-\s*(\d+)"#, options: [.regularExpression, .caseInsensitive]) {
             let text = String(value[match])
             let number = text.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }.last ?? ""
-            return number.isEmpty ? "دور المجموعات" : "الجولة \(number) — دور المجموعات"
+            return number.isEmpty ? L("دور المجموعات") : Lf("الجولة %@ — دور المجموعات", number)
         }
         if let match = value.range(of: #"^Round of\s*(\d+)"#, options: [.regularExpression, .caseInsensitive]) {
             let text = String(value[match])
             let number = text.components(separatedBy: CharacterSet.decimalDigits.inverted).filter { !$0.isEmpty }.last ?? ""
-            return number.isEmpty ? value : "دور الـ\(number)"
+            return number.isEmpty ? value : Lf("دور الـ%@", number)
         }
         return value
     }
@@ -1221,12 +1221,12 @@ nonisolated enum SportsConstants {
 
     static func categoryLabel(_ category: String) -> String {
         switch category {
-        case "saudi": return "البطولات السعودية"
-        case "gulf": return "البطولات الخليجية"
-        case "arab": return "البطولات العربية"
-        case "european": return "البطولات الأوروبية"
-        case "world": return "بطولات عالمية"
-        default: return "بطولات"
+        case "saudi": return L("البطولات السعودية")
+        case "gulf": return L("البطولات الخليجية")
+        case "arab": return L("البطولات العربية")
+        case "european": return L("البطولات الأوروبية")
+        case "world": return L("بطولات عالمية")
+        default: return L("بطولات")
         }
     }
 }
@@ -1264,23 +1264,45 @@ enum SpFormat {
 
     private static var formatters: [String: DateFormatter] = [:]
 
-    private static func makeFormatter(_ pattern: String, locale: Locale = Locale(identifier: "ar-u-nu-latn")) -> DateFormatter {
+    // لغة عرض التواريخ — يحدّثها SpLanguage عند التبديل. المفاتيح الآلية
+    // (dateKey/numericDate) تتجاهلها وتبقى en_US_POSIX. القيمة بسيطة وتُكتب من
+    // MainActor فقط وتُقرأ أثناء التنسيق — nonisolated(unsafe) كافٍ هنا.
+    nonisolated(unsafe) static var displayLangCode: String = "ar"
+
+    // العربية: أسماء عربية + أرقام لاتينية + ميلادي (نتجنّب ar-SA الهجري).
+    // الإنجليزية: أسماء إنجليزية (Saturday / 27 July).
+    private static var displayLocale: Locale {
+        displayLangCode == "en" ? Locale(identifier: "en_US") : Locale(identifier: "ar-u-nu-latn")
+    }
+
+    private static func makeFormatter(_ pattern: String, locale: Locale) -> DateFormatter {
         let f = DateFormatter()
         f.timeZone = riyadh
-        // أسماء عربية + أرقام لاتينية + تقويم ميلادي (22:00 / 27 يونيو) — نتجنّب
-        // ar-SA لأنه يفترض التقويم الهجري (يظهر «محرم» بدل «يونيو»).
         f.locale = locale
         f.calendar = Calendar(identifier: .gregorian)
         f.dateFormat = pattern
         return f
     }
 
+    /// مُنسِّق عرض واعٍ باللغة — الكاش مُفتَّح بالنمط + رمز اللغة.
     private static func fmt(_ pattern: String) -> DateFormatter {
-        if let f = formatters[pattern] { return f }
-        let f = makeFormatter(pattern)
-        formatters[pattern] = f
+        let key = "\(pattern)|\(displayLangCode)"
+        if let f = formatters[key] { return f }
+        let f = makeFormatter(pattern, locale: displayLocale)
+        formatters[key] = f
         return f
     }
+
+    /// «اليوم/غدًا/أمس» أو Today/Tomorrow/Yesterday حسب لغة العرض.
+    private static func relDayWord(_ kind: RelDay) -> String {
+        let en = displayLangCode == "en"
+        switch kind {
+        case .today:     return en ? "Today" : "اليوم"
+        case .tomorrow:  return en ? "Tomorrow" : "غدًا"
+        case .yesterday: return en ? "Yesterday" : "أمس"
+        }
+    }
+    private enum RelDay { case today, tomorrow, yesterday }
 
     static func kickoffDay(_ iso: String?) -> String {
         guard let iso, let d = SpDateMath.date(from: iso) else { return "" }
@@ -1328,17 +1350,17 @@ enum SpFormat {
     static func daySeparator(_ date: Date) -> String {
         let cal = Self.riyadhCal
         let numeric = numericDate(date)
-        if cal.isDateInToday(date) { return "اليوم · \(numeric)" }
-        if cal.isDateInTomorrow(date) { return "غدًا · \(numeric)" }
-        if cal.isDateInYesterday(date) { return "أمس · \(numeric)" }
+        if cal.isDateInToday(date) { return "\(relDayWord(.today)) · \(numeric)" }
+        if cal.isDateInTomorrow(date) { return "\(relDayWord(.tomorrow)) · \(numeric)" }
+        if cal.isDateInYesterday(date) { return "\(relDayWord(.yesterday)) · \(numeric)" }
         return numeric
     }
 
-    /// وقت نسبي بالعربية («قبل ٣ ساعات») — لبطاقات الأخبار.
+    /// وقت نسبي («قبل ٣ ساعات» / “3 hours ago”) حسب لغة العرض — لبطاقات الأخبار.
     static func relativeArabic(_ iso: String?) -> String {
         guard let iso, let d = SpDateMath.date(from: iso) else { return "" }
         let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "ar")
+        f.locale = displayLocale
         f.unitsStyle = .full
         return f.localizedString(for: d, relativeTo: Date())
     }
