@@ -44,10 +44,10 @@
 		5B0000A6 /* ForYouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A6 /* ForYouView.swift */; };
 		5B0000A7 /* SpLiveStream.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A7 /* SpLiveStream.swift */; };
 		5B0000B0 /* TransferCenterModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000B0 /* TransferCenterModels.swift */; };
-		5B0000C1 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000C1 /* Localization.swift */; };
-		5B0000C2 /* EnglishStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000C2 /* EnglishStrings.swift */; };
 		5B0000B1 /* TransferCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000B1 /* TransferCenterView.swift */; };
 		5B0000B2 /* MatchesCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000B2 /* MatchesCenterView.swift */; };
+		5B0000C1 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000C1 /* Localization.swift */; };
+		5B0000C2 /* EnglishStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000C2 /* EnglishStrings.swift */; };
 		5B000102 /* SpMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000102 /* SpMatchActivity.swift */; };
 		5B000103 /* SpLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000103 /* SpLiveActivityManager.swift */; };
 		5B000104 /* SabqSportsWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000104 /* SabqSportsWidgetsBundle.swift */; };
@@ -122,10 +122,10 @@
 		5C0000A6 /* ForYouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForYouView.swift; sourceTree = "<group>"; };
 		5C0000A7 /* SpLiveStream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpLiveStream.swift; sourceTree = "<group>"; };
 		5C0000B0 /* TransferCenterModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferCenterModels.swift; sourceTree = "<group>"; };
-		5C0000C1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
-		5C0000C2 /* EnglishStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishStrings.swift; sourceTree = "<group>"; };
 		5C0000B1 /* TransferCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferCenterView.swift; sourceTree = "<group>"; };
 		5C0000B2 /* MatchesCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MatchesCenterView.swift; sourceTree = "<group>"; };
+		5C0000C1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+		5C0000C2 /* EnglishStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishStrings.swift; sourceTree = "<group>"; };
 		5C000100 /* SabqSportsWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SabqSportsWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5C000101 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5C000102 /* SpMatchActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpMatchActivity.swift; sourceTree = "<group>"; };
@@ -518,7 +518,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070800;
+				CURRENT_PROJECT_VERSION = 2026070801;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
@@ -549,7 +549,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = SabqSports/SabqSports.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070800;
+				CURRENT_PROJECT_VERSION = 2026070801;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;

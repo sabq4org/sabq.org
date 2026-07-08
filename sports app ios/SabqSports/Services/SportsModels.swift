@@ -643,6 +643,20 @@ nonisolated struct SpLoginRequest: Encodable {
     let deviceInfo: SpDeviceInfo?
 }
 
+// دخول/تسجيل بالجوال (Twilio Verify)
+nonisolated struct SpPhoneSendRequest: Encodable {
+    let phone: String
+}
+nonisolated struct SpPhoneSendResponse: Decodable {
+    let success: Bool
+    let message: String?
+}
+nonisolated struct SpPhoneVerifyRequest: Encodable {
+    let phone: String
+    let code: String
+    let deviceInfo: SpDeviceInfo?
+}
+
 // MARK: - المتابعة + تفضيلات التنبيهات (تتطلّب جلسة)
 
 nonisolated struct SpFollow: Decodable, Identifiable, Hashable {
@@ -1613,6 +1627,18 @@ extension APIClient {
             (firstName != nil || lastName != nil) ? .init(firstName: firstName, lastName: lastName) : nil
         let body = SpAppleAuthRequest(identityToken: identityToken, fullName: fullName, email: email, deviceInfo: APIClient.deviceInfo())
         return try await post(SpLoginResponse.self, path: "/auth/apple", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// إرسال رمز تحقّق للجوال (Twilio Verify). الرقم بأي صيغة سعودية — الخادم يطبّعه.
+    func sendPhoneCode(_ phone: String) async throws -> SpPhoneSendResponse {
+        let body = SpPhoneSendRequest(phone: phone)
+        return try await post(SpPhoneSendResponse.self, path: "/auth/phone/send", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// التحقّق من الرمز → جلسة عضو سبق (يُنشئ الحساب إن لم يكن موجودًا).
+    func verifyPhoneCode(_ phone: String, code: String) async throws -> SpLoginResponse {
+        let body = SpPhoneVerifyRequest(phone: phone, code: code, deviceInfo: APIClient.deviceInfo())
+        return try await post(SpLoginResponse.self, path: "/auth/phone/verify", body: body, apiRoot: URLConstants.mobileAPI)
     }
 
     /// أخبار سبق الرياضية (تصنيف «رياضة») — عبر mobileAPI، عامّة بلا مصادقة.

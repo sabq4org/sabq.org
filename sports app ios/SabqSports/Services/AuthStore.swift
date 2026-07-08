@@ -7,7 +7,7 @@ import UserNotifications
 // يُحفظ في Keychain ويُضبط على APIClient لكل الطلبات المحميّة (المتابعة/التنبيهات).
 // @Observable + @MainActor: تُحقن في البيئة وتُحدّث الواجهة تلقائيًّا.
 /// مصدر خطأ الدخول — لتوجيه الرسالة تحت الزر المناسب في ورقة الدخول.
-enum SpAuthErrorSource { case none, credentials, apple }
+enum SpAuthErrorSource { case none, credentials, apple, phone }
 
 @MainActor
 @Observable
@@ -218,7 +218,40 @@ final class SpAuthStore {
         isLoading = false
     }
 
-    /// تثبيت الجلسة بعد أي مسار دخول (Apple/بريد): الرمز + العضو + Keychain + العميل.
+    // MARK: - دخول/تسجيل بالجوال (Twilio Verify)
+
+    /// إرسال رمز التحقّق للجوال. يرجع (نجاح، رسالة) للعرض في الواجهة.
+    func sendPhoneCode(_ phone: String) async -> (ok: Bool, message: String) {
+        isLoading = true; errorMessage = nil; errorSource = .none
+        defer { isLoading = false }
+        do {
+            let resp = try await APIClient.shared.sendPhoneCode(phone)
+            let msg = resp.message ?? (resp.success ? L("تم إرسال رمز التحقق") : L("تعذّر إرسال رمز التحقق"))
+            if !resp.success { errorMessage = msg; errorSource = .phone }
+            return (resp.success, msg)
+        } catch {
+            let msg = friendly(error)
+            errorMessage = msg; errorSource = .phone
+            return (false, msg)
+        }
+    }
+
+    /// التحقّق من الرمز وتثبيت الجلسة عند النجاح.
+    func verifyPhoneCode(_ phone: String, code: String) async -> Bool {
+        isLoading = true; errorMessage = nil; errorSource = .phone
+        defer { isLoading = false }
+        do {
+            let resp = try await APIClient.shared.verifyPhoneCode(phone, code: code)
+            try await applySession(resp)
+            return true
+        } catch {
+            errorMessage = friendly(error)
+            errorSource = .phone
+            return false
+        }
+    }
+
+    /// تثبيت الجلسة بعد أي مسار دخول (Apple/بريد/جوال): الرمز + العضو + Keychain + العميل.
     private func applySession(_ resp: SpLoginResponse) async throws {
         guard let t = resp.token, !t.isEmpty else {
             throw NSError(domain: "sabqsports", code: 401,
