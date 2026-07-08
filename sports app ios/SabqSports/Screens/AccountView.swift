@@ -12,7 +12,6 @@ struct AccountView: View {
     @Environment(SpAppRouter.self) private var router
     @Environment(\.openURL) private var openURL
     @AppStorage("vara.smartSnaps.visible") private var showSmartSnaps = true
-    @AppStorage("vara.fanDay.enabled") private var fanDayEnabled = true
     @State private var selectedTeam: IDBox?
     @State private var showSignOutConfirm = false
     @State private var showEditProfile = false
@@ -471,8 +470,6 @@ struct AccountView: View {
                     alertRow(L("لقطات ذكية"), "sparkles", \.smartSnaps)
                     rowDivider
                     localSmartSnapsRow
-                    rowDivider
-                    localFanDayRow
                 }
                 hint(followedTeams.isEmpty
                      ? L("تابع فريقًا ليصلك تنبيه عند أحداث مبارياته.")
@@ -599,38 +596,6 @@ struct AccountView: View {
                         .font(SportsFonts.app(size: 11.5, weight: .bold))
                 }
                 .foregroundStyle(showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(SpPressStyle())
-    }
-
-    /// مفتاح تجربة «يوم المشجع» — إيقافه يعيد الرئيسية القديمة فورًا للحكم السريع.
-    private var localFanDayRow: some View {
-        Button {
-            fanDayEnabled.toggle()
-        } label: {
-            HStack(spacing: 12) {
-                iconTile("sportscourt.fill", fanDayEnabled ? SpTheme.green : SpTheme.onDarkFaint)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(L("يوم المشجع"))
-                        .font(SportsFonts.app(size: 14.5, weight: .semibold))
-                        .foregroundStyle(SpTheme.onDark)
-                    Text(L("هيرو فريقي في الرئيسية — تجربة قابلة للإيقاف"))
-                        .font(SportsFonts.app(size: 11, weight: .semibold))
-                        .foregroundStyle(SpTheme.onDarkDim)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(fanDayEnabled ? SpTheme.green : SpTheme.onDarkFaint)
-                        .frame(width: 7, height: 7)
-                    Text(fanDayEnabled ? L("مفعّل") : L("متوقف"))
-                        .font(SportsFonts.app(size: 11.5, weight: .bold))
-                }
-                .foregroundStyle(fanDayEnabled ? SpTheme.green : SpTheme.onDarkFaint)
             }
             .padding(.horizontal, 14).padding(.vertical, 12)
             .contentShape(Rectangle())
