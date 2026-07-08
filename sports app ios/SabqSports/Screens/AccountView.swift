@@ -781,12 +781,46 @@ enum SpTab: Hashable { case matches, roshn, competitions, world, account }
 /// نموذج الدخول بعضوية سبق: عنوان + حقول + زر «الدخول بعضوية سبق» الأساسي +
 /// Apple بديلًا + ختم «من سبق». يُستخدم داخل بطاقة «حسابي» (SpMembershipLogin في
 /// signInCard) وداخل SpLoginSheet المنبثقة.
+enum SpLoginMode { case phone, membership }
+
 struct SpMembershipLogin: View {
     @Environment(SpAuthStore.self) private var auth
+    @State private var mode: SpLoginMode = .phone
     @State private var identifier = ""
     @State private var password = ""
 
     var body: some View {
+        VStack(spacing: 14) {
+            header
+            modeTabs
+            // المحتوى حسب التبويب: الجوال (OTP) أو عضوية سبق (بريد/كلمة مرور).
+            if mode == .phone {
+                SpPhoneLoginFlow()
+            } else {
+                membershipFields
+            }
+
+            dividerOr
+
+            // بديل مشترك — المتابعة عبر Apple (أسفل كلا التبويبين).
+            Button { auth.startAppleSignIn() } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "applelogo").font(.system(size: 18, weight: .semibold))
+                    Text(L("المتابعة عبر Apple")).font(SportsFonts.app(size: 15, weight: .semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 48)
+                .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(.black))
+            }
+            .buttonStyle(.plain)
+            .disabled(auth.isLoading)
+
+            errorText(for: .apple)
+        }
+    }
+
+    // الترويسة — ترحيب + ختم «من سبق» + سطر تعريفي.
+    private var header: some View {
         VStack(spacing: 14) {
             HStack(spacing: 6) {
                 Text(L("مرحبًا بك في"))
@@ -794,7 +828,6 @@ struct SpMembershipLogin: View {
                     .foregroundStyle(SpTheme.onDark)
                 SpWordmark(size: 20)
             }
-            // ختم «من سبق» أسفل الترحيب مباشرةً — الرعاية الخفيفة أعلى البطاقة.
             HStack(spacing: 7) {
                 Text(L("أحد منتجات"))
                     .font(SportsFonts.app(size: 11, weight: .semibold))
@@ -805,18 +838,48 @@ struct SpMembershipLogin: View {
                     .foregroundStyle(SpTheme.green)
             }
             .padding(.top, -4)
-            Text(L("سجّل بعضويتك في سبق لتحفظ فريقك، وترسل توقّعاتك، وتصلك تنبيهات المباريات على كل أجهزتك."))
+            Text(L("سجّل دخولك لتحفظ فريقك، وترسل توقّعاتك، وتصلك تنبيهات المباريات على كل أجهزتك."))
                 .font(SportsFonts.app(size: 13))
                 .foregroundStyle(SpTheme.onDarkDim)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
 
+    // مبدّل التبويبين — [الجوال] [عضوية سبق].
+    private var modeTabs: some View {
+        HStack(spacing: 6) {
+            modeTab(L("الجوال"), icon: "iphone", value: .phone)
+            modeTab(L("عضوية سبق"), icon: "person.text.rectangle", value: .membership)
+        }
+        .padding(4)
+        .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.cardFill))
+    }
+
+    private func modeTab(_ title: String, icon: String, value: SpLoginMode) -> some View {
+        let active = mode == value
+        return Button {
+            withAnimation(.easeOut(duration: 0.2)) { mode = value }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 12, weight: .bold))
+                Text(title).font(SportsFonts.app(size: 13.5, weight: .bold))
+            }
+            .foregroundStyle(active ? .white : SpTheme.onDarkDim)
+            .frame(maxWidth: .infinity).frame(height: 38)
+            .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius - 2, style: .continuous)
+                .fill(active ? SpTheme.green : Color.clear))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // تبويب عضوية سبق — بريد/جوال + كلمة مرور.
+    private var membershipFields: some View {
+        VStack(spacing: 12) {
             VStack(spacing: 10) {
                 field(text: $identifier, placeholder: L("البريد الإلكتروني أو الجوال"), icon: "person", secure: false)
                 field(text: $password, placeholder: L("كلمة المرور"), icon: "lock", secure: true)
             }
-
-            // الزر الأساسي — الدخول بعضوية سبق (نفس حساب سبق).
             Button {
                 Task { await auth.loginWithCredentials(identifier: identifier, password: password) }
             } label: {
@@ -838,27 +901,7 @@ struct SpMembershipLogin: View {
             .buttonStyle(.plain)
             .disabled(auth.isLoading)
 
-            // خطأ دخول العضوية — تحت الزر الأخضر مباشرةً كي يعرف المستخدم أنه يخصّ
-            // حقول البريد/كلمة المرور لا زر Apple.
             errorText(for: .credentials)
-
-            dividerOr
-
-            // بديل — المتابعة عبر Apple.
-            Button { auth.startAppleSignIn() } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "applelogo").font(.system(size: 18, weight: .semibold))
-                    Text(L("المتابعة عبر Apple")).font(SportsFonts.app(size: 15, weight: .semibold))
-                }
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity).frame(height: 48)
-                .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(.black))
-            }
-            .buttonStyle(.plain)
-            .disabled(auth.isLoading)
-
-            // خطأ دخول Apple — تحت زر Apple.
-            errorText(for: .apple)
         }
     }
 
@@ -908,6 +951,194 @@ struct SpMembershipLogin: View {
             Rectangle().fill(SpTheme.outline).frame(height: 1)
         }
         .padding(.vertical, 2)
+    }
+}
+
+// MARK: - تدفّق الدخول بالجوال (Twilio Verify)
+
+/// إدخال الجوال (🇸🇦 +966 افتراضيًا، رقم بلا صفر) ← رمز تحقّق من 6 أرقام مع تعبئة
+/// آلية عند وصول الرسالة. النجاح يُصدر جلسة عضو (يُنشئ الحساب إن لزم).
+struct SpPhoneLoginFlow: View {
+    @Environment(SpAuthStore.self) private var auth
+    private enum Step { case phone, code }
+    @State private var step: Step = .phone
+    @State private var number = ""     // أرقام المشترك فقط (5XXXXXXXX)
+    @State private var code = ""
+    @State private var resend = 0      // عدّاد إعادة الإرسال (ثوانٍ)
+
+    private var normalized: String { String(number.filter(\.isNumber).prefix(9)) }
+    private var phoneValid: Bool { normalized.count == 9 && normalized.first == "5" }
+    private var e164Display: String { "+966 " + normalized }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if step == .phone { phoneStep } else { codeStep }
+        }
+    }
+
+    // خطوة إدخال الرقم
+    private var phoneStep: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 10) {
+                HStack(spacing: 5) {
+                    Text("🇸🇦").font(.system(size: 16))
+                    Text("+966").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                }
+                .environment(\.layoutDirection, .leftToRight)
+                Rectangle().fill(SpTheme.outline).frame(width: 1, height: 22)
+                TextField("", text: $number, prompt: Text(verbatim: "5XXXXXXXX").foregroundStyle(SpTheme.onDarkFaint))
+                    .keyboardType(.numberPad)
+                    .textContentType(.telephoneNumber)
+                    .font(SportsFonts.app(size: 16, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDark)
+                    .tint(SpTheme.green)
+                    .environment(\.layoutDirection, .leftToRight)
+                    .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(9)) }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 13)
+            .background(fieldBg)
+
+            Text(L("سنرسل رمز تحقّق برسالة نصية إلى جوالك."))
+                .font(SportsFonts.app(size: 11.5)).foregroundStyle(SpTheme.onDarkFaint)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            primaryButton(L("أرسل رمز التحقق"), enabled: phoneValid) { Task { await send() } }
+            errorText
+        }
+    }
+
+    // خطوة الرمز
+    private var codeStep: some View {
+        VStack(spacing: 14) {
+            VStack(spacing: 4) {
+                Text(L("أدخل رمز التحقق"))
+                    .font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
+                HStack(spacing: 5) {
+                    Text(L("أُرسل إلى"))
+                    Text(e164Display).environment(\.layoutDirection, .leftToRight)
+                    Button(L("تعديل")) { withAnimation { step = .phone; code = "" } }
+                        .foregroundStyle(SpTheme.green)
+                }
+                .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkDim)
+            }
+
+            SpOtpBoxes(code: $code) { Task { await verify() } }
+
+            if resend > 0 {
+                Text(String(format: L("إعادة الإرسال خلال %d ثانية"), resend))
+                    .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.onDarkFaint)
+            } else {
+                Button(L("إعادة إرسال الرمز")) { Task { await send() } }
+                    .buttonStyle(.plain)
+                    .font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.green)
+            }
+
+            primaryButton(L("تحقّق ودخول"), enabled: code.count == 6) { Task { await verify() } }
+            errorText
+        }
+    }
+
+    // MARK: أفعال
+
+    private func send() async {
+        let r = await auth.sendPhoneCode(normalized)
+        if r.ok {
+            withAnimation { step = .code }
+            startResend()
+        }
+    }
+
+    private func verify() async {
+        guard code.count == 6 else { return }
+        _ = await auth.verifyPhoneCode(normalized, code: code)
+        // النجاح يُغلق الورقة عبر onChange(isLoggedIn) في SpLoginSheet.
+    }
+
+    private func startResend() {
+        resend = 60
+        Task { @MainActor in
+            while resend > 0 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if resend > 0 { resend -= 1 }
+            }
+        }
+    }
+
+    // MARK: عناصر مشتركة
+
+    private var fieldBg: some View {
+        RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+            .fill(SpTheme.cardFill)
+            .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
+    }
+
+    private func primaryButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if auth.isLoading { ProgressView().tint(.white) }
+                Text(title).font(SportsFonts.app(size: 16, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity).frame(height: 50)
+            .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous)
+                .fill(enabled ? SpTheme.green : SpTheme.green.opacity(0.4)))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled || auth.isLoading)
+    }
+
+    @ViewBuilder private var errorText: some View {
+        if auth.errorSource == .phone, let err = auth.errorMessage {
+            Text(err)
+                .font(SportsFonts.app(size: 12)).foregroundStyle(SpTheme.crimson)
+                .multilineTextAlignment(.center).frame(maxWidth: .infinity)
+        }
+    }
+}
+
+/// حقل رمز OTP — 6 خانات مرئية فوق حقل خفيّ يحمل التعبئة الآلية (.oneTimeCode).
+struct SpOtpBoxes: View {
+    @Binding var code: String
+    var onComplete: () -> Void
+    private let length = 6
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ZStack {
+            TextField("", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .focused($focused)
+                .foregroundStyle(.clear)
+                .tint(.clear)
+                .onChange(of: code) { _, v in
+                    let d = String(v.filter(\.isNumber).prefix(length))
+                    if d != code { code = d }
+                    if d.count == length { focused = false; onComplete() }
+                }
+            HStack(spacing: 8) {
+                ForEach(0..<length, id: \.self) { i in box(i) }
+            }
+            .environment(\.layoutDirection, .leftToRight)
+            .allowsHitTesting(false)
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+        .onAppear { focused = true }
+    }
+
+    private func box(_ i: Int) -> some View {
+        let chars = Array(code)
+        let digit: String = i < chars.count ? String(chars[i]) : ""
+        let active = i == chars.count
+        return Text(digit)
+            .font(SportsFonts.app(size: 22, weight: .heavy))
+            .foregroundStyle(SpTheme.onDark)
+            .frame(maxWidth: .infinity).frame(height: 54)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.cardFill))
+            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(active ? SpTheme.green : SpTheme.outline, lineWidth: active ? 2 : 1))
     }
 }
 
