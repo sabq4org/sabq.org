@@ -156,6 +156,8 @@ data class WcOverview(
     val saudi: WcSaudi = WcSaudi(),
     /** بطل البطولة بعد حسم النهائي — null قبل ذلك */
     val champion: WcChampion? = null,
+    /** true عندما أُطفئ البلوك من لوحة التحكم — الشريط كله يختفي */
+    val hidden: Boolean = false,
     val updatedAt: String = "",
 )
 

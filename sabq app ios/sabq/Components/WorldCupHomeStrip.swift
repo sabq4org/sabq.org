@@ -62,8 +62,10 @@ final class WorldCupHomeStore {
 
 // MARK: - شريط المونديال في الواجهة الرئيسية
 //
-// بطاقة بثيم الملعب الليلي تعرض مباراة اليوم (نتيجة حية أو عدّ تنازلي) مع
-// رابط لقسم كأس العالم الكامل. تختفي كليًا عند غياب البيانات — صفر أثر.
+// بطاقة بثيم الملعب الليلي تعرض مباراة اليوم (نتيجة حية أو عدّ تنازلي) أو
+// بطاقة البطل بعد حسم النهائي، مع رابط لقسم كأس العالم الكامل. تختفي كليًا
+// عند إطفاء البلوك من لوحة التحكم (hidden) أو غياب البيانات — صفر أثر
+// (مطابق WorldCupHomeSection على الويب وKingsCupHomeStrip).
 
 struct WorldCupHomeStrip: View {
     private let store = WorldCupHomeStore.shared
@@ -85,23 +87,29 @@ struct WorldCupHomeStrip: View {
         return [featured]
     }
 
+    /// يختفي الشريط عند إطفاء البلوك من اللوحة أو غياب المباراة والبطل معًا.
+    private var stripHidden: Bool {
+        guard let ov = store.overview else { return true }
+        if ov.hidden == true { return true }
+        return ov.champion == nil && matches.isEmpty
+    }
+
     var body: some View {
         // حامل مكان Color.clear يمنع SwiftUI من إلغاء العرض (وبالتالي .task)
         // عندما لا تكون البيانات قد وصلت بعد — فخ Group+EmptyView المعروف.
         ZStack {
             Color.clear.frame(width: 0, height: 0)
-            // البطل (بعد حسم النهائي) يتقدّم على مربع المباراة — يبقي البانر
-            // حيًّا بعد انتهاء آخر مباراة حتى يُطفأ البلوك من لوحة التحكم.
-            if let champion = store.overview?.champion {
+            if let ov = store.overview, !stripHidden {
+                // البطل (بعد حسم النهائي) يتقدّم على مربع المباراة — يبقي البانر
+                // حيًّا بعد انتهاء آخر مباراة حتى يُطفأ البلوك من لوحة التحكم.
                 NavigationLink(value: WorldCupRoute()) {
-                    championCard(champion)
-                }
-                .buttonStyle(.plain)
-            } else if !matches.isEmpty {
-                NavigationLink(value: WorldCupRoute()) {
-                    VStack(spacing: 10) {
-                        ForEach(matches) { f in
-                            card(f)
+                    if let champion = ov.champion {
+                        championCard(champion)
+                    } else {
+                        VStack(spacing: 10) {
+                            ForEach(matches) { f in
+                                card(f)
+                            }
                         }
                     }
                 }
@@ -114,6 +122,7 @@ struct WorldCupHomeStrip: View {
             // الحلقة لا تخرج لمجرد أن المباراة «ليست حيّة الآن»: قبل الصافرة
             // تستطلع بوتيرة أبطأ كي تلتقط التحوّل قادمة→مباشر (كان العدّاد
             // يتجمّد على 00:00:00 لمن بقي على الرئيسية لحظة الانطلاق).
+            // بعد التتويج نبقي نبضة دقيقة خفيفة لالتقاط إطفاء البلوك من اللوحة.
             await store.loadIfNeeded()
             while !Task.isCancelled {
                 let interval: UInt64
@@ -130,8 +139,11 @@ struct WorldCupHomeStrip: View {
                         interval = 60_000_000_000   // بعيدة: نبضة دقيقة صديقة للكاش تكفي
                         lightRefresh = true
                     }
+                } else if store.overview?.champion != nil, store.overview?.hidden != true {
+                    interval = 60_000_000_000       // بطل ظاهر: التقاط إطفاء البلوك
+                    lightRefresh = true
                 } else {
-                    return              // لا حيّة ولا قادمة — لا شيء يُستطلع
+                    return              // لا حيّة ولا قادمة ولا بطل — لا شيء يُستطلع
                 }
                 try? await Task.sleep(nanoseconds: interval)
                 if Task.isCancelled { return }
