@@ -1016,27 +1016,33 @@ struct SpMyTeamCard: View {
 
     private var invitation: some View {
         Button(action: onPickTeam) {
-            HStack(spacing: 13) {
-                Image(systemName: "star.circle.fill")
-                    .font(.system(size: 34))
+            HStack(spacing: 10) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(SpTheme.green)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L("اختر فريقك المفضّل"))
-                        .font(SportsFonts.app(size: 15, weight: .heavy))
-                        .foregroundStyle(SpTheme.onDark)
-                    Text(L("تابع مبارياته عبر كل البطولات من هنا — النجمة في صفحة النادي"))
-                        .font(SportsFonts.app(size: 11, weight: .semibold))
-                        .foregroundStyle(SpTheme.onDarkDim)
-                        .lineLimit(2)
-                }
+                Text(L("اختر فريقك المفضّل"))
+                    .font(SportsFonts.app(size: 13.5, weight: .bold))
+                    .foregroundStyle(SpTheme.onDark)
+                    .lineLimit(1)
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.compact.left")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDarkFaint)
+                Text(L("اختيار"))
+                    .font(SportsFonts.app(size: 11, weight: .bold))
+                    .foregroundStyle(SpTheme.green)
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(SpTheme.green)
             }
-            .padding(13).frame(maxWidth: .infinity)
-            .background(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card))
-            .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(SpTheme.green.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(SpTheme.green.opacity(0.18), lineWidth: 1)
+            )
         }
         .buttonStyle(SpPressStyle())
     }
