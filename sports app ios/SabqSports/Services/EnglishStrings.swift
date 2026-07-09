@@ -66,6 +66,7 @@ nonisolated enum SpEnglishStrings {
         "العالمية": "World",
         "عدسة العرض": "View lens",
         "تعذّر التحميل": "Couldn’t load",
+        "تفاصيل هذه المباراة غير متاحة حاليًا": "Match details aren’t available for this fixture yet",
         "اختر بطولاتك": "Choose your competitions",
         "فعّل البطولات التي تهمّك من أيقونة الضبط أعلى الشاشة ليظهر جدولها الموحّد هنا":
             "Enable the competitions you care about from the settings icon at the top to see their unified schedule here",

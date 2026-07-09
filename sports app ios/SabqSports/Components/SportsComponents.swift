@@ -453,9 +453,11 @@ struct SpScoreRow: View {
 // رفيعة تحت ترويسة البطولة. يدفع مركز المباراة عند النقر.
 struct SpFlatMatchRow: View {
     let fixture: SpFixture
+    /// مباريات TheSports-only في «عالمية» تحمل id سالبًا اصطناعيًا — لا مركز مباراة AF.
+    private var isExternalLiveOnly: Bool { fixture.id < 0 }
+
     var body: some View {
-        // مباريات TheSports-only في «عالمية» تحمل id سالبًا اصطناعيًا — لا مركز مباراة AF.
-        if fixture.id < 0 {
+        if isExternalLiveOnly {
             SpScoreRow(fixture: fixture)
                 .padding(.vertical, 10)
                 .padding(.horizontal, 8)
