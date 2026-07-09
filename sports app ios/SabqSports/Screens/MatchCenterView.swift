@@ -233,6 +233,9 @@ struct SpMatchCenter: View {
                 if let f = fixture { header(f) }
 
                 preMatchCard
+                // حكم المباراة للقادمة يظهر مباشرةً تحت «الوقت المتبقّي» (قرار 2026-07-09).
+                // للمباريات التي انطلقت يبقى ضمن تبويب التشكيلة (أدناه) بلا تكرار.
+                if fixture?.started == false { refereeCard }
 
                 if loading && detail == nil {
                     SpLoading()
@@ -626,7 +629,7 @@ struct SpMatchCenter: View {
                 }
                 starVsStarCard
                 broadcastInfoCard(f)
-                refereeCard
+                // حكم المباراة انتقل أعلى المركز تحت «الوقت المتبقّي» (لم يعد هنا).
             }
         }
     }
@@ -656,10 +659,8 @@ struct SpMatchCenter: View {
                     Text(L("رؤية VARA")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
                 }
-                Text(text)
-                    .font(SportsFonts.app(size: 13.5)).foregroundStyle(SpTheme.onDarkDim)
-                    .lineSpacing(4).fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // 3 أسطر ثم «اقرأ المزيد» — يتوسّع محليًّا بلا مغادرة المركز.
+                SpVisionText(text: text)
             }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -1491,11 +1492,12 @@ struct SpMatchCenter: View {
     }
 
     /// الرسمية إن كان فيها أساسيون؛ وإلا المتوقعة بشارة تحذيرية؛ وإلا ما توفّر.
-    /// حكم المباراة هنا (قرار المالك 2026-07-04: ضمن التشكيلة لا أعلى المركز).
+    /// حكم المباراة ضمن التشكيلة للمباريات المنطلقة (قرار 2026-07-04). أمّا القادمة
+    /// فحكمها يظهر أعلى المركز تحت «الوقت المتبقّي» (قرار 2026-07-09) — فلا نكرّره هنا.
     @ViewBuilder
     private func lineupsSection(_ d: SpMatchDetail) -> some View {
         VStack(spacing: 14) {
-            refereeCard
+            if fixture?.started == true { refereeCard }
             if d.lineups.contains(where: { !$0.startXI.isEmpty }) {
                 lineupsView(d.lineups)
             } else if hasExpectedLineup {
@@ -2187,4 +2189,83 @@ struct SpFlowChart: View {
         }
         .frame(height: 92)
     }
+}
+
+// MARK: - نص رؤية VARA القابل للتوسّع (3 أسطر ثم «اقرأ المزيد»)
+//
+// نقصّ النص على 3 أسطر ونُظهر زر التوسّع فقط حين يتجاوزها فعلًا. كشف التجاوز
+// بلا افتراضات: نقيس ارتفاع النص كاملًا مقابل ارتفاعه مقصوصًا على الحدّ عبر
+// نصّين خفيّين في الخلفية (fixedSize يجعلهما يأخذان ارتفاعهما المثالي رغم قصّ
+// النص الظاهر)، فيصحّ الكشف لأي طول/لغة/عرض شاشة.
+private struct SpVisionText: View {
+    let text: String
+    var collapsedLimit: Int = 3
+
+    @State private var expanded = false
+    @State private var fullHeight: CGFloat = 0
+    @State private var clampHeight: CGFloat = 0
+
+    private var isTruncated: Bool { fullHeight > clampHeight + 1 }
+    // الخطّ وتباعد الأسطر مشتركان بين النص الظاهر ونصّي القياس — أي تعديل هنا
+    // يبقي كشف التجاوز متطابقًا (لا انحراف صامت).
+    private let font = SportsFonts.app(size: 13.5)
+    private let lineSpace: CGFloat = 4
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(text)
+                .font(font).foregroundStyle(SpTheme.onDarkDim)
+                .lineSpacing(lineSpace)
+                .lineLimit(expanded ? nil : collapsedLimit)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(measurer)
+
+            if isTruncated {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+                } label: {
+                    Text(expanded ? L("عرض أقل") : L("اقرأ المزيد"))
+                        .font(SportsFonts.app(size: 12.5, weight: .bold))
+                        .foregroundStyle(SpTheme.gold)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // خلفية خفيّة تقيس ارتفاعين: النص كاملًا، والنص مقصوصًا على الحدّ.
+    private var measurer: some View {
+        ZStack {
+            Text(text)
+                .font(font).lineSpacing(lineSpace)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: SpVisionFullHeightKey.self, value: g.size.height)
+                })
+            Text(text)
+                .font(font).lineSpacing(lineSpace)
+                .lineLimit(collapsedLimit)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: SpVisionClampHeightKey.self, value: g.size.height)
+                })
+        }
+        .hidden()
+        .allowsHitTesting(false)
+        .onPreferenceChange(SpVisionFullHeightKey.self) { fullHeight = $0 }
+        .onPreferenceChange(SpVisionClampHeightKey.self) { clampHeight = $0 }
+    }
+}
+
+private struct SpVisionFullHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
+private struct SpVisionClampHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
