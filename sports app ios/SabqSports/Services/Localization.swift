@@ -76,14 +76,15 @@ nonisolated(unsafe) var spActiveLangCode: String =
 
 /// يعيد النص باللغة النشطة. المصدر عربي (النص المُمرَّر)؛ في الوضع الإنجليزي
 /// يُبحث عنه في `SpEnglishStrings.map` ويسقط للعربية إن لم يوجد.
-func L(_ arabic: String) -> String {
+/// `nonisolated` إلزامي مع `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`.
+nonisolated func L(_ arabic: String) -> String {
     guard spActiveLangCode == "en" else { return arabic }
     return SpEnglishStrings.map[arabic] ?? arabic
 }
 
 /// نسخة تدعم القوالب: `Lf("%d مباراة", count)` — يُترجَم القالب ثم يُطبَّق.
 /// القالب الإنجليزي يجب أن يحمل نفس محدّدات التنسيق بالترتيب نفسه.
-func Lf(_ arabicFormat: String, _ args: CVarArg...) -> String {
+nonisolated func Lf(_ arabicFormat: String, _ args: CVarArg...) -> String {
     let en = spActiveLangCode == "en"
     let template = en ? (SpEnglishStrings.map[arabicFormat] ?? arabicFormat) : arabicFormat
     return String(format: template, locale: Locale(identifier: spActiveLangCode), arguments: args)
@@ -91,5 +92,5 @@ func Lf(_ arabicFormat: String, _ args: CVarArg...) -> String {
 
 extension String {
     /// اختصار للترجمة داخل السلاسل: `"المباريات".loc`.
-    var loc: String { L(self) }
+    nonisolated var loc: String { L(self) }
 }

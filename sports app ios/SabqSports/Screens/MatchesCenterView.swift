@@ -689,7 +689,7 @@ struct MatchesCenterView: View {
                         .lineLimit(1)
                 }
                 Text(SpFormat.dayMonthLabel(day.date))
-                    .font(SportsFonts.app(size: 12, weight: .heavy))
+                    .font(SportsFonts.app(size: 12, weight: .semibold))
                     .foregroundStyle(active ? accent : SpTheme.onDark)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
@@ -701,7 +701,7 @@ struct MatchesCenterView: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(active ? accent : SpTheme.outline, lineWidth: active ? 1.5 : 1)
+                    .stroke(active ? accent.opacity(0.55) : SpTheme.outline, lineWidth: 1)
             )
             .contentShape(Rectangle())
         }
@@ -1327,33 +1327,17 @@ private struct SpCenterMatchRow: View {
     }
 
     private var rowLabel: some View {
-        VStack(spacing: 4) {
-            HStack(spacing: 6) {
-                Color.clear.frame(width: 24, height: 24) // فراغ محجوز لنجمة المتابعة
-                SpScoreRow(fixture: fixture)
-            }
-            compBadge
+        HStack(spacing: 6) {
+            Color.clear.frame(width: 24, height: 24) // فراغ محجوز لنجمة المتابعة
+            SpScoreRow(
+                fixture: fixture,
+                caption: (showCompetition ? fixture.competition : nil)
+            )
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 8)
         .background(rowBackground)
         .contentShape(Rectangle())
-    }
-
-    // اسم البطولة على نفس هندسة صفّ النتيجة (فراغ النجمة 24pt + توسيط) —
-    // فيتمركز تحت عمود الوقت/الموعد تمامًا لا تحت منتصف الصف الكامل.
-    @ViewBuilder private var compBadge: some View {
-        if showCompetition, let comp = fixture.competition, !comp.isEmpty {
-            HStack(spacing: 6) {
-                Color.clear.frame(width: 24, height: 0)
-                // اسم البطولة رمادي هادئ — يتكرّر أسفل كل صف، فاللون المحوري هنا ضوضاء.
-                Text(comp)
-                    .font(SportsFonts.app(size: 9.5, weight: .bold))
-                    .foregroundStyle(SpTheme.onDarkDim)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-            }
-        }
     }
 
     private var followButton: some View {

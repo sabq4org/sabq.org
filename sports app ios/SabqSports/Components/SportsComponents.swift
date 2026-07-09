@@ -327,6 +327,8 @@ struct SpLoading: View {
 // والمواضع (RTL: المضيف يمينًا، الضيف يسارًا).
 struct SpScoreRow: View {
     let fixture: SpFixture
+    /// سطر اختياري تحت الوقت/النتيجة (مثل اسم البطولة في الوضع المختلط).
+    var caption: String? = nil
     private let logoSize: CGFloat = 34
     private let centerWidth: CGFloat = 50
 
@@ -362,7 +364,7 @@ struct SpScoreRow: View {
     }
 
     private var centerColumn: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 1) {
             if started {
                 Text("\(fixture.goals.away ?? 0)-\(fixture.goals.home ?? 0)")
                     .font(SportsFonts.app(size: 15, weight: .heavy))
@@ -375,8 +377,15 @@ struct SpScoreRow: View {
                     .environment(\.layoutDirection, .leftToRight)
             }
             statusSub
+            if let caption, !caption.isEmpty {
+                Text(caption)
+                    .font(SportsFonts.app(size: 9, weight: .semibold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
         }
-        .frame(width: centerWidth)
+        .frame(minWidth: centerWidth)
     }
 
     @ViewBuilder private var statusSub: some View {
