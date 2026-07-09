@@ -20,6 +20,11 @@ nonisolated struct SpStatus: Codable, Hashable {
     let extra: Int?
     let live: Bool
     let finished: Bool
+    /// مرساة الساعة الذاتية من الخادم (Unix ثوانٍ) — «الآن − الزمن المنقضي»
+    /// مثبّتة عبر matchClock الموحّد، نفس قيمة دفعات Live Activity حرفيًّا.
+    /// منها يشتق `SpMatchClock` العدّاد فيتطابق التطبيق مع شاشة القفل.
+    /// nil = الساعة متوقّفة أو استجابة لا تحقنها (تسقط للعرض الثابت).
+    var clockStartEpoch: Double? = nil
 }
 
 nonisolated struct SpScore: Codable, Hashable {
@@ -39,7 +44,7 @@ nonisolated struct SpFixture: Codable, Identifiable, Hashable {
     let id: Int
     let date: String
     let timestamp: Int
-    let status: SpStatus
+    var status: SpStatus
     let round: String
     let venue: SpVenue
     let home: SpTeam

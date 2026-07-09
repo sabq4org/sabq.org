@@ -204,6 +204,72 @@ struct SpTeamLogo: View {
     }
 }
 
+// MARK: - الساعة الموحّدة للمباراة (عدّاد الدقيقة المطابق لشاشة القفل)
+
+/// عدّاد الدقيقة الموحّد: يشتق الدقيقة من مرساة الخادم `clockStartEpoch` — نفس
+/// المرساة (matchClock) التي تدفعها Live Activity عبر APNs — فيتطابق الرقم داخل
+/// التطبيق (بطاقة «مبارياتي»، القوائم، مركز المباراة) مع شاشة القفل إلى الثانية.
+/// بلا مرساة (ساعة متوقّفة/خادم لم يحقنها) يسقط على دقيقة المزوّد الثابتة كما كانت.
+enum SpMatchClock {
+    /// أقصى دقيقة منطقية (120 + بدل ضائع) — صمّام أمان ضد مرساة فاسدة/مزوّد عالق.
+    static let sanityCapMinutes = 130
+
+    /// نص الحالات الموقوفة (استراحة/ترجيح/…) — nil إن كانت الساعة تعمل.
+    static func pausedLabel(_ status: SpStatus) -> String? {
+        switch status.code.uppercased() {
+        case "HT", "HALF_TIME": return L("استراحة")
+        case "BT", "BREAK": return L("استراحة إضافي")
+        case "P", "PEN": return L("ركلات")
+        case "SUSP": return L("موقوفة")
+        case "INT": return L("متوقّفة")
+        default: return nil
+        }
+    }
+
+    /// دقيقة المزوّد الثابتة («63'» أو «45+2'») — المرجع بلا مرساة وفي بدل الضائع.
+    static func providerMinute(_ status: SpStatus) -> String {
+        guard let e = status.elapsed else { return status.label }
+        if let extra = status.extra, extra > 0 { return "\(e)+\(extra)'" }
+        return "\(e)'"
+    }
+
+    /// هل العدّاد الذاتي هو المعروض الآن؟ (جارية + مرساة + خارج بدل الضائع)
+    static func isSelfTicking(_ status: SpStatus) -> Bool {
+        status.live && !status.finished
+            && (status.clockStartEpoch ?? 0) > 0
+            && (status.extra ?? 0) == 0
+            && pausedLabel(status) == nil
+    }
+
+    /// الدقيقة للعرض لحظة `date`: من المرساة إن كانت الساعة جارية، وإلا نص
+    /// المزوّد. بدل الضائع يُعرض دائمًا بنص المزوّد («45+2'») لأن صيغته خاصة.
+    static func minuteText(_ status: SpStatus, at date: Date) -> String {
+        if let paused = pausedLabel(status) { return paused }
+        let provider = providerMinute(status)
+        guard isSelfTicking(status), let epoch = status.clockStartEpoch else { return provider }
+        let elapsed = date.timeIntervalSince1970 - epoch
+        guard elapsed >= 0 else { return provider }
+        let m = max(1, Int(elapsed / 60.0) + 1)
+        guard m <= sanityCapMinutes else { return provider }
+        return "\(m)'"
+    }
+}
+
+/// نصّ دقيقة حيّ يتحرك بالثانية من المرساة الموحّدة — يرث خط/لون السياق.
+struct SpLiveMinuteText: View {
+    let status: SpStatus
+
+    var body: some View {
+        if SpMatchClock.isSelfTicking(status) {
+            TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
+                Text(SpMatchClock.minuteText(status, at: timeline.date))
+            }
+        } else {
+            Text(SpMatchClock.minuteText(status, at: Date()))
+        }
+    }
+}
+
 // MARK: - شارة حالة المباراة (مباشر/منتهية/موعد)
 
 struct SpStatusPill: View {
@@ -213,7 +279,7 @@ struct SpStatusPill: View {
         if fixture.status.live {
             HStack(spacing: 4) {
                 Circle().fill(.white).frame(width: 5, height: 5)
-                Text(elapsedText)
+                SpLiveMinuteText(status: fixture.status)
             }
             .font(SportsFonts.app(size: 11, weight: .bold))
             .foregroundStyle(.white)
@@ -234,20 +300,6 @@ struct SpStatusPill: View {
         }
     }
 
-    private var elapsedText: String {
-        // أوقات بلا عدّاد دقائق: الاستراحة/ركلات الترجيح → ليبل قصير بدل الدقيقة.
-        switch fixture.status.code {
-        case "HT": return L("استراحة")
-        case "BT": return L("استراحة إضافي")
-        case "P", "PEN": return L("ركلات")
-        case "SUSP": return L("موقوفة")
-        case "INT": return L("متوقّفة")
-        default: break
-        }
-        guard let e = fixture.status.elapsed else { return fixture.status.label }
-        if let extra = fixture.status.extra, extra > 0 { return "\(e)+\(extra)'" }
-        return "\(e)'"
-    }
 }
 
 // MARK: - رأس قسم موحّد
@@ -395,7 +447,7 @@ struct SpScoreRow: View {
                 if fixture.shootoutLive, let p = fixture.penaltyScore {
                     penaltyDigits(p)
                 } else {
-                    Text(liveMinute)
+                    SpLiveMinuteText(status: fixture.status)
                 }
             }
             .font(SportsFonts.app(size: 10.5, weight: .bold))
@@ -419,20 +471,6 @@ struct SpScoreRow: View {
                 .foregroundStyle(SpTheme.onDarkFaint)
                 .lineLimit(1).minimumScaleFactor(0.6)
         }
-    }
-
-    private var liveMinute: String {
-        switch fixture.status.code {
-        case "HT": return L("استراحة")
-        case "BT": return L("استراحة إضافي")
-        case "P", "PEN": return L("ركلات")
-        case "SUSP": return L("موقوفة")
-        case "INT": return L("متوقّفة")
-        default: break
-        }
-        guard let e = fixture.status.elapsed else { return fixture.status.label }
-        if let extra = fixture.status.extra, extra > 0 { return "\(e)+\(extra)'" }
-        return "\(e)'"
     }
 
     /// أرقام الترجيح محاذيةً لعمودَي الفريقين (ضيف-مضيف كسطر النتيجة) في Text

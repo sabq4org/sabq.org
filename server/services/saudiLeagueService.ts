@@ -276,6 +276,12 @@ export interface SplFixture {
     extra: number | null;
     live: boolean;
     finished: boolean;
+    /**
+     * مرساة الساعة الذاتية (Unix ثوانٍ): «الآن − الزمن المنقضي» مثبّتة عبر
+     * matchClock — منها يشتق التطبيق/الويدجت عدّادًا متطابقًا. تُحقن في مسارات
+     * REST والموجز فقط (null/غائبة = الساعة متوقّفة أو المسار لا يحقنها).
+     */
+    clockStartEpoch?: number | null;
   };
   round: string;
   venue: { name: string; city: string };
@@ -719,7 +725,7 @@ async function mapTsBoardToWorldLive(items: TsLiveBoardItem[]): Promise<SplWorld
         code: m.statusCode,
         label: m.statusLabel,
         elapsed: m.elapsed,
-        extra: null,
+        extra: m.extra,
         live: m.live,
         finished: m.finished,
       },
@@ -754,7 +760,7 @@ async function mapTsBoardToWorldLive(items: TsLiveBoardItem[]): Promise<SplWorld
 }
 
 export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
-  return withSWR(`spl:world-live`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
+  const base = await withSWR(`spl:world-live`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
     const [rows, ongoing] = await Promise.all([
       apiGet("fixtures", { live: "all", timezone: TIMEZONE }),
       getOngoingLeagueIds().catch(() => new Set<number>()),
@@ -818,6 +824,11 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
         return a.timestamp - b.timestamp;
       });
   });
+  // الطبقة اللحظية (TheSports) على البطولات المُدرَجة — **خارج** withSWR عمدًا:
+  // تُطبَّق عند كل نداء فتبقى النتيجة بطزاجة TheSports (~2ث) لا بطزاجة نافذة
+  // اللوحة (8ث). هذا ما يجعل موجز SSE و/world-live بسرعة مركز المباراة نفسها —
+  // كان الموجز يبثّ نتيجة API-Football الخام فيتأخر الهدف عشرات الثواني.
+  return overlayLiveBoardList(base);
 }
 
 const TEAM_RECENT_TTL = 10 * 60 * 1000; // نتائج الفريق الأخيرة تتغيّر بعد كل مباراة فقط

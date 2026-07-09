@@ -449,7 +449,8 @@ struct HomeView: View {
         if f.status.live {
             HStack(spacing: 6) {
                 Circle().fill(.white).frame(width: 6, height: 6)
-                Text("\(L("مباشر")) \(liveMinute(f))")
+                Text(L("مباشر"))
+                SpLiveMinuteText(status: f.status)
                     .environment(\.layoutDirection, .leftToRight)
             }
             .font(SportsFonts.app(size: 11, weight: .bold))
@@ -508,11 +509,6 @@ struct HomeView: View {
         return "\(h) · \(a)"
     }
 
-    private func liveMinute(_ f: SpFixture) -> String {
-        guard let e = f.status.elapsed else { return f.status.label }
-        if let extra = f.status.extra, extra > 0 { return "\(e)+\(extra)'" }
-        return "\(e)'"
-    }
 
     // MARK: - لوحة دوري روشن (تدفّق واحد غنيّ بالأرقام — هادئ، أبيض + أخضر)
 

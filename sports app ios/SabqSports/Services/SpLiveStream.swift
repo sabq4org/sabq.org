@@ -82,9 +82,11 @@ final class SpLiveStream {
         if sportsChanged { sportsVersion &+= 1 }
         if wcChanged { wcVersion &+= 1 }
 
-        // نبّه «مبارياتي»/النشاط الحيّ فورًا (جلب مُوجّه بدل انتظار دورته الدورية).
-        // يشمل ختم المونديال (w:) — كانت تُحدَّث sportsVersion فقط فتتأخّر مباريات كأس العالم.
         if sportsChanged || wcChanged {
+            // تطبيق فوري: الموجز يحمل النتيجة/الدقيقة/المرساة بطزاجة TheSports —
+            // نحقنها في «مبارياتي» (البطاقة + الويدجت + النشاط الحيّ) بلا انتظار
+            // رحلة شبكة، ثم جلب /lite يصحّح التفاصيل (الليبل/الترجيح) بعدها بلحظة.
+            SpMatchFollows.shared.applyDigest(digest.items)
             Task { await SpMatchFollows.shared.refresh() }
         }
     }
@@ -105,6 +107,8 @@ nonisolated struct SpLiveDigestItem: Decodable, Hashable {
     let ex: Int?
     let liv: Bool
     let fin: Bool
+    /// مرساة الساعة الموحّدة (matchClock) — نفس قيمة دفعات Live Activity.
+    let cs: Double?
 }
 
 nonisolated struct SpLiveDigest: Decodable {

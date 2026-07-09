@@ -4,10 +4,13 @@
  * بدل استطلاع العميل كل 10 ثوانٍ، يفتح اتصال `GET /api/sports/live-stream` واحدًا
  * ويستقبل «موجزًا» مضغوطًا لكل المباريات الجارية (رياضة + مونديال) فور تغيّره.
  * الخادم يبني الموجز مرة كل ثانيتين (نفس إيقاع liveActivityWorker، ومصادره مكاشة
- * SWR بـ1.5ث فلا ضغط إضافيًا على المزوّد) ويبثّه لكل المتصلين فقط عند الاختلاف.
+ * SWR فلا ضغط إضافيًا على المزوّد) ويبثّه لكل المتصلين فقط عند الاختلاف.
  *
- * العميل يستعمل الموجز إشارةً (نتيجة/حالة/دقيقة) ثم يجلب التفاصيل الكاملة فورًا —
- * زمن الوصول الكلي ≈ ثانيتين (سقف طزاجة المزوّد نفسه).
+ * النتيجة داخل الموجز بطزاجة TheSports (~2ث): getWorldLiveFixtures تُطبّق الطبقة
+ * اللحظية على البطولات المُدرَجة، وعناصر المونديال تُركَّب عليها SportMonks هنا —
+ * فالعميل يطبّق `gh/ga/el/cs` مباشرةً على بطاقاته ثم يجلب التفاصيل للإثراء فقط.
+ * `cs` = مرساة الساعة الموحّدة (matchClock) — نفس القيمة التي تدفعها Live Activity
+ * عبر APNs، فيتطابق العدّاد داخل التطبيق مع شاشة القفل حرفيًّا.
  *
  * لا يستورد db (ADR-001). نمط الترويسات مطابق لسابقة editorPresence.ts.
  */
@@ -18,6 +21,7 @@ import {
 } from "../services/saudiLeagueService";
 import { getLiveFixtures, isWorldCupConfigured, type WcFixture } from "../services/worldCupService";
 import { getLiveScore, isSportmonksConfigured } from "../services/sportmonksService";
+import { clockStartEpochFor } from "../services/matchClock";
 
 /** عنصر موجز مضغوط — مفاتيح قصيرة لتقليل حجم كل دفعة. */
 interface LiveDigestItem {
@@ -29,6 +33,8 @@ interface LiveDigestItem {
   ex: number | null;
   liv: boolean;
   fin: boolean;
+  /** مرساة الساعة الموحّدة (Unix ثوانٍ) — null والساعة متوقّفة. */
+  cs: number | null;
 }
 
 const TICK_MS = 2_000;
@@ -78,6 +84,7 @@ async function buildDigest(): Promise<LiveDigestItem[]> {
           ex: f.status?.extra ?? null,
           liv: Boolean(f.status?.live),
           fin: Boolean(f.status?.finished),
+          cs: f.status ? clockStartEpochFor(f.id, f.status) : null,
         });
       }
     } catch {
@@ -99,6 +106,7 @@ async function buildDigest(): Promise<LiveDigestItem[]> {
           ex: f.status?.extra ?? null,
           liv: Boolean(f.status?.live),
           fin: Boolean(f.status?.finished),
+          cs: f.status ? clockStartEpochFor(f.id, f.status) : null,
         });
       }
     } catch {

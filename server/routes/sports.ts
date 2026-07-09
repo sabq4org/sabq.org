@@ -64,6 +64,7 @@ import {
   type SaudiCompetition,
   type SplFixture,
 } from "../services/saudiLeagueService";
+import { clockStartEpochFor } from "../services/matchClock";
 import { getTeamOgImage } from "../services/sportsOgImage";
 import {
   getXg,
@@ -122,6 +123,29 @@ function parseSeason(req: Request): number | undefined {
   if (!/^\d{4}$/.test(raw)) return undefined;
   const n = Number(raw);
   return n >= 2000 && n <= 2100 ? n : undefined;
+}
+
+/**
+ * يحقن مرساة الساعة الموحّدة (matchClock) في حالة المباراة — منها يشتق التطبيق
+ * عدّادًا ذاتيًّا مطابقًا لما تدفعه Live Activity عبر APNs (نفس الوحدة والتثبيت).
+ */
+function withClockAnchor<T extends SplFixture>(f: T): T {
+  return { ...f, status: { ...f.status, clockStartEpoch: clockStartEpochFor(f.id, f.status) } };
+}
+
+/**
+ * «ساخنة» = تستحق كاش الحافة القصير (5ث): جارية فعلًا، أو حان انطلاقها ولم يقلبها
+ * المزوّد بعد، أو على وشك الانطلاق (≤10 دقائق). قبل هذا كانت استجابة ما قبل
+ * الانطلاق تُخزَّن على الحافة بـ s-maxage طويل فيرى الجمهور «لم تبدأ» دقائق
+ * بعد صافرة البداية.
+ */
+const KICKOFF_HOT_BEFORE_SEC = 10 * 60;
+const KICKOFF_HOT_AFTER_SEC = 3 * 3600;
+function isHotFixture(f: Pick<SplFixture, "timestamp" | "status">): boolean {
+  if (f.status.live) return true;
+  if (f.status.finished) return false;
+  const now = Math.floor(Date.now() / 1000);
+  return now >= f.timestamp - KICKOFF_HOT_BEFORE_SEC && now <= f.timestamp + KICKOFF_HOT_AFTER_SEC;
 }
 
 /** يقسّم جدول البطولة إلى مباشر/اليوم/قادمة/نتائج جاهزة للعرض. */
@@ -266,12 +290,12 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const live = await overlayLiveBoardList(await getGlobalLiveFixtures());
+      const live = (await overlayLiveBoardList(await getGlobalLiveFixtures())).map(withClockAnchor);
       // نقطة مباشرة بحتة: لا نُبقيها في كاش المتصفح (يبتلع الـpolling) أثناء وجود
-      // مباريات جارية؛ خلاف ذلك كاش قصير يكفي.
+      // مباريات جارية أو على وشك الانطلاق؛ خلاف ذلك كاش قصير يكفي.
       res.set(
         "Cache-Control",
-        live.some((f) => f.status.live)
+        live.some(isHotFixture)
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
       );
@@ -292,12 +316,12 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     try {
-      const matches = await getWorldLiveFixtures();
+      const matches = (await getWorldLiveFixtures()).map(withClockAnchor);
       // أثناء وجود مباريات جارية: كاش حافة قصير جدًّا (5ث) فلا يبتلع CDN استطلاع
       // العميل (8ث) — مطابق لـ/api/sports/live. خلاف ذلك كاش أطول يكفي.
       res.set(
         "Cache-Control",
-        matches.some((f) => f.status.live)
+        matches.some(isHotFixture)
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
       );
@@ -320,10 +344,10 @@ export function registerSportsRoutes(app: Express) {
     const dateRaw = typeof req.query.date === "string" ? req.query.date.trim() : "";
     const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : undefined;
     try {
-      const today = await overlayLiveBoardList(await getGlobalTodayFixtures(date));
+      const today = (await overlayLiveBoardList(await getGlobalTodayFixtures(date))).map(withClockAnchor);
       res.set(
         "Cache-Control",
-        today.some((f) => f.status.live)
+        today.some(isHotFixture)
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
       );
@@ -364,10 +388,10 @@ export function registerSportsRoutes(app: Express) {
     const to = dayKey(req.query.to) ?? riyadhDay(45);
     if (from > to) return res.status(400).json({ message: "نطاق تواريخ غير صالح" });
     try {
-      const fixtures = await overlayLiveBoardList(await getUnifiedFixtures(comps, from, to));
+      const fixtures = (await overlayLiveBoardList(await getUnifiedFixtures(comps, from, to))).map(withClockAnchor);
       res.set(
         "Cache-Control",
-        fixtures.some((f) => f.status.live)
+        fixtures.some(isHotFixture)
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
       );
@@ -402,10 +426,10 @@ export function registerSportsRoutes(app: Express) {
       const liveIds = new Set(liveNow.map((f) => f.id));
       const mergedLive = [...liveNow, ...buckets.live.filter((f) => !liveIds.has(f.id))];
       // الطبقة اللحظية: نتيجة TheSports الفائقة على المباريات الجارية (إن أُدرجت البطولة).
-      const live = await overlayLiveFixturesForComp(mergedLive, comp.slug);
+      const live = (await overlayLiveFixturesForComp(mergedLive, comp.slug)).map(withClockAnchor);
       res.set(
         "Cache-Control",
-        live.some((f) => f.status.live)
+        live.some(isHotFixture) || buckets.today.some(isHotFixture)
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
       );
@@ -575,9 +599,12 @@ export function registerSportsRoutes(app: Express) {
         res.status(404).json({ message: "المباراة غير موجودة" });
         return;
       }
-      const ttl = detail.fixture.status.live ? "max-age=10, s-maxage=15" : "max-age=120, s-maxage=300";
+      const fixture = withClockAnchor(detail.fixture);
+      // «ساخنة» تشمل نافذة الانطلاق (±) — استجابة ما قبل البدء كانت تُخزَّن على
+      // الحافة 300ث فيرى الجمهور «لم تبدأ» دقائق بعد الصافرة.
+      const ttl = isHotFixture(fixture) ? "max-age=10, s-maxage=15" : "max-age=120, s-maxage=300";
       res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
-      res.json(detail);
+      res.json({ ...detail, fixture });
     } catch (error) {
       console.error("[Sports] match detail failed:", error);
       res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });
@@ -597,12 +624,13 @@ export function registerSportsRoutes(app: Express) {
     }
     try {
       // مباراة عالمية (id سالب) → لقطة من لوحة TheSports؛ غيرها → API-Football.
-      const fixture = id < 0 ? await getWorldLiveMatchLite(id) : await getMatchLite(id);
-      if (!fixture) {
+      const raw = id < 0 ? await getWorldLiveMatchLite(id) : await getMatchLite(id);
+      if (!raw) {
         res.status(404).json({ message: "المباراة غير موجودة" });
         return;
       }
-      const ttl = fixture.status.live ? "max-age=10, s-maxage=15" : "max-age=60, s-maxage=120";
+      const fixture = withClockAnchor(raw);
+      const ttl = isHotFixture(fixture) ? "max-age=10, s-maxage=15" : "max-age=60, s-maxage=120";
       res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=60`);
       res.json({ fixture });
     } catch (error) {

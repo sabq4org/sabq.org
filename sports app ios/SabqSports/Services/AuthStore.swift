@@ -641,7 +641,17 @@ final class SpMatchFollows {
 
     /// تحديث لقطة مباراة متابَعة بأحدث حالة/نتيجة (يُبقي المتابعة كما هي).
     func update(_ fixture: SpFixture) {
+        var fixture = fixture
         guard let idx = items.firstIndex(where: { $0.id == fixture.id }) else { return }
+        // ترحيل المرساة: بعض المسارات لا تحقنها (كأس العالم عبر REST) — نحافظ على
+        // مرساة الموجز القائمة ما دامت المباراة جارية بنفس الحالة، وإلا يتقلّب
+        // العدّاد بين ذاتيّ وثابت مع كل جلب ويعيد النشاط الحيّ إرساءه محليًّا.
+        if fixture.status.clockStartEpoch == nil,
+           let anchor = items[idx].status.clockStartEpoch,
+           fixture.status.live, !fixture.status.finished,
+           fixture.status.code == items[idx].status.code {
+            fixture.status.clockStartEpoch = anchor
+        }
         let now = Date()
         noteFinishedIfNeeded(fixture, now: now)
         if shouldHideFinished(fixture, now: now) {
@@ -664,6 +674,45 @@ final class SpMatchFollows {
     func updateFromFixtures(_ fixtures: [SpFixture]) {
         for fixture in fixtures where isFollowing(fixture.id) {
             update(fixture)
+        }
+    }
+
+    /// مفتاح المباراة في موجز البث الحيّ: المونديال «w:» وسواه «s:».
+    private func digestKey(_ f: SpFixture) -> String {
+        f.competitionSlug == "world-cup" ? "w:\(f.id)" : "s:\(f.id)"
+    }
+
+    /// تطبيق موجز SSE مباشرةً على المتابعات: النتيجة/الدقيقة/المرساة تصل بطزاجة
+    /// TheSports بلا رحلة شبكة إضافية — فتتحدّث البطاقة والويدجت والنشاط الحيّ
+    /// فورًا، ويأتي جلب /lite بعدها لتصحيح ما لا يحمله الموجز (الليبل/الترجيح).
+    func applyDigest(_ items: [SpLiveDigestItem]) {
+        guard !items.isEmpty, !self.items.isEmpty else { return }
+        let byKey = Dictionary(items.map { ($0.k, $0) }, uniquingKeysWith: { a, _ in a })
+        for f in self.items {
+            guard let d = byKey[digestKey(f)] else { continue }
+            let changed = d.gh != (f.goals.home ?? -1) || d.ga != (f.goals.away ?? -1)
+                || d.el != f.status.elapsed || d.ex != f.status.extra
+                || d.liv != f.status.live || d.fin != f.status.finished
+                || (!d.st.isEmpty && d.st != f.status.code)
+                || d.cs != f.status.clockStartEpoch
+            guard changed else { continue }
+            // الليبل يبقى من آخر لقطة كاملة (الموجز لا يحمله) — يصحّحه /lite بعد لحظة،
+            // وعرض الدقيقة لا يتأثر لأنه يُشتق من الكود/المرساة لا من الليبل.
+            let status = SpStatus(
+                code: d.st.isEmpty ? f.status.code : d.st,
+                label: f.status.label,
+                elapsed: d.el,
+                extra: d.ex,
+                live: d.liv,
+                finished: d.fin,
+                clockStartEpoch: d.cs
+            )
+            update(SpFixture(
+                id: f.id, date: f.date, timestamp: f.timestamp, status: status,
+                round: f.round, venue: f.venue, home: f.home, away: f.away,
+                goals: SpScore(home: d.gh, away: d.ga), penalties: f.penalties,
+                competition: f.competition, competitionSlug: f.competitionSlug
+            ))
         }
     }
 
