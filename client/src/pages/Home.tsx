@@ -24,8 +24,8 @@ import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { AdSlot } from "@/components/AdSlot";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 
-// إخفاء/إظهار الإعلان البارز أعلى الصفحة الرئيسية (تحت الهيدر). مخفي مؤقتاً 2026-06-17 — بدّل إلى true للإرجاع.
-const SHOW_TOP_ADS = false;
+// الإعلان البارز أعلى الصفحة الرئيسية (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
+const SHOW_TOP_ADS = true;
 
 // === LAZY LOADED - Below the fold content (retryImport + deploy recovery) ===
 const AIInsightsBlock = lazyNamed(() => import("@/components/AIInsightsBlock"), "AIInsightsBlock");
@@ -501,8 +501,7 @@ export default function Home() {
             </Suspense>
           </ErrorBoundary>
 
-          {/* ⛔️ الإعلان البارز أسفل الهيدر مخفي مؤقتاً بطلب المالك (2026-06-17، احتفاءً بالمونديال).
-              لإرجاعه: بدّل SHOW_TOP_ADS إلى true. */}
+          {/* الإعلان البارز أسفل الهيدر — أُعيد إظهاره 2026-07-09 بطلب المالك. للإخفاء: بدّل SHOW_TOP_ADS إلى false. */}
           {SHOW_TOP_ADS && (
             <>
               {/* DMS Ads - Leaderboard for desktop, MPU for mobile - تحت الكاروسيل */}

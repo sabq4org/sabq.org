@@ -14,7 +14,7 @@ import StoryTimeline from "@/components/StoryTimeline";
 import FollowStoryButton from "@/components/FollowStoryButton";
 import { AdSlot } from "@/components/AdSlot";
 import { NativeAdsSection } from "@/components/NativeAdsSection";
-import { DmsLeaderboardAd, useAdTracking } from "@/components/DmsAdSlot";
+import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 import { SocialShareBar } from "@/components/SocialShareBar";
 import { DigitalPassportButton } from "@/components/passport/DigitalPassportButton";
 import { FocusReader, FocusReaderTrigger } from "@/components/FocusReader";
@@ -74,8 +74,8 @@ import { transformArticleHtml } from "@/lib/legacyHtmlTransformer";
 import { useHeroPreload } from "@/hooks/useHeroPreload";
 import { useNaturalAspectRatio } from "@/hooks/useNaturalAspectRatio";
 
-// إخفاء/إظهار الإعلان البارز أعلى صفحة المقال (تحت الهيدر). مخفي مؤقتاً 2026-06-17 — بدّل إلى true للإرجاع.
-const SHOW_TOP_AD = false;
+// الإعلان البارز أعلى صفحة المقال (تحت الهيدر). أُعيد إظهاره 2026-07-09 (بعد إخفاء المونديال). للإخفاء: بدّل إلى false.
+const SHOW_TOP_AD = true;
 
 const AiArticleStats = lazy(() =>
   import("@/components/AiArticleStats").then(module => ({ default: module.AiArticleStats }))
@@ -1173,8 +1173,7 @@ export default function ArticleDetail() {
     <div className="min-h-screen bg-background/95 relative z-10" dir="rtl">
       <Header user={user} />
 
-      {/* ⛔️ الإعلان البارز أعلى المقال مخفي مؤقتاً بطلب المالك (2026-06-17، احتفاءً بالمونديال).
-          لإرجاعه: بدّل SHOW_TOP_AD إلى true. */}
+      {/* الإعلان البارز أعلى المقال — أُعيد إظهاره 2026-07-09 بطلب المالك. للإخفاء: بدّل SHOW_TOP_AD إلى false. */}
       {SHOW_TOP_AD && (
         /* DMS Leaderboard Ad - Desktop only */
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4 max-w-7xl">
@@ -1464,13 +1463,8 @@ export default function ArticleDetail() {
               </Collapsible>
             )}
 
-            {/*
-              DMS MPU Ad (mobile, under الموجز) DISABLED 2026-06-05 per user
-              request — clears the ad that sat right below the AI summary box
-              on the MOBILE web article view. Only this mobile slot is removed;
-              DMS tracking + the desktop Leaderboard stay intact. Re-add
-              <DmsMpuAd id="MPU" lazyLoad={true} /> (and its import) to restore.
-            */}
+            {/* DMS MPU Ad (mobile, under الموجز) — أُعيد إظهاره 2026-07-09 (أُخفي 2026-06-05 بطلب المستخدم). جوال فقط. */}
+            <DmsMpuAd id="MPU" lazyLoad={true} />
 
             {/* Smart AI Insights - secondary trigger (visible only for authenticated users) */}
             {article.status === "published" && user && (
