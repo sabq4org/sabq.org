@@ -14,6 +14,7 @@ import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { OptimizedImage } from "./OptimizedImage";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { apiUrl } from "@/lib/queryClient";
 
 interface TrendingArticle {
   id: string;
@@ -145,7 +146,7 @@ export function TrendingWeekSection() {
   const { data, isLoading } = useQuery<TrendingResponse>({
     queryKey: ['/api/recommendations/trending', { limit: 5 }],
     queryFn: async () => {
-      const res = await fetch('/api/recommendations/trending?limit=5', {
+      const res = await fetch(apiUrl('/api/recommendations/trending?limit=5'), {
         credentials: 'include',
       });
       if (!res.ok) {
