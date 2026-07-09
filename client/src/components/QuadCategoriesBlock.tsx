@@ -109,7 +109,7 @@ function FeaturedCard({ data }: { data: CategoryColumnData["featured"] }) {
         </h3>
 
         {/* Meta */}
-        <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-3 mt-1.5 text-xs font-medium text-foreground/65">
           <div className="flex items-center gap-1" data-testid="featured-time">
             <Clock className="w-3 h-3" />
             <span>{data.meta.age}</span>
@@ -133,7 +133,7 @@ function TitleList({ items }: { items: CategoryColumnData["list"] }) {
             <h4 className="text-sm font-medium line-clamp-2 mb-1 group-hover:text-primary transition-colors">
               {item.title}
             </h4>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="flex items-center gap-3 text-xs font-medium text-foreground/65">
               <span>{item.meta.age}</span>
             </div>
           </div>
@@ -161,7 +161,7 @@ function ColumnHeader({ category, stats, teaser }: Pick<CategoryColumnData, 'cat
         </Badge>
       </div>
       {teaser && (
-        <p className="text-xs text-muted-foreground" data-testid="category-teaser">
+        <p className="text-xs font-medium text-foreground/65" data-testid="category-teaser">
           {teaser}
         </p>
       )}
@@ -255,7 +255,7 @@ function MobileCompactList({ items }: { items: CategoryColumnData[] }) {
                   <h4 className="text-sm font-semibold line-clamp-2 mb-1 group-hover:text-primary transition-colors">
                     {item.featured.title}
                   </h4>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                  <div className="flex items-center gap-2 text-[10px] font-medium text-foreground/65">
                     <span className="flex items-center gap-0.5">
                       <Clock className="w-2.5 h-2.5" />
                       {item.featured.meta.age}
@@ -273,7 +273,7 @@ function MobileCompactList({ items }: { items: CategoryColumnData[] }) {
                     className="group flex items-start gap-1.5 py-1"
                     data-testid={`mobile-list-item-${idx}`}
                   >
-                    <span className="text-[10px] text-muted-foreground mt-0.5 flex-shrink-0">•</span>
+                    <span className="text-[10px] font-medium text-foreground/65 mt-0.5 flex-shrink-0">•</span>
                     <h5 className="text-xs font-medium line-clamp-1 flex-1 group-hover:text-primary transition-colors">
                       {article.title}
                     </h5>

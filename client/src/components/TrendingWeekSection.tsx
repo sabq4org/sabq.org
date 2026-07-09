@@ -128,7 +128,7 @@ function TrendingCard({ article, index }: { article: TrendingArticle; index: num
 
             <div className="flex flex-wrap items-center gap-1.5">
               {timeAgo && (
-                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1 text-[11px] font-medium text-foreground/65">
                   <Clock className="h-2.5 w-2.5" />
                   {timeAgo}
                 </span>
@@ -178,7 +178,7 @@ export function TrendingWeekSection() {
               <h2 className="text-2xl font-bold" data-testid="heading-trending-week">
                 ترند الأسبوع
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm font-medium text-foreground/70">
                 أكثر المقالات مشاهدة هذا الأسبوع
               </p>
             </div>
@@ -283,7 +283,7 @@ export function TrendingWeekSection() {
 
                               {/* Meta */}
                               {timeAgo && (
-                                <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                                <div className="flex items-center gap-1 text-[11px] font-medium text-foreground/65">
                                   <Clock className="h-3 w-3" />
                                   <span>{timeAgo}</span>
                                 </div>

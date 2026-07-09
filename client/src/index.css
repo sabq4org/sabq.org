@@ -74,13 +74,13 @@ input, select, textarea {
 
   --foreground: 210 25% 7.8431%;
 
-  --border: 201.4286 30.4348% 90.9804%;
+  --border: 201.4286 22% 84%;
 
   --card: 180 6.6667% 97.0588%;
 
   --card-foreground: 210 25% 7.8431%;
 
-  --card-border: 220 24% 88%;
+  --card-border: 220 18% 82%;
 
   --sidebar: 180 6.6667% 97.0588%;
 
@@ -102,7 +102,7 @@ input, select, textarea {
 
   --popover-foreground: 210 25% 7.8431%;
 
-  --popover-border: 220 24% 88%;
+  --popover-border: 220 18% 82%;
 
   --primary: 203.8863 88.2845% 53.1373%;
 
@@ -298,7 +298,7 @@ input, select, textarea {
 
   --muted: 0 0% 9.4118%;
 
-  --muted-foreground: 210 3.3898% 46.2745%;
+  --muted-foreground: 210 6% 68%;
 
   --footer: 220 18% 12%;
 

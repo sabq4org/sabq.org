@@ -78,7 +78,8 @@ export function CategoryPills({
   const baseItem =
     "cursor-pointer rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors hover-elevate active-elevate-2";
   const activeItem = "bg-foreground text-background font-medium";
-  const inactiveItem = "bg-muted/60 text-muted-foreground hover:text-foreground";
+  const inactiveItem =
+    "border border-border bg-card text-foreground/80 hover:border-primary/35 hover:bg-primary/10 hover:text-primary";
 
   return (
     <div className="w-full border-b bg-background/95 backdrop-blur-sm sticky top-0 z-40">
