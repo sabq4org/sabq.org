@@ -681,11 +681,35 @@ function tsUuidToNegativeId(uuid: string): number {
   return -n;
 }
 
-function mapTsBoardToWorldLive(items: TsLiveBoardItem[]): SplWorldLiveItem[] {
+async function mapTsBoardToWorldLive(items: TsLiveBoardItem[]): Promise<SplWorldLiveItem[]> {
+  // تعريب الأسماء الإنجليزية عبر الطبقة الموحّدة (كاش فوري + AI بالخلفية).
+  const needsAr = items
+    .flatMap((m) => [m.homeName, m.awayName])
+    .filter((n) => n && /[A-Za-z]/.test(n));
+  const uniqueNames = [...new Set(needsAr)];
+  let teamTr: NameLookup = (n) => n ?? "";
+  if (uniqueNames.length > 0 && !isEnglishSports()) {
+    try {
+      teamTr = await resolveSportsNames(
+        "team",
+        uniqueNames.map((name) => ({ name })),
+        { skipAi: true },
+      );
+      void resolveSportsNames(
+        "team",
+        uniqueNames.map((name) => ({ name })),
+      ).catch(() => {});
+    } catch {
+      /* أفضل جهد — نُبقي الاسم الإنجليزي */
+    }
+  }
+
   return items.map((m) => {
     const ts = m.matchTime > 0 ? m.matchTime : Math.floor(Date.now() / 1000);
     const leagueId = tsUuidToNegativeId(m.competitionId);
     const fixtureId = tsUuidToNegativeId(m.matchId);
+    const homeName = /[A-Za-z]/.test(m.homeName) ? teamTr(m.homeName) : m.homeName;
+    const awayName = /[A-Za-z]/.test(m.awayName) ? teamTr(m.awayName) : m.awayName;
     return {
       id: fixtureId,
       date: new Date(ts * 1000).toISOString(),
@@ -702,14 +726,14 @@ function mapTsBoardToWorldLive(items: TsLiveBoardItem[]): SplWorldLiveItem[] {
       venue: { name: "", city: "" },
       home: {
         id: tsUuidToNegativeId(m.homeTeamId),
-        name: m.homeName,
-        logo: "",
+        name: homeName || m.homeName,
+        logo: m.homeLogo || "",
         winner: null,
       },
       away: {
         id: tsUuidToNegativeId(m.awayTeamId),
-        name: m.awayName,
-        logo: "",
+        name: awayName || m.awayName,
+        logo: m.awayLogo || "",
         winner: null,
       },
       goals: { home: m.goalsHome, away: m.goalsAway },
@@ -751,9 +775,8 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
     if (visible.length < WORLD_LIVE_AF_MIN) {
       const tsBoard = await getTheSportsLiveBoard().catch(() => [] as TsLiveBoardItem[]);
       if (tsBoard.length > 0) {
-        return mapTsBoardToWorldLive(tsBoard).sort(
-          (a, b) => a.timestamp - b.timestamp,
-        );
+        const mapped = await mapTsBoardToWorldLive(tsBoard);
+        return mapped.sort((a, b) => a.timestamp - b.timestamp);
       }
       if (visible.length === 0) return [];
     }
