@@ -1524,6 +1524,13 @@ actor APIClient {
         try await get(APIDailySummary.self, path: "/ai/daily-summary", apiRoot: publicAPIBaseURL)
     }
 
+    /// «موجز سبق» — five published must-know stories. Public for guests;
+    /// the existing Bearer header lets the backend personalize up to two
+    /// items for signed-in members.
+    func fetchDailyBrief(ignoreCache: Bool = false) async throws -> APIDailyBrief {
+        try await get(APIDailyBrief.self, path: "/daily-brief", ignoreCache: ignoreCache)
+    }
+
     /// Audio newsletters list. Public. Backend may return a bare array OR a
     /// wrapped `{ newsletters: [] }` shape; handle both.
     func fetchAudioNewsletters() async throws -> [APIAudioNewsletter] {

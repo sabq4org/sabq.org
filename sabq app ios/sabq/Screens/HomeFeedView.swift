@@ -41,6 +41,13 @@ struct HomeFeedView: View {
     @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
     @State private var isFirstLoad = true
     @State private var todayInsights: [String: String] = [:]
+    /// Real five-story «موجز سبق» preview shown as the first home card.
+    /// Guests receive the common edition; the Bearer token (when present)
+    /// lets the backend personalize at most two stories.
+    @State private var dailyBrief: APIDailyBrief?
+    @State private var dailyBriefLoadFailed = false
+    @AppStorage("sabq_daily_brief_progress_edition") private var briefProgressEdition = ""
+    @AppStorage("sabq_daily_brief_progress_count") private var briefProgressCount = 0
     /// Rich personal-journey insights (member-session only). Drives the
     /// inline metric tiles + interest chips in personalJourneyBlock.
     @State private var richInsights: APITodayInsights?
@@ -149,9 +156,15 @@ struct HomeFeedView: View {
                     }
 
                     NavigationLink(value: DailyBriefRoute()) {
-                        greetingBlock
+                        dailyBriefCard
                     }
                     .buttonStyle(.plain)
+                    .simultaneousGesture(TapGesture().onEnded {
+                        SabqAnalytics.log("daily_brief_card_open", parameters: [
+                            "edition": dailyBrief?.edition ?? "unavailable",
+                            "item_count": dailyBrief?.itemCount ?? 0,
+                        ])
+                    })
                     .animatedAppear(index: 0)
 
                     // عاجل — الشريط الوحيد المسموح فوق الهيرو.
@@ -229,7 +242,11 @@ struct HomeFeedView: View {
             .sabqAutoHideTabBar()
             .refreshable {
                 SabqHaptics.medium()
-                await articlesStore.loadArticles(ignoreCache: true)
+                async let articlesRefresh: Void = articlesStore.loadArticles(ignoreCache: true)
+                async let briefRefresh: APIDailyBrief? = try? await APIClient.shared.fetchDailyBrief(ignoreCache: true)
+                await articlesRefresh
+                dailyBrief = await briefRefresh
+                dailyBriefLoadFailed = dailyBrief == nil
                 // أعد جلب شريط العاجل أيضاً حتى ينعكس أي تفعيل/تعطيل من لوحة
                 // التحكم فور السحب للتحديث.
                 breakingTicker = (try? await APIClient.shared.fetchBreakingTicker()) ?? nil
@@ -278,6 +295,7 @@ struct HomeFeedView: View {
             // Phase-4 + Phase-5 background fetches. All best-effort: silent
             // on failure so the home screen still renders.
             async let insights: [String: String]? = try? await APIClient.shared.fetchTodayInsights()
+            async let brief: APIDailyBrief? = try? await APIClient.shared.fetchDailyBrief()
             async let upcoming: [APICalendarEvent]? = try? await APIClient.shared.fetchUpcomingCalendarEvents(days: 14)
             async let newsletters: [APIAudioNewsletter]? = try? await APIClient.shared.fetchAudioNewsletters()
             async let breaking = (try? await APIClient.shared.fetchBreakingTicker()) ?? nil
@@ -288,6 +306,8 @@ struct HomeFeedView: View {
                 : nil
 
             if let v = await insights { todayInsights = v }
+            dailyBrief = await brief
+            dailyBriefLoadFailed = dailyBrief == nil
             calendarToday = (await upcoming) ?? []
             latestNewsletter = (await newsletters)?.first
             breakingTicker = await breaking
@@ -1064,7 +1084,253 @@ struct HomeFeedView: View {
         }
     }
 
-    // MARK: - Greeting Block (Phase 2)
+    // MARK: - Sabq Daily Brief (#750)
+
+    /// The first home card now previews real published stories instead of a
+    /// rotating marketing message. The destination independently reloads the
+    /// same cacheable payload, so a stale/failed preview never blocks access.
+    @ViewBuilder
+    private var dailyBriefCard: some View {
+        if let brief = dailyBrief, !brief.items.isEmpty {
+            loadedDailyBriefCard(brief)
+        } else if dailyBriefLoadFailed {
+            unavailableDailyBriefCard
+        } else {
+            loadingDailyBriefCard
+        }
+    }
+
+    private func loadedDailyBriefCard(_ brief: APIDailyBrief) -> some View {
+        let progress = dailyBriefProgress(for: brief)
+        let isComplete = progress >= brief.itemCount
+        let actionTitle: String = {
+            if isComplete { return "راجع الموجز" }
+            if progress > 0 { return "تابع من الخبر \(progress + 1)" }
+            return "ابدأ الموجز"
+        }()
+
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 11) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(SabqTheme.brandGradient)
+                        .frame(width: 46, height: 46)
+                    Image(systemName: "newspaper.fill")
+                        .font(SabqFonts.app(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("موجز سبق")
+                        .font(SabqFonts.app(size: 17, weight: .heavy))
+                        .foregroundStyle(SabqTheme.ink)
+                    Text("\(brief.editionLabel) • \(dailyBriefUpdatedLabel(brief.updatedAt))")
+                        .font(SabqFonts.app(size: 10.5, weight: .regular))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                if progress > 0 {
+                    Text("\(min(progress, brief.itemCount))/\(brief.itemCount)")
+                        .font(SabqFonts.app(size: 11, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(SabqTheme.primaryEnd.opacity(0.10)))
+                } else {
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                        Text(dailyBriefDurationLabel(brief.estimatedReadingSeconds))
+                    }
+                    .font(SabqFonts.app(size: 10.5, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                }
+            }
+
+            Text(brief.headline)
+                .font(SabqFonts.app(size: 15, weight: .bold))
+                .foregroundStyle(SabqTheme.ink)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+
+            VStack(alignment: .leading, spacing: 9) {
+                ForEach(Array(brief.items.prefix(2))) { item in
+                    HStack(alignment: .firstTextBaseline, spacing: 9) {
+                        Text("\(item.position)")
+                            .font(SabqFonts.app(size: 10, weight: .heavy))
+                            .monospacedDigit()
+                            .foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(
+                                Circle().fill(item.isBreaking ? SabqTheme.coral : SabqTheme.primaryEnd)
+                            )
+
+                        Text(item.title)
+                            .font(SabqFonts.app(size: 12.5, weight: .semibold))
+                            .foregroundStyle(SabqTheme.secondaryInk)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.leading)
+
+                        Spacer(minLength: 4)
+
+                        if item.isPersonalized {
+                            Text("لك")
+                                .font(SabqFonts.app(size: 9, weight: .bold))
+                                .foregroundStyle(SabqTheme.primaryEnd)
+                        }
+                    }
+                }
+
+                if brief.itemCount > 2 {
+                    Text("+ \(brief.itemCount - 2) أخبار")
+                        .font(SabqFonts.app(size: 10.5, weight: .medium))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .padding(.leading, 31)
+                }
+            }
+
+            if progress > 0 {
+                ProgressView(
+                    value: Double(min(progress, brief.itemCount)),
+                    total: Double(max(1, brief.itemCount))
+                )
+                .tint(SabqTheme.primaryEnd)
+                .scaleEffect(x: 1, y: 0.7, anchor: .center)
+            }
+
+            HStack(spacing: 6) {
+                Text(actionTitle)
+                    .font(SabqFonts.app(size: 12.5, weight: .bold))
+                if progress == 0 {
+                    Text("• \(dailyBriefDurationLabel(brief.estimatedReadingSeconds))")
+                        .font(SabqFonts.app(size: 11, weight: .regular))
+                        .foregroundStyle(SabqTheme.secondaryInk)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.left")
+                    .font(SabqFonts.app(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(SabqTheme.primaryEnd)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    SabqTheme.primaryEnd.opacity(0.08),
+                                    SabqTheme.sky.opacity(0.025),
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .stroke(SabqTheme.primaryEnd.opacity(0.20), lineWidth: 0.75)
+        )
+        .shadow(color: SabqTheme.primaryEnd.opacity(0.07), radius: 12, x: 0, y: 5)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            "موجز سبق، \(brief.editionLabel)، \(brief.itemCount) أخبار، \(actionTitle)"
+        )
+    }
+
+    private var loadingDailyBriefCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 11) {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(SabqTheme.paleFill)
+                    .frame(width: 46, height: 46)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("موجز سبق")
+                        .font(SabqFonts.app(size: 17, weight: .heavy))
+                    Text("نرتب أهم الأخبار لك…")
+                        .font(SabqFonts.app(size: 11))
+                }
+                .foregroundStyle(SabqTheme.secondaryInk)
+            }
+            RoundedRectangle(cornerRadius: 5).fill(SabqTheme.paleFill).frame(height: 13)
+            RoundedRectangle(cornerRadius: 5).fill(SabqTheme.paleFill).frame(width: 240, height: 13)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.45), lineWidth: 0.5)
+        )
+        .accessibilityLabel("جارٍ تحميل موجز سبق")
+    }
+
+    private var unavailableDailyBriefCard: some View {
+        HStack(spacing: 13) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .fill(SabqTheme.primaryEnd.opacity(0.10))
+                    .frame(width: 46, height: 46)
+                Image(systemName: "arrow.clockwise")
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .foregroundStyle(SabqTheme.primaryEnd)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("موجز سبق")
+                    .font(SabqFonts.app(size: 16, weight: .heavy))
+                    .foregroundStyle(SabqTheme.ink)
+                Text("تعذّر تحديث الموجز. اضغط للمحاولة مجدداً.")
+                    .font(SabqFonts.app(size: 11.5))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.left")
+                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .foregroundStyle(SabqTheme.primaryEnd)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .stroke(SabqTheme.primaryEnd.opacity(0.16), lineWidth: 0.5)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private func dailyBriefProgress(for brief: APIDailyBrief) -> Int {
+        guard briefProgressEdition == brief.id else { return 0 }
+        return min(max(briefProgressCount, 0), brief.itemCount)
+    }
+
+    private func dailyBriefDurationLabel(_ seconds: Int) -> String {
+        let minutes = max(1, Int(ceil(Double(seconds) / 60)))
+        switch minutes {
+        case 1: return "دقيقة"
+        case 2: return "دقيقتان"
+        default: return "\(minutes) دقائق"
+        }
+    }
+
+    private func dailyBriefUpdatedLabel(_ raw: String) -> String {
+        guard let date = SabqFormatters.parseISO8601(raw) else { return "محدّث الآن" }
+        return "حُدّث \(SabqFormatters.riyadhTime.string(from: date))"
+    }
+
+    // MARK: - Legacy greeting block
 
     /// Time-aware Arabic greeting. The greeting + sub-message is the first
     /// piece the reader sees, framing the day's content as something curated
