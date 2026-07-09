@@ -18,24 +18,10 @@ nonisolated enum SpEnglishStrings {
         "عالمية": "World",
         "حسابي": "Account",
 
-        // ── شاشات الترحيب (Onboarding) ──
-        "تخطّي": "Skip",
-        "التالي": "Next",
-        "ابدأ الآن": "Get Started",
-        "مرحبًا بك في VARA": "Welcome to VARA",
-        "دقّة الرياضة في راحة يدك — مباريات، بطولات، وتوقّعات ذكية في تطبيق واحد.":
-            "Sports precision in the palm of your hand — matches, competitions, and smart predictions in one app.",
+        // ── ختم «من سبق» (ورقة الدخول / حسابي) ──
         "أحد منتجات": "A product of",
         "صحيفة سبق": "Sabq",
-        "كل المباريات في مكان واحد": "All matches in one place",
-        "جدول موحّد لكل البطولات، ومركز مباراة غنيّ بالأحداث والإحصائيات والتشكيلات والتقييمات.":
-            "A unified schedule for every competition, plus a rich match center with events, stats, lineups, and ratings.",
-        "توقّع VARA الذكي": "Smart VARA Predictions",
-        "خوارزمية ديناميكية تحسب احتمالات النتيجة من الترتيب والفورمة وأفضلية الأرض — ونافس على لوحة المتصدّرين.":
-            "A dynamic algorithm computes outcome odds from standings, form, and home advantage — then compete on the leaderboard.",
-        "تابع فريقك ولا تفوّت لحظة": "Follow your team, never miss a moment",
-        "تنبيهات فورية للأهداف والبطاقات وحالات الفار، وبطاقة «مبارياتي» بعدّاد تنازليّ حيّ.":
-            "Instant alerts for goals, cards, and VAR reviews, plus a “My Matches” card with a live countdown.",
+        "مرحبًا بك في VARA": "Welcome to VARA",
 
         // ── المظهر واللغة (AccountView) ──
         "المظهر": "Appearance",

@@ -61,7 +61,7 @@ struct AccountView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 2)
                 }
-                .padding(16)
+                .screenPadding()
             }
             .refreshable { await auth.loadUserData() }
             .autoHideTabBar()
@@ -825,8 +825,8 @@ enum SpTab: Hashable { case matches, roshn, competitions, world, account }
 // MARK: - مكوّن الدخول بعضوية سبق (مشترك بين تبويب «حسابي» وورقة الدخول العامّة)
 
 /// نموذج الدخول بعضوية سبق: عنوان + حقول + زر «الدخول بعضوية سبق» الأساسي +
-/// Apple بديلًا + ختم «من سبق». يُستخدم داخل بطاقة «حسابي» (SpMembershipLogin في
-/// signInCard) وداخل SpLoginSheet المنبثقة.
+/// Apple بديلًا + ختم «من سبق» تحت الترويسة. يُستخدم داخل بطاقة «حسابي»
+/// (SpMembershipLogin في signInCard) وداخل SpLoginSheet المنبثقة.
 enum SpLoginMode { case phone, membership }
 
 struct SpMembershipLogin: View {
@@ -848,7 +848,7 @@ struct SpMembershipLogin: View {
 
             dividerOr
 
-            // بديل مشترك — المتابعة عبر Apple (أسفل كلا التبويبين).
+            // بديل مشترك — المتابعة عبر Apple (أسفل كلا التبويبين). لا Google (قرار ب1).
             Button { auth.startAppleSignIn() } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "applelogo").font(.system(size: 18, weight: .semibold))
@@ -865,7 +865,7 @@ struct SpMembershipLogin: View {
         }
     }
 
-    // الترويسة — ترحيب + ختم «من سبق» + سطر تعريفي.
+    // الترويسة — ترحيب + ختم «من سبق» تحت العنوان + سطر تعريفي.
     private var header: some View {
         VStack(spacing: 14) {
             HStack(spacing: 6) {
