@@ -147,23 +147,21 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
     return s.statusLabel.isEmpty ? SpWidgetL("قريبًا") : s.statusLabel
 }
 
-// عرض الحالة الحيّة على الجزيرة الديناميكية — يفضّل العدّاد الذاتي من
-// `clockStartEpoch` (يتحرّك على الجهاز بلا انتظار APNs)، ويسقط على النصّ المدفوع
-// عند الاستراحة/الترجيح/بدل الضائع («45+2'») حيث الساعة متوقّفة أو الصيغة خاصّة.
-// نفس عدّاد شاشة القفل (SpLA.tickingMinute) حرفيًّا — كانا يحسبان باختلاف طفيف
-// (سقف موجود هنا وغائب هناك) فيختلف الرقمان داخل الجهاز نفسه.
+// عرض الحالة الحيّة على الجزيرة الديناميكية — الدقيقة من المرساة `clockStartEpoch`
+// **لحظة كل رسم** (نفس دالة شاشة القفل حرفيًّا)، والنصّ المدفوع للاستراحة/الترجيح/
+// بدل الضائع («45+2'»). لا TimelineView هنا: واجهة Live Activity تُرسَم فقط عند
+// وصول تحديث محتوى ولا تُنفَّذ دوريًّا (ثبت ميدانيًّا 2026-07-09 — تجمّد العدّاد)،
+// فدفعات الدقيقة (~كل 60ث) هي ما يعيد الرسم، والمرساة تضبط القيمة لحظته.
 @ViewBuilder
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
     if s.isLive, !s.isFinished,
        let epoch = s.clockStartEpoch, epoch > 0,
        !s.minute.contains("+") {
-        TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
-            let minute = SpLA.tickingMinute(epoch: epoch, at: timeline.date, fallback: s.minute)
-            let label = s.statusLabel.isEmpty ? minute : "\(minute) · \(s.statusLabel)"
-            Text(label)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .center)
-        }
+        let minute = SpLA.tickingMinute(epoch: epoch, at: Date(), fallback: s.minute)
+        let label = s.statusLabel.isEmpty ? minute : "\(minute) · \(s.statusLabel)"
+        Text(label)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .center)
     } else {
         Text(statusText(s, kickoff: kickoff))
             .lineLimit(1)
@@ -300,17 +298,16 @@ private struct LockScreenView: View {
         .frame(maxWidth: .infinity)
     }
 
-/// السطر الأوّل من شارة الحالة: عدّاد ذاتي من `clockStartEpoch` حين تجري الساعة،
-/// وإلا النصّ المدفوع (`minute`) عند الاستراحة/الترجيح/بدل الضائع.
-/// العدّاد يعرض دقائق (`72'`) لا صيغة ساعات — بخلاف `Text(timerInterval:)`.
+/// السطر الأوّل من شارة الحالة: الدقيقة من المرساة `clockStartEpoch` لحظة الرسم
+/// حين تجري الساعة، وإلا النصّ المدفوع (استراحة/ترجيح/بدل ضائع). تُعرض دقائق
+/// (`72'`) لا صيغة ساعات — بخلاف `Text(timerInterval:)`. (لا TimelineView —
+/// لا يتكتك داخل Live Activity؛ إعادة الرسم تأتي من دفعات الدقيقة.)
 @ViewBuilder private var liveClockOrText: some View {
     let s = context.state
     if s.isLive, !s.isFinished,
        let epoch = s.clockStartEpoch, epoch > 0,
        !s.minute.contains("+") {
-        TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
-            Text(SpLA.tickingMinute(epoch: epoch, at: timeline.date, fallback: s.minute))
-        }
+        Text(SpLA.tickingMinute(epoch: epoch, at: Date(), fallback: s.minute))
     } else {
         Text(primaryStatusLine)
     }
@@ -411,12 +408,11 @@ enum SpLA {
     static let liveDot = Color(red: 1.0, green: 0.43, blue: 0.34)
     static let green = accent
 
-    /// عدّاد الدقيقة الذاتي الموحّد (شاشة القفل + الجزيرة): m = floor((now−epoch)/60)+1.
-    /// المرساة `clockStartEpoch` تأتي من matchClock على الخادم — نفس مصدر عدّاد
-    /// التطبيق (SpMatchClock) فيتطابق الرقمان. سقف الأمان مطلق (130 دقيقة) لا
-    /// نسبيّ للدقيقة المدفوعة: دفعات الدقيقة لم تعد تُرسَل أثناء جريان الساعة
-    /// (المرساة تغني عنها)، فالنصّ المدفوع يتقادم ولا يصلح مرجعًا للسقف —
-    /// السقف النسبي القديم كان سيجمّد العدّاد على آخر دقيقة مدفوعة.
+    /// دقيقة العرض الموحّدة (شاشة القفل + الجزيرة): m = floor((now−epoch)/60)+1
+    /// تُحسب **لحظة كل رسم** — المرساة `clockStartEpoch` من matchClock على الخادم،
+    /// نفس مصدر عدّاد التطبيق (SpMatchClock) فيتطابق الرقمان عند كل تحديث.
+    /// سقف الأمان مطلق (130 دقيقة) لا نسبيّ للدقيقة المدفوعة — السقف النسبي
+    /// القديم (+2) كان يجمّد العدّاد كلما تقادم نصّ الدفعة.
     static func tickingMinute(epoch: Double, at date: Date, fallback: String) -> String {
         let elapsed = date.timeIntervalSince1970 - epoch
         guard elapsed >= 0 else { return fallback.isEmpty ? "1'" : fallback }
