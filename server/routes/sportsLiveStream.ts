@@ -39,6 +39,9 @@ interface LiveDigestItem {
 
 const TICK_MS = 2_000;
 const HEARTBEAT_MS = 20_000;
+// سقف أمان للمقابس المفتوحة لكل نسخة — كانت المجموعة بلا حدّ، وGET معفى من كل
+// محدّدات المعدل، فعاصفة إعادة اتصال تكدّس اتصالات معلّقة حتى ضغط الذاكرة/FD.
+const MAX_CLIENTS = 2_000;
 
 const clients = new Set<Response>();
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -164,6 +167,10 @@ function stopLoopsIfIdle(): void {
 
 export function registerSportsLiveStreamRoutes(app: Express): void {
   app.get("/api/sports/live-stream", (req: Request, res: Response) => {
+    if (clients.size >= MAX_CLIENTS) {
+      res.status(503).set("Retry-After", "15").json({ message: "الخدمة مشغولة، أعد المحاولة" });
+      return;
+    }
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
