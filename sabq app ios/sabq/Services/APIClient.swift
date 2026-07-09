@@ -641,7 +641,48 @@ actor APIClient {
 
     func login(email: String, password: String) async throws -> APILoginResponse {
         await ensureCSRF()
-        return try await post(APILoginResponse.self, path: "/auth/login", body: APILoginRequest(email: email, password: password))
+        return try await post(
+            APILoginResponse.self,
+            path: "/auth/login",
+            body: APILoginRequest(email: email, phone: nil, password: password)
+        )
+    }
+
+    /// دخول بحساب سبق بالبريد/الجوال + كلمة المرور. يكتشف البريد بوجود «@».
+    func loginWithIdentifier(_ identifier: String, password: String) async throws -> APILoginResponse {
+        await ensureCSRF()
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isEmail = trimmed.contains("@")
+        return try await post(
+            APILoginResponse.self,
+            path: "/auth/login",
+            body: APILoginRequest(
+                email: isEmail ? trimmed.lowercased() : nil,
+                phone: isEmail ? nil : trimmed,
+                password: password
+            )
+        )
+    }
+
+    /// إرسال رمز تحقّق للجوال (Twilio Verify). الرقم بأي صيغة سعودية — الخادم يطبّعه.
+    func sendPhoneCode(_ phone: String) async throws -> APIPhoneSendResponse {
+        await ensureCSRF()
+        return try await post(
+            APIPhoneSendResponse.self,
+            path: "/auth/phone/send",
+            body: APIPhoneSendRequest(phone: phone)
+        )
+    }
+
+    /// التحقّق من الرمز → جلسة عضو سبق (يُنشئ الحساب إن لم يكن موجودًا).
+    func verifyPhoneCode(_ phone: String, code: String) async throws -> APILoginResponse {
+        await ensureCSRF()
+        let deviceInfo = await Self.currentDeviceInfo()
+        return try await post(
+            APILoginResponse.self,
+            path: "/auth/phone/verify",
+            body: APIPhoneVerifyRequest(phone: phone, code: code, deviceInfo: deviceInfo)
+        )
     }
 
     func register(name: String, email: String, password: String) async throws -> APILoginResponse {

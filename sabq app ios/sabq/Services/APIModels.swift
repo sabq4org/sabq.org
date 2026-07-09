@@ -764,9 +764,33 @@ nonisolated struct APITrendingResponse: Decodable {
 
 // MARK: - Auth
 
+/// دخول بحساب سبق — البريد أو الجوال + كلمة المرور (nil يُحذف من JSON تلقائيًّا).
 nonisolated struct APILoginRequest: Encodable {
-    let email: String
+    let email: String?
+    let phone: String?
     let password: String
+}
+
+// دخول/تسجيل بالجوال (Twilio Verify)
+nonisolated struct APIPhoneSendRequest: Encodable {
+    let phone: String
+}
+
+nonisolated struct APIPhoneSendResponse: Decodable {
+    let success: Bool
+    let message: String?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        success = (try? c.decode(Bool.self, forKey: FlexKey("success"))) ?? false
+        message = try? c.decode(String.self, forKey: FlexKey("message"))
+    }
+}
+
+nonisolated struct APIPhoneVerifyRequest: Encodable {
+    let phone: String
+    let code: String
+    let deviceInfo: APIDeviceInfo?
 }
 
 nonisolated struct APIAvatarUploadResponse: Decodable {
