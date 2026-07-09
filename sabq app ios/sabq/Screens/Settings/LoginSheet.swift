@@ -371,6 +371,7 @@ private struct PhoneLoginFlow: View {
     @State private var number = ""
     @State private var code = ""
     @State private var resend = 0
+    @FocusState private var phoneFocused: Bool
 
     private var normalized: String { String(number.filter(\.isNumber).prefix(9)) }
     private var phoneValid: Bool { normalized.count == 9 && normalized.first == "5" }
@@ -393,19 +394,26 @@ private struct PhoneLoginFlow: View {
                 }
                 .environment(\.layoutDirection, .leftToRight)
                 Rectangle().fill(SabqTheme.outline).frame(width: 1, height: 22)
+                // خط النظام للأرقام — الخط العربي المخصّص كان يخفي الأحرف أثناء الكتابة أحيانًا.
                 TextField("", text: $number, prompt: Text(verbatim: "5XXXXXXXX").foregroundStyle(SabqTheme.tertiaryInk))
                     .keyboardType(.numberPad)
                     .textContentType(.telephoneNumber)
-                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 17, weight: .semibold, design: .rounded).monospacedDigit())
                     .foregroundStyle(SabqTheme.ink)
                     .tint(SabqTheme.primaryEnd)
                     .multilineTextAlignment(.leading)
+                    .focused($phoneFocused)
                     .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(9)) }
             }
             .environment(\.layoutDirection, .leftToRight)
             .padding(.horizontal, 14)
             .padding(.vertical, 13)
             .background(fieldBg)
+            .contentShape(Rectangle())
+            .onTapGesture { phoneFocused = true }
+            .onAppear { phoneFocused = true }
 
             Text("سنرسل رمز تحقّق برسالة نصية إلى جوالك.")
                 .font(SabqFonts.app(size: 11.5))
@@ -517,7 +525,8 @@ private struct PhoneLoginFlow: View {
     }
 }
 
-/// حقل رمز OTP — 6 خانات مرئية فوق حقل خفيّ يحمل التعبئة الآلية (.oneTimeCode).
+/// حقل رمز OTP — خانات مرئية + TextField فوقها بشفافية منخفضة جدًا ليفعّل شريط
+/// «من الرسائل» (QuickType) عند وصول SMS مع `.oneTimeCode`.
 private struct LoginOtpBoxes: View {
     @Binding var code: String
     var onComplete: () -> Void
@@ -526,22 +535,31 @@ private struct LoginOtpBoxes: View {
 
     var body: some View {
         ZStack {
-            TextField("", text: $code)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .focused($focused)
-                .foregroundStyle(.clear)
-                .tint(.clear)
-                .onChange(of: code) { _, v in
-                    let d = String(v.filter(\.isNumber).prefix(length))
-                    if d != code { code = d }
-                    if d.count == length { focused = false; onComplete() }
-                }
             HStack(spacing: 8) {
                 ForEach(0..<length, id: \.self) { i in box(i) }
             }
             .environment(\.layoutDirection, .leftToRight)
             .allowsHitTesting(false)
+
+            // فوق الخانات وبشفافية شبه معدومة — iOS يرفض opacity=0 تمامًا لاقتراح الرمز.
+            TextField("", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(size: 22, weight: .heavy, design: .rounded).monospacedDigit())
+                .foregroundStyle(.clear)
+                .tint(.clear)
+                .multilineTextAlignment(.center)
+                .focused($focused)
+                .opacity(0.02)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .onChange(of: code) { _, v in
+                    let d = String(v.filter(\.isNumber).prefix(length))
+                    if d != code { code = d }
+                    if d.count == length { focused = false; onComplete() }
+                }
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
@@ -554,7 +572,7 @@ private struct LoginOtpBoxes: View {
         let digit: String = i < chars.count ? String(chars[i]) : ""
         let active = i == chars.count
         return Text(digit)
-            .font(SabqFonts.app(size: 22, weight: .heavy))
+            .font(.system(size: 22, weight: .heavy, design: .rounded).monospacedDigit())
             .foregroundStyle(SabqTheme.ink)
             .frame(maxWidth: .infinity)
             .frame(height: 54)
