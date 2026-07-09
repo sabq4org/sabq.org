@@ -162,7 +162,8 @@ class CloudflareImagesService {
           'Authorization': `Bearer ${apiToken}`,
           'Content-Type': `multipart/form-data; boundary=${boundary}`,
         },
-        body: body,
+        // TS 6+: Buffer<ArrayBufferLike> is not assignable to BodyInit; Uint8Array is.
+        body: new Uint8Array(body),
         signal: AbortSignal.timeout(25_000),
       });
 
@@ -177,7 +178,7 @@ class CloudflareImagesService {
         const retryResp = await fetch(apiEndpoint, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-          body: body,
+          body: new Uint8Array(body),
           signal: AbortSignal.timeout(20_000),
         });
         if (!retryResp.ok) {

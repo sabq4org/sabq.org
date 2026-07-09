@@ -297,7 +297,8 @@ export class ElevenLabsService {
     
     // Add audio files
     options.files.forEach((file, index) => {
-      const blob = new Blob([file], { type: 'audio/mpeg' });
+      // TS 6+: Buffer<ArrayBufferLike> is not a BlobPart; wrap as Uint8Array.
+      const blob = new Blob([new Uint8Array(file)], { type: 'audio/mpeg' });
       formData.append('files', blob, `sample_${index}.mp3`);
     });
 
@@ -378,7 +379,7 @@ export class ElevenLabsService {
   }): Promise<SpeechToTextResult> {
     const formData = new FormData();
     
-    const blob = new Blob([options.file], { type: 'audio/mpeg' });
+    const blob = new Blob([new Uint8Array(options.file)], { type: 'audio/mpeg' });
     formData.append('file', blob, 'audio.mp3');
     formData.append('model_id', 'scribe_v1');
     
