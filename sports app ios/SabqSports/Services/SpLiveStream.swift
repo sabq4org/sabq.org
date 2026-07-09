@@ -83,7 +83,8 @@ final class SpLiveStream {
         if wcChanged { wcVersion &+= 1 }
 
         // نبّه «مبارياتي»/النشاط الحيّ فورًا (جلب مُوجّه بدل انتظار دورته الدورية).
-        if sportsChanged {
+        // يشمل ختم المونديال (w:) — كانت تُحدَّث sportsVersion فقط فتتأخّر مباريات كأس العالم.
+        if sportsChanged || wcChanged {
             Task { await SpMatchFollows.shared.refresh() }
         }
     }

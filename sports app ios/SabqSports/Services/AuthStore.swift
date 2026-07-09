@@ -1,7 +1,7 @@
 import SwiftUI
 import AuthenticationServices
 import Security
-import UserNotifications
+@preconcurrency import UserNotifications
 
 // إدارة جلسة العضو (تسجيل دخول Apple → Bearer عبر /api/v1/auth/apple). الرمز
 // يُحفظ في Keychain ويُضبط على APIClient لكل الطلبات المحميّة (المتابعة/التنبيهات).
@@ -689,7 +689,7 @@ final class SpMatchFollows {
                 if shouldPoll { await self.refresh() }
                 if Task.isCancelled { return }
                 // وتيرة متكيّفة: أسرع أثناء المباراة/قربها، وأبطأ عندما لا شيء نشط.
-                let interval: UInt64 = self.hasLiveFollowed ? 10_000_000_000 : 30_000_000_000
+                let interval: UInt64 = self.hasLiveFollowed ? 5_000_000_000 : 30_000_000_000
                 try? await Task.sleep(nanoseconds: interval)
             }
         }
@@ -846,13 +846,11 @@ final class SpMatchFollows {
 
     /// تنظيف إشعارات «الانطلاق بالموعد» المعلّقة من إصدارات سابقة — مرة عند الإقلاع.
     private func purgeScheduledKickoffNotifications() {
-        let center = UNUserNotificationCenter.current()
-        center.getPendingNotificationRequests { requests in
+        UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
             let ids = requests.map(\.identifier)
                 .filter { $0.hasPrefix("match-") && $0.hasSuffix("-kick") }
-            if !ids.isEmpty {
-                center.removePendingNotificationRequests(withIdentifiers: ids)
-            }
+            guard !ids.isEmpty else { return }
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
         }
     }
 

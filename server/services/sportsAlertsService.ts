@@ -11,8 +11,8 @@
  *     المحميّة بـ SWR، فلا ضغط إضافي على API-Football.
  *   - أول مشاهدة لأي مباراة تُسجَّل كخطّ أساس بلا إرسال (تتجنّب إغراق المستخدم عند
  *     الإقلاع بأحداث وقعت قبل التشغيل).
- *   - اللقطة في الذاكرة كافية: الجوب يعمل على القائد فقط (leader election)، وفقدانها
- *     عند إعادة التشغيل يعيد ضبط الأساس بلا تكرار إشعارات سابقة.
+ *   - اللقطة في الذاكرة كافية للأساس (baseline)؛ منع تكرار البطاقات عبر المصادر
+ *     يعتمد على Redis SET NX (مع سقوط آمن لذاكرة العملية إن لم يتوفر Redis).
  *   - فشل التوصيل لمستخدم لا يكسر بقيّة الدورة (محصّن بـ try/catch).
  */
 import { and, desc, eq } from "drizzle-orm";
@@ -105,10 +105,18 @@ let lastEventCleanup = 0;
 const eventPending = new Map<number, Map<string, number>>();
 const EVENT_CONFIRM_MS = Number(process.env.SPORTS_CARD_CONFIRM_MS ?? 20_000);
 
+// نفس نافذة التأكيد لمسار TheSports (بطاقات/فار) — يقلّل الشبح ويعطي وقتًا لـ playerId.
+const tsEventPending = new Map<number, Map<string, number>>();
+
 const eventSig = (e: SplMatchEvent): string => {
   // البطاقات: لاعب واحد ≤ بطاقة واحدة من كل نوع → نتجاهل الدقيقة المتذبذبة لمنع تكرار الإشعار.
+  // أولوية playerId الثابت؛ الاسم فقط كاحتياط (مُطبَّع) حتى لا يتقلّب التوقيع مع التعريب.
   if (e.type === "yellow-card" || e.type === "red-card") {
-    return `${e.type}|${e.teamId}|${e.player}`;
+    const who =
+      e.playerId != null
+        ? `id:${e.playerId}`
+        : `n:${(e.player || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
+    return `${e.type}|${e.teamId}|${who}`;
   }
   // الفار: المزوّد يعدّل الدقيقة ويملأ اسم اللاعب لاحقًا → توقيع بالفريق والتفصيل
   // فقط كي لا يُرسَل إشعار المراجعة نفسها مرّتين.
@@ -117,6 +125,17 @@ const eventSig = (e: SplMatchEvent): string => {
   }
   return `${e.type}|${e.minute ?? ""}|${e.extra ?? ""}|${e.teamId}|${e.player}`;
 };
+
+/** أسماء بديلة لنفس بطاقة AF — عند اكتمال playerId لاحقًا لا يُعاد الإرسال باسم مختلف. */
+function eventSigAliases(e: SplMatchEvent): string[] {
+  if (e.type !== "yellow-card" && e.type !== "red-card") return [eventSig(e)];
+  const out = new Set<string>([eventSig(e)]);
+  if (e.playerId != null && e.player) {
+    const nameWho = `n:${e.player.trim().toLowerCase().replace(/\s+/g, " ")}`;
+    out.add(`${e.type}|${e.teamId}|${nameWho}`);
+  }
+  return [...out];
+}
 
 // توقيعات أحداث TheSports المُرسَلة لكل مباراة مونديال (منفصلة عن توقيعات
 // API-Football كي لا تتصادم عند تبدّل المصدر). أول رصدٍ = خطّ أساس بلا إرسال.
@@ -127,17 +146,30 @@ let lastTsEventCleanup = 0;
 // بطاقة/فار قديمة أثناء الشوط الثاني؛ كانت تُعامل كـ«حدث جديد» وتصل للمستخدم
 // متأخرة جدًا (مثال: بطاقة د21 تصل عند د81). نترك هامشًا صغيرًا للتأخير الطبيعي.
 const STALE_EVENT_MINUTE_GRACE = 8;
+/** أقصى عمر بالوقت الحقيقي منذ أول ظهور في pending قبل اعتبار الحدث متأخرًا جدًا. */
+const STALE_EVENT_WALL_MS = Number(process.env.SPORTS_STALE_EVENT_WALL_MS ?? 5 * 60_000);
 
 function isStaleMatchEvent(
   match: SplLiveBoardItem,
   eventMinute: number | null | undefined,
   extraMinute = 0,
 ): boolean {
+  // بعد انتهاء المباراة: أي backfill لبطاقة/فار متأخر يُرفض (لا نُغرق بعد الصافرة).
+  if (match.status.finished) return true;
+
   const currentMinute = match.status.elapsed;
-  if (!match.status.live || currentMinute == null || eventMinute == null || eventMinute <= 0) {
-    return false;
+  if (eventMinute != null && eventMinute > 0 && currentMinute != null) {
+    // يعمل حتى لو انقطع علم live مؤقتًا طالما الدقيقة متاحة.
+    if (currentMinute - (eventMinute + extraMinute) > STALE_EVENT_MINUTE_GRACE) {
+      return true;
+    }
   }
-  return currentMinute - (eventMinute + extraMinute) > STALE_EVENT_MINUTE_GRACE;
+  return false;
+}
+
+/** رفض بالوقت الحقيقي إن بقي الحدث معلّقًا أطول من STALE_EVENT_WALL_MS. */
+function isStaleByWallClock(firstSeenAt: number, nowMs = Date.now()): boolean {
+  return nowMs - firstSeenAt > STALE_EVENT_WALL_MS;
 }
 
 // حارس الإرسال الأخير: بصمة نصّ الإشعار نفسه لكل مباراة — مهما تقلّبت تواقيع
@@ -145,6 +177,85 @@ function isStaleMatchEvent(
 const sentAlertSigs = new Map<number, Set<string>>();
 let lastSentSigsCleanup = 0;
 const alertSig = (a: DetectedAlert): string => a.dedupeKey ?? `${a.kind}|${a.title}|${a.body}`;
+
+// P1: مفتاح بطاقة/فار موحّد عبر API-Football و TheSports + Redis SET NX قبل الإرسال.
+// يمنع تكرار البطاقة حين يفشل أحد المصدرين أو يختلف نصّ العنوان/الجسم بين المسارين.
+const CARD_ALERT_LOCK_TTL_MS = 6 * 60 * 60 * 1000;
+const cardAlertMemoryLocks = new Map<string, number>();
+
+function normalizePlayerKey(
+  playerId?: string | number | null,
+  playerName?: string | null,
+): string {
+  if (playerId != null && String(playerId).trim() !== "") return `id:${playerId}`;
+  const name = (playerName || "").trim().toLowerCase().replace(/\s+/g, " ");
+  return name ? `n:${name}` : "n:unknown";
+}
+
+/** لقفل Redis عبر المصدرين: الاسم أوّلًا (AF id ≠ TS id)، ثم المعرّف احتياطًا. */
+function normalizePlayerKeyCrossSource(
+  playerId?: string | number | null,
+  playerName?: string | null,
+): string {
+  const name = (playerName || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (name) return `n:${name}`;
+  return normalizePlayerKey(playerId, null);
+}
+
+function matchTeamSide(
+  m: SplLiveBoardItem,
+  teamId?: number | null,
+  team?: "home" | "away" | null,
+): "home" | "away" | "x" {
+  if (team === "home" || team === "away") return team;
+  if (teamId != null) {
+    if (teamId === m.home.id) return "home";
+    if (teamId === m.away.id) return "away";
+  }
+  return "x";
+}
+
+function buildCardDedupeKey(
+  fixtureId: number,
+  side: string,
+  playerKey: string,
+  kind: "yellow" | "red",
+  minute?: number | null,
+): string {
+  // الدقيقة+الفريق+النوع مشتركة بين AF و TS (معرّفات اللاعبين تختلف بين المصدرين).
+  if (minute != null && minute > 0) {
+    return `card:${fixtureId}:${side}:${kind}:m${minute}`;
+  }
+  return `card:${fixtureId}:${side}:${playerKey}:${kind}`;
+}
+
+function buildVarDedupeKey(fixtureId: number, side: string, detail: string): string {
+  const d = detail.trim().toLowerCase().replace(/\s+/g, " ").slice(0, 80);
+  return `var:${fixtureId}:${side}:${d || "review"}`;
+}
+
+function compactCardAlertLocks(now = Date.now()): void {
+  for (const [key, expiresAt] of cardAlertMemoryLocks) {
+    if (expiresAt <= now) cardAlertMemoryLocks.delete(key);
+  }
+}
+
+/** SET NX عبر Redis؛ عند غياب Redis نسقط لـ Map محلي بنفس TTL. */
+async function claimAlertSlot(dedupeKey: string): Promise<boolean> {
+  const redisKey = `sports_alerts:dedupe:${dedupeKey}`;
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      return (await redis.setLock(redisKey, "1", CARD_ALERT_LOCK_TTL_MS)) === "OK";
+    } catch (err) {
+      console.error("[SportsAlerts] alert dedupe redis lock failed:", err);
+    }
+  }
+  compactCardAlertLocks();
+  if (cardAlertMemoryLocks.has(redisKey)) return false;
+  cardAlertMemoryLocks.set(redisKey, Date.now() + CARD_ALERT_LOCK_TTL_MS);
+  return true;
+}
 
 const STAT_INSIGHT_BUCKET_MINUTES = 10;
 const STAT_INSIGHT_LOCK_TTL_MS = 75 * 60 * 1000;
@@ -185,8 +296,12 @@ function hasSentStatInsightStory(fixtureId: number, story: StatInsightStory): bo
 //     تتغيّر النتيجة فيتولّد توقيع جديد يُطلق إشعار القرار مرّة واحدة.
 //   - غير ذلك (تبديل): نُبقي الدقيقة/الثانية للتمييز.
 const tsEventSig = (e: TsEvent): string => {
-  const who = e.playerId ?? e.player ?? e.inPlayer ?? "";
+  // بطاقات: أولوية playerId؛ بلا اسم معرَّب في التوقيع (التعريب يتقلّب بين الدورات).
   if (e.type === "yellow" || e.type === "red" || e.type === "yellow_red") {
+    const who =
+      e.playerId != null && String(e.playerId).trim() !== ""
+        ? `id:${e.playerId}`
+        : `n:${(e.player || e.inPlayer || "").trim().toLowerCase().replace(/\s+/g, " ")}`;
     return `${e.type}|${e.team ?? ""}|${who}`;
   }
   if (e.type === "goal" || e.type === "penalty_goal" || e.type === "own_goal") {
@@ -200,8 +315,22 @@ const tsEventSig = (e: TsEvent): string => {
   if (e.type === "var") {
     return `var|${e.team ?? ""}|${e.varReason ?? ""}|${e.varResult ?? ""}`;
   }
+  const who = e.playerId ?? e.player ?? e.inPlayer ?? "";
   return `${e.rawType}|${e.minute}|${e.second ?? ""}|${e.team ?? ""}|${who}`;
 };
+
+/** أسماء بديلة لنفس بطاقة TheSports عند اكتمال playerId بعد أول رصد بالاسم. */
+function tsEventSigAliases(e: TsEvent): string[] {
+  if (e.type !== "yellow" && e.type !== "red" && e.type !== "yellow_red") {
+    return [tsEventSig(e)];
+  }
+  const out = new Set<string>([tsEventSig(e)]);
+  if (e.playerId != null && String(e.playerId).trim() !== "") {
+    const name = (e.player || e.inPlayer || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (name) out.add(`${e.type}|${e.team ?? ""}|n:${name}`);
+  }
+  return [...out];
+}
 
 const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?? 0}`;
 
@@ -555,11 +684,13 @@ async function detectEventAlerts(
     }
 
     const prev = eventSeen.get(m.id);
-    const curByType = events.map((e) => ({ e, sig: eventSig(e) }));
+    const curByType = events.map((e) => ({ e, sig: eventSig(e), aliases: eventSigAliases(e) }));
 
     // خطّ الأساس: أول رصدٍ للمباراة يسجّل كل التواقيع بلا إرسال ولا احتجاز.
     if (!prev) {
-      eventSeen.set(m.id, new Set(curByType.map((c) => c.sig)));
+      const base = new Set<string>();
+      for (const c of curByType) for (const a of c.aliases) base.add(a);
+      eventSeen.set(m.id, base);
       eventPending.delete(m.id);
       continue;
     }
@@ -572,45 +703,62 @@ async function detectEventAlerts(
     const nowMs = Date.now();
 
     const matchName = `${m.home.name} ضد ${m.away.name}`;
-    for (const { e, sig } of curByType) {
-      if (prev.has(sig)) continue; // سبق إرساله/تأسيسه
+    for (const { e, sig, aliases } of curByType) {
+      if (aliases.some((a) => prev.has(a))) continue; // سبق إرساله/تأسيسه (أي اسم بديل)
 
       const isCard = e.type === "yellow-card" || e.type === "red-card";
       const isVar = e.type === "var";
       // غير الكروت/الفار لا يُنتج إشعارًا هنا (الأهداف عبر اللقطة) — نسجّله ونمضي.
       if (!isCard && !isVar) {
-        nextSeen.add(sig);
+        for (const a of aliases) nextSeen.add(a);
         continue;
       }
       if (isStaleMatchEvent(m, e.minute, e.extra ?? 0)) {
-        nextSeen.add(sig);
+        for (const a of aliases) nextSeen.add(a);
         continue;
       }
 
       // نافذة التأكيد: لا نُرسِل إلا بعد أن يصمد الحدث زمنًا يتجاوز كاش الأحداث.
+      // البطاقات بلا playerId: ننتظر حتى يظهر المعرّف أو تنتهي النافذة (ثم نرسل بالاسم).
       const firstSeenAt = prevPending?.get(sig);
       if (firstSeenAt == null) {
-        // أول رصدٍ → احتجاز بانتظار التأكيد (بلا إرسال).
         nextPending.set(sig, nowMs);
         continue;
       }
+      if (isStaleByWallClock(firstSeenAt, nowMs)) {
+        for (const a of aliases) nextSeen.add(a);
+        continue;
+      }
       if (nowMs - firstSeenAt < EVENT_CONFIRM_MS) {
-        // ما زال ضمن النافذة → يبقى معلّقًا بطابعه الزمني الأصلي.
+        nextPending.set(sig, firstSeenAt);
+        continue;
+      }
+      if (isCard && e.playerId == null && nowMs - firstSeenAt < EVENT_CONFIRM_MS * 2) {
+        // دورة/دورتان إضافيتان لاستكمال playerId قبل تثبيت التوقيع بالاسم.
         nextPending.set(sig, firstSeenAt);
         continue;
       }
 
       // صمد الحدث ما يكفي → إشعارٌ مؤكَّد، ونقله إلى «المرصودة».
-      nextSeen.add(sig);
+      for (const a of aliases) nextSeen.add(a);
       const minute = e.minute != null ? ` · د${e.minute}${e.extra ? `+${e.extra}` : ""}` : "";
+      const side = matchTeamSide(m, e.teamId);
       if (isCard) {
         const icon = e.type === "red-card" ? "🟥" : "🟨";
+        const cardKind = e.type === "red-card" ? "red" : "yellow";
         out.push({
           fixtureId: m.id,
           kind: "card",
           title: `${icon} ${e.label}${e.team ? ` · ${e.team}` : ""}`,
           body: `${e.player || matchName}${minute}`,
           teamRefIds,
+          dedupeKey: buildCardDedupeKey(
+            m.id,
+            side,
+            normalizePlayerKeyCrossSource(e.playerId, e.player),
+            cardKind,
+            e.minute,
+          ),
         });
       } else {
         // فار: «تأكيد هدف بعد المراجعة» فحص روتيني يلي كل هدف تقريبًا — الهدف نفسه
@@ -624,6 +772,7 @@ async function detectEventAlerts(
           title: "🎦 مراجعة الفار",
           body: `${detail}${matchName}${minute}`,
           teamRefIds,
+          dedupeKey: buildVarDedupeKey(m.id, side, e.label || ""),
         });
       }
     }
@@ -876,18 +1025,44 @@ async function detectTsEventAlerts(
     const matchName = `${m.home.name} ضد ${m.away.name}`;
 
     const prev = tsEventSeen.get(m.id);
+    const curByType = ts.events.map((e) => ({
+      e,
+      sig: tsEventSig(e),
+      aliases: tsEventSigAliases(e),
+    }));
+
+    // خطّ الأساس: أول رصدٍ للمباراة يسجّل كل التواقيع بلا إرسال ولا احتجاز.
+    if (!prev) {
+      const base = new Set<string>();
+      for (const c of curByType) for (const a of c.aliases) base.add(a);
+      tsEventSeen.set(m.id, base);
+      tsEventPending.delete(m.id);
+      continue;
+    }
+
     // اتحاد تراكمي لا استبدال (نفس علّة eventSeen — الاختفاء المؤقت يعيد الإرسال).
-    const curSigs = new Set(ts.events.map(tsEventSig));
-    tsEventSeen.set(m.id, prev ? new Set([...prev, ...curSigs]) : curSigs);
-    if (!prev) continue; // خطّ أساس فقط
+    const nextSeen = new Set(prev);
+    const prevPending = tsEventPending.get(m.id);
+    const nextPending = new Map<string, number>();
+    const nowMs = Date.now();
 
-    for (const e of ts.events) {
-      if (prev.has(tsEventSig(e))) continue; // ليس جديدًا
-      if (isStaleMatchEvent(m, e.minute)) continue;
-      const minute = e.minute ? ` · د${e.minute}` : "";
-      const teamName = TEAM_NAME(m, e.team);
+    for (const { e, sig, aliases } of curByType) {
+      if (aliases.some((a) => prev.has(a))) continue; // ليس جديدًا (أي اسم بديل)
 
-      if (e.type === "goal" || e.type === "penalty_goal" || e.type === "own_goal") {
+      const isCard = e.type === "yellow" || e.type === "red" || e.type === "yellow_red";
+      const isVar = e.type === "var";
+      const isGoal = e.type === "goal" || e.type === "penalty_goal" || e.type === "own_goal";
+
+      if (isStaleMatchEvent(m, e.minute)) {
+        for (const a of aliases) nextSeen.add(a);
+        continue;
+      }
+
+      // أهداف: تُرسل فورًا (حساسة للزمن) بعد خطّ الأساس — بلا نافذة تأكيد.
+      if (isGoal) {
+        for (const a of aliases) nextSeen.add(a);
+        const minute = e.minute ? ` · د${e.minute}` : "";
+        const teamName = TEAM_NAME(m, e.team);
         const who = arById(e.playerId) ?? (e.player ? tr(e.player) : teamName || matchName);
         const score =
           e.homeScore != null && e.awayScore != null
@@ -906,7 +1081,49 @@ async function detectTsEventAlerts(
           body,
           teamRefIds,
         });
-      } else if (e.type === "red" || e.type === "yellow_red") {
+        continue;
+      }
+
+      if (!isCard && !isVar) {
+        for (const a of aliases) nextSeen.add(a);
+        continue;
+      }
+
+      // فار غير حاسم: نسجّله بلا إشعار (فحص روتيني / معلّق).
+      if (isVar && (e.varResult == null || !TS_VAR_DECISIVE_RESULTS.has(e.varResult))) {
+        for (const a of aliases) nextSeen.add(a);
+        continue;
+      }
+
+      // نافذة التأكيد (نفس EVENT_CONFIRM_MS لمسار API-Football).
+      const firstSeenAt = prevPending?.get(sig);
+      if (firstSeenAt == null) {
+        nextPending.set(sig, nowMs);
+        continue;
+      }
+      if (isStaleByWallClock(firstSeenAt, nowMs)) {
+        for (const a of aliases) nextSeen.add(a);
+        continue;
+      }
+      if (nowMs - firstSeenAt < EVENT_CONFIRM_MS) {
+        nextPending.set(sig, firstSeenAt);
+        continue;
+      }
+      // بطاقة بلا playerId: انتظر دورة/دورتين إضافيتين لاستكمال المعرّف.
+      if (
+        isCard &&
+        (e.playerId == null || String(e.playerId).trim() === "") &&
+        nowMs - firstSeenAt < EVENT_CONFIRM_MS * 2
+      ) {
+        nextPending.set(sig, firstSeenAt);
+        continue;
+      }
+
+      for (const a of aliases) nextSeen.add(a);
+      const minute = e.minute ? ` · د${e.minute}` : "";
+      const teamName = TEAM_NAME(m, e.team);
+
+      if (e.type === "red" || e.type === "yellow_red") {
         const who = arById(e.playerId) ?? (e.player ? tr(e.player) : "");
         out.push({
           fixtureId: m.id,
@@ -914,6 +1131,13 @@ async function detectTsEventAlerts(
           title: `🟥 بطاقة حمراء${teamName ? ` · ${teamName}` : ""}`,
           body: `${who || matchName}${minute}`,
           teamRefIds,
+          dedupeKey: buildCardDedupeKey(
+            m.id,
+            matchTeamSide(m, null, e.team),
+            normalizePlayerKeyCrossSource(e.playerId, who || e.player),
+            "red",
+            e.minute,
+          ),
         });
       } else if (e.type === "yellow") {
         const who = arById(e.playerId) ?? (e.player ? tr(e.player) : "");
@@ -923,22 +1147,34 @@ async function detectTsEventAlerts(
           title: `🟨 بطاقة صفراء${teamName ? ` · ${teamName}` : ""}`,
           body: `${who || matchName}${minute}`,
           teamRefIds,
+          dedupeKey: buildCardDedupeKey(
+            m.id,
+            matchTeamSide(m, null, e.team),
+            normalizePlayerKeyCrossSource(e.playerId, who || e.player),
+            "yellow",
+            e.minute,
+          ),
         });
-      } else if (e.type === "var") {
-        // إشعار فقط عند قرارٍ حاسم (إلغاء/احتساب/تغيير). المزوّد يرسل حادثة VAR
-        // أيضًا للفحص الروتيني الذي يلي كل هدف (تأكيد) وللمراجعة المعلّقة (0) —
-        // وكانت هذه مصدر إشعار «مراجعة الفار» الزائف في كل مباراة.
-        if (e.varResult == null || !TS_VAR_DECISIVE_RESULTS.has(e.varResult)) continue;
-        const outcome = TS_VAR_RESULT_AR[e.varResult] ?? "قرار بعد مراجعة الفار";
+      } else if (isVar) {
+        const outcome = TS_VAR_RESULT_AR[e.varResult!] ?? "قرار بعد مراجعة الفار";
         out.push({
           fixtureId: m.id,
           kind: "var",
           title: "🎦 مراجعة الفار",
           body: `${outcome} · ${matchName}${minute}`,
           teamRefIds,
+          dedupeKey: buildVarDedupeKey(
+            m.id,
+            matchTeamSide(m, null, e.team),
+            `${e.varReason ?? ""}|${e.varResult}`,
+          ),
         });
       }
     }
+
+    tsEventSeen.set(m.id, nextSeen);
+    if (nextPending.size > 0) tsEventPending.set(m.id, nextPending);
+    else tsEventPending.delete(m.id);
   }
 
   // تنظيف دوريّ لتوقيعات مباريات لم تعد ضمن القائمة (مرّة كل ساعة).
@@ -948,6 +1184,9 @@ async function detectTsEventAlerts(
     const allIds = new Set(matches.map((mm) => mm.id));
     for (const id of tsEventSeen.keys()) {
       if (!allIds.has(id)) tsEventSeen.delete(id);
+    }
+    for (const id of tsEventPending.keys()) {
+      if (!allIds.has(id)) tsEventPending.delete(id);
     }
   }
 
@@ -1004,6 +1243,11 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
     const sigs = sentAlertSigs.get(alert.fixtureId) ?? new Set<string>();
     const sig = alertSig(alert);
     if (sigs.has(sig)) continue;
+    // بطاقة/فار: قفل Redis موحّد عبر المصدرين (TS ↔ AF) حتى مع اختلاف النص.
+    if (alert.kind === "card" || alert.kind === "var") {
+      const claimed = await claimAlertSlot(sig);
+      if (!claimed) continue;
+    }
     sigs.add(sig);
     sentAlertSigs.set(alert.fixtureId, sigs);
     recipients += await dispatchAlert(alert);

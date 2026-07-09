@@ -75,7 +75,7 @@ const LIVE_TTL = 15 * 1000;
 const LIVE_BOARD_TTL = 8 * 1000;
 const FIXTURES_TTL = 60 * 1000;
 const TODAY_TTL = 60 * 1000; // قائمة مباريات اليوم — تتغيّر ببطء (الجاري يُحدَّث بكاش live)
-const MATCH_DETAIL_TTL = 20 * 1000;
+const MATCH_DETAIL_TTL = 10 * 1000;
 const SEASON_TTL = 6 * 60 * 60 * 1000; // الموسم الحالي شبه ثابت
 const ROUNDS_TTL = 30 * 60 * 1000; // قائمة الجولات تتغيّر نادرًا
 const H2H_TTL = 60 * 60 * 1000; // المواجهات التاريخية شبه ثابتة
@@ -619,8 +619,9 @@ export async function getOngoingLeagueIds(): Promise<Set<number>> {
   return ids;
 }
 
-// أنماط ضجيج لا نريدها في «البطولات العالمية القائمة»: ودّيات، فئات سنّية، احتياط.
-const NOISE_LEAGUE_RE = /friendl|\bu-?1[5-9]\b|\bu-?2[0-3]\b|youth|reserve|amateur/i;
+// أنماط ضجيج لا نريدها في «البطولات العالمية القائمة»: ودّيات واحتياط وهواة فقط.
+// الفئات السنّية (U20/Youth) تُعرض — طلب المنتج 2026-07-09.
+const NOISE_LEAGUE_RE = /friendl|reserve|amateur/i;
 
 /**
  * مفتاح ترجمة الدوري العالمي: أسماء مثل "Premier League" تتكرر عبر دول كثيرة،
@@ -658,9 +659,12 @@ function localizeWorldLeagueName(name: string, country: string, tr?: NameLookup)
 /**
  * المباريات المباشرة في البطولات العالمية التي موسمها قائم الآن — نُبقي بطولاتنا
  * المنتقاة دائمًا، ونضيف أي دوري عالمي موسمه قائم (عبر كل العالم لا قائمتنا فقط)،
- * ونستبعد ضجيج الودّيات والفئات السنّية. نداء fixtures?live=all + مجموعة المواسم
- * القائمة، كلاهما خلف كاش SWR يخدم آلاف الزوار. الأسماء المعروفة تُعرَّب مع
- * fallback إنجليزي آمن. (مجمّع في الواجهة حسب الدولة ثم الدوري.)
+ * ونستبعد ضجيج الودّيات والاحتياط (الفئات السنّية تُعرض). نداء fixtures?live=all
+ * من API-Football + مجموعة المواسم القائمة، كلاهما خلف كاش SWR. الأسماء المعروفة
+ * تُعرَّب مع fallback إنجليزي آمن. (مجمّع في الواجهة حسب الدولة ثم الدوري.)
+ *
+ * المصدر: API-Football (`fixtures?live=all`) — ليس TheSports. TheSports يُستخدم
+ * فقط لتسريع النتيجة/الأحداث لبطولات محدودة مربوطة في TS_COMPETITION_IDS.
  */
 export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
   return withSWR(`spl:world-live`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
@@ -1266,20 +1270,40 @@ export async function getMatchEventsOnly(fixtureId: number): Promise<SplMatchEve
 }
 
 /**
- * لقطة خفيفة للمباراة (fixture فقط) — لتحديث «مبارياتي»/الويدجت بلا سحب
- * events/statistics/lineups الثقيلة. نداء fixtures?id= واحد فقط.
+ * لقطة خفيفة (fixture فقط) — لتحديث «مبارياتي» بلا events/stats/lineups.
+ * نداء fixtures?id= واحد فقط. أثناء اللعب نُركّب نتيجة TheSports خارج كاش SWR
+ * كي تطابق القائمة الرئيسية (التي تستخدم overlay) ولا تتأخّر النتيجة 10–20ث.
  */
 export async function getMatchLite(fixtureId: number): Promise<SplFixture | null> {
   if (isSyntheticFixtureId(fixtureId)) {
-    return (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId) ?? null;
+    const fx = (await getWorldCupMergedFixtures()).find((f) => f.id === fixtureId) ?? null;
+    if (!fx?.status.live) return fx;
+    const tsCompId = getTsCompetitionId("world-cup");
+    return tsCompId ? overlayFastScoreOnFixture(fx, tsCompId) : fx;
   }
-  return withSWR(`spl:match-lite:${fixtureId}`, MATCH_DETAIL_TTL, MATCH_DETAIL_TTL * 2, async () => {
+  const base = await withSWR(`spl:match-lite:${fixtureId}`, MATCH_DETAIL_TTL, MATCH_DETAIL_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
     const item = rows[0];
     if (!item) return null;
     const fxTr = await fixtureTranslators(rows);
-    return localizeFixture(item, fxTr);
+    const fx = localizeFixture(item, fxTr);
+    const leagueId = item.league?.id;
+    if (typeof leagueId === "number") liteLeagueByFixture.set(fixtureId, leagueId);
+    return fx;
   });
+  if (!base?.status.live) return base;
+  return overlayMatchLite(base, fixtureId);
+}
+
+/** leagueId آخر معروف لكل مباراة lite — يُملأ داخل كولباك SWR. */
+const liteLeagueByFixture = new Map<number, number>();
+
+async function overlayMatchLite(fx: SplFixture, fixtureId: number): Promise<SplFixture> {
+  const leagueId = liteLeagueByFixture.get(fixtureId);
+  const comp = leagueId != null ? getCompetitionByLeagueId(leagueId) : undefined;
+  const tsCompId = getTsCompetitionId(comp?.slug);
+  if (!tsCompId) return fx;
+  return overlayFastScoreOnFixture(fx, tsCompId);
 }
 
 // ============================================================

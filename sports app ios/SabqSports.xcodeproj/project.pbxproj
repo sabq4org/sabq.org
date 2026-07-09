@@ -35,6 +35,8 @@
 		5B000022 /* IBMPlexSansArabic-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5C000022 /* IBMPlexSansArabic-Regular.ttf */; };
 		5B000023 /* IBMPlexSansArabic-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5C000023 /* IBMPlexSansArabic-SemiBold.ttf */; };
 		5B000024 /* IBMPlexSansArabic-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5C000024 /* IBMPlexSansArabic-Bold.ttf */; };
+		5B000026 /* IBMPlexSansArabic-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5C000026 /* IBMPlexSansArabic-Medium.ttf */; };
+		5B000027 /* IBMPlexSansArabic-Text.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5C000027 /* IBMPlexSansArabic-Text.ttf */; };
 		5B000025 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 5C000025 /* LaunchScreen.storyboard */; };
 		5B0000A1 /* VaraPrediction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A1 /* VaraPrediction.swift */; };
 		5B0000A2 /* VaraInsights.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000A2 /* VaraInsights.swift */; };
@@ -49,6 +51,7 @@
 		5B0000C1 /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000C1 /* Localization.swift */; };
 		5B0000C2 /* EnglishStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000C2 /* EnglishStrings.swift */; };
 		5B0000D0 /* EditProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000D0 /* EditProfileView.swift */; };
+		5B0000D2 /* NotificationsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000D2 /* NotificationsSettingsView.swift */; };
 		5B0000D1 /* SpPhotoPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000D1 /* SpPhotoPermission.swift */; };
 		5B000102 /* SpMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000102 /* SpMatchActivity.swift */; };
 		5B000103 /* SpLiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000103 /* SpLiveActivityManager.swift */; };
@@ -112,6 +115,8 @@
 		5C000022 /* IBMPlexSansArabic-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Regular.ttf"; sourceTree = "<group>"; };
 		5C000023 /* IBMPlexSansArabic-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-SemiBold.ttf"; sourceTree = "<group>"; };
 		5C000024 /* IBMPlexSansArabic-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Bold.ttf"; sourceTree = "<group>"; };
+		5C000026 /* IBMPlexSansArabic-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Medium.ttf"; sourceTree = "<group>"; };
+		5C000027 /* IBMPlexSansArabic-Text.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "IBMPlexSansArabic-Text.ttf"; sourceTree = "<group>"; };
 		5C000025 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		5C000030 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		5C000031 /* SabqSports.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SabqSports.entitlements; sourceTree = "<group>"; };
@@ -129,6 +134,7 @@
 		5C0000C1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		5C0000C2 /* EnglishStrings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnglishStrings.swift; sourceTree = "<group>"; };
 		5C0000D0 /* EditProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProfileView.swift; sourceTree = "<group>"; };
+		5C0000D2 /* NotificationsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsSettingsView.swift; sourceTree = "<group>"; };
 		5C0000D1 /* SpPhotoPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpPhotoPermission.swift; sourceTree = "<group>"; };
 		5C000100 /* SabqSportsWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = SabqSportsWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5C000101 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -190,6 +196,7 @@
 				5C00000E /* CommunityView.swift */,
 				5C00000F /* AccountView.swift */,
 				5C0000D0 /* EditProfileView.swift */,
+				5C0000D2 /* NotificationsSettingsView.swift */,
 				5C0000A5 /* SearchView.swift */,
 				5C0000A6 /* ForYouView.swift */,
 				5C000010 /* MatchCenterView.swift */,
@@ -264,7 +271,9 @@
 		5D000008 /* Fonts */ = {
 			isa = PBXGroup;
 			children = (
+				5C000027 /* IBMPlexSansArabic-Text.ttf */,
 				5C000022 /* IBMPlexSansArabic-Regular.ttf */,
+				5C000026 /* IBMPlexSansArabic-Medium.ttf */,
 				5C000023 /* IBMPlexSansArabic-SemiBold.ttf */,
 				5C000024 /* IBMPlexSansArabic-Bold.ttf */,
 			);
@@ -367,6 +376,8 @@
 				5B000022 /* IBMPlexSansArabic-Regular.ttf in Resources */,
 				5B000023 /* IBMPlexSansArabic-SemiBold.ttf in Resources */,
 				5B000024 /* IBMPlexSansArabic-Bold.ttf in Resources */,
+				5B000026 /* IBMPlexSansArabic-Medium.ttf in Resources */,
+				5B000027 /* IBMPlexSansArabic-Text.ttf in Resources */,
 				5B000025 /* LaunchScreen.storyboard in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -403,6 +414,7 @@
 				5B00000E /* CommunityView.swift in Sources */,
 				5B00000F /* AccountView.swift in Sources */,
 				5B0000D0 /* EditProfileView.swift in Sources */,
+				5B0000D2 /* NotificationsSettingsView.swift in Sources */,
 				5B0000D1 /* SpPhotoPermission.swift in Sources */,
 				5B000010 /* MatchCenterView.swift in Sources */,
 				5B000011 /* TeamPlayerPages.swift in Sources */,
@@ -586,7 +598,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = SabqSportsWidgets/SabqSportsWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070712;
+				CURRENT_PROJECT_VERSION = 2026070808;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SabqSportsWidgets/Info.plist;
@@ -597,7 +609,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sports.LiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -611,7 +623,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = SabqSportsWidgets/SabqSportsWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026070712;
+				CURRENT_PROJECT_VERSION = 2026070808;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = SabqSportsWidgets/Info.plist;
@@ -622,7 +634,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sports.LiveActivity;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

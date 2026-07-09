@@ -147,20 +147,27 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
     return s.statusLabel.isEmpty ? SpWidgetL("قريبًا") : s.statusLabel
 }
 
-// عرض الحالة الحيّة على الجزيرة الديناميكية — يعرض نصّ الدقيقة **كما يظهر داخل
-// التطبيق تمامًا** («45' · الشوط الأول»، «45+2'»، «90+3'»). المصدر هو الدقيقة
-// المدفوعة من الخادم الذي يعيد حسابها ويدفعها كل ثانيتين بأولوية عالية، فتبقى
-// شاشة القفل متزامنة مع رقم المباراة داخل التطبيق.
-//
-// تخلّينا عن العدّاد الذاتي (Text(timerInterval:)): فوق الدقيقة 60 كان يعرض
-// صيغة الساعات («1:12:30» بدل «72'»)، وبإزاحة −1 كان يتأخّر دقيقةً كاملة عن
-// رقم التطبيق، ولا يستطيع تمثيل بدل الضائع («45+2'») — فكانت شاشة القفل تخالف
-// ما يراه المستخدم داخل التطبيق. النصّ المدفوع يطابقه في كل الأطوار.
+// عرض الحالة الحيّة على الجزيرة الديناميكية — يفضّل العدّاد الذاتي من
+// `clockStartEpoch` (يتحرّك على الجهاز بلا انتظار APNs)، ويسقط على النصّ المدفوع
+// عند الاستراحة/الترجيح/بدل الضائع («45+2'») حيث الساعة متوقّفة أو الصيغة خاصّة.
 @ViewBuilder
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
-    Text(statusText(s, kickoff: kickoff))
-        .lineLimit(1)
-        .frame(maxWidth: .infinity, alignment: .center)
+    if s.isLive, !s.isFinished,
+       let epoch = s.clockStartEpoch, epoch > 0,
+       !s.minute.contains("+") {
+        TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
+            let elapsed = timeline.date.timeIntervalSince1970 - epoch
+            let m = elapsed >= 0 ? max(1, Int(elapsed / 60.0) + 1) : 1
+            let label = s.statusLabel.isEmpty ? "\(m)'" : "\(m)' · \(s.statusLabel)"
+            Text(label)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+    } else {
+        Text(statusText(s, kickoff: kickoff))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .center)
+    }
 }
 
 // البطاقة RTL: المضيف يمينًا والضيف يسارًا. نرسم النتيجة LTR بترتيب
@@ -292,24 +299,49 @@ private struct LockScreenView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// السطر الأوّل من شارة الحالة: نصّ الدقيقة الحيّة **كما يظهر داخل التطبيق**
-    /// («45'»/«45+2'») أو حالة الشوط. مدفوع من الخادم (يُحدّث كل ثانيتين بأولوية
-    /// عالية) — بلا عدّاد ذاتي كي لا يختلف الرقم عمّا يراه المستخدم داخل التطبيق
-    /// ولا ينزلق لصيغة الساعات بعد الدقيقة 60.
-    @ViewBuilder private var liveClockOrText: some View {
+/// السطر الأوّل من شارة الحالة: عدّاد ذاتي من `clockStartEpoch` حين تجري الساعة،
+/// وإلا النصّ المدفوع (`minute`) عند الاستراحة/الترجيح/بدل الضائع.
+/// العدّاد يعرض دقائق (`72'`) لا صيغة ساعات — بخلاف `Text(timerInterval:)`.
+@ViewBuilder private var liveClockOrText: some View {
+    let s = context.state
+    if s.isLive, !s.isFinished,
+       let epoch = s.clockStartEpoch, epoch > 0,
+       !s.minute.contains("+") {
+        TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
+            Text(Self.minuteLabel(epoch: epoch, at: timeline.date, fallback: s.minute))
+        }
+    } else {
         Text(primaryStatusLine)
     }
+}
 
-    /// السطر الأول: العدّاد إن وُجد، وإلا نصّ الحالة («مباشر»/«انتهت»/«قريبًا»).
-    private var primaryStatusLine: String {
-        let s = context.state
-        if s.isFinished { return SpWidgetL("انتهت") }
-        if s.isLive {
-            if !s.minute.isEmpty { return s.minute }
-            return s.statusLabel.isEmpty ? SpWidgetL("مباشر") : s.statusLabel
-        }
-        return s.statusLabel.isEmpty ? SpWidgetL("قريبًا") : s.statusLabel
+/// يحسب الدقيقة الجارية من المرساة: نفس معادلة الخادم/التطبيق (m = floor((now−epoch)/60)+1).
+private static func minuteLabel(epoch: Double, at date: Date, fallback: String) -> String {
+    let elapsed = date.timeIntervalSince1970 - epoch
+    guard elapsed >= 0 else { return fallback.isEmpty ? "1'" : fallback }
+    let m = max(1, Int(elapsed / 60.0) + 1)
+    // سقف أمان: لا نتجاوز الدقيقة المدفوعة بأكثر من دقيقتين (مزوّد متأخّر).
+    if let pushed = parseMinute(fallback), m > pushed + 2 {
+        return fallback
     }
+    return "\(m)'"
+}
+
+private static func parseMinute(_ raw: String) -> Int? {
+    let digits = raw.prefix(while: { $0.isNumber })
+    return digits.isEmpty ? nil : Int(digits)
+}
+
+/// السطر الأول: العدّاد إن وُجد، وإلا نصّ الحالة («مباشر»/«انتهت»/«قريبًا»).
+private var primaryStatusLine: String {
+    let s = context.state
+    if s.isFinished { return SpWidgetL("انتهت") }
+    if s.isLive {
+        if !s.minute.isEmpty { return s.minute }
+        return s.statusLabel.isEmpty ? SpWidgetL("مباشر") : s.statusLabel
+    }
+    return s.statusLabel.isEmpty ? SpWidgetL("قريبًا") : s.statusLabel
+}
 
     /// السطر الثاني: رقم الشوط/استراحة — يظهر فقط حين يكون السطر الأول عدّادًا
     /// (كي لا يتكرّر نصّ الحالة في السطرين).

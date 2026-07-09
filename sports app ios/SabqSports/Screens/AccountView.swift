@@ -45,8 +45,7 @@ struct AccountView: View {
                     predictionsSection
                     languageSection
                     appearanceSection
-                    notificationsSection
-                    transfersNotificationsSection
+                    notificationsEntrySection
                     aboutSection
                     dangerZoneSection
 
@@ -450,113 +449,45 @@ struct AccountView: View {
         .padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 12)
     }
 
-    // MARK: - تنبيهات المباريات
+    // MARK: - الإشعارات (مدخل لصفحة التفاصيل)
 
-    @ViewBuilder private var notificationsSection: some View {
+    private var notificationsEntrySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(L("تنبيهات المباريات"))
-            if auth.isLoggedIn {
-                settingsCard {
-                    alertRow(L("بداية المباراة"), "play.circle.fill", \.kickoff)
-                    rowDivider
-                    alertRow(L("الأهداف"), "soccerball", \.goals)
-                    rowDivider
-                    alertRow(L("البطاقات"), "rectangle.portrait.fill", \.cards)
-                    rowDivider
-                    alertRow(L("حالات الفار (VAR)"), "tv.fill", \.varReview)
-                    rowDivider
-                    alertRow(L("نهاية المباراة"), "flag.checkered", \.fulltime)
-                    rowDivider
-                    alertRow(L("لقطات ذكية"), "sparkles", \.smartSnaps)
-                    rowDivider
-                    localSmartSnapsRow
-                }
-                hint(followedTeams.isEmpty
-                     ? L("تابع فريقًا ليصلك تنبيه عند أحداث مبارياته.")
-                     : L("تصلك هذه التنبيهات عن مباريات فِرقك المتابَعة."))
-            } else {
-                settingsCard {
-                    Button { router.requestLogin() } label: {
-                        HStack(spacing: 12) {
-                            iconTile("bell.badge.fill", SpTheme.green)
-                            Text(L("سجّل الدخول بعضوية سبق لتفعيل تنبيهات فِرقك"))
-                                .font(SportsFonts.app(size: 14, weight: .semibold))
+            sectionHeader(L("الإشعارات"))
+            settingsCard {
+                NavigationLink { NotificationsSettingsView() } label: {
+                    HStack(spacing: 12) {
+                        iconTile("bell.badge.fill", SpTheme.green)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("إدارة الإشعارات"))
+                                .font(SportsFonts.app(size: 14.5, weight: .bold))
                                 .foregroundStyle(SpTheme.onDark)
-                            Spacer(minLength: 0)
-                            Image(systemName: "chevron.backward")
-                                .font(.system(size: 12, weight: .bold))
+                            Text(notificationsEntrySubtitle)
+                                .font(SportsFonts.app(size: 11.5, weight: .semibold))
                                 .foregroundStyle(SpTheme.onDarkFaint)
+                                .lineLimit(2)
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 14)
-                        .contentShape(Rectangle())
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.backward")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(SpTheme.onDarkFaint)
                     }
-                    .buttonStyle(SpPressStyle())
+                    .padding(.horizontal, 14).padding(.vertical, 14)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(SpPressStyle())
             }
+            hint(L("تصلك إشعارات الفِرق المتابَعة والمباريات في «مبارياتي»."))
         }
     }
 
-    // MARK: - تنبيهات الانتقالات (بثّ عام — لا يتطلّب متابعة فريق)
-
-    @ViewBuilder private var transfersNotificationsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(L("تنبيهات الانتقالات"))
-            if auth.isLoggedIn {
-                settingsCard {
-                    alertRow(L("انتقالات سعودية"), "flag.fill", \.transfersSaudi)
-                    rowDivider
-                    alertRow(L("انتقالات عالمية بارزة"), "globe", \.transfersGlobal)
-                }
-                hint(L("تصلك الصفقات المؤكّدة فور تأكيدها — تنبيهات سوق عامّة لا تتطلّب متابعة فريق."))
-            } else {
-                settingsCard {
-                    Button { router.requestLogin() } label: {
-                        HStack(spacing: 12) {
-                            iconTile("bell.badge.fill", SpTheme.green)
-                            Text(L("سجّل الدخول بعضوية سبق لتفعيل تنبيهات الانتقالات"))
-                                .font(SportsFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SpTheme.onDark)
-                            Spacer(minLength: 0)
-                            Image(systemName: "chevron.backward")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(SpTheme.onDarkFaint)
-                        }
-                        .padding(.horizontal, 14).padding(.vertical, 14)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(SpPressStyle())
-                }
-            }
+    private var notificationsEntrySubtitle: String {
+        let teams = followedTeams.count
+        let matches = SpMatchFollows.shared.visibleItems.count
+        if !auth.isLoggedIn {
+            return L("إذن النظام · مبارياتي · تسجيل الدخول للتنبيهات اللحظية")
         }
-    }
-
-    private func alertRow(_ title: String, _ icon: String, _ keyPath: WritableKeyPath<SpAlertPrefs, Bool>) -> some View {
-        let active = auth.alertPrefs[keyPath: keyPath]
-        return Button {
-            var p = auth.alertPrefs
-            p[keyPath: keyPath].toggle()
-            Task { await auth.setAlertPrefs(p) }
-        } label: {
-            HStack(spacing: 12) {
-                iconTile(icon, active ? SpTheme.green : SpTheme.onDarkFaint)
-                Text(title)
-                    .font(SportsFonts.app(size: 14.5, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDark)
-                Spacer(minLength: 0)
-                // نقطة + نص بلا كبسولة ملوّنة — الحالة لمسة لا صندوق (×7 صفوف).
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(active ? SpTheme.green : SpTheme.onDarkFaint)
-                        .frame(width: 7, height: 7)
-                    Text(active ? L("مفعّل") : L("متوقف"))
-                        .font(SportsFonts.app(size: 11.5, weight: .bold))
-                }
-                .foregroundStyle(active ? SpTheme.green : SpTheme.onDarkFaint)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(SpPressStyle())
+        return String(format: L("%d فِرق · %d مباريات · أنواع الأحداث"), teams, matches)
     }
 
     // MARK: - عن التطبيق
@@ -578,32 +509,13 @@ struct AccountView: View {
         }
     }
 
-    private var localSmartSnapsRow: some View {
-        Button {
-            showSmartSnaps.toggle()
-        } label: {
-            HStack(spacing: 12) {
-                iconTile("eye", showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
-                Text(L("إظهار اللقطات داخل التطبيق"))
-                    .font(SportsFonts.app(size: 14.5, weight: .semibold))
-                    .foregroundStyle(SpTheme.onDark)
-                Spacer(minLength: 0)
-                HStack(spacing: 6) {
-                    Circle()
-                        .fill(showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
-                        .frame(width: 7, height: 7)
-                    Text(showSmartSnaps ? L("ظاهر") : L("مخفي"))
-                        .font(SportsFonts.app(size: 11.5, weight: .bold))
-                }
-                .foregroundStyle(showSmartSnaps ? SpTheme.green : SpTheme.onDarkFaint)
-            }
-            .padding(.horizontal, 14).padding(.vertical, 12)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(SpPressStyle())
+    private var appVersion: String {
+        let b = Bundle.main
+        let v = (b.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
+        let n = (b.infoDictionary?["CFBundleVersion"] as? String) ?? "1"
+        return "\(v) (\(n))"
     }
 
-    // صفّ يفتح رابطًا خارجيًّا (بنفس هيئة navRow).
     private func linkRow(_ icon: String, _ title: String, _ urlString: String) -> some View {
         Button {
             if let url = URL(string: urlString) { openURL(url) }
@@ -618,13 +530,6 @@ struct AccountView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(SpPressStyle())
-    }
-
-    private var appVersion: String {
-        let b = Bundle.main
-        let v = (b.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0"
-        let n = (b.infoDictionary?["CFBundleVersion"] as? String) ?? "1"
-        return "\(v) (\(n))"
     }
 
     private func navRow<D: View>(_ icon: String, _ title: String, _ tint: Color = SpTheme.onDarkDim,

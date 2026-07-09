@@ -39,6 +39,11 @@ const MAX_AGE_DAYS = 3;
 // دفعة إشعارات متلاحقة. قابل للضبط عبر SPORTS_TRANSFER_MAX_GLOBAL_PER_CYCLE.
 const MAX_GLOBAL_PER_CYCLE = Number(process.env.SPORTS_TRANSFER_MAX_GLOBAL_PER_CYCLE ?? 3);
 
+// سقف الصفقات السعودية الفردية في الدورة. عند تجاوزه نُرسل إشعارًا واحدًا مجمّعًا
+// بدل دفعة 5+ متلاحقة (كاش ساعة + دورة 10 دقائق كانت تُفرغ دفعةً دفعة). قابل
+// للضبط عبر SPORTS_TRANSFER_MAX_SAUDI_PER_CYCLE.
+const MAX_SAUDI_PER_CYCLE = Number(process.env.SPORTS_TRANSFER_MAX_SAUDI_PER_CYCLE ?? 2);
+
 type TransferScope = "saudi" | "global";
 
 interface DetectedTransferAlert {
@@ -105,14 +110,14 @@ async function detectSaudi(): Promise<DetectedTransferAlert[]> {
     return [];
   }
   const baseline = seenSaudi.size === 0;
-  const out: DetectedTransferAlert[] = [];
+  const fresh: DetectedTransferAlert[] = [];
   for (const t of transfers) {
     const key = `s:${t.id}`;
     if (seenSaudi.has(key)) continue;
     seenSaudi.add(key);
     if (baseline) continue; // أول دورة: أساس فقط
     if (!isRecent(t.date)) continue;
-    out.push({
+    fresh.push({
       key,
       scope: "saudi",
       title: "🟢 صفقة سعودية مؤكّدة",
@@ -120,7 +125,22 @@ async function detectSaudi(): Promise<DetectedTransferAlert[]> {
       playerId: t.player.id,
     });
   }
-  return out;
+  // ضمن السقف: إشعارات فردية. فوقه: إشعار واحد مجمّع (كل الـids مُعلَّمة مرصودة أعلاه).
+  if (fresh.length <= MAX_SAUDI_PER_CYCLE) return fresh;
+  const preview = fresh
+    .slice(0, 3)
+    .map((a) => a.body)
+    .join(" · ");
+  const extra = fresh.length > 3 ? ` · و${fresh.length - 3} أخرى` : "";
+  return [
+    {
+      key: `s:digest:${fresh.map((a) => a.key).join(",")}`,
+      scope: "saudi",
+      title: `🟢 ${fresh.length} صفقات سعودية جديدة`,
+      body: `${preview}${extra}`,
+      playerId: 0,
+    },
+  ];
 }
 
 /** كشف الصفقات العالمية البارزة المؤكّدة الجديدة (major && !saudi). */

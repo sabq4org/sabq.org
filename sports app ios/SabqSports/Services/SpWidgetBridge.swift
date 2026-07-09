@@ -5,7 +5,7 @@ import WidgetKit
 // ثم أقرب متابَعة من «مبارياتي» عبر البطولات، ثم أبرز مباريات روشن)، يكيّش
 // الشعارين في حاوية App Group، يكتب اللقطة المشتركة، ثم يطلب تحديث خطوط
 // الودجت. يُستدعى بعد تحميل الرئيسية — أفضل جهد، لا يرمي.
-enum SpWidgetBridge {
+nonisolated enum SpWidgetBridge {
     static let widgetKind = "SpNextMatchWidget"
 
     static func sync(follows: [SpFixture], favoriteId: Int?) async {
