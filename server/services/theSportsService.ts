@@ -1296,6 +1296,8 @@ export interface TsLiveBoardItem {
   awayTeamId: string;
   homeName: string;
   awayName: string;
+  homeLogo: string;
+  awayLogo: string;
   goalsHome: number;
   goalsAway: number;
   penHome: number | null;
@@ -1382,20 +1384,19 @@ export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
       }),
     );
 
-    // أسماء الفرق الناقصة: team/additional يعطي الاسم الإنجليزي (Basic Info).
+    // team/additional: اسم إنجليزي + شعار لكل الفرق (Basic Info).
     // لا نعرض uuid خامًا أبدًا — كان يظهر كـ «أسماء» غير مفهومة في عالمية.
     const teamExtraNames = new Map<string, string>();
-    const missingTeams = teamIds.filter((id) => {
-      const n = teamTr(id);
-      return !n || looksLikeTsUuid(n);
-    });
-    for (let i = 0; i < missingTeams.length; i += I18N_CONCURRENCY) {
-      const slice = missingTeams.slice(i, i + I18N_CONCURRENCY);
+    const teamExtraLogos = new Map<string, string>();
+    for (let i = 0; i < teamIds.length; i += I18N_CONCURRENCY) {
+      const slice = teamIds.slice(i, i + I18N_CONCURRENCY);
       await Promise.all(
         slice.map(async (tid) => {
           const ex = await getTsTeamExtra(tid);
-          const name = ex?.name?.trim() ?? "";
+          if (!ex) return;
+          const name = ex.name?.trim() ?? "";
           if (name && !looksLikeTsUuid(name)) teamExtraNames.set(tid, name);
+          if (ex.logo?.trim()) teamExtraLogos.set(tid, ex.logo.trim());
         }),
       );
     }
@@ -1442,6 +1443,8 @@ export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
         awayTeamId: e.awayTeamId,
         homeName,
         awayName,
+        homeLogo: teamExtraLogos.get(e.homeTeamId) ?? "",
+        awayLogo: teamExtraLogos.get(e.awayTeamId) ?? "",
         goalsHome: e.decoded.home,
         goalsAway: e.decoded.away,
         penHome: e.decoded.penHome,
