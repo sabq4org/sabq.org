@@ -1,7 +1,7 @@
 import SwiftUI
 
-// مركز المباراة — يُفتح كـ sheet عند الضغط على أي بطاقة مباراة. ترويسة «ملعب»
-// خضراء (الفريقان + النتيجة/التوقيت + الحالة + البطولة + الملعب)، ثم تبويبات:
+// مركز المباراة — يُفتح كـ sheet عند الضغط على أي بطاقة مباراة. ترويسة مسطّحة
+// (الفريقان + النتيجة/التوقيت + الحالة + الدور/التاريخ + الملعب)، ثم تبويبات:
 // الأحداث · الإحصاءات · التشكيلة (تُخفى الفارغة). يبدأ بمعاينة فورية من البطاقة
 // ثم يثري بالتفاصيل الكاملة من /sports/match/:id. نصوص الترويسة بيضاء على الأخضر.
 extension VaraTeamStrength {
@@ -233,7 +233,6 @@ struct SpMatchCenter: View {
                 if let f = fixture { header(f) }
 
                 preMatchCard
-                matchInfoCard
 
                 if loading && detail == nil {
                     SpLoading()
@@ -335,6 +334,18 @@ struct SpMatchCenter: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
             }
+            let stadium = headerStadium(f)
+            if !stadium.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(stadium)
+                        .font(SportsFonts.app(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .foregroundStyle(SpTheme.onDarkDim)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
@@ -349,6 +360,14 @@ struct SpMatchCenter: View {
         let day = SpFormat.kickoffDay(f.date)
         if !day.isEmpty { parts.append(day) }
         return parts.joined(separator: " · ")
+    }
+
+    private func headerStadium(_ f: SpFixture) -> String {
+        let name = f.venue.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let city = f.venue.city.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty { return city }
+        if city.isEmpty { return name }
+        return "\(name) — \(city)"
     }
 
     private func teamColumn(_ t: SpTeam) -> some View {
@@ -414,7 +433,6 @@ struct SpMatchCenter: View {
                         .font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
                     Spacer(minLength: 0)
                 }
-                // سطر الموعد/البطولة/الدور حُذف — يتكرّر مفصّلًا في بطاقة المعلومات أدناه.
                 SpCountdownChips(timestampMs: f.timestamp * 1000)
                     .frame(maxWidth: .infinity, alignment: .center)
             }
@@ -425,56 +443,6 @@ struct SpMatchCenter: View {
             )
             .padding(.horizontal, 16)
         }
-    }
-
-    // MARK: - معلومات المباراة القادمة (اليوم/التاريخ/الملعب/البطولة/الدور)
-
-    @ViewBuilder private var matchInfoCard: some View {
-        if let f = fixture, !f.started {
-            let stadium = f.venue.city.isEmpty ? f.venue.name
-                : (f.venue.name.isEmpty ? f.venue.city : "\(f.venue.name) — \(f.venue.city)")
-            VStack(spacing: 0) {
-                infoLine("calendar", L("اليوم والتاريخ"), SpFormat.kickoffDay(f.date))
-                infoDivider
-                infoLine("clock", L("التوقيت"), SpFormat.kickoffTime(f.date))
-                if !stadium.isEmpty {
-                    infoDivider
-                    infoLine("mappin.and.ellipse", L("الملعب"), stadium)
-                }
-                let comp = [f.competition, preview?.competition].compactMap { $0 }.first { !$0.isEmpty } ?? ""
-                if !comp.isEmpty {
-                    infoDivider
-                    infoLine("trophy.fill", L("البطولة"), comp)
-                }
-                if !f.round.isEmpty {
-                    infoDivider
-                    infoLine("flag.checkered", L("الدور"), f.round)
-                }
-            }
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
-                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
-            )
-            .padding(.horizontal, 16)
-        }
-    }
-
-    private func infoLine(_ icon: String, _ label: String, _ value: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold)).foregroundStyle(acc)
-                .frame(width: 26, height: 26)
-            Text(label).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
-            Spacer(minLength: 8)
-            Text(value).font(SportsFonts.app(size: 13, weight: .bold)).foregroundStyle(SpTheme.onDark)
-                .lineLimit(1).minimumScaleFactor(0.7)
-        }
-        .padding(.horizontal, 14).padding(.vertical, 11)
-    }
-
-    private var infoDivider: some View {
-        Rectangle().fill(SpTheme.outline.opacity(0.6)).frame(height: 1).padding(.leading, 52)
     }
 
     // MARK: - حكم المباراة (كما في ويب المونديال — أعداد صحيحة لا متوسطات كسرية)
