@@ -128,6 +128,14 @@ interface SabqApi {
     @POST("api/v1/auth/login")
     suspend fun login(@Body body: LoginRequest): ApiLoginResponse
 
+    /** إرسال رمز OTP للجوال (Twilio Verify). */
+    @POST("api/v1/auth/phone/send")
+    suspend fun sendPhoneCode(@Body body: PhoneSendRequest): PhoneSendResponse
+
+    /** التحقق من رمز الجوال وإصدار جلسة عضو. */
+    @POST("api/v1/auth/phone/verify")
+    suspend fun verifyPhoneCode(@Body body: PhoneVerifyRequest): ApiLoginResponse
+
     @POST("api/v1/auth/register")
     suspend fun register(@Body body: RegisterRequest): ApiLoginResponse
 

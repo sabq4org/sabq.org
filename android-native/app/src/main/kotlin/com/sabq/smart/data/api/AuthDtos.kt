@@ -12,10 +12,32 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
+/** دخول بحساب سبق — البريد أو الجوال + كلمة المرور (null يُحذف من JSON). */
 @Serializable
 data class LoginRequest(
-    val email: String,
+    val email: String? = null,
+    val phone: String? = null,
     val password: String,
+)
+
+/** إرسال رمز تحقّق للجوال — `POST /api/v1/auth/phone/send`. */
+@Serializable
+data class PhoneSendRequest(
+    val phone: String,
+)
+
+@Serializable
+data class PhoneSendResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+)
+
+/** التحقق من رمز الجوال — `POST /api/v1/auth/phone/verify`. */
+@Serializable
+data class PhoneVerifyRequest(
+    val phone: String,
+    val code: String,
+    val deviceInfo: OAuthDeviceInfo? = null,
 )
 
 @Serializable
