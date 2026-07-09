@@ -1038,6 +1038,7 @@ struct SpPhoneLoginFlow: View {
                     .font(SportsFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(SpTheme.onDark)
                     .tint(SpTheme.green)
+                    .multilineTextAlignment(.leading)   // الرقم يبدأ بجانب +966 مباشرة (لا يطفو للطرف البعيد)
                     .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(9)) }
             }
             // الصفّ كاملًا LTR: المفتاح +966 يسار، الرقم يمينه (كالويب).
