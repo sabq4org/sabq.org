@@ -635,7 +635,12 @@ struct HomeView: View {
         .padding(.horizontal, 12).padding(.vertical, 11)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(SpTheme.chipFill)
+                .fill(SpTheme.card)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(SpTheme.cardStroke, lineWidth: 1)
+                )
+                .shadow(color: SpTheme.cardShadow, radius: 6, x: 0, y: 3)
         )
     }
 
