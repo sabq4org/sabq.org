@@ -65,7 +65,7 @@ struct SectionsView: View {
                 ForEach(trendingTags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
                         Text(tag)
-                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.primaryStart)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)

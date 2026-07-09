@@ -117,7 +117,7 @@ struct AudioNewslettersView: View {
                         HStack(spacing: 3) {
                             Image(systemName: "clock").font(SabqFonts.app(size: 9))
                             Text(formatDuration(d))
-                                .font(SabqFonts.app(size: 10, weight: .semibold))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                                 .monospacedDigit()
                         }
                         .foregroundStyle(SabqTheme.tertiaryInk)
@@ -126,7 +126,7 @@ struct AudioNewslettersView: View {
                         HStack(spacing: 3) {
                             Image(systemName: "headphones").font(SabqFonts.app(size: 9))
                             Text("\(listens)")
-                                .font(SabqFonts.app(size: 10, weight: .semibold))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                                 .monospacedDigit()
                         }
                         .foregroundStyle(SabqTheme.tertiaryInk)

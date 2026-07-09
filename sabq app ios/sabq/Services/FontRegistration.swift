@@ -26,17 +26,35 @@ enum SabqFonts {
     }
 
     /// الخط الموحّد للتطبيق كله — يُرجع متغيّر IBM Plex Sans Arabic المناسب
-    /// لوزن SwiftUI المطلوب. بديل مباشر لـ `SabqFonts.app(size: weight:)` كي يطابق
-    /// كامل التطبيق الخط المعتمد في تفاصيل الخبر (3 أوزان متوفّرة، فنُسقط
-    /// الأوزان النادرة على أقرب وزن).
+    /// لوزن SwiftUI المطلوب.
+    ///
+    /// سياسة التخفيف (2026-07):
+    /// - العبارات الصغيرة (≤13pt: وقت، تاريخ، chips، meta) تبقى هوائية —
+    ///   لا Bold أبداً، و`.medium`/`.semibold` يسقطان على Regular.
+    /// - النصوص الأكبر تُخفَّف درجة واحدة: Bold→SemiBold، و`.medium`→Regular
+    ///   (سابقاً كان `.medium` يُرسم SemiBold فيبدو كل شيء ثقيلاً).
+    /// - `headline()` يبقى Bold للعناوين التحريرية الكبيرة فقط.
     nonisolated static func app(size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        if weight == .bold || weight == .heavy || weight == .black {
-            return .custom(bold, size: size)
+        let isCaption = size <= 13
+
+        switch weight {
+        case .ultraLight, .thin, .light, .regular:
+            return .custom(regular, size: size)
+        case .medium:
+            // Medium must stay Regular — mapping it to SemiBold made every
+            // clock/date/meta label look bold across the app.
+            return .custom(regular, size: size)
+        case .semibold:
+            return .custom(isCaption ? regular : semibold, size: size)
+        case .bold:
+            // Soften one step: captions → Regular, body/titles → SemiBold.
+            return .custom(isCaption ? regular : semibold, size: size)
+        case .heavy, .black:
+            // Captions stay airy; only large display type keeps true Bold.
+            return .custom(isCaption ? regular : bold, size: size)
+        default:
+            return .custom(regular, size: size)
         }
-        if weight == .semibold || weight == .medium {
-            return .custom(semibold, size: size)
-        }
-        return .custom(regular, size: size)
     }
 
     private static var didRegister = false

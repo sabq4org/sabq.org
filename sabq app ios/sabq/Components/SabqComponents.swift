@@ -1113,11 +1113,11 @@ struct CompactScreenHeader: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(SabqFonts.app(size: 30, weight: .bold))
+                    .font(SabqFonts.app(size: 28, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 15, weight: .regular))
+                    .font(SabqFonts.app(size: 14, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(4)
@@ -1149,11 +1149,11 @@ struct SectionHeader: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(title)
-                    .font(SabqFonts.app(size: 19, weight: .bold))
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 14, weight: .regular))
+                    .font(SabqFonts.app(size: 13, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(3)
@@ -1223,10 +1223,10 @@ struct SmallActionButton: View {
         Button(action: action) {
             HStack(spacing: 7) {
                 Text(title)
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
 
                 Image(systemName: systemImage)
-                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
             }
             .foregroundStyle(tint)
             .padding(.horizontal, 14)
@@ -1285,10 +1285,10 @@ struct CategoryChip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(SabqFonts.app(size: 14, weight: .semibold))
+                .font(SabqFonts.app(size: 13, weight: .medium))
                 .foregroundStyle(isSelected ? .white : SabqTheme.secondaryInk)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 9)
                 .background(
                     Capsule(style: .continuous)
                         .fill(
@@ -1315,10 +1315,10 @@ struct StatusChip: View {
 
     var body: some View {
         Text(title)
-            .font(SabqFonts.app(size: 12, weight: .semibold))
+            .font(SabqFonts.app(size: 11, weight: .regular))
             .foregroundStyle(tint)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
             .background(
                 Capsule(style: .continuous)
                     .fill(tint.opacity(0.10))
@@ -1336,13 +1336,13 @@ struct DetailLabelPill: View {
         HStack(spacing: 5) {
             if let icon {
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 11, weight: .bold))
+                    .font(SabqFonts.app(size: 10, weight: .medium))
                     // SF Symbols vary in bounding box — lock size so every pill
                     // matches the passport "موثَّق" chip height.
                     .frame(width: 11, height: 11)
             }
             Text(title)
-                .font(SabqFonts.app(size: 12, weight: .bold))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .lineLimit(1)
         }
         .foregroundStyle(tint)
@@ -1368,42 +1368,31 @@ struct FeaturedArticleCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Hero container uses the `Color.clear → .overlay(image)`
-            // pattern instead of letting the Image drive intrinsic size.
-            // Why: in RTL TabView pages (especially the first page,
-            // which is *visually* the last because of layoutDirection
-            // inversion), CachedAsyncImage's intrinsic width — derived
-            // from .fill's aspect-ratio math on the loaded UIImage —
-            // would leak into the card's layout pass, making the card
-            // wider than the TabView page. The Arabic title + excerpt
-            // then bled past the screen's right edge, clipping the
-            // first word of every line (e.g. "أبو" missing from
-            // "أبوظبي"). `Color.clear` gives the container a fixed,
-            // parent-driven width, and `.overlay { image.scaledToFill }
-            // .clipped()` paints the image inside that fixed frame
-            // without ever asking SwiftUI to recompute layout from the
-            // image's pixel size.
-            // 16:10 hero — was fixed 200pt which produced a too-short
-            // viewport that crop-clipped faces in portrait shots (the
-            // backend's focal point is centred for most photos and the
-            // resulting hero ate the top of the head). Android renders
-            // a taller hero at the same width and shows the full
-            // subject; matching it here. Reported 2026-05-24.
+            // Hero must always span the card width. Using aspectRatio(.fit)
+            // as the *outer* size rule let TabView's fixed height compress
+            // the image horizontally on wide phones (Pro / Pro Max) while
+            // the text block below kept the card full-width — white side
+            // gutters. Width-driven height + fixedSize(vertical) refuses
+            // that squeeze; carousel height tracks the same math.
             Color.clear
                 .frame(maxWidth: .infinity)
                 .aspectRatio(16.0 / 10.0, contentMode: .fit)
+                .fixedSize(horizontal: false, vertical: true)
                 .overlay {
-                    if let urlString = article.imageURL, let url = URL(string: urlString) {
-                        FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
+                    Group {
+                        if let urlString = article.imageURL, let url = URL(string: urlString) {
+                            FocalCachedAsyncImage(url: url, focalPoint: article.imageFocalPoint) {
+                                articleImagePlaceholder
+                                    .overlay {
+                                        ProgressView()
+                                            .tint(SabqTheme.primaryEnd)
+                                    }
+                            }
+                        } else {
                             articleImagePlaceholder
-                                .overlay {
-                                    ProgressView()
-                                        .tint(SabqTheme.primaryEnd)
-                                }
                         }
-                    } else {
-                        articleImagePlaceholder
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 .clipped()
                 .clipShape(
@@ -1433,7 +1422,7 @@ struct FeaturedArticleCard: View {
                 // the start of every line (looked like "أبو" was missing
                 // from "أبوظبي").
                 Text(article.title)
-                    .font(SabqFonts.app(size: 20, weight: .bold))
+                    .font(SabqFonts.app(size: 19, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
@@ -1442,7 +1431,7 @@ struct FeaturedArticleCard: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(article.excerpt)
-                    .font(SabqFonts.app(size: 15, weight: .regular))
+                    .font(SabqFonts.app(size: 14, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -1453,18 +1442,18 @@ struct FeaturedArticleCard: View {
                 HStack(spacing: 12) {
                     HStack(spacing: 5) {
                         Image(systemName: "clock")
-                            .font(SabqFonts.app(size: 12, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                         Text(article.readingTime)
-                            .font(SabqFonts.app(size: 12, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                             .monospacedDigit()
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                     HStack(spacing: 5) {
                         Image(systemName: "calendar")
-                            .font(SabqFonts.app(size: 12, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                         Text(article.dateFormatted)
-                            .font(SabqFonts.app(size: 12, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
@@ -1475,7 +1464,7 @@ struct FeaturedArticleCard: View {
                         onBookmark()
                     } label: {
                         Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                            .font(SabqFonts.app(size: 16, weight: .semibold))
+                            .font(SabqFonts.app(size: 15, weight: .medium))
                             .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
                             .scaleEffect(isBookmarked ? 1.15 : 1)
                             .animation(.spring(response: 0.3, dampingFraction: 0.5), value: isBookmarked)
@@ -1514,7 +1503,7 @@ struct FeaturedArticleCard: View {
                 endPoint: .bottomTrailing
             )
         )
-        .frame(height: 200)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay {
             Image(systemName: article.category.icon)
                 .font(SabqFonts.app(size: 80, weight: .ultraLight))
@@ -1563,11 +1552,15 @@ struct CompactArticleRow: View {
                 }
 
                 Text(article.title)
-                    .font(SabqFonts.app(size: 16, weight: .bold))
+                    // Lighter than Bold — SemiBold reads cleaner in dense
+                    // list rows without the heavy newspaper weight.
+                    .font(SabqFonts.subhead(size: 16))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                    .lineSpacing(3)
+                    .lineSpacing(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 metadataRow
             }
@@ -1599,11 +1592,13 @@ struct CompactArticleRow: View {
             heroImage
 
             Text(article.title)
-                .font(SabqFonts.app(size: 17, weight: .bold))
+                .font(SabqFonts.subhead(size: 17))
                 .foregroundStyle(SabqTheme.ink)
                 .lineLimit(3)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
 
             metadataRow
         }
@@ -1662,13 +1657,13 @@ struct CompactArticleRow: View {
         HStack(spacing: 4) {
             Circle()
                 .fill(SabqTheme.coral)
-                .frame(width: 6, height: 6)
+                .frame(width: 5, height: 5)
             Text("عاجل")
-                .font(SabqFonts.app(size: 11, weight: .bold))
+                .font(SabqFonts.app(size: 10, weight: .medium))
                 .foregroundStyle(SabqTheme.coral)
         }
         .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.vertical, 4)
         .background(
             Capsule(style: .continuous)
                 .fill(SabqTheme.coral.opacity(0.10))
@@ -1677,10 +1672,10 @@ struct CompactArticleRow: View {
 
     private var newPill: some View {
         Text("جديد")
-            .font(SabqFonts.app(size: 11, weight: .bold))
+            .font(SabqFonts.app(size: 10, weight: .medium))
             .foregroundStyle(SabqTheme.leaf)
             .padding(.horizontal, 8)
-            .padding(.vertical, 5)
+            .padding(.vertical, 4)
             .background(
                 Capsule(style: .continuous)
                     .fill(SabqTheme.leaf.opacity(0.12))
@@ -1691,15 +1686,15 @@ struct CompactArticleRow: View {
         HStack(spacing: 12) {
             HStack(spacing: 4) {
                 Image(systemName: "clock")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                 Text(article.readingTime)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .monospacedDigit()
             }
             .foregroundStyle(SabqTheme.tertiaryInk)
 
             Text(article.relativeDate)
-                .font(SabqFonts.app(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 10, weight: .regular))
                 .foregroundStyle(SabqTheme.tertiaryInk)
 
             Spacer(minLength: 0)
@@ -1709,7 +1704,7 @@ struct CompactArticleRow: View {
                 onBookmark()
             } label: {
                 Image(systemName: isBookmarked ? "bookmark.fill" : "bookmark")
-                    .font(SabqFonts.app(size: 14, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .medium))
                     .foregroundStyle(isBookmarked ? SabqTheme.primaryEnd : SabqTheme.tertiaryInk)
                     .scaleEffect(isBookmarked ? 1.1 : 1)
                     .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isBookmarked)
@@ -1762,11 +1757,11 @@ struct CategoryTile: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(category.title)
-                    .font(SabqFonts.app(size: 17, weight: .bold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(category.subtitle)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1940,13 +1935,13 @@ struct SabqTabBar: View {
         let tint = SabqTheme.primaryEnd
         HStack(spacing: 6) {
             Image(systemName: isSelected ? tab.selectedImage : tab.systemImage)
-                .font(SabqFonts.app(size: 17, weight: .semibold))
+                .font(SabqFonts.app(size: 16, weight: .medium))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(isSelected ? tint : SabqTheme.tertiaryInk)
 
             if isSelected {
                 Text(tab.title)
-                    .font(SabqFonts.app(size: 12.5, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(tint)
                     // Without these, "استكشاف" wraps onto a second line
                     // inside the narrower active capsule on 6.1" devices.

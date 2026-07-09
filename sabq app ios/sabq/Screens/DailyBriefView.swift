@@ -98,7 +98,7 @@ struct DailyBriefView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(tint)
                 Spacer(minLength: 0)
             }
@@ -107,7 +107,7 @@ struct DailyBriefView: View {
                 .foregroundStyle(SabqTheme.ink)
                 .monospacedDigit()
             Text(label)
-                .font(SabqFonts.app(size: 11, weight: .medium))
+                .font(SabqFonts.app(size: 10, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .lineLimit(1)
         }
@@ -140,7 +140,7 @@ struct DailyBriefView: View {
         return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.coral)
                 Text("اقتراحات لك من اهتماماتك")
                     .font(SabqFonts.app(size: 15, weight: .heavy))
@@ -181,7 +181,7 @@ struct DailyBriefView: View {
                     .frame(width: 220, height: 124)
             }
             Text(article.category.title)
-                .font(SabqFonts.app(size: 10, weight: .bold))
+                .font(SabqFonts.app(size: 10, weight: .regular))
                 .foregroundStyle(article.category.tint)
             Text(article.title)
                 .font(SabqFonts.app(size: 13.5, weight: .bold))
@@ -211,7 +211,7 @@ struct DailyBriefView: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text("مزاجك القرائي اليوم")
-                    .font(SabqFonts.app(size: 11, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                 Text(label)
                     .font(SabqFonts.app(size: 15, weight: .heavy))
@@ -268,10 +268,10 @@ struct DailyBriefView: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                        .font(SabqFonts.app(size: 10, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text(user.localizedRole)
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .lineLimit(1)
                 }
@@ -336,7 +336,7 @@ struct DailyBriefView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "slider.horizontal.3")
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Text("اهتماماتك")
                     .font(SabqFonts.app(size: 15, weight: .heavy))
@@ -346,7 +346,7 @@ struct DailyBriefView: View {
                     showInterestsPicker = true
                 } label: {
                     Text(interests.isEmpty ? "اختر اهتماماتك" : "تعديل")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                 }
                 .buttonStyle(.plain)
@@ -364,9 +364,9 @@ struct DailyBriefView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "plus.circle.fill")
-                                .font(SabqFonts.app(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                             Text("اختر اهتماماتك الآن")
-                                .font(SabqFonts.app(size: 13, weight: .bold))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                         }
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
@@ -381,7 +381,7 @@ struct DailyBriefView: View {
                 FlowLayout(spacing: 8) {
                     ForEach(interests) { interest in
                         Text(interest.name ?? interest.slug ?? "—")
-                            .font(SabqFonts.app(size: 12, weight: .semibold))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                             .foregroundStyle(SabqTheme.primaryEnd)
                             .padding(.horizontal, 11)
                             .padding(.vertical, 7)
@@ -392,7 +392,7 @@ struct DailyBriefView: View {
                 }
 
                 Text("\(interests.count) تصنيف نختار لك منه أخباراً يومية")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
         }
@@ -515,7 +515,7 @@ struct DailyBriefView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 74), spacing: 8)], alignment: .leading, spacing: 8) {
                 ForEach(["محليات", "اقتصاد", "رياضة", "تقنية", "رأي", "لحظة بلحظة", "العالم", "صحة"], id: \.self) { item in
                     Text(item)
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
@@ -560,7 +560,7 @@ struct DailyBriefView: View {
     private func benefitRow(_ text: String, icon: String) -> some View {
         HStack(alignment: .top, spacing: 9) {
             Image(systemName: icon)
-                .font(SabqFonts.app(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .regular))
                 .foregroundStyle(SabqTheme.primaryEnd)
                 .frame(width: 18)
             Text(text)
@@ -577,7 +577,7 @@ struct DailyBriefView: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                        .font(SabqFonts.app(size: 13, weight: .heavy))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                     Text("ابدأ التسجيل مع SABQ AI")
                         .font(SabqFonts.app(size: 16, weight: .heavy))
                 }
@@ -727,7 +727,7 @@ struct InterestsPickerSheet: View {
                     selection = Set(categories.map(\.id))
                 } label: {
                     Text("حدد الكل")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
@@ -740,7 +740,7 @@ struct InterestsPickerSheet: View {
                     selection.removeAll()
                 } label: {
                     Text("امسح الكل")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.secondaryInk)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
@@ -850,7 +850,7 @@ struct InterestsPickerSheet: View {
                 }
             } label: {
                 Text("إعادة المحاولة")
-                    .font(SabqFonts.app(size: 13, weight: .heavy))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 9)

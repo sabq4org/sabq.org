@@ -90,7 +90,7 @@ struct AuthorArticlesView: View {
 
                 if let role = page?.author.role, !role.isEmpty {
                     Text(role)
-                        .font(SabqFonts.app(size: 12, weight: .heavy))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .tracking(0.4)
                         .foregroundStyle(SabqTheme.primaryEnd)
                         .padding(.horizontal, 12)
@@ -201,9 +201,9 @@ struct AuthorArticlesView: View {
         VStack(spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 10, weight: .semibold))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                 Text(label)
-                    .font(SabqFonts.app(size: 10, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .tracking(0.2)
             }
             .foregroundStyle(tint)
@@ -255,10 +255,10 @@ struct AuthorArticlesView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "tag.fill")
-                    .font(SabqFonts.app(size: 11, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Text("التصنيفات الأبرز")
-                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
             }
 
@@ -275,11 +275,11 @@ struct AuthorArticlesView: View {
         let tint = Self.colorFromHex(cat.color) ?? SabqTheme.primaryEnd
         return HStack(spacing: 6) {
             Image(systemName: cat.icon ?? "circle.fill")
-                .font(SabqFonts.app(size: 10, weight: .semibold))
+                .font(SabqFonts.app(size: 10, weight: .regular))
             Text(cat.nameAr)
-                .font(SabqFonts.app(size: 12, weight: .bold))
+                .font(SabqFonts.app(size: 10, weight: .regular))
             Text("\(cat.count)")
-                .font(SabqFonts.app(size: 11, weight: .heavy))
+                .font(SabqFonts.app(size: 10, weight: .regular))
                 .monospacedDigit()
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
@@ -304,7 +304,7 @@ struct AuthorArticlesView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Image(systemName: "newspaper.fill")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.primaryEnd)
                 Text("أحدث المنشورات")
                     .font(SabqFonts.app(size: 14, weight: .bold))
@@ -312,7 +312,7 @@ struct AuthorArticlesView: View {
                 Spacer(minLength: 0)
                 if !articles.isEmpty {
                     Text("\(articles.count)")
-                        .font(SabqFonts.app(size: 11, weight: .heavy))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                         .monospacedDigit()
                 }

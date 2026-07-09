@@ -117,7 +117,7 @@ struct ExploreView: View {
                     recentSearches.removeAll()
                     UserDefaults.standard.set([String](), forKey: "sabq_recent_searches")
                 }
-                .font(SabqFonts.app(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .regular))
                 .foregroundStyle(SabqTheme.tertiaryInk)
             }
 
@@ -129,7 +129,7 @@ struct ExploreView: View {
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "magnifyingglass")
-                                .font(SabqFonts.app(size: 10, weight: .semibold))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                             Text(recent)
                                 .font(SabqFonts.app(size: 12, weight: .medium))
                         }
@@ -169,7 +169,7 @@ struct ExploreView: View {
         } else {
             VStack(alignment: .leading, spacing: 14) {
                 Text("\(displayResults.count) نتيجة")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                 ForEach(Array(displayResults.enumerated()), id: \.element.id) { index, article in
@@ -195,7 +195,7 @@ struct ExploreView: View {
     private func sectionTitle(icon: String, title: String, tint: Color) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(SabqFonts.app(size: 12, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .regular))
                 .foregroundStyle(tint)
             Text(title)
                 .font(SabqFonts.app(size: 14, weight: .bold))

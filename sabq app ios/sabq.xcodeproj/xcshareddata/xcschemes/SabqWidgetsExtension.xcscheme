@@ -18,6 +18,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "5A11110000000000000000D1"
                BuildableName = "SabqWidgetsExtension.appex"
+               BlueprintName = "SabqWidgetsExtension"
                ReferencedContainer = "container:sabq.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -31,6 +32,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "3AFE5FD72F60C121006270F8"
                BuildableName = "sabq.app"
+               BlueprintName = "sabq"
                ReferencedContainer = "container:sabq.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -63,6 +65,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "5A11110000000000000000D1"
             BuildableName = "SabqWidgetsExtension.appex"
+            BlueprintName = "SabqWidgetsExtension"
             ReferencedContainer = "container:sabq.xcodeproj">
          </BuildableReference>
       </RemoteRunnable>
@@ -71,6 +74,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "3AFE5FD72F60C121006270F8"
             BuildableName = "sabq.app"
+            BlueprintName = "sabq"
             ReferencedContainer = "container:sabq.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
@@ -106,6 +110,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "3AFE5FD72F60C121006270F8"
             BuildableName = "sabq.app"
+            BlueprintName = "sabq"
             ReferencedContainer = "container:sabq.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>

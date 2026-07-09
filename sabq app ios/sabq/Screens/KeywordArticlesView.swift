@@ -157,7 +157,7 @@ struct KeywordArticlesView: View {
                 Image(systemName: isFollowing ? "checkmark.circle.fill" : "plus.circle")
                     .font(SabqFonts.app(size: 14, weight: .semibold))
                 Text(isFollowing ? "متابع" : "متابعة الوسم")
-                    .font(SabqFonts.app(size: 13, weight: .heavy))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
             }
             .foregroundStyle(isFollowing ? .white : SabqTheme.primaryEnd)
             .padding(.horizontal, 16)
@@ -220,15 +220,15 @@ private struct CompactOpinionKeywordRow: View {
                 HStack(spacing: 12) {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
-                            .font(SabqFonts.app(size: 11, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                         Text(opinion.readingTime)
-                            .font(SabqFonts.app(size: 11, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                             .monospacedDigit()
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Text(opinion.dateFormatted)
-                        .font(SabqFonts.app(size: 11, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Spacer(minLength: 0)

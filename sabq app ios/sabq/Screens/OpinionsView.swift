@@ -130,7 +130,7 @@ struct OpinionsView: View {
             HStack(spacing: 8) {
                 OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 22)
                 Text(opinion.authorName)
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(1)
             }
@@ -217,7 +217,7 @@ struct OpinionsView: View {
             OpinionAuthorAvatar(name: opinion.authorName, imageURL: opinion.authorImageURL, size: 26)
 
             Text(opinion.authorName)
-                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
         }
     }

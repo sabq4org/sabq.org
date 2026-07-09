@@ -81,7 +81,7 @@ struct LiveCoverageView: View {
                         .frame(width: 8, height: 8)
 
                     Text("مباشر")
-                        .font(SabqFonts.app(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.coral)
 
                     if let lastUpdated = liveData?.stats?.lastUpdated {
@@ -140,7 +140,7 @@ struct LiveCoverageView: View {
                     .font(SabqFonts.app(size: 13, weight: isSelected ? .bold : .medium))
 
                 Text("\(count)")
-                    .font(SabqFonts.app(size: 11, weight: .bold))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(
@@ -188,7 +188,7 @@ struct LiveCoverageView: View {
                 .fill(SabqTheme.outline)
                 .frame(height: 0.5)
             Text(formatDateHeader(dateString))
-                .font(SabqFonts.app(size: 13, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
                 .fixedSize()
             Rectangle()
@@ -221,12 +221,12 @@ struct LiveCoverageView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
                     Text(formatEventTime(event.publishedAt))
-                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
 
                     if event.priority == "urgent" {
                         Text("عاجل")
-                            .font(SabqFonts.app(size: 10, weight: .heavy))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -234,7 +234,7 @@ struct LiveCoverageView: View {
                     }
 
                     Text(event.eventTypeLabelAr)
-                        .font(SabqFonts.app(size: 10, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(severityColor(event.severity))
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -244,7 +244,7 @@ struct LiveCoverageView: View {
 
                     if event.isUpdate {
                         Text("تحديث")
-                            .font(SabqFonts.app(size: 10, weight: .bold))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                             .foregroundStyle(SabqTheme.primaryEnd)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -258,7 +258,7 @@ struct LiveCoverageView: View {
                     Text(countryFlag(event.country))
                         .font(SabqFonts.app(size: 14))
                     Text(event.countryNameAr)
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.secondaryInk)
                 }
 
@@ -274,7 +274,7 @@ struct LiveCoverageView: View {
                         Image(systemName: "quote.opening")
                             .font(SabqFonts.app(size: 9))
                         Text(source)
-                            .font(SabqFonts.app(size: 11, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
                 }
@@ -284,7 +284,7 @@ struct LiveCoverageView: View {
                         Image(systemName: "pin.fill")
                             .font(SabqFonts.app(size: 10))
                         Text("مثبت")
-                            .font(SabqFonts.app(size: 11, weight: .bold))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                     }
                     .foregroundStyle(SabqTheme.primaryEnd)
                 }
