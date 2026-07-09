@@ -640,6 +640,33 @@ export async function getTheSportsMatchLive(
   }
 }
 
+/**
+ * لقطة حيّة كاملة لمباراة عبر معرّف TheSports الخام (uuid) مباشرةً — بلا جسر
+ * diary. تُستخدم لمباريات «عالمية» القادمة من لوحة detail_live (لا مقابل لها في
+ * API-Football)، حيث نملك uuid المباراة أصلًا. أفضل جهد: null عند أي فشل/تهدئة.
+ */
+export async function getTheSportsMatchLiveByUuid(
+  matchUuid: string
+): Promise<TsMatchLive | null> {
+  if (!isTheSportsConfigured()) return null;
+  if (Date.now() < tsCooldownUntil) return null;
+  try {
+    const live = (await getLiveMap()).get(matchUuid);
+    if (!live) return null;
+    const decoded = decodeScore(live.score);
+    if (!decoded) return null;
+    return {
+      ...buildFastScore(decoded),
+      events: decodeEvents(live.incidents),
+      stats: decodeStats(live.stats),
+      commentary: decodeCommentary(live.tlive),
+    };
+  } catch (e) {
+    armCooldown(e);
+    return null;
+  }
+}
+
 // ───────────────────── بيانات إثرائية شبه ثابتة (additional/list, market) ─────────────────────
 // نقاط مُفعَّلة في الباقة (متحقَّق منها 2026‑06‑23): team/additional/list (uuid مفرد)،
 // competition/additional/list، player/market/list (uuid مفرد)، match/recent/list.

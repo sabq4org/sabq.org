@@ -28,6 +28,7 @@ import {
   getTheSportsFastScore,
   getTheSportsLiveBoard,
   getTheSportsMatchLive,
+  getTheSportsMatchLiveByUuid,
   getTsCompetitionExtra,
   getTsCompetitionId,
   getTsCompetitionMatchPairs,
@@ -1586,6 +1587,75 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
     const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fx) : detail.events;
     const statistics = ts.stats ? mapTsStatsToSpl(ts.stats, detail) : detail.statistics;
     return { ...detail, fixture, events, statistics };
+  } catch {
+    return detail;
+  }
+}
+
+// ============================================================
+// مركز مباراة «عالمية» (TheSports فقط) — المعرّف السالب الاصطناعي
+// ------------------------------------------------------------
+// مباريات لوحة البث المباشر العالمي لا مقابل لها في API-Football، فتحمل معرّفًا
+// سالبًا مشتقًّا من uuid المباراة (tsUuidToNegativeId). نستعيد uuid بمسح اللوحة
+// المكاشة (لا خريطة عكسية — الهاش أحادي الاتجاه)، ثم نبني SplMatchDetail من
+// لقطة detail_live الحيّة نفسها (نتيجة + أحداث + إحصاءات). أفضل جهد: null إن
+// خرجت المباراة من اللوحة (انتهت/لم تعد جارية) فيردّ المسار 404 كأي مباراة مفقودة.
+// ============================================================
+
+/** استعادة عنصر لوحة البث العالمي الذي يشتقّ منه المعرّف السالب المطلوب. */
+async function findWorldLiveBoardItem(
+  negativeId: number
+): Promise<TsLiveBoardItem | null> {
+  if (!(negativeId < 0)) return null;
+  const board = await getTheSportsLiveBoard().catch(() => [] as TsLiveBoardItem[]);
+  return board.find((m) => tsUuidToNegativeId(m.matchId) === negativeId) ?? null;
+}
+
+/** لقطة خفيفة (fixture فقط) لمباراة عالمية TheSports — لـ«مبارياتي»/Live Activity. */
+export async function getWorldLiveMatchLite(
+  negativeId: number
+): Promise<SplFixture | null> {
+  const item = await findWorldLiveBoardItem(negativeId);
+  if (!item) return null;
+  const [mapped] = await mapTsBoardToWorldLive([item]);
+  return mapped ?? null;
+}
+
+/** مركز مباراة كامل (نتيجة + أحداث + إحصاءات) لمباراة عالمية TheSports. */
+export async function getWorldLiveMatchDetail(
+  negativeId: number
+): Promise<SplMatchDetail | null> {
+  const item = await findWorldLiveBoardItem(negativeId);
+  if (!item) return null;
+  const [mapped] = await mapTsBoardToWorldLive([item]);
+  if (!mapped) return null;
+  const detail: SplMatchDetail = {
+    fixture: mapped,
+    events: [],
+    statistics: null,
+    lineups: [],
+    leagueId: mapped.leagueId,
+  };
+  try {
+    const ts = await getTheSportsMatchLiveByUuid(item.matchId);
+    if (!ts) return detail;
+    const fixture: SplFixture = {
+      ...mapped,
+      goals: { home: ts.home, away: ts.away },
+      penalties:
+        ts.penHome != null || ts.penAway != null
+          ? { home: ts.penHome, away: ts.penAway }
+          : mapped.penalties,
+      status: {
+        ...mapped.status,
+        live: ts.live,
+        finished: ts.finished || mapped.status.finished,
+      },
+    };
+    const withFx: SplMatchDetail = { ...detail, fixture };
+    const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fixture) : [];
+    const statistics = ts.stats ? mapTsStatsToSpl(ts.stats, withFx) : null;
+    return { ...withFx, events, statistics };
   } catch {
     return detail;
   }

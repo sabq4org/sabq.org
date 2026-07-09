@@ -2087,13 +2087,8 @@ struct SpMatchCenter: View {
     // MARK: - التحميل
 
     private func load() async {
-        // مباريات TheSports-only في «عالمية» (id سالب اصطناعي) بلا مركز AF.
-        if fixtureId < 0 {
-            self.loading = false
-            self.loadError = L("تفاصيل هذه المباراة غير متاحة حاليًا")
-            return
-        }
-        // التفاصيل أساسية؛ إثراء SportMonks أفضل جهد بالتوازي.
+        // التفاصيل أساسية؛ إثراء SportMonks أفضل جهد بالتوازي. مباريات «عالمية»
+        // (id سالب) تُحلّ خادميًّا من لوحة TheSports الحيّة عبر النقطة نفسها.
         async let detailRes = APIClient.shared.fetchMatchDetail(id: fixtureId)
         async let xgOpt = (try? APIClient.shared.fetchXg(matchId: fixtureId))
         async let momOpt = (try? APIClient.shared.fetchMomentum(matchId: fixtureId))

@@ -47,7 +47,8 @@ final class SpLiveActivityManager {
 
     // MARK: بدء النشاط
     func start(for fixture: SpFixture) {
-        // لا Live Activity لمباريات TheSports-only (id سالب) — لا تفاصيل AF ولا deep link صالح.
+        // مباريات «عالمية» (id سالب): مركزها ومركز /lite يعملان الآن، لكن نؤجّل
+        // Live Activity على شاشة القفل ريثما يُختبر مسار التحديث على جهاز فعلي.
         guard fixture.id > 0 else { return }
         adoptExistingIfNeeded()
         guard isSupported, activities[fixture.id] == nil else { return }

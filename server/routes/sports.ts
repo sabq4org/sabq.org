@@ -25,6 +25,8 @@ import {
   getGlobalLiveFixtures,
   getGlobalTodayFixtures,
   getWorldLiveFixtures,
+  getWorldLiveMatchDetail,
+  getWorldLiveMatchLite,
   getHeadToHead,
   getLiveFixtures,
   getMatchDetail,
@@ -551,19 +553,28 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) {
+    // المعرّف السالب = مباراة «عالمية» من لوحة TheSports (لا مقابل لها في AF).
+    if (!Number.isFinite(id) || id === 0) {
       res.status(400).json({ message: "معرّف مباراة غير صحيح" });
       return;
     }
     try {
-      const base = await getMatchDetail(id);
-      if (!base) {
+      // مباريات عالمية (id سالب): تُحلّ من لوحة البث الحيّة نفسها — نتيجة/أحداث/
+      // إحصاءات detail_live — بلا نداء API-Football (لا مقابل لها هناك).
+      const detail =
+        id < 0
+          ? await getWorldLiveMatchDetail(id)
+          : await (async () => {
+              const base = await getMatchDetail(id);
+              if (!base) return null;
+              // الطبقة اللحظية: نتيجة/أحداث/إحصاءات TheSports فوق بيانات API-Football
+              // للمباريات الجارية في البطولات المُدرَجة — أفضل جهد (تتراجع بصمت).
+              return overlayLiveMatchDetail(base);
+            })();
+      if (!detail) {
         res.status(404).json({ message: "المباراة غير موجودة" });
         return;
       }
-      // الطبقة اللحظية: نتيجة/أحداث/إحصاءات TheSports فوق بيانات API-Football
-      // للمباريات الجارية في البطولات المُدرَجة — أفضل جهد (تتراجع بصمت).
-      const detail = await overlayLiveMatchDetail(base);
       const ttl = detail.fixture.status.live ? "max-age=10, s-maxage=15" : "max-age=120, s-maxage=300";
       res.set("Cache-Control", `public, ${ttl}, stale-while-revalidate=120`);
       res.json(detail);
@@ -580,12 +591,13 @@ export function registerSportsRoutes(app: Express) {
       return;
     }
     const id = Number(req.params.id);
-    if (!Number.isFinite(id) || id <= 0) {
+    if (!Number.isFinite(id) || id === 0) {
       res.status(400).json({ message: "معرّف مباراة غير صحيح" });
       return;
     }
     try {
-      const fixture = await getMatchLite(id);
+      // مباراة عالمية (id سالب) → لقطة من لوحة TheSports؛ غيرها → API-Football.
+      const fixture = id < 0 ? await getWorldLiveMatchLite(id) : await getMatchLite(id);
       if (!fixture) {
         res.status(404).json({ message: "المباراة غير موجودة" });
         return;

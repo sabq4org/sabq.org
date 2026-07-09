@@ -453,25 +453,17 @@ struct SpScoreRow: View {
 // رفيعة تحت ترويسة البطولة. يدفع مركز المباراة عند النقر.
 struct SpFlatMatchRow: View {
     let fixture: SpFixture
-    /// مباريات TheSports-only في «عالمية» تحمل id سالبًا اصطناعيًا — لا مركز مباراة AF.
-    private var isExternalLiveOnly: Bool { fixture.id < 0 }
 
     var body: some View {
-        if isExternalLiveOnly {
+        NavigationLink {
+            SpMatchCenter(fixtureId: fixture.id, preview: fixture)
+        } label: {
             SpScoreRow(fixture: fixture)
                 .padding(.vertical, 10)
                 .padding(.horizontal, 8)
-        } else {
-            NavigationLink {
-                SpMatchCenter(fixtureId: fixture.id, preview: fixture)
-            } label: {
-                SpScoreRow(fixture: fixture)
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 8)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(SpPressStyle())
+                .contentShape(Rectangle())
         }
+        .buttonStyle(SpPressStyle())
     }
 }
 
