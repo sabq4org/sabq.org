@@ -60,8 +60,6 @@ const LIVE_STATE_AR: Record<string, string> = {
 
 const TWO_HOURS_SEC = 2 * 3600;
 const STALE_LIVE_SEC = 180; // إذا توقّف الدفع، تُعتَّم البطاقة بعد 3 دقائق
-// المباراة جارية والساعة ذاتية: فترات هدوء طويلة بلا دفعات طبيعية تمامًا.
-const LIVE_QUIET_STALE_SEC = 30 * 60;
 const PUSH_CONCURRENCY = 10;
 
 const CLOCK_PAUSED_STATES = new Set([
@@ -301,9 +299,6 @@ function staleDateFor(detail: SplMatchDetail): number {
     const kickoffSec = f.timestamp + 120;
     if (kickoffSec > Date.now() / 1000) return kickoffSec;
   }
-  // أثناء اللعب: كانت دفعات الدقيقة تمدّد التقادم ضمنيًّا كل ٦٠ث؛ بعد إلغائها
-  // (العدّاد ذاتي من المرساة) نمدّه صراحةً — شوط هادئ بلا أهداف لا يعني تقادمًا.
-  if (f.status.live) return Math.floor(Date.now() / 1000) + LIVE_QUIET_STALE_SEC;
   return Math.floor(Date.now() / 1000) + STALE_LIVE_SEC;
 }
 
@@ -429,18 +424,18 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     ]);
 
     const state = stabilizeClockAnchor(fixtureId, buildContentState(detail, ts, live));
-    // بصمة الدفع: أثناء جريان الساعة الذاتية (مرساة قائمة وبلا «+») **لا** نُضمّن
-    // الدقيقة — الجهاز يعدّها محليًّا من clockStartEpoch، ودفع كل انقلاب دقيقة كان
-    // يعني ~90 دفعة أولوية 10 لكل جهاز في المباراة فيستنزف ميزانية ActivityKit
-    // ويُعرّض شاشة القفل للخنق منتصف المباراة. تبقى الدقيقة في البصمة حين تكون
-    // هي المعروضَ فعلًا: ساعة متوقّفة (استراحة/ترجيح) أو بدل ضائع («45+2'»).
-    const selfTicking = state.clockStartEpoch != null && !state.minute.includes("+");
+    // بصمة الدفع تشمل الدقيقة عمدًا: واجهة Live Activity تُرسَم فقط عند وصول
+    // تحديث (TimelineView لا يتكتك داخلها — ثبت ميدانيًّا 2026-07-09: تجمّدت
+    // شاشة القفل على آخر دفعة بينما التطبيق يعدّ)، فدفعة كل انقلاب دقيقة هي ما
+    // يعيد الرسم، والويدجت يحسب الدقيقة من المرساة لحظة الرسم فتأتي مضبوطة.
+    // ميزانية الدفعات المتكررة يتيحها NSSupportsLiveActivitiesFrequentUpdates
+    // في امتداد الويدجت (غيابه سابقًا هو ما كان يخنق الدفعات منتصف المباراة).
     const pushKey = JSON.stringify({
       h: state.homeScore,
       a: state.awayScore,
       ph: state.homePenaltyScore ?? null,
       pa: state.awayPenaltyScore ?? null,
-      m: selfTicking ? "" : state.minute,
+      m: state.minute,
       s: state.statusLabel,
       l: state.isLive,
       f: state.isFinished,

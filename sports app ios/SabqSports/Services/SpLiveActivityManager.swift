@@ -221,12 +221,10 @@ final class SpLiveActivityManager {
         return !paused.contains(code.uppercased())
     }
 
-    /// تاريخ تقادم الحالة: أثناء اللعب نافذة واسعة (30 دقيقة) — العدّاد ذاتيّ من
-    /// المرساة ودفعات الخادم تأتي عند التغيّر فقط، فشوط هادئ بلا أهداف ليس تقادمًا
-    /// (نافذة 3 دقائق القديمة افترضت دفعات كل دقيقة). وحتى الانطلاق+دقيقتين
-    /// للمباراة القادمة كي لا يُعتَّم العدّاد التنازلي قبل البدء.
+    /// تاريخ تقادم الحالة: قصير أثناء اللعب (دفعات الدقيقة الدورية تمدّده ضمنيًّا)؛
+    /// وحتى الانطلاق+دقيقتين للمباراة القادمة كي لا يُعتَّم العدّاد التنازلي قبل البدء.
     private func staleDate(for f: SpFixture) -> Date? {
-        if f.status.live { return Date().addingTimeInterval(30 * 60) }
+        if f.status.live { return Date().addingTimeInterval(180) }
         if !f.started, f.kickoff > Date() { return f.kickoff.addingTimeInterval(120) }
         return nil
     }
