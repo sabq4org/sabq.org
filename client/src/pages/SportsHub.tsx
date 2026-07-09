@@ -1076,11 +1076,14 @@ function RoundsView({ compSlug, onOpen }: { compSlug: string; onOpen: (id: numbe
   });
   const fixtures = Array.isArray(fxData?.fixtures) ? fxData!.fixtures : [];
 
-  const emptyBox = (text: string) => (
-    <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">{text}</div>
+  const emptyBox = (title: string, hint?: string) => (
+    <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
+      <p className="text-sm font-semibold text-foreground/80">{title}</p>
+      {hint && <p className="mt-1.5 text-[12.5px] text-foreground/55">{hint}</p>}
+    </div>
   );
 
-  if (rounds.length === 0) return emptyBox("لا تتوفّر جولات لهذه البطولة بعد.");
+  if (rounds.length === 0) return emptyBox("لا تتوفّر جولات لهذه البطولة بعد", "تظهر الجولات هنا عند إعلان جدول المباريات.");
 
   return (
     <div>
@@ -1100,7 +1103,7 @@ function RoundsView({ compSlug, onOpen }: { compSlug: string; onOpen: (id: numbe
       {isLoading
         ? <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">{[...Array(6)].map((_, i) => <div key={i} className="h-16 rounded-lg bg-card border border-border animate-pulse" />)}</div>
         : fixtures.length === 0
-          ? emptyBox("لا توجد مباريات في هذه الجولة.")
+          ? emptyBox("لا توجد مباريات في هذه الجولة", "جرّب جولة أخرى من الشريط أعلاه.")
           : <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">{fixtures.map((f) => <MatchCard key={f.id} fixture={f} onOpen={onOpen} compact />)}</div>}
     </div>
   );
@@ -1119,11 +1122,16 @@ export function MatchHub({ data, configured, compSlug, onOpen }: {
   const firstWithData = tabs.find((t) => t.list.length > 0)?.key ?? "today";
   const [active, setActive] = useState(firstWithData);
 
-  const emptyBox = (text: string) => (
-    <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">{text}</div>
+  const emptyBox = (title: string, hint?: string) => (
+    <div className="rounded-2xl border border-dashed border-border bg-card px-6 py-14 text-center">
+      <p className="text-sm font-semibold text-foreground/80">{title}</p>
+      {hint && <p className="mt-1.5 text-[12.5px] text-foreground/55">{hint}</p>}
+    </div>
   );
 
-  if (!configured) return emptyBox("بانتظار انطلاق الموسم — تغطية المباريات الحيّة تظهر هنا فور بدء الجولة الأولى.");
+  if (!configured) {
+    return emptyBox("بانتظار انطلاق الموسم", "تغطية المباريات الحيّة تظهر هنا فور بدء الجولة الأولى.");
+  }
 
   const isRounds = active === "rounds";
   const current = tabs.find((t) => t.key === active) ?? tabs[1];
@@ -1155,7 +1163,10 @@ export function MatchHub({ data, configured, compSlug, onOpen }: {
           {isRounds
             ? <RoundsView compSlug={compSlug} onOpen={onOpen} />
             : current.list.length === 0
-              ? emptyBox(active === "live" ? "لا مباريات مباشرة الآن — عُد عند صافرة البداية" : "لا توجد مباريات في هذه الفترة — جرّب تبويبًا آخر")
+              ? emptyBox(
+                  active === "live" ? "لا مباريات مباشرة الآن" : "لا توجد مباريات في هذه الفترة",
+                  active === "live" ? "عُد عند صافرة البداية لمتابعة اللحظات الحيّة." : "جرّب تبويبًا آخر من الشريط أعلاه.",
+                )
               : (
                 <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {/* كل التبويبات (مباشر/اليوم/قادمة/النتائج) صفوف مدمجة موحّدة على كل المقاسات */}

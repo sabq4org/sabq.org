@@ -25,12 +25,15 @@ export function apiUrl(path: string): string {
 }
 
 /**
- * بوابة الرياضة تختار ar/en من ?lang= أو Accept-Language. متصفح إنجليزي على
- * sabq.org العربي كان يستلم أسماء إنجليزية رغم الواجهة العربية. نفرض لغة
- * المسار: /en → en، وإلا ar — ما لم يُمرَّر lang صراحةً.
+ * بوابة الرياضة ومركز الانتقالات يختاران ar/en من ?lang= أو Accept-Language.
+ * متصفح إنجليزي على sabq.org العربي كان يستلم تسميات إنجليزية (مثل نوافذ
+ * الانتقالات) رغم الواجهة العربية. نفرض لغة المسار: /en → en، وإلا ar —
+ * ما لم يُمرَّر lang صراحةً.
  */
 export function withSportsLang(path: string): string {
-  if (!path.includes("/api/sports")) return path;
+  if (!path.includes("/api/sports") && !path.includes("/api/transfer-center")) {
+    return path;
+  }
   if (/[?&]lang=/.test(path)) return path;
   const lang =
     typeof window !== "undefined" && window.location.pathname.startsWith("/en")
