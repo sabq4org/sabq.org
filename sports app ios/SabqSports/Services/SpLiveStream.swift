@@ -76,8 +76,9 @@ final class SpLiveStream {
         // المباريات التي غادرت الموجز (انتهت): ختم أخير مميّز ثم تُحذف لاحقًا.
         for (k, v) in stamps where fresh[k] == nil && v != -1 { fresh[k] = -1 }
 
-        let sportsChanged = subset(fresh, "s:") != subset(stamps, "s:")
-        let wcChanged = subset(fresh, "w:") != subset(stamps, "w:")
+        let previous = stamps
+        let sportsChanged = subset(fresh, "s:") != subset(previous, "s:")
+        let wcChanged = subset(fresh, "w:") != subset(previous, "w:")
         stamps = fresh
         if sportsChanged { sportsVersion &+= 1 }
         if wcChanged { wcVersion &+= 1 }
@@ -87,7 +88,12 @@ final class SpLiveStream {
             // نحقنها في «مبارياتي» (البطاقة + الويدجت + النشاط الحيّ) بلا انتظار
             // رحلة شبكة، ثم جلب /lite يصحّح التفاصيل (الليبل/الترجيح) بعدها بلحظة.
             SpMatchFollows.shared.applyDigest(digest.items)
-            Task { await SpMatchFollows.shared.refresh() }
+            // جلب /lite التصحيحي فقط حين تتغيّر مباراة متابَعة فعلًا — كان يُطلق مع
+            // كل نبضة لأي مباراة في العالم (20 جارية = جلب متواصل كل ثانيتين عبثًا).
+            let followedKeys = SpMatchFollows.shared.followedDigestKeys()
+            if followedKeys.contains(where: { fresh[$0] != previous[$0] }) {
+                Task { await SpMatchFollows.shared.refresh() }
+            }
         }
     }
 

@@ -682,6 +682,11 @@ final class SpMatchFollows {
         f.competitionSlug == "world-cup" ? "w:\(f.id)" : "s:\(f.id)"
     }
 
+    /// مفاتيح المتابعات في الموجز — ليقصر SpLiveStream جلب /lite على تغيّرها فعلًا.
+    func followedDigestKeys() -> Set<String> {
+        Set(items.map { digestKey($0) })
+    }
+
     /// تطبيق موجز SSE مباشرةً على المتابعات: النتيجة/الدقيقة/المرساة تصل بطزاجة
     /// TheSports بلا رحلة شبكة إضافية — فتتحدّث البطاقة والويدجت والنشاط الحيّ
     /// فورًا، ويأتي جلب /lite بعدها لتصحيح ما لا يحمله الموجز (الليبل/الترجيح).
@@ -750,8 +755,15 @@ final class SpMatchFollows {
         autoRefreshTask = nil
     }
 
+    /// جلبة قائمة الآن — يمنع تراكب الجلبات المكرّرة (نبضة الموجز + حلقة 5ث +
+    /// ForYou + البطاقة كانت تطلق /lite مزدوجًا لنفس المباراة في اللحظة نفسها).
+    private var refreshInFlight = false
+
     /// يجدّد حالة/نتيجة المباريات الجارية أو القريبة من الانطلاق (±٣ ساعات) من الخادم.
     func refresh() async {
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
+        defer { refreshInFlight = false }
         let now = Date()
         pruneExpiredFinishedMatches(now: now)
         let targets = items.filter { shouldRefresh($0, now: now) }

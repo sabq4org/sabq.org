@@ -83,10 +83,13 @@ struct SpPredictionMatchCard: View {
         }
     }
 
+    /// منسّق ISO ثابت — كان يُنشأ مع كل إعادة رسم للبطاقة.
+    private static let isoFormatter = ISO8601DateFormatter()
+
     private var kickoffLabel: String {
         if settled { return L("انتهت") }
         if match.locked { return L("جارية / مقفلة") }
-        let iso = ISO8601DateFormatter().string(from: f.kickoff)
+        let iso = Self.isoFormatter.string(from: f.kickoff)
         let day = SpFormat.dayMonth(iso)
         let time = SpFormat.kickoffTime(iso)
         return [day, time].filter { !$0.isEmpty }.joined(separator: " · ")

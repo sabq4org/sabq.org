@@ -416,24 +416,17 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
 
     // نتيجة لحظية من TheSports للبطولات المربوطة — نفس المصدر السريع الذي يسرّع
     // الموقع والتطبيق، فيمنع اختلاف شاشة القفل عن الواجهة.
-    let ts: TsMatchLive | null = null;
+    // الاستعلامان مستقلّان — بالتوازي: تسلسلهما كان يمدّد الدورة مع تعدد المباريات
+    // الجارية فتتباطأ دفعات شاشة القفل عن إيقاع الثانيتين.
     const tsCompId = getTsCompetitionId(leagueSlug(detail.leagueId));
-    if (tsCompId) {
-      try {
-        ts = await getTheSportsMatchLive(fixtureId, detail.fixture.timestamp, tsCompId);
-      } catch {
-        ts = null;
-      }
-    }
-
-    // نتيجة لحظية من SportMonks (الوقت الحقيقي) — نستدعيها حتى مع TheSports
-    // لأن TheSports يسبق في النتيجة، لكنه لا يملك حقل دقيقة جارٍ موثوقًا هنا.
-    let live: WcLiveScore | null = null;
-    try {
-      live = await getLiveScore(fixtureId);
-    } catch {
-      live = null;
-    }
+    const [ts, live] = await Promise.all([
+      tsCompId
+        ? getTheSportsMatchLive(fixtureId, detail.fixture.timestamp, tsCompId).catch(
+            (): TsMatchLive | null => null,
+          )
+        : Promise.resolve(null),
+      getLiveScore(fixtureId).catch((): WcLiveScore | null => null),
+    ]);
 
     const state = stabilizeClockAnchor(fixtureId, buildContentState(detail, ts, live));
     // بصمة الدفع: أثناء جريان الساعة الذاتية (مرساة قائمة وبلا «+») **لا** نُضمّن

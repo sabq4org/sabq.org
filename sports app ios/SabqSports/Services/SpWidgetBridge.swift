@@ -24,6 +24,8 @@ nonisolated enum SpWidgetBridge {
     }
 
     private static func write(_ f: SpFixture, favoriteId: Int?) async {
+        // كنسة دورية لحاوية الشعارات (مقيّدة داخليًّا بمرة كل أسبوع).
+        SpSharedContainer.cleanupStaleLogos()
         // لا نعيد الكتابة إن كانت اللقطة الحالية لنفس المباراة وبنفس البيانات الأساسية.
         let current = SpWidgetSnapshot.load()
         let homeFile = await SpSharedContainer.cacheLogo(from: f.home.logo)

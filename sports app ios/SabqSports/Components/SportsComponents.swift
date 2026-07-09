@@ -13,6 +13,8 @@ struct SpAvatarImage: View {
     var placeholderFg: Color = Color.white.opacity(0.92)
     var placeholderBg: Color = Color.white.opacity(0.18)
     @State private var image: UIImage?
+    /// كاش مشترك — كانت الصورة تُنزَّل وتُفكَّك من جديد مع كل ظهور للصف/الشاشة.
+    private static let cache = NSCache<NSString, UIImage>()
 
     var body: some View {
         Group {
@@ -31,8 +33,13 @@ struct SpAvatarImage: View {
         .overlay(Circle().stroke(ring, lineWidth: 2))
         .task(id: url) {
             guard let s = url, !s.isEmpty, let u = URL(string: s) else { image = nil; return }
+            if let cached = Self.cache.object(forKey: s as NSString) {
+                image = cached
+                return
+            }
             if let (data, _) = try? await URLSession.shared.data(from: u),
-               let img = UIImage(data: data) {
+               let img = await spPreparedThumbnail(from: data, maxDimension: 240) {
+                Self.cache.setObject(img, forKey: s as NSString)
                 image = img
             }
         }
@@ -160,11 +167,27 @@ struct SpEmblem: View {
 
 // MARK: - الصور البعيدة والشعارات
 
+/// تحضير مصغّرة للعرض: تفكيك + تصغير للبعد الأقصى (خارج الخيط الرئيسي عبر
+/// byPreparingThumbnail) — الشعارات تُعرض ≤58pt وكان الأصل كامل الدقة يقيم في
+/// الكاش والذاكرة، والتفكيك يقع على الخيط الرئيسي لحظة أول عرض.
+private func spPreparedThumbnail(from data: Data, maxDimension: CGFloat) async -> UIImage? {
+    guard let img = UIImage(data: data) else { return nil }
+    let largest = max(img.size.width, img.size.height)
+    guard largest > maxDimension, largest > 0 else {
+        return await img.byPreparingForDisplay() ?? img
+    }
+    let scale = maxDimension / largest
+    let target = CGSize(width: img.size.width * scale, height: img.size.height * scale)
+    return await img.byPreparingThumbnail(ofSize: target) ?? img
+}
+
 // صورة بعيدة بكاش @State — تبقى ثابتة عبر إعادة رسم الأب المتكرر (بخلاف
 // AsyncImage التي ترتدّ للفراغ عند كل تحديث، كالرئيسية الحيّة → اختفاء الصور).
 struct SpRemoteImage: View {
     let url: String
     var contentMode: ContentMode = .fit
+    /// البعد الأقصى بالبكسل للمصغّرة المكيّشة — يغطي حتى ~80pt على شاشات 3x.
+    var maxPixelDimension: CGFloat = 240
     @State private var image: UIImage?
     private static let cache = NSCache<NSString, UIImage>()
 
@@ -178,13 +201,14 @@ struct SpRemoteImage: View {
         }
         .task(id: url) {
             guard !url.isEmpty, let u = URL(string: url) else { image = nil; return }
-            if let cached = Self.cache.object(forKey: url as NSString) {
+            let key = "\(url)#\(Int(maxPixelDimension))" as NSString
+            if let cached = Self.cache.object(forKey: key) {
                 image = cached
                 return
             }
             if let (data, _) = try? await URLSession.shared.data(from: u),
-               let img = UIImage(data: data) {
-                Self.cache.setObject(img, forKey: url as NSString)
+               let img = await spPreparedThumbnail(from: data, maxDimension: maxPixelDimension) {
+                Self.cache.setObject(img, forKey: key)
                 image = img
             }
         }
@@ -827,6 +851,7 @@ struct SpMyMatchesCard: View {
 struct SpMyTeamCard: View {
     @Environment(SpFavorites.self) private var favorites
     @Environment(SpLiveStream.self) private var liveStream
+    @Environment(SpAppRouter.self) private var router
 
     /// ترتيب روشن المحمّل في الرئيسية — لمركز الفريق (بلا نداء إضافي).
     let standings: [SpStandingRow]
@@ -836,6 +861,8 @@ struct SpMyTeamCard: View {
 
     @State private var fixtures: [SpFixture] = []
     @State private var loaded = false
+    /// نبضة موجز وصلت والتبويب مخفي — تُصرف بتحميل واحد عند العودة.
+    @State private var pendingReload = false
 
     /// بطولات الفريق السعودي المحتملة — ≤ 8 (حد الخادم).
     private static let teamComps = ["pro-league", "kings-cup", "super-cup", "afc-champions-league", "club-world-cup"]
@@ -850,7 +877,14 @@ struct SpMyTeamCard: View {
         }
         .task(id: favorites.team?.id) { await load() }
         // البث الحيّ: أي تغيّر بمباريات عامة قد يمسّ مباراة الفريق — تحديث صامت.
+        // والتبويب المخفي لا يجلب (جدول 5 بطولات مع كل نبضة!) — يؤجَّل للعودة.
         .onChange(of: liveStream.sportsVersion) { _, _ in
+            guard router.selectedTab == .roshn else { pendingReload = true; return }
+            Task { await load() }
+        }
+        .onChange(of: router.selectedTab) { _, tab in
+            guard tab == .roshn, pendingReload else { return }
+            pendingReload = false
             Task { await load() }
         }
     }

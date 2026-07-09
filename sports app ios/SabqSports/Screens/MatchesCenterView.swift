@@ -175,6 +175,8 @@ struct MatchesCenterView: View {
     @State private var loading = true
     @State private var loadError: String?
     @State private var liveOnly = false
+    /// نبضة موجز/دورة استطلاع وصلت والتبويب مخفي — تُصرف بتحميل واحد عند العودة.
+    @State private var pendingLiveReload = false
     @State private var selection = SpCenterFilter.load()
     // نطاق «العدسة» — يُفلتر شرائح البطولات الظاهرة ويُميّز الحبّة المتصدّرة.
     // مستقلّ عن selection: عند التعمّق في بطولة واحدة يبقى النطاق كما هو فتظلّ
@@ -246,13 +248,19 @@ struct MatchesCenterView: View {
         }
         .onChange(of: liveOnly) { _, _ in rebuildDays(keepSelection: true) }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await load(force: true) } }
+            if phase == .active, router.selectedTab == .matches { Task { await load(force: true) } }
         }
-        // البث الحيّ (SSE): الجدول يضم بطولات عامة + المونديال — نصغي للنسختين.
-        .onChange(of: liveStream.sportsVersion) { _, _ in
+        // البث الحيّ (SSE): الجدول يضم بطولات عامة + المونديال — مراقب واحد لمجموع
+        // النسختين (مراقبان منفصلان كانا يطلقان تحميلين كاملين متزامنين للنبضة
+        // المختلطة). والتبويب المخفي لا يعيد التحميل مع كل نبضة (TabView يُبقي
+        // التبويبات المزارة حيّة) — يؤجَّل التحديث لعودة الظهور.
+        .onChange(of: liveStream.sportsVersion &+ liveStream.wcVersion) { _, _ in
+            guard router.selectedTab == .matches else { pendingLiveReload = true; return }
             Task { await load(force: true) }
         }
-        .onChange(of: liveStream.wcVersion) { _, _ in
+        .onChange(of: router.selectedTab) { _, tab in
+            guard tab == .matches, pendingLiveReload else { return }
+            pendingLiveReload = false
             Task { await load(force: true) }
         }
         .refreshable { await load(force: true) }
@@ -1293,6 +1301,11 @@ struct MatchesCenterView: View {
             let delay: UInt64 = (hasLive || nearKickoff) ? 10_000_000_000 : 45_000_000_000
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
+            // التبويب مخفي: لا شبكة — نبضة الموجز/عودة الظهور تتكفّلان بالتحديث.
+            guard router.selectedTab == .matches else {
+                pendingLiveReload = true
+                continue
+            }
             // في الوضع الخامل نسمح بـ HTTP/URL cache (s-maxage≈30–60ث) بدل تجاهله دائمًا.
             await load(force: hasLive || nearKickoff)
         }
