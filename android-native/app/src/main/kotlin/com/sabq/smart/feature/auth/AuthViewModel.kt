@@ -71,16 +71,23 @@ class AuthViewModel @Inject constructor(
     }
 
     fun login(email: String, password: String) {
-        if (email.isBlank() || password.isBlank()) {
-            _form.value = AuthFormState.Error("الرجاء إدخال البريد وكلمة المرور")
+        loginWithCredentials(email, password)
+    }
+
+    /** دخول بحساب سبق (بريد أو جوال + كلمة مرور). */
+    fun loginWithCredentials(identifier: String, password: String) {
+        val id = identifier.trim()
+        if (id.isBlank() || password.isBlank()) {
+            _form.value = AuthFormState.Error("أدخل البريد الإلكتروني أو الجوال وكلمة المرور")
             return
         }
         viewModelScope.launch {
             _form.value = AuthFormState.Submitting
             _resend.value = ResendActivationState.Idle
-            runCatching { repo.login(email, password) }
+            val method = if (id.contains("@")) "email" else "phone_password"
+            runCatching { repo.loginWithIdentifier(id, password) }
                 .onSuccess {
-                    com.sabq.smart.data.analytics.SabqAnalytics.login("email")
+                    com.sabq.smart.data.analytics.SabqAnalytics.login(method)
                     _form.value = AuthFormState.Success(it)
                 }
                 .onFailure { e ->
@@ -93,6 +100,59 @@ class AuthViewModel @Inject constructor(
                         is AuthException -> AuthFormState.Error(e.message ?: "تعذّر تسجيل الدخول")
                         else -> AuthFormState.Error(e.localizedMessage ?: "حدث خطأ، حاول مجدداً")
                     }
+                }
+        }
+    }
+
+    /**
+     * إرسال رمز OTP للجوال. يرجع نجاح/رسالة للواجهة (عدّاد إعادة الإرسال).
+     */
+    fun sendPhoneCode(phone: String, onResult: (ok: Boolean, message: String) -> Unit) {
+        viewModelScope.launch {
+            _form.value = AuthFormState.Submitting
+            _resend.value = ResendActivationState.Idle
+            runCatching { repo.sendPhoneCode(phone) }
+                .onSuccess { resp ->
+                    val msg = resp.message
+                        ?: if (resp.success) "تم إرسال رمز التحقق" else "تعذّر إرسال رمز التحقق"
+                    if (resp.success) {
+                        _form.value = AuthFormState.Idle
+                        onResult(true, msg)
+                    } else {
+                        _form.value = AuthFormState.Error(msg)
+                        onResult(false, msg)
+                    }
+                }
+                .onFailure { e ->
+                    val msg = (e as? AuthException)?.message
+                        ?: e.localizedMessage
+                        ?: "تعذّر إرسال رمز التحقق"
+                    _form.value = AuthFormState.Error(msg)
+                    onResult(false, msg)
+                }
+        }
+    }
+
+    /** التحقق من رمز الجوال وتثبيت الجلسة. */
+    fun verifyPhoneCode(phone: String, code: String) {
+        if (code.length < 4) {
+            _form.value = AuthFormState.Error("رمز التحقق غير صحيح")
+            return
+        }
+        viewModelScope.launch {
+            _form.value = AuthFormState.Submitting
+            _resend.value = ResendActivationState.Idle
+            runCatching { repo.verifyPhoneCode(phone, code) }
+                .onSuccess {
+                    com.sabq.smart.data.analytics.SabqAnalytics.login("phone")
+                    _form.value = AuthFormState.Success(it)
+                }
+                .onFailure { e ->
+                    _form.value = AuthFormState.Error(
+                        (e as? AuthException)?.message
+                            ?: e.localizedMessage
+                            ?: "رمز التحقق غير صحيح",
+                    )
                 }
         }
     }

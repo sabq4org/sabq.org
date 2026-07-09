@@ -1,5 +1,8 @@
 import SwiftUI
 
+/// مصدر رسالة الخطأ في ورقة الدخول — حتى تظهر تحت الزر/التبويب الصحيح فقط.
+enum AuthErrorSource { case none, credentials, phone, social }
+
 @Observable
 final class AuthStore {
     private(set) var currentUser: APIUser?
@@ -8,6 +11,8 @@ final class AuthStore {
     private(set) var errorMessage: String?
     private(set) var successMessage: String?
     private(set) var registrationPending = false
+    /// مصدر آخر خطأ مصادقة — يوجّه عرض الرسالة تحت تبويب الجوال أو البريد.
+    private(set) var errorSource: AuthErrorSource = .none
     /// True when the last login attempt hit a `pending` account — drives
     /// the "إعادة إرسال رمز التفعيل" affordance on the login sheet so
     /// users with an unverified email don't reach a dead end.
@@ -65,53 +70,120 @@ final class AuthStore {
 
     @MainActor
     func login(email: String, password: String) async {
+        await loginWithCredentials(identifier: email, password: password)
+    }
+
+    /// دخول بحساب سبق (بريد أو جوال + كلمة مرور).
+    @MainActor
+    func loginWithCredentials(identifier: String, password: String) async {
+        let id = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         if isLoginLockedOut {
             let remaining = Int(Self.loginLockoutDuration - Date().timeIntervalSince(lastLoginAttempt!))
             errorMessage = "محاولات كثيرة. حاول مرة أخرى بعد \(remaining) ثانية"
+            errorSource = .credentials
+            return
+        }
+        guard !id.isEmpty, !password.isEmpty else {
+            errorMessage = "أدخل البريد الإلكتروني أو الجوال وكلمة المرور"
+            errorSource = .credentials
             return
         }
 
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        errorSource = .none
         pendingActivationUserId = nil
         pendingActivationEmail = nil
         loginAttempts += 1
         lastLoginAttempt = Date()
         do {
-            let response = try await APIClient.shared.login(email: email, password: password)
-            loginAttempts = 0
-            if let token = response.token {
-                await APIClient.shared.setAuthToken(token)
-            }
-            await APIClient.shared.markAuthenticated()
-            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
-            if let loginUser = response.user {
-                currentUser = loginUser
-                isLoggedIn = true
-                SabqAnalytics.setUserId(loginUser.id)
-                SabqAnalytics.login(method: "email")
-            }
-            await fetchFullProfile()
-            // Request push permission + register the device token. Permission
-            // is asked once per install — if the user previously granted or
-            // denied, the system surfaces no prompt and the call completes
-            // immediately. Editorial pushes route through this token.
-            await registerPushTokenAfterAuth()
+            let response = try await APIClient.shared.loginWithIdentifier(id, password: password)
+            try await applySession(response, analyticsMethod: id.contains("@") ? "email" : "phone_password")
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
-            // Account exists but is still pending email verification.
-            // Remember the userId + email so the login sheet can show
-            // the "resend activation" affordance and the action knows
-            // which account to target.
+            errorSource = .credentials
             if case let .accountPendingActivation(_, userId) = apiError {
                 pendingActivationUserId = userId
-                pendingActivationEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+                pendingActivationEmail = id.contains("@") ? id : nil
             }
         } catch {
             errorMessage = "حدث خطأ في تسجيل الدخول"
+            errorSource = .credentials
         }
         isLoading = false
+    }
+
+    // MARK: - دخول/تسجيل بالجوال (Twilio Verify)
+
+    /// إرسال رمز التحقّق للجوال. يرجع (نجاح، رسالة) للعرض في الواجهة.
+    @MainActor
+    func sendPhoneCode(_ phone: String) async -> (ok: Bool, message: String) {
+        isLoading = true
+        errorMessage = nil
+        errorSource = .none
+        defer { isLoading = false }
+        do {
+            let resp = try await APIClient.shared.sendPhoneCode(phone)
+            let msg = resp.message ?? (resp.success ? "تم إرسال رمز التحقق" : "تعذّر إرسال رمز التحقق")
+            if !resp.success {
+                errorMessage = msg
+                errorSource = .phone
+            }
+            return (resp.success, msg)
+        } catch let apiError as APIError {
+            let msg = apiError.errorDescription ?? "تعذّر إرسال رمز التحقق"
+            errorMessage = msg
+            errorSource = .phone
+            return (false, msg)
+        } catch {
+            let msg = "تعذّر إرسال رمز التحقق"
+            errorMessage = msg
+            errorSource = .phone
+            return (false, msg)
+        }
+    }
+
+    /// التحقّق من الرمز وتثبيت الجلسة عند النجاح.
+    @MainActor
+    func verifyPhoneCode(_ phone: String, code: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        errorSource = .phone
+        defer { isLoading = false }
+        do {
+            let response = try await APIClient.shared.verifyPhoneCode(phone, code: code)
+            try await applySession(response, analyticsMethod: "phone")
+            return true
+        } catch let apiError as APIError {
+            errorMessage = apiError.errorDescription
+            errorSource = .phone
+            return false
+        } catch {
+            errorMessage = "رمز التحقق غير صحيح"
+            errorSource = .phone
+            return false
+        }
+    }
+
+    /// تثبيت الجلسة بعد أي مسار دخول ناجح (بريد/جوال/OTP).
+    @MainActor
+    private func applySession(_ response: APILoginResponse, analyticsMethod: String) async throws {
+        guard let token = response.token, !token.isEmpty else {
+            throw APIError.apiMessage(response.message ?? "بيانات الدخول غير صحيحة")
+        }
+        loginAttempts = 0
+        await APIClient.shared.setAuthToken(token)
+        await APIClient.shared.markAuthenticated()
+        UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
+        if let loginUser = response.user {
+            currentUser = loginUser
+            isLoggedIn = true
+            SabqAnalytics.setUserId(loginUser.id)
+            SabqAnalytics.login(method: analyticsMethod)
+        }
+        await fetchFullProfile()
+        await registerPushTokenAfterAuth()
     }
 
     /// Re-send the activation email for the account whose login attempt
@@ -162,6 +234,7 @@ final class AuthStore {
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        errorSource = .none
         pendingActivationUserId = nil
         pendingActivationEmail = nil
         do {
@@ -182,8 +255,10 @@ final class AuthStore {
             await registerPushTokenAfterAuth()
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
+            errorSource = .social
         } catch {
             errorMessage = "تعذر تسجيل الدخول عبر Google"
+            errorSource = .social
         }
         isLoading = false
     }
@@ -202,6 +277,7 @@ final class AuthStore {
         isLoading = true
         errorMessage = nil
         successMessage = nil
+        errorSource = .none
         pendingActivationUserId = nil
         pendingActivationEmail = nil
         do {
@@ -227,8 +303,10 @@ final class AuthStore {
             await registerPushTokenAfterAuth()
         } catch let apiError as APIError {
             errorMessage = apiError.errorDescription
+            errorSource = .social
         } catch {
             errorMessage = "تعذر تسجيل الدخول عبر Apple"
+            errorSource = .social
         }
         isLoading = false
     }
@@ -435,6 +513,7 @@ final class AuthStore {
     func clearMessages() {
         errorMessage = nil
         successMessage = nil
+        errorSource = .none
         registrationPending = false
         pendingActivationUserId = nil
         pendingActivationEmail = nil
@@ -449,6 +528,7 @@ final class AuthStore {
     func setExternalAuthError(_ message: String) {
         errorMessage = message
         successMessage = nil
+        errorSource = .social
         isLoading = false
     }
 
