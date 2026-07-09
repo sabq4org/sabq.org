@@ -15,7 +15,7 @@
  *   GET /api/sports/match/:id               (مسجّلو الأهداف عند التوسيع)
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays,
@@ -52,6 +52,43 @@ import {
   type SpCompetitionCategory,
   type SpLiveItem,
 } from "./SportsHub";
+
+/** شريحة هيرو موحّدة — كلها button بنفس الصندوق (Safari يكبّر <a> ويختلف عن span). */
+function HeroChip({
+  href,
+  tone = "muted",
+  children,
+}: {
+  href?: string;
+  tone?: "live" | "muted";
+  children: React.ReactNode;
+}) {
+  const [, setLocation] = useLocation();
+  const face =
+    tone === "live"
+      ? "inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 text-[12px] font-bold tabular-nums text-white"
+      : "inline-flex items-center gap-1.5 rounded-full bg-muted px-3 text-[12px] font-bold text-muted-foreground";
+  return (
+    <button
+      type="button"
+      className={`${face} appearance-none border-0 align-middle ${href ? "cursor-pointer transition-colors hover:bg-primary/10 hover:text-primary" : "cursor-default"}`}
+      style={{
+        height: 32,
+        minHeight: 32,
+        maxHeight: 32,
+        boxSizing: "border-box",
+        lineHeight: 1,
+        paddingTop: 0,
+        paddingBottom: 0,
+        WebkitAppearance: "none",
+      }}
+      onClick={href ? () => setLocation(href) : undefined}
+      tabIndex={href ? 0 : -1}
+    >
+      {children}
+    </button>
+  );
+}
 
 // ---------- أدوات التاريخ (بتوقيت الرياض) ----------
 
@@ -395,11 +432,11 @@ export function MatchRow({
           href={`/sports/team/${f.home.id}`}
           className={`flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2 ${homeWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
         >
-          <span className="truncate text-[13px] leading-5 sm:text-sm">{f.home.name}</span>
+          <span className="truncate text-[11px] leading-4 sm:text-sm sm:leading-5">{f.home.name}</span>
           {f.home.logo ? (
-            <img src={f.home.logo} alt="" className="h-6 w-6 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
+            <img src={f.home.logo} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
           ) : (
-            <span className="h-6 w-6 shrink-0 rounded-full bg-muted" />
+            <span className="h-5 w-5 shrink-0 rounded-full bg-muted sm:h-6 sm:w-6" />
           )}
         </Link>
 
@@ -447,11 +484,11 @@ export function MatchRow({
           className={`flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 ${awayWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
         >
           {f.away.logo ? (
-            <img src={f.away.logo} alt="" className="h-6 w-6 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
+            <img src={f.away.logo} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
           ) : (
-            <span className="h-6 w-6 shrink-0 rounded-full bg-muted" />
+            <span className="h-5 w-5 shrink-0 rounded-full bg-muted sm:h-6 sm:w-6" />
           )}
-          <span className="truncate text-[13px] leading-5 sm:text-sm">{f.away.name}</span>
+          <span className="truncate text-[11px] leading-4 sm:text-sm sm:leading-5">{f.away.name}</span>
         </Link>
 
         {/* توسيع مسجّلي الأهداف */}
@@ -777,28 +814,27 @@ export default function SportsMatchesBoard() {
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
               {liveTotal > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-1.5 text-[12px] font-bold tabular-nums text-white">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveTotal} مباشر الآن
-                </span>
+                <HeroChip tone="live">
+                  <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-white" />
+                  {liveTotal} مباشر الآن
+                </HeroChip>
               )}
               {isToday && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground">
-                  {isLiveFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5 text-red-500" strokeWidth={1.8} />}
+                <HeroChip>
+                  {isLiveFetching
+                    ? <Loader2 className="h-2 w-2 shrink-0 animate-spin text-red-500" strokeWidth={2.6} />
+                    : <Radio className="h-2 w-2 shrink-0 text-red-500" strokeWidth={2.6} />}
                   تحديث تلقائي
-                </span>
+                </HeroChip>
               )}
-              <Link
-                href="/sports/live"
-                className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-              >
-                <Radio className="h-3.5 w-3.5 text-red-500" strokeWidth={1.8} /> البث المباشر · العالم
-              </Link>
-              <Link
-                href="/sports"
-                className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-              >
-                البوابة الرياضية <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
-              </Link>
+              <HeroChip href="/sports/live">
+                <Radio className="h-2 w-2 shrink-0 text-red-500" strokeWidth={2.6} />
+                البث المباشر · العالم
+              </HeroChip>
+              <HeroChip href="/sports">
+                البوابة الرياضية
+                <ChevronLeft className="h-2 w-2 shrink-0" strokeWidth={2.6} />
+              </HeroChip>
             </div>
           </section>
 

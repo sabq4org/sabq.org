@@ -11,7 +11,7 @@
  * الدوريات الصغيرة تظهر بأسمائها الإنجليزية (fallback آمن).
  */
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, Loader2, Radio, Trophy } from "lucide-react";
 import { Header } from "@/components/Header";
@@ -20,6 +20,43 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import { ACCENT, MatchDialog, competitionHref, type SpLiveItem } from "./SportsHub";
 import { MatchRow } from "./SportsMatchesBoard";
+
+/** شريحة هيرو موحّدة — كلها button بنفس الصندوق (Safari يكبّر <a> ويختلف عن span). */
+function HeroChip({
+  href,
+  tone = "muted",
+  children,
+}: {
+  href?: string;
+  tone?: "live" | "muted";
+  children: React.ReactNode;
+}) {
+  const [, setLocation] = useLocation();
+  const face =
+    tone === "live"
+      ? "inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 text-[12px] font-bold tabular-nums text-white"
+      : "inline-flex items-center gap-1.5 rounded-full bg-muted px-3 text-[12px] font-bold text-muted-foreground";
+  return (
+    <button
+      type="button"
+      className={`${face} appearance-none border-0 align-middle ${href ? "cursor-pointer transition-colors hover:bg-primary/10 hover:text-primary" : "cursor-default"}`}
+      style={{
+        height: 32,
+        minHeight: 32,
+        maxHeight: 32,
+        boxSizing: "border-box",
+        lineHeight: 1,
+        paddingTop: 0,
+        paddingBottom: 0,
+        WebkitAppearance: "none",
+      }}
+      onClick={href ? () => setLocation(href) : undefined}
+      tabIndex={href ? 0 : -1}
+    >
+      {children}
+    </button>
+  );
+}
 
 const LIVE_REFETCH_MS = 15_000;
 
@@ -169,26 +206,25 @@ export default function SportsLive() {
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
             {total > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500 px-3 py-1.5 text-[12px] font-bold tabular-nums text-white">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {total} مباشر الآن
-              </span>
+              <HeroChip tone="live">
+                <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-white" />
+                {total} مباشر الآن
+              </HeroChip>
             )}
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground">
-              {isFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5 text-red-500" />}
+            <HeroChip>
+              {isFetching
+                ? <Loader2 className="h-2 w-2 shrink-0 animate-spin text-red-500" strokeWidth={2.6} />
+                : <Radio className="h-2 w-2 shrink-0 text-red-500" strokeWidth={2.6} />}
               تحديث تلقائي
-            </span>
-            <Link
-              href="/sports/matches"
-              className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-            >
-              مباريات اليوم <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
-            </Link>
-            <Link
-              href="/sports"
-              className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[12px] font-bold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
-            >
-              البوابة الرياضية <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
-            </Link>
+            </HeroChip>
+            <HeroChip href="/sports/matches">
+              مباريات اليوم
+              <ChevronLeft className="h-2 w-2 shrink-0" strokeWidth={2.6} />
+            </HeroChip>
+            <HeroChip href="/sports">
+              البوابة الرياضية
+              <ChevronLeft className="h-2 w-2 shrink-0" strokeWidth={2.6} />
+            </HeroChip>
           </div>
         </section>
 
