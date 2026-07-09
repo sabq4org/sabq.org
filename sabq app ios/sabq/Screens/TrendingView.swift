@@ -90,7 +90,7 @@ struct TrendingView: View {
                 ForEach(tags, id: \.self) { tag in
                     NavigationLink(value: KeywordRoute(keyword: tag)) {
                         Text(tag)
-                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(SabqTheme.primaryEnd)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
@@ -151,14 +151,14 @@ struct TrendingView: View {
 
                             HStack(spacing: 8) {
                                 Text(article.category.title)
-                                    .font(SabqFonts.app(size: 11, weight: .bold))
+                                    .font(SabqFonts.app(size: 10, weight: .regular))
                                     .foregroundStyle(SabqTheme.primaryEnd)
 
                                 HStack(spacing: 3) {
                                     Image(systemName: "clock")
                                         .font(SabqFonts.app(size: 10))
                                     Text(article.relativeDate)
-                                        .font(SabqFonts.app(size: 11, weight: .medium))
+                                        .font(SabqFonts.app(size: 10, weight: .regular))
                                 }
                                 .foregroundStyle(SabqTheme.tertiaryInk)
                             }

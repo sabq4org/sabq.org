@@ -32,21 +32,21 @@ struct WCPredictCTA: View {
                                              startPoint: .top, endPoint: .bottom))
                         .frame(width: 44, height: 44)
                     Image(systemName: "target")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(WCTheme.heroTop)
                 }
                 .shadow(color: WCTheme.gold.opacity(0.45), radius: 6, y: 2)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("توقّع واربح")
-                        .font(SabqFonts.app(size: 16, weight: .black)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(.white)
                     Text("أصِب النتيجة بالضبط واكسب من 500 نقطة لكل مباراة")
                         .font(SabqFonts.app(size: 11)).foregroundStyle(.white.opacity(0.85))
                         .lineLimit(2)
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.left")
-                    .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.gold)
+                    .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.gold)
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
             .background(
@@ -138,7 +138,7 @@ struct WCPredictionsView: View {
             ForEach(Tab.allCases, id: \.self) { t in
                 Button { withAnimation(.easeOut(duration: 0.2)) { tab = t } } label: {
                     Text(t.rawValue)
-                        .font(SabqFonts.app(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(tab == t ? .white : WCTheme.onDarkDim)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 9)
@@ -189,7 +189,7 @@ private struct WCPredTodayTab: View {
         VStack(spacing: 14) {
             if let toast {
                 Text(toast)
-                    .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 9)
                     .background(RoundedRectangle(cornerRadius: 12).fill(WCTheme.emeraldDeep))
             }
@@ -225,7 +225,7 @@ private struct WCPredTodayTab: View {
                 teamSide(f.home)
                 VStack(spacing: 3) {
                     Text(WCFormat.time(f))
-                        .font(SabqFonts.app(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
+                        .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
                     Text(f.round).font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
                 }
                 .frame(minWidth: 70)
@@ -239,7 +239,7 @@ private struct WCPredTodayTab: View {
             } else {
                 Button { showLogin = true } label: {
                     Text("سجّل الدخول للتوقّع")
-                        .font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).padding(.vertical, 11)
                         .background(Capsule().fill(WCTheme.emeraldDeep))
                 }
@@ -250,7 +250,7 @@ private struct WCPredTodayTab: View {
                 Image(systemName: "person.2.fill").font(.system(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                 Text("\(m.predictionsCount) مشارك").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
                 Spacer()
-                Text("الجائزة 500 نقطة").font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.gold)
+                Text("الجائزة 500 نقطة").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.gold)
             }
         }
         .padding(14)
@@ -261,7 +261,7 @@ private struct WCPredTodayTab: View {
     private func teamSide(_ team: WCTeam) -> some View {
         VStack(spacing: 6) {
             WCTeamLogo(team: team, size: 42, ring: WCTheme.cardStroke)
-            Text(team.name).font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
+            Text(team.name).font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 .lineLimit(1).multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -286,14 +286,14 @@ private struct WCPredTodayTab: View {
             // تحت شعاره — وإلا خُزِّن التوقّع مقلوبًا فظهر «لم تُصب» لتوقّع صحيح.
             HStack(spacing: 16) {
                 stepper(value: input.away) { setAway(id, $0) }
-                Text("-").font(SabqFonts.app(size: 20, weight: .black)).foregroundStyle(WCTheme.onDarkDim)
+                Text("-").font(SabqFonts.app(size: 18, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
                 stepper(value: input.home) { setHome(id, $0) }
             }
             .environment(\.layoutDirection, .leftToRight)
 
             if drawNotAllowed {
                 Text(WC_DRAW_NOT_ALLOWED_MESSAGE)
-                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity).padding(.vertical, 8).padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 10).fill(WCTheme.liveRed))
@@ -309,7 +309,7 @@ private struct WCPredTodayTab: View {
                                 .font(.system(size: 12))
                         }
                         Text(saved != nil ? "تحديث التوقّع" : "حفظ التوقّع")
-                            .font(SabqFonts.app(size: 13, weight: .bold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                     }
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 9)
@@ -322,7 +322,7 @@ private struct WCPredTodayTab: View {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.system(size: 12)).foregroundStyle(WCTheme.emerald)
                     Text("تم حفظ توقّعك")
-                        .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDarkDim)
                 }
                 .frame(maxWidth: .infinity).padding(.vertical, 7)
             }
@@ -333,7 +333,7 @@ private struct WCPredTodayTab: View {
         HStack(spacing: 10) {
             stepBtn("minus") { if value > 0 { set(value - 1) } }
             Text("\(value)")
-                .font(SabqFonts.app(size: 22, weight: .black).monospacedDigit())
+                .font(SabqFonts.app(size: 20, weight: .semibold).monospacedDigit())
                 .foregroundStyle(WCTheme.onDark).frame(minWidth: 30)
             stepBtn("plus") { if value < 20 { set(value + 1) } }
         }
@@ -346,7 +346,7 @@ private struct WCPredTodayTab: View {
         // واضحة وقابلة للّمس لكن هادئة (تقلّل ازدحام الأخضر في كل بطاقة).
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                .font(.system(size: 14, weight: .semibold)).foregroundStyle(WCTheme.emeraldDeep)
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(WCTheme.emerald.opacity(0.14)))
         }
@@ -372,12 +372,12 @@ private struct WCPredTodayTab: View {
             // خروج المغلوب: «1-1» وحدها مضلِّلة — نوضّح من حُسمت له بالترجيح.
             if let po = m.fixture.penaltyOutcome {
                 Text("فاز \(po.winnerName) بالترجيح (\(po.winnerScore)-\(po.loserScore))")
-                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                     .multilineTextAlignment(.center)
             }
             if let mine = m.myPrediction {
                 HStack(spacing: 8) {
-                    Text("توقّعك:").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    Text("توقّعك:").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                     wcScorePair(away: mine.predAway, home: mine.predHome, size: 12, color: WCTheme.onDark)
                     statusBadge(mine.status, points: mine.pointsAwarded)
                 }
@@ -440,7 +440,7 @@ func wcScorePair(away: Int, home: Int, size: CGFloat, color: Color) -> some View
         Text("-")
         Text("\(home)")
     }
-    .font(SabqFonts.app(size: size, weight: .black).monospacedDigit())
+    .font(SabqFonts.app(size: size, weight: .semibold).monospacedDigit())
     .foregroundStyle(color)
     .environment(\.layoutDirection, .leftToRight)
 }
@@ -463,17 +463,17 @@ func statusBadge(_ status: String, points: Int) -> some View {
     switch status {
     case "correct":
         Text("أصبت +\(points)")
-            .font(SabqFonts.app(size: 10, weight: .black)).foregroundStyle(.white)
+            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(.white)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(WCTheme.emeraldDeep))
     case "incorrect":
         Text("لم تُصب")
-            .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(.white)
+            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(.white)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(WCTheme.liveRed))
     default:
         Text("بانتظار النتيجة")
-            .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(WCTheme.chipFill))
     }
@@ -516,7 +516,7 @@ private struct WCPredTournamentTab: View {
         VStack(spacing: 14) {
             if let toast = toast {
                 Text(toast)
-                    .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
                     .frame(maxWidth: .infinity).padding(.vertical, 9)
                     .background(RoundedRectangle(cornerRadius: 12).fill(WCTheme.emeraldDeep))
             }
@@ -537,7 +537,7 @@ private struct WCPredTournamentTab: View {
         VStack(spacing: 10) {
             Image(systemName: "crown.fill").font(.system(size: 34)).foregroundStyle(WCTheme.onDarkDim.opacity(0.5))
             Text("توقّعات البطولة قيد الإطلاق")
-                .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
             Text("عُد قريبًا — توقّع البطل والهدّاف واربح آلاف النقاط.")
                 .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
                 .multilineTextAlignment(.center)
@@ -552,7 +552,7 @@ private struct WCPredTournamentTab: View {
             HStack(spacing: 6) {
                 Image(systemName: "info.circle.fill").foregroundStyle(WCTheme.emeraldDeep)
                 Text("كيف تعمل توقّعات البطولة؟")
-                    .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.onDark)
             }
             VStack(alignment: .leading, spacing: 8) {
                 bullet("🏆", "البطل (\(data.pools.champion) نقطة): اختر من يرفع الكأس من المنتخبات المتأهّلة لدور الـ32. تُقسَّم الجائزة على كل من يصيب البطل مرجّحةً بوزن توقّعك — لا بالتساوي.")
@@ -622,10 +622,10 @@ private struct WCPredTournamentTab: View {
             HStack(spacing: 8) {
                 Image(systemName: "crown.fill").foregroundStyle(WCTheme.gold)
                 Text("من يرفع كأس العالم 2026؟")
-                    .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                 Spacer()
                 Text("\(data.pools.champion) نقطة")
-                    .font(SabqFonts.app(size: 11, weight: .black)).foregroundStyle(WCTheme.heroTop)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.heroTop)
                     .padding(.horizontal, 9).padding(.vertical, 3)
                     .background(Capsule().fill(WCTheme.gold))
             }
@@ -638,7 +638,7 @@ private struct WCPredTournamentTab: View {
 
             if let mine = mine, let name = mine.teamName {
                 HStack(spacing: 6) {
-                    Text("اخترت: \(name)").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    Text("اخترت: \(name)").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                     statusBadge(mine.status, points: mine.pointsAwarded)
                     if mine.status == "pending" && champOpen {
                         Text("بوزن ×\(String(format: "%.1f", Double(mine.weight) / 100))")
@@ -650,7 +650,7 @@ private struct WCPredTournamentTab: View {
             if champOpen {
                 VStack(alignment: .leading, spacing: 10) {
                     Text("اختر البطل من المتأهّلين لدور الـ32 (\(data.teams.filter { !$0.eliminated }.count) ما زال في المنافسة)")
-                        .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
 
                     LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
                         ForEach(data.teams) { t in
@@ -662,11 +662,11 @@ private struct WCPredTournamentTab: View {
                                 VStack(spacing: 5) {
                                     teamLogo(t.logo, size: 38)
                                     Text(t.name)
-                                        .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                                        .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                                         .lineLimit(1).multilineTextAlignment(.center)
                                     if t.eliminated {
                                         Text("خرج")
-                                            .font(SabqFonts.app(size: 9, weight: .bold)).foregroundStyle(WCTheme.liveRed)
+                                            .font(SabqFonts.app(size: 9, weight: .medium)).foregroundStyle(WCTheme.liveRed)
                                     } else if total > 0 {
                                         Text("\(pct)%")
                                             .font(SabqFonts.app(size: 9).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
@@ -693,7 +693,7 @@ private struct WCPredTournamentTab: View {
 
                     if pickedId != nil && estShare > 0 {
                         Text("إذا فاز اختيارك، حصّتك التقديرية ≈ \(estShare) نقطة")
-                            .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.gold)
+                            .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.gold)
                             .multilineTextAlignment(.center).frame(maxWidth: .infinity)
                             .padding(.vertical, 8)
                             .background(RoundedRectangle(cornerRadius: 12).fill(WCTheme.gold.opacity(0.10)))
@@ -712,7 +712,7 @@ private struct WCPredTournamentTab: View {
                                 Text(mine != nil
                                      ? "حدّث البطل (بوزن ×\(String(format: "%.1f", Double(liveWeight) / 100)))"
                                      : "احفظ البطل (بوزن ×\(String(format: "%.1f", Double(liveWeight) / 100)))")
-                                    .font(SabqFonts.app(size: 13, weight: .bold))
+                                    .font(SabqFonts.app(size: 12, weight: .medium))
                             }
                             .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 10)
                             .background(Capsule().fill(WCTheme.gold))
@@ -722,7 +722,7 @@ private struct WCPredTournamentTab: View {
                     } else {
                         Button { showLogin = true } label: {
                             Text("سجّل دخولك للتوقّع")
-                                .font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(.white)
+                                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(.white)
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
                                 .background(Capsule().fill(WCTheme.emeraldDeep))
                         }
@@ -743,7 +743,7 @@ private struct WCPredTournamentTab: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 5) {
                 Image(systemName: "chart.line.uptrend.xyaxis").font(.system(size: 11))
-                Text("ثبّت مبكرًا = حصّة أكبر").font(SabqFonts.app(size: 11, weight: .bold))
+                Text("ثبّت مبكرًا = حصّة أكبر").font(SabqFonts.app(size: 11, weight: .medium))
             }
             .foregroundStyle(WCTheme.gold)
 
@@ -753,7 +753,7 @@ private struct WCPredTournamentTab: View {
                     let active = data.champion.stage == t.id
                     let passed = idx > i || !data.champion.open
                     VStack(spacing: 1) {
-                        Text(t.mult).font(SabqFonts.app(size: 12, weight: .black).monospacedDigit())
+                        Text(t.mult).font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
                         Text(t.label).font(SabqFonts.app(size: 8)).lineLimit(1).minimumScaleFactor(0.7)
                     }
                     .foregroundStyle(active ? .white : (passed ? WCTheme.onDarkDim : WCTheme.onDark))
@@ -815,10 +815,10 @@ private struct WCPredTournamentTab: View {
             HStack(spacing: 8) {
                 Image(systemName: "soccerball").foregroundStyle(WCTheme.emeraldDeep)
                 Text("من هدّاف البطولة؟")
-                    .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                 Spacer()
                 Text("\(data.pools.topScorer) نقطة")
-                    .font(SabqFonts.app(size: 11, weight: .black)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
                     .padding(.horizontal, 9).padding(.vertical, 3)
                     .background(Capsule().fill(WCTheme.emeraldDeep))
             }
@@ -835,7 +835,7 @@ private struct WCPredTournamentTab: View {
 
             if let mine = mine, let name = mine.playerName {
                 HStack(spacing: 6) {
-                    Text("اخترت: \(name)").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    Text("اخترت: \(name)").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                     statusBadge(mine.status, points: mine.pointsAwarded)
                 }
             }
@@ -859,10 +859,10 @@ private struct WCPredTournamentTab: View {
                                     scorerPhoto(s.photo, size: 40)
                                     VStack(alignment: .leading, spacing: 2) {
                                         HStack(spacing: 5) {
-                                            Text(s.name).font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                                            Text(s.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                                             if s.eliminated {
                                                 Text("خرج فريقه")
-                                                    .font(SabqFonts.app(size: 9, weight: .bold)).foregroundStyle(WCTheme.liveRed)
+                                                    .font(SabqFonts.app(size: 9, weight: .medium)).foregroundStyle(WCTheme.liveRed)
                                             }
                                         }
                                         HStack(spacing: 4) {
@@ -873,7 +873,7 @@ private struct WCPredTournamentTab: View {
                                     Spacer(minLength: 4)
                                     VStack(spacing: 1) {
                                         Text("\(s.goals)")
-                                            .font(SabqFonts.app(size: 15, weight: .black).monospacedDigit())
+                                            .font(SabqFonts.app(size: 15, weight: .semibold).monospacedDigit())
                                             .foregroundStyle(WCTheme.emeraldDeep)
                                         Text(total > 0 ? "\(pct)%" : "هدف")
                                             .font(SabqFonts.app(size: 8)).foregroundStyle(WCTheme.onDarkDim)
@@ -908,7 +908,7 @@ private struct WCPredTournamentTab: View {
                                     Image(systemName: "soccerball").font(.system(size: 12))
                                 }
                                 Text(mine != nil ? "حدّث توقّع الهدّاف" : "احفظ توقّع الهدّاف")
-                                    .font(SabqFonts.app(size: 13, weight: .bold))
+                                    .font(SabqFonts.app(size: 12, weight: .medium))
                             }
                             .foregroundStyle(.white).frame(maxWidth: .infinity).padding(.vertical, 10)
                             .background(Capsule().fill(WCTheme.emeraldDeep))
@@ -918,7 +918,7 @@ private struct WCPredTournamentTab: View {
                     } else {
                         Button { showLogin = true } label: {
                             Text("سجّل دخولك للتوقّع")
-                                .font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(.white)
+                                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(.white)
                                 .frame(maxWidth: .infinity).padding(.vertical, 10)
                                 .background(Capsule().fill(WCTheme.emeraldDeep))
                         }
@@ -954,7 +954,7 @@ private struct WCPredTournamentTab: View {
         HStack(spacing: 14) {
             HStack(spacing: 5) {
                 Image(systemName: "person.2.fill").font(.system(size: 11))
-                Text("\(count) توقّعوا").font(SabqFonts.app(size: 11, weight: .bold))
+                Text("\(count) توقّعوا").font(SabqFonts.app(size: 11, weight: .medium))
             }
             .foregroundStyle(tint)
 
@@ -962,7 +962,7 @@ private struct WCPredTournamentTab: View {
                 HStack(spacing: 4) {
                     Image(systemName: "flame.fill").font(.system(size: 11)).foregroundStyle(tint)
                     Text("الأكثر توقّعًا:").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
-                    Text(leaderName).font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                    Text(leaderName).font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                     Text("(\(leaderPct)%)")
                         .font(SabqFonts.app(size: 11).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
                         .environment(\.layoutDirection, .leftToRight)
@@ -977,7 +977,7 @@ private struct WCPredTournamentTab: View {
     private func lockedBanner(_ text: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "lock.fill").font(.system(size: 13))
-            Text(text).font(SabqFonts.app(size: 13, weight: .bold))
+            Text(text).font(SabqFonts.app(size: 12, weight: .medium))
         }
         .foregroundStyle(WCTheme.liveRed)
         .frame(maxWidth: .infinity)
@@ -1078,7 +1078,7 @@ private struct WCPredMineTab: View {
                 .font(SabqFonts.app(size: 14)).foregroundStyle(WCTheme.onDarkDim)
             Button { showLogin = true } label: {
                 Text("تسجيل الدخول")
-                    .font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(.white)
                     .padding(.horizontal, 24).padding(.vertical, 11)
                     .background(Capsule().fill(WCTheme.emeraldDeep))
             }
@@ -1100,7 +1100,7 @@ private struct WCPredMineTab: View {
 
     private func tile(_ value: String, _ label: String, _ accent: Color?) -> some View {
         VStack(spacing: 2) {
-            Text(value).font(SabqFonts.app(size: 18, weight: .black).monospacedDigit())
+            Text(value).font(SabqFonts.app(size: 17, weight: .semibold).monospacedDigit())
                 .foregroundStyle(accent ?? WCTheme.onDark)
                 .environment(\.layoutDirection, .leftToRight)
             Text(label).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
@@ -1125,7 +1125,7 @@ private struct WCPredMineTab: View {
             // شريط علوي: اليوم + شارة الحالة
             HStack {
                 Text(kickoffDayLabel(item.kickoffAt))
-                    .font(SabqFonts.app(size: 11, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDarkDim)
                 Spacer()
                 statusPill(settled: settled, isWin: isWin, points: item.pointsAwarded)
             }
@@ -1152,7 +1152,7 @@ private struct WCPredMineTab: View {
             if let pw = penWin {
                 Rectangle().fill(WCTheme.cardStroke.opacity(0.6)).frame(height: 1)
                 Text("فاز \(pw.name) بالترجيح (\(pw.w)-\(pw.l))")
-                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                     .frame(maxWidth: .infinity).multilineTextAlignment(.center)
                     .padding(.vertical, 6).padding(.horizontal, 8)
             }
@@ -1178,7 +1178,7 @@ private struct WCPredMineTab: View {
             .frame(width: 44, height: 44)
             .overlay(Circle().stroke(WCTheme.cardStroke, lineWidth: 1))
             Text(name ?? "—")
-                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 .lineLimit(2).multilineTextAlignment(.center).frame(width: 62)
         }
     }
@@ -1196,14 +1196,14 @@ private struct WCPredMineTab: View {
             if isWin {
                 HStack(spacing: 4) {
                     Image(systemName: "trophy.fill").font(.system(size: 10))
-                    Text("+\(points) نقطة").font(SabqFonts.app(size: 11, weight: .black))
+                    Text("+\(points) نقطة").font(SabqFonts.app(size: 11, weight: .medium))
                 }
                 .foregroundStyle(.white).padding(.horizontal, 10).padding(.vertical, 3)
                 .background(Capsule().fill(WCTheme.emeraldDeep))
             } else {
                 HStack(spacing: 4) {
-                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
-                    Text("لم تُصب").font(SabqFonts.app(size: 11, weight: .bold))
+                    Image(systemName: "xmark").font(.system(size: 9, weight: .medium))
+                    Text("لم تُصب").font(SabqFonts.app(size: 11, weight: .medium))
                 }
                 .foregroundStyle(WCTheme.onDarkDim).padding(.horizontal, 10).padding(.vertical, 3)
                 .background(Capsule().fill(WCTheme.chipFill))
@@ -1211,7 +1211,7 @@ private struct WCPredMineTab: View {
         } else {
             HStack(spacing: 4) {
                 Image(systemName: "clock").font(.system(size: 9))
-                Text("قيد الانتظار").font(SabqFonts.app(size: 11, weight: .bold))
+                Text("قيد الانتظار").font(SabqFonts.app(size: 11, weight: .medium))
             }
             .foregroundStyle(WCTheme.gold).padding(.horizontal, 10).padding(.vertical, 3)
             .background(Capsule().fill(WCTheme.gold.opacity(0.15)))
@@ -1248,7 +1248,7 @@ struct WCWinCelebration: View {
             VStack(spacing: 16) {
                 Text("🎯").font(.system(size: 60))
                 Text("توقّع موفّق! 🎉")
-                    .font(SabqFonts.app(size: 24, weight: .black)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 22, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                 Text("\(item.homeTeamName ?? "") ضد \(item.awayTeamName ?? "")")
                     .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
                     .multilineTextAlignment(.center)
@@ -1257,7 +1257,7 @@ struct WCWinCelebration: View {
 
                 VStack(spacing: 2) {
                     Text("+\(item.pointsAwarded)")
-                        .font(SabqFonts.app(size: 42, weight: .black).monospacedDigit())
+                        .font(SabqFonts.app(size: 28, weight: .semibold).monospacedDigit())
                         .foregroundStyle(WCTheme.emeraldDeep)
                         .environment(\.layoutDirection, .leftToRight)
                     Text("نقطة من إصابة النتيجة الدقيقة")
@@ -1267,7 +1267,7 @@ struct WCWinCelebration: View {
 
                 Button(action: onClose) {
                     Text("رائع!")
-                        .font(SabqFonts.app(size: 16, weight: .bold)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity).frame(height: 50)
                         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(WCTheme.emeraldDeep))
                 }
@@ -1311,7 +1311,7 @@ struct WCWinCelebration: View {
             .frame(width: 44, height: 44)
             .overlay(Circle().stroke(WCTheme.cardStroke, lineWidth: 1))
             Text(name ?? "—")
-                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 .lineLimit(2).multilineTextAlignment(.center).frame(width: 58)
         }
     }
@@ -1420,14 +1420,14 @@ private struct WCPredLeaderboardTab: View {
             rankBadge(l.rank)
             avatar(l.avatar)
             VStack(alignment: .leading, spacing: 2) {
-                Text(l.name).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                Text(l.name).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                 Text("\(l.correctCount) إصابة من \(l.playedCount)")
                     .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
             }
             Spacer()
             VStack(spacing: 1) {
                 Text("\(l.totalPoints)")
-                    .font(SabqFonts.app(size: 16, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.gold)
+                    .font(SabqFonts.app(size: 16, weight: .semibold).monospacedDigit()).foregroundStyle(WCTheme.gold)
                     .environment(\.layoutDirection, .leftToRight)
                 Text("نقطة").font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
             }
@@ -1440,7 +1440,7 @@ private struct WCPredLeaderboardTab: View {
         let color: Color = rank == 1 ? WCTheme.gold : (rank == 2 ? WCTheme.onDarkDim : (rank == 3 ? WCTheme.leaf : WCTheme.chipFill))
         let fg: Color = rank <= 3 ? .white : WCTheme.onDarkDim
         return Text("\(rank)")
-            .font(SabqFonts.app(size: 13, weight: .black).monospacedDigit()).foregroundStyle(fg)
+            .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit()).foregroundStyle(fg)
             .frame(width: 30, height: 30)
             .background(Circle().fill(rank <= 3 ? color : WCTheme.chipFill))
             .environment(\.layoutDirection, .leftToRight)
@@ -1462,7 +1462,7 @@ private struct WCPredLeaderboardTab: View {
             Rectangle().fill(WCTheme.chipFill).frame(height: 1).padding(.top, 2)
             HStack(spacing: 12) {
                 Text("\(v.rank)")
-                    .font(SabqFonts.app(size: 13, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.gold)
+                    .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit()).foregroundStyle(WCTheme.gold)
                     .frame(width: 30, height: 30)
                     .background(Circle().stroke(WCTheme.gold, lineWidth: 1.5))
                     .environment(\.layoutDirection, .leftToRight)
@@ -1470,14 +1470,14 @@ private struct WCPredLeaderboardTab: View {
                     .font(.system(size: 30)).foregroundStyle(WCTheme.gold)
                     .frame(width: 34, height: 34)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("أنت").font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    Text("أنت").font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     Text("\(v.correctCount) إصابة من \(v.playedCount)")
                         .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                 }
                 Spacer()
                 VStack(spacing: 1) {
                     Text("\(v.totalPoints)")
-                        .font(SabqFonts.app(size: 16, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.gold)
+                        .font(SabqFonts.app(size: 16, weight: .semibold).monospacedDigit()).foregroundStyle(WCTheme.gold)
                         .environment(\.layoutDirection, .leftToRight)
                     Text("نقطة").font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
                 }
@@ -1500,7 +1500,7 @@ private struct WCPredLeaderboardTab: View {
                     ProgressView().tint(WCTheme.onDarkDim).scaleEffect(0.8)
                 }
                 Text(loadingMore ? "جارٍ التحميل…" : "عرض المزيد (\(leaders.count) من \(total ?? 0))")
-                    .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)

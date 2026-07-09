@@ -192,7 +192,7 @@ struct SettingsView: View {
                                     .font(SabqFonts.app(size: 11))
                                     .foregroundStyle(SabqTheme.primaryEnd)
                                 Text(user.localizedRole)
-                                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                                    .font(SabqFonts.app(size: 12, weight: .medium))
                                     .foregroundStyle(SabqTheme.primaryEnd)
                             }
                             // Long-press the role label to surface the raw
@@ -297,9 +297,9 @@ struct SettingsView: View {
                                     Button { showEditProfile = true } label: {
                                         HStack(spacing: 6) {
                                             Image(systemName: "person.text.rectangle")
-                                                .font(SabqFonts.app(size: 12, weight: .semibold))
+                                                .font(SabqFonts.app(size: 11, weight: .regular))
                                             Text("البيانات الشخصية")
-                                                .font(SabqFonts.app(size: 13, weight: .semibold))
+                                                .font(SabqFonts.app(size: 12, weight: .medium))
                                         }
                                         .foregroundStyle(.white)
                                         .frame(maxWidth: .infinity)
@@ -324,9 +324,9 @@ struct SettingsView: View {
                                     } label: {
                                         HStack(spacing: 6) {
                                             Image(systemName: "slider.horizontal.3")
-                                                .font(SabqFonts.app(size: 12, weight: .semibold))
+                                                .font(SabqFonts.app(size: 11, weight: .regular))
                                             Text("اهتماماتك")
-                                                .font(SabqFonts.app(size: 13, weight: .semibold))
+                                                .font(SabqFonts.app(size: 12, weight: .medium))
                                         }
                                         .foregroundStyle(needsBasics ? SabqTheme.primaryEnd : .white)
                                         .frame(maxWidth: .infinity)
@@ -359,9 +359,9 @@ struct SettingsView: View {
                         Button { showEditProfile = true } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "pencil")
-                                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                                    .font(SabqFonts.app(size: 12, weight: .medium))
                                 Text("تعديل الملف الشخصي")
-                                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                                    .font(SabqFonts.app(size: 12, weight: .medium))
                             }
                             .foregroundStyle(SabqTheme.primaryEnd)
                             .padding(.horizontal, 16)
@@ -550,7 +550,7 @@ struct SettingsView: View {
                         .foregroundStyle(SabqTheme.ink)
                     if let badgeCount, badgeCount > 0 {
                         Text("\(badgeCount)")
-                            .font(SabqFonts.app(size: 11, weight: .heavy))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                             .monospacedDigit()
                             .foregroundStyle(.white)
                             .padding(.horizontal, 7)
@@ -568,7 +568,7 @@ struct SettingsView: View {
             Spacer(minLength: 0)
 
             Image(systemName: "chevron.forward")
-                .font(SabqFonts.app(size: 13, weight: .heavy))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
         .padding(14)
@@ -613,7 +613,7 @@ struct SettingsView: View {
                         .foregroundStyle(SabqTheme.ink)
                     Spacer()
                     Image(systemName: "chevron.forward")
-                        .font(SabqFonts.app(size: 12, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
                 .padding(.vertical, 8)
@@ -678,7 +678,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Image(systemName: "chevron.forward")
-                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
         .padding(.vertical, 3)
@@ -743,7 +743,7 @@ struct SettingsView: View {
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(14)
@@ -782,7 +782,7 @@ struct SettingsView: View {
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(14)
@@ -823,7 +823,7 @@ struct SettingsView: View {
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(14)
@@ -866,7 +866,7 @@ struct SettingsView: View {
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(14)
@@ -902,7 +902,7 @@ struct SettingsView: View {
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.forward")
-                        .font(SabqFonts.app(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }
@@ -1056,7 +1056,7 @@ struct SettingsView: View {
 
                 HStack(spacing: 12) {
                     Text("أ")
-                        .font(SabqFonts.app(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Slider(value: $textSize, in: 14...24, step: 1)
@@ -1235,7 +1235,7 @@ struct SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Image(systemName: "chevron.forward")
-                .font(SabqFonts.app(size: 13, weight: .semibold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(SabqTheme.tertiaryInk)
         }
         .padding(.vertical, 3)

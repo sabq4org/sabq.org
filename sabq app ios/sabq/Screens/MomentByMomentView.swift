@@ -160,7 +160,7 @@ struct MomentByMomentView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text("مباشر")
-                        .font(SabqFonts.app(size: 11, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -258,7 +258,7 @@ struct MomentByMomentView: View {
                 Task { await reload() }
             } label: {
                 Text("إعادة المحاولة")
-                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 8)

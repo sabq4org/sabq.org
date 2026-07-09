@@ -137,7 +137,7 @@ struct WorldCupMatchCenter: View {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                 Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
             }
             .foregroundStyle(running ? WCTheme.onDark : .white)
             .frame(maxWidth: .infinity)
@@ -178,11 +178,11 @@ struct WorldCupMatchCenter: View {
                     if f.started {
                         // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR
                         Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                            .font(SabqFonts.app(size: 30, weight: .black))
+                            .font(SabqFonts.app(size: 24, weight: .semibold))
                             .foregroundStyle(WCTheme.onDark)
                             .environment(\.layoutDirection, .leftToRight)
                     } else {
-                        Text(WCFormat.time(f)).font(SabqFonts.app(size: 22, weight: .black)).foregroundStyle(WCTheme.onDark)
+                        Text(WCFormat.time(f)).font(SabqFonts.app(size: 20, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     }
                     WCStatusPill(fixture: f)
                 }
@@ -198,7 +198,7 @@ struct WorldCupMatchCenter: View {
     private func teamHead(_ team: WCTeam) -> some View {
         VStack(spacing: 6) {
             WCTeamLogo(team: team, size: 48, ring: WCTheme.cardStroke)
-            Text(team.name).font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(WCTheme.onDark)
+            Text(team.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
@@ -212,7 +212,7 @@ struct WorldCupMatchCenter: View {
                 ForEach(tabs, id: \.self) { t in
                     Button { withAnimation(.easeOut(duration: 0.2)) { tab = t } } label: {
                         Text(t.rawValue)
-                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(tab == t ? .white : WCTheme.onDarkDim)
                             .padding(.horizontal, 12).padding(.vertical, 7)
                             .background(Capsule().fill(tab == t ? WCTheme.emeraldDeep : WCTheme.chipFill))
@@ -285,7 +285,7 @@ struct WCEventsTimeline: View {
             Text("نتيجة الشوط الأول").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
             // المضيف يمينًا في RTL — الضيف أولًا داخل LTR
             Text("\(ht.away) - \(ht.home)")
-                .font(SabqFonts.app(size: 12, weight: .black).monospacedDigit())
+                .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
                 .foregroundStyle(WCTheme.onDark)
                 .environment(\.layoutDirection, .leftToRight)
             Spacer(minLength: 0)
@@ -313,7 +313,7 @@ struct WCEventsTimeline: View {
     private var horizontalBar: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("خط زمن المباراة")
-                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emerald)
 
             GeometryReader { geo in
                 let w = geo.size.width
@@ -397,7 +397,7 @@ struct WCEventsTimeline: View {
     private var verticalFlow: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("مجريات المباراة")
-                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emerald)
             ForEach(sorted) { ev in
                 Button { onOpenPlayer(ev.playerId) } label: { row(ev) }
                     .buttonStyle(.plain)
@@ -436,14 +436,14 @@ struct WCEventsTimeline: View {
         return HStack(spacing: 10) {
             Circle().fill(isHome ? WCTheme.emerald : WCTheme.gold).frame(width: 8, height: 8)
             Text(minuteLabel(ev))
-                .font(SabqFonts.app(size: 12, weight: .bold).monospacedDigit())
+                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
                 .foregroundStyle(WCTheme.onDarkDim)
                 .frame(minWidth: 40)
                 .environment(\.layoutDirection, .leftToRight)
             icon(ev.type)
             VStack(alignment: .leading, spacing: 1) {
                 Text(ev.player.isEmpty ? ev.label : "\(ev.player) (\(ev.label))")
-                    .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                    .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                 if let extra {
                     Text(extra).font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.sky).lineLimit(1)
                 }
@@ -490,9 +490,9 @@ struct WCPressureView: View {
                         Image(systemName: "gauge.medium").foregroundStyle(WCTheme.emerald)
                         Text("الأكثر سيطرة الآن:").font(SabqFonts.app(size: 13)).foregroundStyle(WCTheme.onDarkDim)
                         Text(latest.side == "home" ? homeName : awayName)
-                            .font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(WCTheme.onDark)
+                            .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                         Text("\(Int(latest.value))")
-                            .font(SabqFonts.app(size: 13, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+                            .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit()).foregroundStyle(WCTheme.onDark)
                             .padding(.horizontal, 7).padding(.vertical, 2)
                             .background(Capsule().fill(WCTheme.chipFill))
                             .environment(\.layoutDirection, .leftToRight)
@@ -573,10 +573,10 @@ struct WCPitch: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(lineup.teamName).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                Text(lineup.teamName).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                 Spacer()
                 if let f = lineup.formation {
-                    Text(f).font(SabqFonts.app(size: 12, weight: .bold).monospacedDigit())
+                    Text(f).font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
                         .foregroundStyle(WCTheme.onDarkDim)
                         .padding(.horizontal, 8).padding(.vertical, 2)
                         .background(Capsule().fill(WCTheme.chipFill))
@@ -597,8 +597,8 @@ struct WCPitch: View {
     private var bench: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "figure.seated.side").font(.system(size: 11, weight: .bold)).foregroundStyle(WCTheme.emerald)
-                Text("دكة البدلاء").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                Image(systemName: "figure.seated.side").font(.system(size: 11, weight: .medium)).foregroundStyle(WCTheme.emerald)
+                Text("دكة البدلاء").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emerald)
                 Text("(\(lineup.substitutes.count))").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 8)], alignment: .leading, spacing: 8) {
@@ -614,12 +614,12 @@ struct WCPitch: View {
     private func benchRow(_ p: WCLineupPlayer) -> some View {
         HStack(spacing: 8) {
             Text(p.number.map { "\($0)" } ?? "•")
-                .font(SabqFonts.app(size: 11, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.emeraldDeep)
+                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.emeraldDeep)
                 .frame(width: 22, height: 22)
                 .background(Circle().fill(WCTheme.emerald.opacity(0.15)))
                 .environment(\.layoutDirection, .leftToRight)
             Text(p.name)
-                .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
                 .lineLimit(1).minimumScaleFactor(0.8)
             Spacer(minLength: 0)
         }
@@ -661,9 +661,9 @@ struct WCPitch: View {
         Button { onOpenPlayer(p.id) } label: {
             VStack(spacing: 2) {
                 Text(p.number.map { "\($0)" } ?? "•")
-                    .font(SabqFonts.app(size: 11, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.pitchBottom)
+                    .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.pitchBottom)
                     .frame(width: 28, height: 28).background(Circle().fill(.white))
-                Text(p.name).font(SabqFonts.app(size: 9, weight: .semibold)).foregroundStyle(.white)
+                Text(p.name).font(SabqFonts.app(size: 9, weight: .regular)).foregroundStyle(.white)
                     .lineLimit(1).frame(maxWidth: 56)
             }
         }
@@ -747,7 +747,7 @@ struct WCStatsView: View {
                             Text(p.name).font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                             Spacer()
                             Text(String(format: "%.2f", p.xg))
-                                .font(SabqFonts.app(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+                                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.onDark)
                                 .environment(\.layoutDirection, .leftToRight)
                         }
                     }
@@ -771,7 +771,7 @@ struct WCStatsView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Text(w.description).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    Text(w.description).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     if w.type == "forecast" {
                         Text("· توقّع").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                     }
@@ -801,7 +801,7 @@ struct WCStatsView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "bandage.fill").font(.system(size: 12)).foregroundStyle(WCTheme.liveRed)
-                Text("الغيابات").font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.liveRed)
+                Text("الغيابات").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.liveRed)
             }
             HStack(alignment: .top, spacing: 12) {
                 absenteeCol(detail.fixture.home, list.filter { $0.location == "home" })
@@ -817,7 +817,7 @@ struct WCStatsView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 WCRemoteImage(url: team.logo).frame(width: 16, height: 16)
-                Text(team.name).font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                Text(team.name).font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
             }
             if players.isEmpty {
                 Text("—").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
@@ -837,11 +837,11 @@ struct WCStatsView: View {
         let max = (h + a) == 0 ? 1 : (h + a)
         return VStack(spacing: 5) {
             HStack {
-                Text(s.home).font(SabqFonts.app(size: 14, weight: .black)).frame(width: 48, alignment: .leading)
+                Text(s.home).font(SabqFonts.app(size: 14, weight: .semibold)).frame(width: 48, alignment: .leading)
                 Spacer()
                 Text(s.label).font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
                 Spacer()
-                Text(s.away).font(SabqFonts.app(size: 14, weight: .black)).frame(width: 48, alignment: .trailing)
+                Text(s.away).font(SabqFonts.app(size: 14, weight: .semibold)).frame(width: 48, alignment: .trailing)
             }
             .foregroundStyle(WCTheme.onDark)
             GeometryReader { geo in
@@ -876,8 +876,8 @@ struct WCRatingsView: View {
                         HStack(spacing: 12) {
                             Image(systemName: "crown.fill").foregroundStyle(WCTheme.gold)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text("رجل المباراة").font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.gold)
-                                Text(motm.name).font(SabqFonts.app(size: 14, weight: .black)).foregroundStyle(WCTheme.onDark)
+                                Text("رجل المباراة").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.gold)
+                                Text(motm.name).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                             }
                             Spacer()
                             ratingBadge(motm.rating)
@@ -905,7 +905,7 @@ struct WCRatingsView: View {
                 WCRemoteImage(url: p.photo, contentMode: .fill).frame(width: 32, height: 32).clipShape(Circle())
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text("\(p.name)\(p.captain ? " (ك)" : "")").font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                Text("\(p.name)\(p.captain ? " (ك)" : "")").font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                 Text(subtitle(p)).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
             }
             Spacer()
@@ -926,7 +926,7 @@ struct WCRatingsView: View {
 
     private func ratingBadge(_ rating: Double) -> some View {
         Text(String(format: "%.1f", rating))
-            .font(SabqFonts.app(size: 13, weight: .black).monospacedDigit())
+            .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
             .foregroundStyle(.white)
             .padding(.horizontal, 7).padding(.vertical, 3)
             .background(RoundedRectangle(cornerRadius: 8).fill(ratingColor(rating)))
@@ -980,7 +980,7 @@ struct WCPredictionView: View {
             }
 
             Divider().overlay(WCTheme.cardStroke)
-            Text("سجل المواجهات").font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+            Text("سجل المواجهات").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
             if detail.headToHead.isEmpty {
                 Text("أول مواجهة رسمية بين المنتخبين — التاريخ يبدأ من هنا")
                     .font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
@@ -1002,11 +1002,11 @@ struct WCPredictionView: View {
     @ViewBuilder private func forecastBlocks(_ f: WCForecast) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Divider().overlay(WCTheme.cardStroke)
-            Text("توقعات متقدّمة").font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+            Text("توقعات متقدّمة").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
 
             if let dc = f.doubleChance {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("الفرصة المزدوجة").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                    Text("الفرصة المزدوجة").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
                     HStack(spacing: 8) {
                         dcCell("\(detail.fixture.home.name) أو تعادل", dc.homeOrDraw)
                         dcCell("بلا تعادل", dc.homeOrAway)
@@ -1021,11 +1021,11 @@ struct WCPredictionView: View {
 
             if !f.goals.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("مجموع الأهداف — أكثر/أقل من").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                    Text("مجموع الأهداف — أكثر/أقل من").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
                     ForEach(f.goals) { ou in
                         HStack(spacing: 8) {
                             Text(String(format: "%g", ou.line))
-                                .font(SabqFonts.app(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+                                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.onDark)
                                 .frame(width: 32).environment(\.layoutDirection, .leftToRight)
                             twoWayBar(left: ou.over, right: ou.under)
                         }
@@ -1035,13 +1035,13 @@ struct WCPredictionView: View {
 
             if !f.correctScores.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("أرجح النتائج (الرقم الأول للمضيف)").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                    Text("أرجح النتائج (الرقم الأول للمضيف)").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             ForEach(f.correctScores) { cs in
                                 VStack(spacing: 2) {
                                     Text(cs.score)
-                                        .font(SabqFonts.app(size: 14, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+                                        .font(SabqFonts.app(size: 14, weight: .semibold).monospacedDigit()).foregroundStyle(WCTheme.onDark)
                                         .environment(\.layoutDirection, .leftToRight)
                                     Text(String(format: "%g%%", cs.prob))
                                         .font(SabqFonts.app(size: 10).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
@@ -1058,7 +1058,7 @@ struct WCPredictionView: View {
 
     private func dcCell(_ label: String, _ value: Int) -> some View {
         VStack(spacing: 3) {
-            Text("\(value)%").font(SabqFonts.app(size: 16, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+            Text("\(value)%").font(SabqFonts.app(size: 16, weight: .semibold).monospacedDigit()).foregroundStyle(WCTheme.onDark)
             Text(label).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                 .multilineTextAlignment(.center).lineLimit(2)
         }
@@ -1068,7 +1068,7 @@ struct WCPredictionView: View {
 
     private func twoWay(_ title: String, leftLabel: String, left: Int, rightLabel: String, right: Int) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+            Text(title).font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
             twoWayBar(left: left, right: right)
             HStack {
                 Text("\(leftLabel) \(left)%").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDark)
@@ -1094,9 +1094,9 @@ struct WCPredictionView: View {
     private func bar(_ label: String, _ value: Int, _ color: Color) -> some View {
         VStack(spacing: 4) {
             HStack {
-                Text(label).font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                Text(label).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 Spacer()
-                Text("\(value)%").font(SabqFonts.app(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
+                Text("\(value)%").font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
             }
             GeometryReader { geo in
                 Capsule().fill(color).frame(width: geo.size.width * CGFloat(value) / 100)
@@ -1110,16 +1110,16 @@ struct WCPredictionView: View {
     private func h2hRow(_ m: WCFixture) -> some View {
         HStack(spacing: 8) {
             Text(String(m.date.prefix(4)))
-                .font(SabqFonts.app(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
+                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(WCTheme.onDarkDim)
                 .padding(.horizontal, 7).padding(.vertical, 3)
                 .background(Capsule().fill(WCTheme.chipFill))
                 .environment(\.layoutDirection, .leftToRight)
-            Text(m.home.name).font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            Text(m.home.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
             // اسم المضيف على اليمين — الضيف أولًا داخل LTR
             Text("\(m.goals.away ?? 0) - \(m.goals.home ?? 0)")
-                .font(SabqFonts.app(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
                 .environment(\.layoutDirection, .leftToRight)
-            Text(m.away.name).font(SabqFonts.app(size: 13, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            Text(m.away.name).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
             Spacer()
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
@@ -1141,7 +1141,7 @@ struct WCTvStrip: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "tv.fill").font(.system(size: 11)).foregroundStyle(WCTheme.emeraldDeep)
-                        Text("القنوات الناقلة").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                        Text("القنوات الناقلة").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                     }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
@@ -1168,7 +1168,7 @@ struct WCTvStrip: View {
             } else {
                 Image(systemName: "play.tv").font(.system(size: 12)).foregroundStyle(WCTheme.onDarkDim)
             }
-            Text(ch.name).font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+            Text(ch.name).font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark).lineLimit(1)
             if let c = ch.country, !c.isEmpty {
                 Text(c).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
             }
@@ -1216,7 +1216,7 @@ struct WCCommentaryView: View {
     private func row(_ item: WCCommentaryItem) -> some View {
         HStack(alignment: .top, spacing: 10) {
             Text(item.minuteLabel)
-                .font(SabqFonts.app(size: 12, weight: .bold).monospacedDigit())
+                .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
                 .foregroundStyle(item.goal ? WCTheme.emeraldDeep : WCTheme.onDarkDim)
                 .frame(minWidth: 40, alignment: .leading)
                 .environment(\.layoutDirection, .leftToRight)
@@ -1289,12 +1289,12 @@ struct WCMomentumView: View {
         return VStack(spacing: 6) {
             HStack {
                 Text("\(homeName) \(pos.home)%")
-                    .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 Spacer()
                 Text("الاستحواذ").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
                 Spacer()
                 Text("\(awayName) \(pos.away)%")
-                    .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
             }
             // RTL: المضيف (زمردي) يمينًا، الضيف (سماوي) يسارًا
             GeometryReader { geo in

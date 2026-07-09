@@ -61,10 +61,10 @@ struct MuqtarabHomeStrip: View {
                     }
                     VStack(alignment: .leading, spacing: 1) {
                         Text("مُقترب")
-                            .font(SabqFonts.app(size: 17, weight: .heavy))
+                            .font(SabqFonts.app(size: 16, weight: .semibold))
                             .foregroundStyle(SabqTheme.ink)
                         Text("زوايا تحليلية بأقلام الكتّاب")
-                            .font(SabqFonts.app(size: 11, weight: .medium))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -72,9 +72,9 @@ struct MuqtarabHomeStrip: View {
                 NavigationLink(value: MuqtarabRoute()) {
                     HStack(spacing: 4) {
                         Text("الكل")
-                            .font(SabqFonts.app(size: 12, weight: .heavy))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                         Image(systemName: "chevron.left")
-                            .font(SabqFonts.app(size: 10, weight: .bold))
+                            .font(SabqFonts.app(size: 10, weight: .medium))
                     }
                     .foregroundStyle(SabqTheme.sky)
                 }
@@ -127,14 +127,14 @@ struct MuqtarabHomeStrip: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let name = topic.angle?.name, !name.isEmpty {
                     Text(name)
-                        .font(SabqFonts.app(size: 10, weight: .heavy))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .foregroundStyle(tint)
                         .background(Capsule().fill(tint.opacity(0.12)))
                 }
                 Text(topic.title)
-                    .font(SabqFonts.app(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)

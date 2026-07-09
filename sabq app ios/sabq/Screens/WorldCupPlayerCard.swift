@@ -94,7 +94,7 @@ struct WCPlayerSheet: View {
                     if let number = p.number {
                         HStack(spacing: 3) {
                             Image(systemName: "tshirt.fill").font(SabqFonts.app(size: 9))
-                            Text("\(number)").font(SabqFonts.app(size: 11, weight: .black).monospacedDigit())
+                            Text("\(number)").font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
                         }
                         .foregroundStyle(WCTheme.onDark)
                         .padding(.horizontal, 8).padding(.vertical, 3)
@@ -113,7 +113,7 @@ struct WCPlayerSheet: View {
         Group {
             if p.photo.isEmpty {
                 Text(String(p.name.prefix(2)))
-                    .font(SabqFonts.app(size: 22, weight: .black)).foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 20, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
                     .frame(width: 76, height: 76).background(Circle().fill(WCTheme.chipFill))
             } else {
                 WCRemoteImage(url: p.photo, contentMode: .fill)
@@ -125,7 +125,7 @@ struct WCPlayerSheet: View {
 
     private func chip(_ text: String, fill: Color, fg: Color) -> some View {
         Text(text)
-            .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(fg)
+            .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(fg)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(fill))
     }
@@ -188,11 +188,11 @@ struct WCPlayerSheet: View {
                         .padding(4)
                         .frame(width: 30, height: 30)
                         .background(Circle().fill(.white))
-                    Text(stop.team).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                    Text(stop.team).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                     Spacer()
                     if !stop.seasons.isEmpty {
                         Text(stop.seasonsLabel)
-                            .font(SabqFonts.app(size: 12, weight: .semibold).monospacedDigit())
+                            .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
                             .foregroundStyle(WCTheme.onDarkDim)
                             .environment(\.layoutDirection, .leftToRight)
                     }
@@ -212,7 +212,7 @@ struct WCPlayerSheet: View {
                 sectionTitle(icon: "trophy.fill", text: "الألقاب")
                 if titles > 0 {
                     Text("\(titles) بطولة")
-                        .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Capsule().fill(WCTheme.chipFill))
                 }
@@ -223,18 +223,18 @@ struct WCPlayerSheet: View {
                         .font(SabqFonts.app(size: 13))
                         .foregroundStyle(trophy.winner ? WCTheme.gold : WCTheme.onDarkDim.opacity(0.5))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(trophy.competition).font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                        Text(trophy.competition).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                         if !trophy.country.isEmpty {
                             Text(trophy.country).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                         }
                     }
                     Spacer()
                     Text(trophy.place)
-                        .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(trophy.winner ? .white : WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(trophy.winner ? .white : WCTheme.onDarkDim)
                         .padding(.horizontal, 7).padding(.vertical, 2)
                         .background(Capsule().fill(trophy.winner ? WCTheme.emeraldDeep : WCTheme.chipFill))
                     Text(trophy.season)
-                        .font(SabqFonts.app(size: 11, weight: .semibold).monospacedDigit())
+                        .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
                         .foregroundStyle(WCTheme.onDarkDim)
                         .environment(\.layoutDirection, .leftToRight)
                 }
@@ -246,8 +246,8 @@ struct WCPlayerSheet: View {
 
     private func sectionTitle(icon: String, text: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: icon).font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.emerald)
-            Text(text).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.emerald)
+            Image(systemName: icon).font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.emerald)
+            Text(text).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.emerald)
         }
     }
 }
@@ -290,12 +290,12 @@ struct WCPlayerStatsGrid: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: "chart.bar.fill").font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.emerald)
-                Text("أرقامه في مونديال 2026").font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                Image(systemName: "chart.bar.fill").font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.emerald)
+                Text("أرقامه في مونديال 2026").font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.emerald)
                 Spacer()
                 if let rating = stats.rating {
                     Text(String(format: "%.1f", rating))
-                        .font(SabqFonts.app(size: 12, weight: .black).monospacedDigit())
+                        .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
                         .foregroundStyle(.white)
                         .padding(.horizontal, 7).padding(.vertical, 3)
                         .background(RoundedRectangle(cornerRadius: 8).fill(ratingColor(rating)))
@@ -326,7 +326,7 @@ struct WCFactTile: View {
     var body: some View {
         VStack(spacing: 2) {
             Text(value)
-                .font(SabqFonts.app(size: 15, weight: .black).monospacedDigit())
+                .font(SabqFonts.app(size: 15, weight: .semibold).monospacedDigit())
                 .foregroundStyle(WCTheme.onDark)
                 .lineLimit(1).minimumScaleFactor(0.7)
             Text(label)
@@ -380,12 +380,12 @@ struct WCPlayerFormSection: View {
     private var header: some View {
         HStack(spacing: 6) {
             Image(systemName: "chart.line.uptrend.xyaxis")
-                .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.emerald)
+                .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.emerald)
             Text(hasXg ? "الفورمة الأخيرة · xG" : "الفورمة الأخيرة")
-                .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.emerald)
+                .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.emerald)
             Spacer()
             Text("آخر \(matches.count)")
-                .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
                 .padding(.horizontal, 7).padding(.vertical, 2)
                 .background(Capsule().fill(WCTheme.chipFill))
                 .environment(\.layoutDirection, .leftToRight)
@@ -397,7 +397,7 @@ struct WCPlayerFormSection: View {
         HStack(spacing: 6) {
             ForEach(Array(matches.enumerated().reversed()), id: \.offset) { _, m in
                 Text(resultAr(m.result))
-                    .font(SabqFonts.app(size: 11, weight: .black))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(.white)
                     .frame(width: 24, height: 24)
                     .background(Circle().fill(resultColor(m.result)))
@@ -444,7 +444,7 @@ struct WCPlayerFormSection: View {
         HStack(spacing: 10) {
             // شارة النتيجة
             Text(resultAr(m.result))
-                .font(SabqFonts.app(size: 11, weight: .black)).foregroundStyle(.white)
+                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
                 .frame(width: 22, height: 22)
                 .background(Circle().fill(resultColor(m.result)))
             // شعار الخصم + اسمه
@@ -455,7 +455,7 @@ struct WCPlayerFormSection: View {
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(m.opponent.isEmpty ? "—" : m.opponent)
-                    .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                    .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                 HStack(spacing: 6) {
                     Text(m.homeAway == "home" ? "أرضه" : "خارج أرضه")
                         .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
@@ -474,17 +474,17 @@ struct WCPlayerFormSection: View {
                 if m.goals > 0 {
                     HStack(spacing: 2) {
                         Image(systemName: "soccerball").font(.system(size: 9)).foregroundStyle(WCTheme.emeraldDeep)
-                        Text("\(m.goals)").font(SabqFonts.app(size: 11, weight: .black).monospacedDigit())
+                        Text("\(m.goals)").font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
                             .foregroundStyle(WCTheme.onDark)
                     }
                 }
                 Text("\(m.scoreFor)-\(m.scoreAgainst)")
-                    .font(SabqFonts.app(size: 12, weight: .black).monospacedDigit())
+                    .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
                     .foregroundStyle(WCTheme.onDark)
                     .environment(\.layoutDirection, .leftToRight)
                 if let r = m.rating {
                     Text(String(format: "%.1f", r))
-                        .font(SabqFonts.app(size: 11, weight: .black).monospacedDigit())
+                        .font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit())
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6).padding(.vertical, 2)
                         .background(RoundedRectangle(cornerRadius: 7).fill(ratingColor(r)))
@@ -498,8 +498,8 @@ struct WCPlayerFormSection: View {
 
     private func statPill(label: String, value: String, fg: Color) -> some View {
         HStack(spacing: 3) {
-            Text(label).font(SabqFonts.app(size: 8, weight: .bold)).foregroundStyle(fg.opacity(0.8))
-            Text(value).font(SabqFonts.app(size: 11, weight: .black).monospacedDigit()).foregroundStyle(fg)
+            Text(label).font(SabqFonts.app(size: 8, weight: .medium)).foregroundStyle(fg.opacity(0.8))
+            Text(value).font(SabqFonts.app(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(fg)
                 .environment(\.layoutDirection, .leftToRight)
         }
         .padding(.horizontal, 6).padding(.vertical, 2)
@@ -544,12 +544,12 @@ struct WCPlayerMarketSection: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 6) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.gold)
-                        Text("القيمة السوقية").font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.gold)
+                            .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.gold)
+                        Text("القيمة السوقية").font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.gold)
                         Spacer()
                         if let v = current {
                             Text(Self.format(v, currency: m.currency))
-                                .font(SabqFonts.app(size: 15, weight: .black).monospacedDigit())
+                                .font(SabqFonts.app(size: 15, weight: .semibold).monospacedDigit())
                                 .foregroundStyle(WCTheme.onDark)
                                 .environment(\.layoutDirection, .leftToRight)
                         }

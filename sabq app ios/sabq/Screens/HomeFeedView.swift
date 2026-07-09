@@ -80,6 +80,9 @@ struct HomeFeedView: View {
     /// new tier (one-shot) or when the periodic nudge is due. Cleared
     /// on dismiss.
     @State private var loyaltyBanner: LoyaltyBannerState?
+    /// Secondary home blocks (رياضة، ستوريز، رحلة، تقويم…) start collapsed
+    /// so the first viewport is newspaper-like: hero + آخر الأخبار.
+    @State private var showMoreToday = false
 
     private static let loyaltyLastSeenLevelKey = "sabq_loyalty_last_seen_level"
     private static let loyaltyLastNudgeDateKey = "sabq_loyalty_last_nudge_at"
@@ -122,13 +125,10 @@ struct HomeFeedView: View {
         ScrollViewReader { scrollProxy in
             ScrollView(showsIndicators: false) {
                 if isContentReady {
-                    // 26pt outer spacing — gives the home feed enough
-                    // breathing room between visually heterogeneous blocks
-                    // (raw header → padded greeting card → breaking pill
-                    // → stories rail → 420pt featured carousel → analytic
-                    // cards → section previews). 20pt felt cramped right
-                    // around the cards-to-section-preview transition.
-                    VStack(alignment: .leading, spacing: 26) {
+                    // Newspaper-first home: عاجل → هيرو → رياضة → رحلة → آخر الأخبار.
+                    // Secondary blocks (ستوريز، تقويم، نشرة، ترند…) live in
+                    // a collapsed «المزيد اليوم» disclosure.
+                    VStack(alignment: .leading, spacing: 20) {
                         Color.clear
                             .frame(height: 0)
                             .id(Self.scrollTopID)
@@ -136,8 +136,6 @@ struct HomeFeedView: View {
                         headerSection
 
                     // Tier-up celebration or periodic engagement nudge.
-                    // Slides in from the top, dismissible, tap routes
-                    // to LoyaltyAccountView.
                     if let banner = loyaltyBanner {
                         LoyaltyCelebrationBanner(
                             tier: banner.tier,
@@ -156,9 +154,7 @@ struct HomeFeedView: View {
                     .buttonStyle(.plain)
                     .animatedAppear(index: 0)
 
-                    // Editorial breaking strip (شريط الأخبار العاجلة) takes the
-                    // top slot when the dashboard has an active topic; otherwise
-                    // fall back to the single breaking-article card.
+                    // عاجل — الشريط الوحيد المسموح فوق الهيرو.
                     if let ticker = breakingTicker, !ticker.headlines.isEmpty {
                         BreakingTickerBar(headlines: ticker.headlines)
                             .animatedAppear(index: 1)
@@ -167,72 +163,34 @@ struct HomeFeedView: View {
                             .animatedAppear(index: 1)
                     }
 
-                    // شريط كأس العالم 2026 — يختفي كليًا عند غياب البيانات
-                    WorldCupHomeStrip()
-                        .animatedAppear(index: 1)
-
-                    // شريط كأس الملك — يظهر عند تفعيله من إعدادات النظام
-                    // (blockHidden) ويختفي كليًا خلاف ذلك أو عند غياب البيانات
-                    KingsCupHomeStrip()
-                        .animatedAppear(index: 1)
-
-                    if !articlesStore.stories.isEmpty {
-                        storiesSection
-                            .animatedAppear(index: 2)
-                    }
-
                     featuredSection
+                        .animatedAppear(index: 2)
+
+                    // رياضة مباشرة تحت الهيرو — ظاهرة دائماً (تختفي ذاتياً بلا بيانات)
+                    WorldCupHomeStrip()
                         .animatedAppear(index: 3)
 
-                    // Personal "knowledge journey" inline panel — signed-in
-                    // users only. Renders the four metric tiles + interest
-                    // chips directly (no navigation), mirroring the web's
-                    // SmartSummaryBlock. Logged-out readers see nothing in
-                    // this slot.
+                    KingsCupHomeStrip()
+                        .animatedAppear(index: 3)
+
+                    // رحلة معرفية: ولاء + مقاييس قراءة + HealthKit (خطوات/نوم)
                     if authStore.isLoggedIn {
                         personalJourneyBlock
                             .animatedAppear(index: 4)
                     }
 
-                    // "صدى الحج" — seasonal block right below the
-                    // personal journey card. Renders to an EmptyView
-                    // when the dashboard hasn't enabled it / we're
-                    // outside the season window / no matching
-                    // articles, so it leaves zero footprint the rest
-                    // of the year.
-                    HajjBlockView()
-                        .animatedAppear(index: 4)
-
-                    if !calendarToday.isEmpty {
-                        calendarTodayCard
-                            .animatedAppear(index: 5)
-                    }
-
-                    if latestNewsletter != nil {
-                        audioNewsletterCard
-                            .animatedAppear(index: 6)
-                    }
-
-                    trendingPreviewSection
-                        .animatedAppear(index: 8)
-
-                    // Category chips removed from the homepage per user
-                    // direction — categories are now reached via Explore tab.
-                    // The `categoryChipsSection` view + filtering state remain
-                    // intact in case we re-introduce them in a sheet later.
-
                     latestArticlesSection
                         .id(Self.latestSectionID)
-                        .animatedAppear(index: 10)
+                        .animatedAppear(index: 5)
 
-                    // مقالات الرأي و«مُقترب» تُعرضان أسفل «آخر الأخبار».
                     opinionsPreviewSection
-                        .animatedAppear(index: 11)
+                        .animatedAppear(index: 6)
 
-                    // شريط «مُقترب» — زوايا تحليلية بأقلام الكتّاب. يختفي
-                    // كليًا عند غياب المواضيع المميّزة.
                     MuqtarabHomeStrip()
-                        .animatedAppear(index: 12)
+                        .animatedAppear(index: 7)
+
+                    moreTodaySection
+                        .animatedAppear(index: 8)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 18)
@@ -377,7 +335,7 @@ struct HomeFeedView: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.up")
-                        .font(SabqFonts.app(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                     Text(newArticlesBannerText)
                         .font(SabqFonts.app(size: 14, weight: .bold))
                 }
@@ -611,7 +569,7 @@ struct HomeFeedView: View {
                     PulsingDot(color: SabqTheme.coral)
 
                     Text("عاجل")
-                        .font(SabqFonts.app(size: 13, weight: .heavy))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.coral)
 
                     Text(article.title)
@@ -623,7 +581,7 @@ struct HomeFeedView: View {
                     Spacer(minLength: 0)
 
                     Image(systemName: "chevron.left")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.coral.opacity(0.6))
                 }
                 .padding(.horizontal, 16)
@@ -682,7 +640,6 @@ struct HomeFeedView: View {
                         .buttonStyle(.plain)
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, 4)
                     .tag(idx)
                 }
             }
@@ -691,14 +648,11 @@ struct HomeFeedView: View {
             // the bottom of the TabView frame with a Spacer-sized gap above.
             .tabViewStyle(.page(indexDisplayMode: .never))
             .id(articlesStore.featuredCarouselRevision)
-            // 470pt covers the worst-case featured card. Hero is now a
-            // 16:10 aspect frame (≈234pt on iPhone std, up to ~269pt on
-            // Pro Max-class widths) instead of the previous fixed 200pt,
-            // plus 40pt vertical padding + 3-line title (~80pt) + 12pt +
-            // 2-line excerpt (~45pt) + 12pt + 30pt meta row + slack.
-            // Spacer inside still absorbs the remainder so the card top
-            // stays pinned. Reported 2026-05-24.
-            .frame(height: 470)
+            // Height must track screen width: hero is 16:10 full-bleed, so a
+            // fixed 470pt was too short on Pro/Pro Max — SwiftUI then
+            // compressed the aspectRatio(.fit) hero horizontally while the
+            // text block kept the card full-width → white side gutters.
+            .frame(height: featuredCarouselHeight)
 
             if featured.count > 1 {
                 HStack(spacing: 7) {
@@ -712,6 +666,77 @@ struct HomeFeedView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    /// TabView page height = full-width 16:10 hero + text block budget.
+    /// Outer feed padding is 16pt each side (see `fullBody`).
+    private var featuredCarouselHeight: CGFloat {
+        let contentWidth = UIScreen.main.bounds.width - 32
+        let heroHeight = contentWidth * (10.0 / 16.0)
+        // title (3 lines) + excerpt (2) + meta + 20pt padding × 2 + spacing
+        let textBlock: CGFloat = 230
+        return ceil(heroHeight + textBlock)
+    }
+
+    // MARK: - More Today (collapsed secondary blocks)
+
+    /// Blocks that used to sit between العاجل and آخر الأخبار — now behind
+    /// a single disclosure so the first viewport stays newspaper-like.
+    private var moreTodaySection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                    showMoreToday.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "square.grid.2x2")
+                        .font(SabqFonts.app(size: 13, weight: .medium))
+                        .foregroundStyle(SabqTheme.primaryEnd)
+                    Text(showMoreToday ? "إخفاء المزيد" : "المزيد اليوم")
+                        .font(SabqFonts.app(size: 14, weight: .medium))
+                        .foregroundStyle(SabqTheme.ink)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.down")
+                        .font(SabqFonts.app(size: 12, weight: .medium))
+                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .rotationEffect(.degrees(showMoreToday ? 180 : 0))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                        .fill(SabqTheme.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
+                        .stroke(SabqTheme.outline.opacity(0.45), lineWidth: 0.5)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showMoreToday ? "إخفاء المزيد اليوم" : "عرض المزيد اليوم")
+
+            if showMoreToday {
+                VStack(alignment: .leading, spacing: 20) {
+                    if !articlesStore.stories.isEmpty {
+                        storiesSection
+                    }
+
+                    HajjBlockView()
+
+                    if !calendarToday.isEmpty {
+                        calendarTodayCard
+                    }
+
+                    if latestNewsletter != nil {
+                        audioNewsletterCard
+                    }
+
+                    trendingPreviewSection
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -762,7 +787,7 @@ struct HomeFeedView: View {
                                 .font(SabqFonts.app(size: 17, weight: .bold))
                                 .foregroundStyle(SabqTheme.ink)
                             Text("خلال آخر 48 ساعة")
-                                .font(SabqFonts.app(size: 11, weight: .medium))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                                 .foregroundStyle(SabqTheme.tertiaryInk)
                         }
                     }
@@ -772,9 +797,9 @@ struct HomeFeedView: View {
                     NavigationLink(value: TrendingRoute()) {
                         HStack(spacing: 4) {
                             Text("المزيد")
-                                .font(SabqFonts.app(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                             Image(systemName: "chevron.left")
-                                .font(SabqFonts.app(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .regular))
                         }
                         .foregroundStyle(SabqTheme.primaryEnd)
                     }
@@ -823,7 +848,7 @@ struct HomeFeedView: View {
                                 .fill(SabqTheme.gold.opacity(0.15))
                                 .frame(width: 28, height: 28)
                             Image(systemName: "quote.opening")
-                                .font(SabqFonts.app(size: 12, weight: .bold))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                                 .foregroundStyle(SabqTheme.gold)
                         }
                         Text("آراء وأقلام")
@@ -836,9 +861,9 @@ struct HomeFeedView: View {
                     NavigationLink(value: OpinionsRoute()) {
                         HStack(spacing: 4) {
                             Text("جميع المقالات")
-                                .font(SabqFonts.app(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                             Image(systemName: "chevron.left")
-                                .font(SabqFonts.app(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .regular))
                         }
                         .foregroundStyle(SabqTheme.primaryEnd)
                     }
@@ -883,7 +908,7 @@ struct HomeFeedView: View {
                 HStack(spacing: 6) {
                     opinionAuthorAvatar(opinion, size: 24)
                     Text(opinion.authorName)
-                        .font(SabqFonts.app(size: 11, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                 }
@@ -900,7 +925,7 @@ struct HomeFeedView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(opinion.title)
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
@@ -909,16 +934,16 @@ struct HomeFeedView: View {
                 HStack(spacing: 8) {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
-                            .font(SabqFonts.app(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                         Text(opinion.readingTime)
-                            .font(SabqFonts.app(size: 10, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                     }
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                     Spacer()
 
                     Text(opinion.relativeDate)
-                        .font(SabqFonts.app(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }
@@ -1112,7 +1137,7 @@ struct HomeFeedView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Text(greeting)
-                        .font(SabqFonts.app(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.secondaryInk)
                     // Tiny "SABQ AI" pill so the headline below clearly
                     // reads as machine-curated rather than editorial copy.
@@ -1120,7 +1145,7 @@ struct HomeFeedView: View {
                         Image(systemName: "sparkles")
                             .font(SabqFonts.app(size: 8, weight: .bold))
                         Text("SABQ AI")
-                            .font(SabqFonts.app(size: 9, weight: .heavy))
+                            .font(SabqFonts.app(size: 9, weight: .medium))
                     }
                     .foregroundStyle(.white)
                     .padding(.horizontal, 6)
@@ -1137,22 +1162,22 @@ struct HomeFeedView: View {
                 }
 
                 Text(headline)
-                    .font(SabqFonts.app(size: 16, weight: .heavy))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(3)
+                    .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(tip)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
-                    .lineLimit(2)
+                    .lineLimit(1)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
-        .padding(18)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
@@ -1166,7 +1191,7 @@ struct HomeFeedView: View {
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                 .stroke(tint.opacity(0.18), lineWidth: 0.5)
         )
-        .shadow(color: tint.opacity(0.08), radius: 14, x: 0, y: 6)
+        .shadow(color: tint.opacity(0.06), radius: 10, x: 0, y: 4)
     }
 
     // MARK: - Personal Journey Block (auth-gated)
@@ -1178,26 +1203,19 @@ struct HomeFeedView: View {
     /// when available so the user sees their actual name, falls back to a
     /// device-local time greeting otherwise.
     private var personalJourneyBlock: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             journeyHeader
             KnowledgeJourneyHealthCard()
             LoyaltyStripView(onTap: { showLoyaltyAccount = true })
             journeyMetrics
             journeyInterests
         }
-        .padding(16)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Solid surface + soft drop shadow instead of `.ultraThinMaterial`.
-        // The material blended too closely with the page background
-        // (SabqTheme.background sits ~5% above pure white in light mode,
-        // and the material averaged to the same tone), so the block
-        // disappeared into the feed. Reported 2026-05-24. Matching the
-        // surface used by every other home card gives the journey block
-        // a clear edge without competing with the cards inside it.
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                 .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 16, x: 0, y: 6)
+                .shadow(color: SabqTheme.shadow, radius: 12, x: 0, y: 4)
                 .shadow(color: SabqTheme.deepShadow, radius: 1, x: 0, y: 1)
         )
         .overlay(
@@ -1230,12 +1248,12 @@ struct HomeFeedView: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(journeyGreeting)
-                    .font(SabqFonts.app(size: 15, weight: .heavy))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
-                Text("رحلتك المعرفية في سبق اليوم باختصار")
-                    .font(SabqFonts.app(size: 11, weight: .medium))
+                Text("رحلتك المعرفية باختصار")
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(1)
                     .minimumScaleFactor(0.9)
@@ -1320,12 +1338,12 @@ struct HomeFeedView: View {
                     .lineLimit(1)
                 if let unit {
                     Text(unit)
-                        .font(SabqFonts.app(size: 11, weight: .semibold))
+                        .font(SabqFonts.app(size: 11, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }
             Text(label)
-                .font(SabqFonts.app(size: 10, weight: .medium))
+                .font(SabqFonts.app(size: 10, weight: .regular))
                 .foregroundStyle(SabqTheme.tertiaryInk)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -1346,13 +1364,13 @@ struct HomeFeedView: View {
         if let interests = richInsights?.topInterests, !interests.isEmpty {
             HStack(spacing: 6) {
                 Text("اهتماماتك اليوم:")
-                    .font(SabqFonts.app(size: 11, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(interests, id: \.self) { name in
                             Text(name)
-                                .font(SabqFonts.app(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .regular))
                                 .foregroundStyle(SabqTheme.secondaryInk)
                                 .padding(.horizontal, 9)
                                 .padding(.vertical, 4)
@@ -1410,7 +1428,7 @@ struct HomeFeedView: View {
                 )
                 NavigationLink(value: CalendarRoute()) {
                     Text("الكل")
-                        .font(SabqFonts.app(size: 11, weight: .heavy))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(gold)
                 }
             }
@@ -1420,12 +1438,12 @@ struct HomeFeedView: View {
                         RoundedRectangle(cornerRadius: 3).fill(gold).frame(width: 3, height: 28)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(event.title)
-                                .font(SabqFonts.app(size: 13, weight: .bold))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                                 .foregroundStyle(SabqTheme.ink)
                                 .lineLimit(1)
                             if let imp = event.importance, imp >= 4 {
                                 Text("حدث بارز")
-                                    .font(SabqFonts.app(size: 10, weight: .medium))
+                                    .font(SabqFonts.app(size: 10, weight: .regular))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                             }
                         }
@@ -1459,7 +1477,7 @@ struct HomeFeedView: View {
                     )
                     NavigationLink(value: AudioNewslettersRoute()) {
                         Text("الكل")
-                            .font(SabqFonts.app(size: 11, weight: .heavy))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                             .foregroundStyle(SabqTheme.coral)
                     }
                 }
@@ -1484,7 +1502,7 @@ struct HomeFeedView: View {
                                 .multilineTextAlignment(.leading)
                             if let d = n.duration {
                                 Text("\(d / 60) دقيقة استماع")
-                                    .font(SabqFonts.app(size: 11, weight: .medium))
+                                    .font(SabqFonts.app(size: 10, weight: .regular))
                                     .foregroundStyle(SabqTheme.tertiaryInk)
                                     .monospacedDigit()
                             }
@@ -1516,7 +1534,7 @@ struct HomeFeedView: View {
                     .fill(tint.opacity(0.14))
                     .frame(width: 26, height: 26)
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(tint)
             }
             Text(title)
@@ -1593,7 +1611,7 @@ struct StoryBubble: View {
             }
 
             Text(story.title)
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .regular))
                 .foregroundStyle(SabqTheme.ink)
                 .lineLimit(1)
                 .frame(width: 72)

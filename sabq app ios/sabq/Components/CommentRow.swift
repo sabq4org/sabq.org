@@ -70,11 +70,11 @@ struct CommentRow: View {
             avatar
             VStack(alignment: .leading, spacing: 2) {
                 Text(comment.userName ?? "مستخدم")
-                    .font(SabqFonts.app(size: 13.5, weight: .semibold))
+                    .font(SabqFonts.app(size: 13, weight: .medium))
                     .foregroundStyle(SabqTheme.ink)
 
                 Text(Self.relativeTime(comment.createdAt))
-                    .font(SabqFonts.app(size: 11.5, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
             Spacer(minLength: 0)
@@ -109,7 +109,7 @@ struct CommentRow: View {
             .frame(width: 32, height: 32)
             .overlay {
                 Text(String((comment.userName ?? "م").prefix(1)))
-                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.primaryEnd)
             }
     }
@@ -135,9 +135,9 @@ struct CommentRow: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "arrowshape.turn.up.left")
-                            .font(SabqFonts.app(size: 11, weight: .semibold))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                         Text("رد")
-                            .font(SabqFonts.app(size: 12, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                     }
                     .foregroundStyle(SabqTheme.primaryEnd)
                 }
@@ -147,9 +147,9 @@ struct CommentRow: View {
             if let pending = comment.status?.lowercased(), pending == "pending" {
                 HStack(spacing: 4) {
                     Image(systemName: "sparkles")
-                        .font(SabqFonts.app(size: 9, weight: .bold))
+                        .font(SabqFonts.app(size: 9, weight: .medium))
                     Text("SABQ AI يراجع")
-                        .font(SabqFonts.app(size: 10.5, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                 }
                 .foregroundStyle(.white)
                 .padding(.horizontal, 8)

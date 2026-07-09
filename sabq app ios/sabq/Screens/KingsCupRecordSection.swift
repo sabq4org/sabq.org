@@ -56,9 +56,9 @@ struct KcRecordSection: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text("حامل اللقب — نسخة \(KcFormat.seasonLabel(e.season))")
-                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.gold)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.gold)
                 Text(champion.name)
-                    .font(SabqFonts.app(size: 19, weight: .black)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 18, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                 if let runnerUp = e.runnerUp {
                     HStack(spacing: 4) {
                         Text("على حساب \(runnerUp.name)")
@@ -93,7 +93,7 @@ struct KcRecordSection: View {
                         .background(Circle().fill(.white))
                     VStack(alignment: .leading, spacing: 1) {
                         Text(row.name)
-                            .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                            .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                             .lineLimit(1)
                         Text(titleCount(row.titles) + " · آخرها \(KcFormat.seasonLabel(row.lastSeason))")
                             .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
@@ -122,7 +122,7 @@ struct KcRecordSection: View {
             ForEach(editions) { e in
                 VStack(alignment: .leading, spacing: 6) {
                     Text("نسخة \(KcFormat.seasonLabel(e.season))")
-                        .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
                     if let champion = e.champion {
                         HStack(spacing: 8) {
                             WCRemoteImage(url: champion.logo)
@@ -130,7 +130,7 @@ struct KcRecordSection: View {
                                 .background(Circle().fill(.white))
                             VStack(alignment: .leading, spacing: 0) {
                                 Text(champion.name)
-                                    .font(SabqFonts.app(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
+                                    .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
                                     .lineLimit(1)
                                 if let score = e.score {
                                     Text(score + (e.penalties.map { " (\($0) ر.ت)" } ?? ""))

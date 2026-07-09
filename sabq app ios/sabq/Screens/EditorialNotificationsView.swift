@@ -140,9 +140,9 @@ struct EditorialNotificationsView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "trash")
-                    .font(SabqFonts.app(size: 12, weight: .semibold))
+                    .font(SabqFonts.app(size: 11, weight: .regular))
                 Text("مسح كل الإشعارات")
-                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
             }
             .foregroundStyle(SabqTheme.coral)
             .frame(maxWidth: .infinity)
@@ -214,7 +214,7 @@ struct EditorialNotificationsView: View {
             }
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.seal.fill")
-                    .font(SabqFonts.app(size: 10, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                 Text("أنت محدّث")
                     .font(SabqFonts.app(size: 11, weight: .black))
             }
@@ -247,7 +247,7 @@ struct EditorialNotificationsView: View {
                 Image(systemName: "checkmark.circle.fill")
                 Text("تحديد الكل كمقروء")
             }
-            .font(SabqFonts.app(size: 13, weight: .semibold))
+            .font(SabqFonts.app(size: 12, weight: .medium))
             .foregroundStyle(SabqTheme.primaryEnd)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 10)
@@ -306,7 +306,7 @@ struct EditorialNotificationsView: View {
                                 .foregroundStyle(style.tint)
                                 .padding(.top, 2)
                             Text(reviewerNote)
-                                .font(SabqFonts.app(size: 11, weight: .semibold))
+                                .font(SabqFonts.app(size: 11, weight: .regular))
                                 .foregroundStyle(style.tint)
                                 .lineLimit(2)
                                 .multilineTextAlignment(.leading)
@@ -315,7 +315,7 @@ struct EditorialNotificationsView: View {
                         .padding(.top, 2)
                     }
                     Text(relativeDate(from: item.createdAt))
-                        .font(SabqFonts.app(size: 10, weight: .medium))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
                 Spacer(minLength: 0)
@@ -530,7 +530,7 @@ struct EditorialNotificationDetailView: View {
                     .foregroundStyle(style.tint)
             }
             Text(style.label)
-                .font(SabqFonts.app(size: 11, weight: .heavy))
+                .font(SabqFonts.app(size: 10, weight: .regular))
                 .tracking(0.5)
                 .foregroundStyle(style.tint)
                 .padding(.horizontal, 10)
@@ -551,7 +551,7 @@ struct EditorialNotificationDetailView: View {
         SurfaceCard {
             VStack(alignment: .leading, spacing: 14) {
                 Text("المحتوى المعني")
-                    .font(SabqFonts.app(size: 11, weight: .heavy))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .foregroundStyle(SabqTheme.tertiaryInk)
 
                 Text(item.articleTitle ?? item.title)
@@ -590,7 +590,7 @@ struct EditorialNotificationDetailView: View {
                     .fill(SabqTheme.sky.opacity(0.14))
                     .frame(width: 28, height: 28)
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 13, weight: .semibold))
+                    .font(SabqFonts.app(size: 12, weight: .medium))
                     .foregroundStyle(SabqTheme.sky)
             }
             Text(label)
@@ -648,7 +648,7 @@ struct EditorialNotificationDetailView: View {
                         .font(SabqFonts.app(size: 14, weight: .semibold))
                         .foregroundStyle(style.tint)
                     Text("ملاحظة المحرر")
-                        .font(SabqFonts.app(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 Text(note)
@@ -674,7 +674,7 @@ struct EditorialNotificationDetailView: View {
     private var metadataRow: some View {
         HStack(spacing: 6) {
             Image(systemName: "clock")
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .regular))
             Text(relativeArabic(item.createdAt))
                 .font(SabqFonts.app(size: 12, weight: .medium))
         }
@@ -851,7 +851,7 @@ struct NotificationPreferencesView: View {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
                         Text("جاري الحفظ...")
-                            .font(SabqFonts.app(size: 11, weight: .medium))
+                            .font(SabqFonts.app(size: 10, weight: .regular))
                             .foregroundStyle(SabqTheme.tertiaryInk)
                     }
                 }
@@ -925,7 +925,7 @@ struct NotificationPreferencesView: View {
                     .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .font(SabqFonts.app(size: 10, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(2)
             }

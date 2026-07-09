@@ -284,9 +284,9 @@ struct SearchView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "plus")
-                                .font(SabqFonts.app(size: 11, weight: .bold))
+                                .font(SabqFonts.app(size: 10, weight: .regular))
                             Text(topic)
-                                .font(SabqFonts.app(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                         }
                         .foregroundStyle(SabqTheme.primaryStart)
                         .padding(.horizontal, 14)
@@ -318,7 +318,7 @@ struct SearchView: View {
                         .tint(SabqTheme.primaryEnd)
                 } else {
                     Text("\(searchTotal > 0 ? searchTotal : displayResults.count) نتيجة")
-                        .font(SabqFonts.app(size: 13, weight: .semibold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.tertiaryInk)
                 }
             }

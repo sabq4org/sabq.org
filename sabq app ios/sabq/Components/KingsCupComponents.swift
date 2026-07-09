@@ -32,19 +32,19 @@ struct KcStatusPill: View {
                 Circle().fill(.white).frame(width: 5, height: 5)
                 Text(elapsedText)
             }
-            .font(SabqFonts.app(size: 11, weight: .bold))
+            .font(SabqFonts.app(size: 11, weight: .medium))
             .foregroundStyle(.white)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(WCTheme.liveRed))
         } else if fixture.status.finished {
             Text(fixture.status.label.isEmpty ? "انتهت" : fixture.status.label)
-                .font(SabqFonts.app(size: 11, weight: .semibold))
+                .font(SabqFonts.app(size: 11, weight: .regular))
                 .foregroundStyle(WCTheme.liveRed)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Capsule().fill(WCTheme.liveRed.opacity(onDark ? 0.20 : 0.12)))
         } else {
             Text(KcFormat.time(fixture))
-                .font(SabqFonts.app(size: 11, weight: .bold))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .foregroundStyle(WCTheme.emeraldDeep)
                 .padding(.horizontal, 8).padding(.vertical, 3)
                 .background(Capsule().fill(WCTheme.emerald.opacity(0.16)))
@@ -73,7 +73,7 @@ struct KcCountdownChips: View {
                 HStack(spacing: 6) {
                     Circle().fill(WCTheme.emerald).frame(width: 8, height: 8)
                     Text("حان موعد الانطلاق — التغطية الحية تبدأ خلال لحظات")
-                        .font(SabqFonts.app(size: 13, weight: .bold))
+                        .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(WCTheme.onDark)
                 }
             } else {
@@ -94,7 +94,7 @@ struct KcCountdownChips: View {
     private func chip(_ value: Int, _ label: String) -> some View {
         VStack(spacing: 1) {
             Text("\(value)")
-                .font(SabqFonts.app(size: 20, weight: .black))
+                .font(SabqFonts.app(size: 18, weight: .semibold))
                 .foregroundStyle(WCTheme.onDark)
             Text(label)
                 .font(SabqFonts.app(size: 10))
@@ -160,7 +160,7 @@ struct KcProbabilityBar: View {
                 Spacer()
                 Text("فوز \(fixture.away.name) \(a)%")
             }
-            .font(SabqFonts.app(size: 11, weight: .semibold))
+            .font(SabqFonts.app(size: 11, weight: .regular))
             .foregroundStyle(WCTheme.emeraldDeep)
 
             GeometryReader { geo in

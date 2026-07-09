@@ -17,6 +17,7 @@
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "3AFE5FD72F60C121006270F8"
                BuildableName = "sabq.app"
+               BlueprintName = "sabq"
                ReferencedContainer = "container:sabq.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
@@ -58,6 +59,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "3AFE5FD72F60C121006270F8"
             BuildableName = "sabq.app"
+            BlueprintName = "sabq"
             ReferencedContainer = "container:sabq.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
@@ -74,6 +76,7 @@
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "3AFE5FD72F60C121006270F8"
             BuildableName = "sabq.app"
+            BlueprintName = "sabq"
             ReferencedContainer = "container:sabq.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
