@@ -8,16 +8,20 @@
         window.addEventListener('error', function(e) {
           var src = e.filename || '';
           var msg = e.message || '';
+          // DMS/GTM injector assumes ≥4 card-article-grid nodes; Safari reports
+          // the throw with a same-origin filename, so message match is required.
+          var isAdDomNoise =
+            msg.indexOf('card-article-grid') !== -1 ||
+            (msg.indexOf('parentNode') !== -1 &&
+              (msg.indexOf('undefined is not an object') !== -1 ||
+                msg.indexOf('Cannot read propert') !== -1));
           var isExternal = !src || src.indexOf(origin) === -1 ||
               src.indexOf('googletagmanager') !== -1 ||
               src.indexOf('googlesyndication') !== -1 ||
-              src.indexOf('doubleclick') !== -1;
-          if (isExternal) {
-            e.stopImmediatePropagation();
-            e.preventDefault();
-            return false;
-          }
-          if (msg.indexOf('scroll-fade-in') !== -1) {
+              src.indexOf('doubleclick') !== -1 ||
+              src.indexOf('dms') !== -1 ||
+              src.indexOf('novatiq') !== -1;
+          if (isExternal || isAdDomNoise || msg.indexOf('scroll-fade-in') !== -1) {
             e.stopImmediatePropagation();
             e.preventDefault();
             return false;
