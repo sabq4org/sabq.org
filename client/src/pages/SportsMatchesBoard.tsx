@@ -432,11 +432,11 @@ export function MatchRow({
           href={`/sports/team/${f.home.id}`}
           className={`flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2 ${homeWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
         >
-          <span className="truncate text-[13px] leading-5 sm:text-sm">{f.home.name}</span>
+          <span className="truncate text-[11px] leading-4 sm:text-sm sm:leading-5">{f.home.name}</span>
           {f.home.logo ? (
-            <img src={f.home.logo} alt="" className="h-6 w-6 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
+            <img src={f.home.logo} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
           ) : (
-            <span className="h-6 w-6 shrink-0 rounded-full bg-muted" />
+            <span className="h-5 w-5 shrink-0 rounded-full bg-muted sm:h-6 sm:w-6" />
           )}
         </Link>
 
@@ -484,11 +484,11 @@ export function MatchRow({
           className={`flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 ${awayWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
         >
           {f.away.logo ? (
-            <img src={f.away.logo} alt="" className="h-6 w-6 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
+            <img src={f.away.logo} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
           ) : (
-            <span className="h-6 w-6 shrink-0 rounded-full bg-muted" />
+            <span className="h-5 w-5 shrink-0 rounded-full bg-muted sm:h-6 sm:w-6" />
           )}
-          <span className="truncate text-[13px] leading-5 sm:text-sm">{f.away.name}</span>
+          <span className="truncate text-[11px] leading-4 sm:text-sm sm:leading-5">{f.away.name}</span>
         </Link>
 
         {/* توسيع مسجّلي الأهداف */}
