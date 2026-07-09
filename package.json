@@ -10,6 +10,7 @@
     "build:server": "esbuild server/index.ts --outfile=dist/index.js --format=esm --platform=node --packages=external --bundle && esbuild server/bootstrap.ts --outfile=dist/bootstrap.js --format=esm --platform=node --packages=external --bundle --external:./index.js",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
+    "check:tsc6": "tsc6",
     "lint": "eslint .",
     "test": "vitest run",
     "test:unit": "vitest run",
@@ -210,7 +211,8 @@
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.20.5",
-    "typescript": "6.0.3",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "^8.61.0",
     "vite": "^6.4.1",
     "vitest": "^4.1.8"
