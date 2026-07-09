@@ -34,10 +34,7 @@ struct HomeView: View {
     @State private var assists: [SpScorer] = []
     @State private var transfers: [SpLeagueTransfer] = []
 
-    // إثراء الهيرو (أفضل جهد) — إحصائيات + xG + تعليق لمباراة الواجهة التي بدأت.
-    // (الزخم/الضغط/الوقائع أُخرجت من الهيرو إلى مركز المباراة — تخفيف زحمة 2026-07-06.)
-    @State private var featuredDetail: SpMatchDetail?
-    @State private var featuredXg: SpXg?
+    // إثراء الهيرو الحيّ — تعليق فقط (الإحصائيات/xG في مركز المباراة).
     @State private var featuredCommentary: SpCommentary?
     /// نبضة هيرو وصلت والتبويب مخفي — تُصرف بتحديث واحد عند العودة.
     @State private var pendingHeroReload = false
@@ -183,18 +180,13 @@ struct HomeView: View {
         }
     }
 
-    /// تحديث حيّ خفيف: قائمة المباريات (تُحرّك النتيجة/الحالة في الهيرو وبقية اللوحة)
-    /// + تفاصيل وتعليق مباراة الهيرو الجارية. التحليل الأثقل (xG/زخم/ضغط) يبقى
-    /// على loadAll (السحب اليدوي) — الأرقام الحيوية هنا هي النتيجة والأحداث.
+    /// تحديث حيّ خفيف: قائمة المباريات + تعليق الهيرو الجاري.
     private func refreshHero() async {
         if let m = try? await APIClient.shared.fetchMatches(comp: SportsConstants.defaultComp, ignoreCache: true) {
             matches = m
         }
-        if let f = featured, f.started {
-            async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: true)
-            async let commentaryOpt = try? APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: true)
-            self.featuredDetail = await detailOpt
-            self.featuredCommentary = f.status.live ? await commentaryOpt : nil
+        if let f = featured, f.status.live {
+            self.featuredCommentary = try? await APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: true)
         }
     }
 
@@ -245,7 +237,7 @@ struct HomeView: View {
         .padding(.top, 6)
     }
 
-    // ترويسة الدوري — هوية فقط بلا أدوات: شعار روشن + الاسم + سطر الموسم.
+    // ترويسة الدوري — هوية روشن بلمسة لون خفيفة تكسر الرتابة البيضاء.
     private var leagueStrip: some View {
         HStack(spacing: 11) {
             Image("RoshnLogo")
@@ -253,7 +245,7 @@ struct HomeView: View {
                 .scaledToFit()
                 .frame(width: 40, height: 40)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(rslAccent.opacity(0.22), lineWidth: 1))
             VStack(alignment: .leading, spacing: 2) {
                 Group {
                     if SpLanguage.shared.isEnglish {
@@ -271,6 +263,18 @@ struct HomeView: View {
             }
             Spacer(minLength: 0)
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [rslAccent.opacity(0.10), rslAccent.opacity(0.03)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+        )
         .padding(.top, 2)
     }
 
@@ -369,22 +373,6 @@ struct HomeView: View {
 
                 if f.status.finished, let story = heroStoryLine(f) {
                     heroContextLine(icon: "checkmark.seal.fill", text: story)
-                }
-
-                let stats = heroStats(f)
-                if !stats.isEmpty {
-                    HStack(spacing: 7) {
-                        ForEach(Array(stats.enumerated()), id: \.offset) { _, s in
-                            VStack(spacing: 2) {
-                                Text(s.0).font(SportsFonts.app(size: 9.5, weight: .bold)).foregroundStyle(SpTheme.onDarkDim)
-                                Text(s.1).font(SportsFonts.app(size: 12, weight: .bold)).foregroundStyle(SpTheme.onDark)
-                                    .monospacedDigit().environment(\.layoutDirection, .leftToRight)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 7)
-                            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(SpTheme.chipFill))
-                        }
-                    }
                 }
 
                 // آخر مجريات المباراة الحيّة — سطر واحد من التعليق العربي.
@@ -487,21 +475,15 @@ struct HomeView: View {
     private var heroBackground: some View {
         let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
         return shape
-            .fill(SpTheme.card)
-            .overlay(shape.stroke(SpTheme.cardStroke, lineWidth: 1))
+            .fill(
+                LinearGradient(
+                    colors: [rslAccent.opacity(0.09), SpTheme.card, SpTheme.card],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .overlay(shape.stroke(rslAccent.opacity(0.16), lineWidth: 1))
             .shadow(color: SpTheme.cardShadow, radius: 14, x: 0, y: 6)
-    }
-
-    // إحصائيات الهيرو (أفضل جهد): استحواذ + تسديدات (من تفاصيل المباراة) + xG.
-    private func heroStats(_ f: SpFixture) -> [(String, String)] {
-        guard f.started else { return [] }
-        var out: [(String, String)] = []
-        if let p = findStat(["possession", "استحواذ"]) { out.append((L("استحواذ"), p)) }
-        if let s = findStat(["total shots", "shots total", "إجمالي التسديدات", "تسديد"]) { out.append((L("تسديدات"), s)) }
-        if let xg = featuredXg, xg.available {
-            out.append(("xG", String(format: "%.1f · %.1f", xg.home.xg, xg.away.xg)))
-        }
-        return Array(out.prefix(3))
     }
 
     /// آخر مجرى بارز من التعليق الحي: أحدث حدث مهم/هدف ضمن آخر العناصر، وإلا الأحدث مطلقًا.
@@ -512,15 +494,6 @@ struct HomeView: View {
         guard let c = pick, !c.displayText.isEmpty else { return nil }
         let minute = c.extraMinute.flatMap { $0 > 0 ? "\(c.minute)+\($0)′" : nil } ?? "\(c.minute)′"
         return "\(minute) · \(c.displayText)"
-    }
-
-    private func findStat(_ keys: [String]) -> String? {
-        guard let rows = featuredDetail?.statistics?.rows else { return nil }
-        let row = rows.first { r in
-            keys.contains { k in r.type.localizedCaseInsensitiveContains(k) || r.label.localizedCaseInsensitiveContains(k) }
-        }
-        guard let row, let h = row.home?.text, let a = row.away?.text, h != "—" || a != "—" else { return nil }
-        return "\(h) · \(a)"
     }
 
 
@@ -556,9 +529,8 @@ struct HomeView: View {
     }
 
     @ViewBuilder private var dashboardContent: some View {
-        // فراغ واضح بين بطاقات روشن بدون فصل بصري زائد.
-        // (بطاقة «فريقي المفضّل» المصغّرة حُذفت — بلوك «فريقي» أعلى الواجهة يغنيها.)
-        VStack(spacing: 28) {
+        // فراغ أوضح بين أقسام روشن — هرمية بدل صفّ بطاقات متلاصقة.
+        VStack(spacing: 32) {
             if showSmartSnaps, !language.isEnglish {
                 VaraInsightCard(context: varaInsightContext)
                     .padding(.horizontal, 16)
@@ -598,7 +570,6 @@ struct HomeView: View {
         let favoriteRow = favoriteTeamId.flatMap { favId in standings.first(where: { $0.team.id == favId }) }
         let topScorer = favoriteTeamId.flatMap { favId in scorers.first(where: { $0.team.id == favId }) } ?? scorers.first
         let bestAtk = standings.max { $0.goalsFor < $1.goalsFor }
-        let bestDef = standings.min { $0.goalsAgainst < $1.goalsAgainst }
         let gap: Int? = standings.count >= 2 ? standings[0].points - standings[1].points : nil
 
         VStack(alignment: .leading, spacing: 11) {
@@ -618,16 +589,11 @@ struct HomeView: View {
             }
             .padding(.horizontal, 16)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 0) {
-                    ForEach(Array(pulseTiles(favoriteRow: favoriteRow, leader: leader, topScorer: topScorer, bestAtk: bestAtk, bestDef: bestDef, gap: gap).enumerated()), id: \.offset) { idx, t in
-                        if idx > 0 {
-                            Rectangle().fill(SpTheme.outline).frame(width: 1, height: 38)
-                        }
+                HStack(spacing: 10) {
+                    ForEach(Array(pulseTiles(favoriteRow: favoriteRow, leader: leader, topScorer: topScorer, bestAtk: bestAtk).enumerated()), id: \.offset) { _, t in
                         pulseTile(t.label, t.value, t.sub, logo: t.logo)
                     }
                 }
-                .background(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).fill(SpTheme.card))
-                .overlay(RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous).stroke(SpTheme.cardStroke, lineWidth: 1))
                 .padding(.horizontal, 16)
             }
         }
@@ -635,24 +601,21 @@ struct HomeView: View {
 
     private typealias PulseTile = (label: String, value: String, sub: String, logo: String?)
 
-    private func pulseTiles(favoriteRow: SpStandingRow?, leader: SpStandingRow?, topScorer: SpScorer?, bestAtk: SpStandingRow?, bestDef: SpStandingRow?, gap: Int?) -> [PulseTile] {
+    private func pulseTiles(favoriteRow: SpStandingRow?, leader: SpStandingRow?, topScorer: SpScorer?, bestAtk: SpStandingRow?) -> [PulseTile] {
         var tiles: [PulseTile] = []
         if let row = favoriteRow {
             tiles.append(("المركز", "\(row.rank)", Lf("%d نقطة", row.points), row.team.logo))
             tiles.append(("لعب", "\(row.played)", Lf("%d فوز", row.win), nil))
             tiles.append(("سجّل", "\(row.goalsFor)", L("هدف"), nil))
-            tiles.append(("استقبل", "\(row.goalsAgainst)", L("هدف"), nil))
             if let s = topScorer, s.team.id == row.team.id {
                 tiles.append(("هداف الفريق", s.name, Lf("%d هدف", s.goals), s.team.logo))
             }
-            return tiles
+            return Array(tiles.prefix(3))
         }
         if let l = leader { tiles.append(("المتصدّر", l.team.name, Lf("%d نقطة", l.points), l.team.logo)) }
         if let s = topScorer { tiles.append(("الهدّاف", s.name, Lf("%d هدف", s.goals), s.team.logo)) }
         if let a = bestAtk { tiles.append(("أقوى هجوم", a.team.name, Lf("%d هدف", a.goalsFor), a.team.logo)) }
-        if let d = bestDef { tiles.append(("أمنع دفاع", d.team.name, Lf("%d عليه", d.goalsAgainst), d.team.logo)) }
-        if let g = gap { tiles.append(("فارق الصدارة", g == 0 ? L("متساويان") : Lf("%d نقطة", g), L("على الوصيف"), nil)) }
-        return tiles
+        return Array(tiles.prefix(3))
     }
 
     private func pulseTile(_ label: String, _ value: String, _ sub: String, logo: String?) -> some View {
@@ -668,8 +631,17 @@ struct HomeView: View {
             Text(sub).font(SportsFonts.app(size: 10, weight: .bold)).foregroundStyle(highlight)
                 .lineLimit(1).minimumScaleFactor(0.7)
         }
-        .frame(width: 112, alignment: .leading)
-        .padding(.horizontal, 13).padding(.vertical, 11)
+        .frame(width: 118, alignment: .leading)
+        .padding(.horizontal, 12).padding(.vertical, 11)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(SpTheme.card)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(SpTheme.cardStroke, lineWidth: 1)
+                )
+                .shadow(color: SpTheme.cardShadow, radius: 6, x: 0, y: 3)
+        )
     }
 
     // جولة هذا الأسبوع — تمرير أفقي للمباريات القادمة/اليوم.
@@ -1153,17 +1125,10 @@ struct HomeView: View {
         // وتكرار detail كامل لكل مباراة متابَعة يضاعف زمن التحميل.
         await loadSmartSnaps(force: force)
 
-        // إثراء الهيرو (أفضل جهد) لمباراة بدأت — إحصائيات + xG + آخر مجريات.
-        if let f = featured, f.started {
-            async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: force)
-            async let xgOpt = try? APIClient.shared.fetchXg(matchId: f.id, ignoreCache: force)
-            async let commentaryOpt = try? APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: force)
-            self.featuredDetail = await detailOpt
-            self.featuredXg = await xgOpt
-            self.featuredCommentary = f.status.live ? await commentaryOpt : nil
+        // تعليق الهيرو الحيّ فقط — الإحصائيات في مركز المباراة.
+        if let f = featured, f.status.live {
+            self.featuredCommentary = try? await APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: force)
         } else {
-            self.featuredDetail = nil
-            self.featuredXg = nil
             self.featuredCommentary = nil
         }
 
