@@ -685,6 +685,8 @@ enum SpTab: Hashable { case matches, roshn, competitions, world, account }
     func requestLogin() { showLogin = true }
     func openAccount() { selectedTab = .account }
     func openMatch(_ fixtureId: Int) {
+        // مباريات TheSports-only في «عالمية» (id سالب) بلا مركز AF — لا تفتح من Live Activity/deep link.
+        guard fixtureId > 0 else { return }
         selectedTab = .matches
         pendingMatchId = fixtureId
     }
