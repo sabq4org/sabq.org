@@ -358,7 +358,7 @@ export default function Home() {
             <p className="text-destructive text-lg mb-4">
               حدث خطأ في تحميل الصفحة الرئيسية
             </p>
-            <p className="text-muted-foreground text-sm mb-6">
+            <p className="mb-6 text-sm font-medium text-foreground/70">
               {error instanceof Error ? error.message : "خطأ غير معروف"}
             </p>
             <button
@@ -383,7 +383,7 @@ export default function Home() {
         <NavigationBar />
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
           <div className="text-center py-20">
-            <p className="text-muted-foreground text-lg">
+            <p className="text-lg font-medium text-foreground/70">
               لا توجد بيانات متاحة حالياً
             </p>
           </div>
@@ -408,7 +408,7 @@ export default function Home() {
           role="status"
           aria-live="polite"
         >
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm font-medium text-foreground/70">
             {isFetching ? "جارٍ تحديث الأخبار…" : "تعذّر تحديث الأخبار"}
           </span>
           {!isFetching && (

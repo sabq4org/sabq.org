@@ -121,7 +121,7 @@ export function SmartSummaryBlock() {
             <h2 className="text-sm font-bold bg-gradient-to-r from-purple-600 to-blue-600 dark:from-purple-400 dark:to-blue-400 bg-clip-text text-transparent">
               سبق الذكية — ملخصات وتوصيات مخصصة لك
             </h2>
-            <p className="text-xs text-muted-foreground mt-0.5 hidden sm:block">
+            <p className="mt-0.5 hidden text-xs font-medium text-foreground/70 sm:block">
               سجّل مجاناً واحصل على إشعارات فورية وأخبار تناسب اهتماماتك
             </p>
           </div>
@@ -190,7 +190,7 @@ export function SmartSummaryBlock() {
               <h2 className="text-base font-bold group-hover:text-primary transition-colors" data-testid="text-greeting">
                 {insights.greeting}
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm font-medium text-foreground/70">
                 رحلتك المعرفية في سبق اليوم باختصار
               </p>
             </div>
@@ -224,7 +224,7 @@ export function SmartSummaryBlock() {
               </div>
               <div>
                 <p className="text-base font-bold text-foreground">{insights.metrics.readingTime} دقيقة</p>
-                <p className="text-[10px] text-muted-foreground">وقت القراءة</p>
+                <p className="text-[10px] font-medium text-foreground/65">وقت القراءة</p>
               </div>
             </div>
             
@@ -237,7 +237,7 @@ export function SmartSummaryBlock() {
               </div>
               <div>
                 <p className="text-base font-bold text-foreground">{insights.metrics.completionRate}%</p>
-                <p className="text-[10px] text-muted-foreground">معدل الإكمال</p>
+                <p className="text-[10px] font-medium text-foreground/65">معدل الإكمال</p>
               </div>
             </div>
             
@@ -250,7 +250,7 @@ export function SmartSummaryBlock() {
               </div>
               <div>
                 <p className="text-base font-bold text-foreground">{insights.metrics.likes}</p>
-                <p className="text-[10px] text-muted-foreground">الإعجابات</p>
+                <p className="text-[10px] font-medium text-foreground/65">الإعجابات</p>
               </div>
             </div>
             
@@ -263,7 +263,7 @@ export function SmartSummaryBlock() {
               </div>
               <div>
                 <p className="text-base font-bold text-foreground">{insights.metrics.comments}</p>
-                <p className="text-[10px] text-muted-foreground">التعليقات</p>
+                <p className="text-[10px] font-medium text-foreground/65">التعليقات</p>
               </div>
             </div>
           </div>

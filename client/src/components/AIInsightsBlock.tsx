@@ -175,7 +175,7 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
           <h2 className="text-base sm:text-lg font-bold" data-testid="insights-title">
             مؤشرات الأسبوع
           </h2>
-          <p className="text-[10px] sm:text-xs text-muted-foreground" data-testid="insights-subtitle">
+          <p className="text-[10px] sm:text-xs font-medium text-foreground/70" data-testid="insights-subtitle">
             نظرة ذكية مدعومة بالذكاء الاصطناعي
           </p>
         </div>
@@ -210,14 +210,14 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
                 </div>
 
                 {/* Subtitle */}
-                <p className="text-[10px] text-muted-foreground mb-2 line-clamp-2" data-testid={`insight-subtitle-${insight.testId}`}>
+                <p className="text-[10px] font-medium text-foreground/70 mb-2 line-clamp-2" data-testid={`insight-subtitle-${insight.testId}`}>
                   {insight.subtitle}
                 </p>
 
                 {/* Trend with MiniChart */}
                 <div className="flex items-center gap-2 mb-2" data-testid={`insight-trend-${insight.testId}`}>
                   <MiniChart trend={insight.trend} color={insight.chartColor} />
-                  <div className="flex items-center gap-1 text-foreground/80 text-[10px] font-medium">
+                  <div className="flex items-center gap-1 text-foreground/85 text-[10px] font-medium">
                     <TrendingUp className="h-2.5 w-2.5" />
                     <span>{insight.trend}</span>
                   </div>
@@ -225,7 +225,7 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
 
                 {/* Article Title */}
                 {insight.article && (
-                  <p className="mt-auto pt-2 text-[10px] text-foreground/80 line-clamp-2 border-t border-current/10" data-testid={`insight-article-${insight.testId}`}>
+                  <p className="mt-auto pt-2 text-[10px] text-foreground/85 line-clamp-2 border-t border-current/10" data-testid={`insight-article-${insight.testId}`}>
                     {insight.article.title}
                   </p>
                 )}
@@ -266,14 +266,14 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
                 </div>
 
                 {/* Subtitle */}
-                <p className="text-xs text-muted-foreground mb-2 min-h-[24px] line-clamp-2" data-testid={`insight-subtitle-${insight.testId}`}>
+                <p className="text-xs font-medium text-foreground/70 mb-2 min-h-[24px] line-clamp-2" data-testid={`insight-subtitle-${insight.testId}`}>
                   {insight.subtitle}
                 </p>
 
                 {/* Trend with MiniChart */}
                 <div className="flex items-center gap-2 mb-2" data-testid={`insight-trend-${insight.testId}`}>
                   <MiniChart trend={insight.trend} color={insight.chartColor} />
-                  <div className="flex items-center gap-1 text-foreground/80 text-xs font-medium">
+                  <div className="flex items-center gap-1 text-foreground/85 text-xs font-medium">
                     <TrendingUp className="h-3 w-3" />
                     <span className="text-xs">{insight.trend}</span>
                   </div>
@@ -281,7 +281,7 @@ export function AIInsightsBlock({ enabled = true }: AIInsightsBlockProps) {
 
                 {/* Article Title - Always visible */}
                 {insight.article && (
-                  <p className="mt-auto pt-2 text-xs text-foreground/80 line-clamp-2 border-t border-current/10" data-testid={`insight-article-${insight.testId}`}>
+                  <p className="mt-auto pt-2 text-xs text-foreground/85 line-clamp-2 border-t border-current/10" data-testid={`insight-article-${insight.testId}`}>
                     {insight.article.title}
                   </p>
                 )}

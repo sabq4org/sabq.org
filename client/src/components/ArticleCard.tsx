@@ -602,7 +602,7 @@ export function ArticleCard({
           </Link>
 
         {article.aiSummary && (
-          <p className="text-sm text-[#475569] dark:text-muted-foreground line-clamp-2 mb-3 leading-relaxed">
+          <p className="mb-3 line-clamp-2 text-sm font-medium leading-relaxed text-foreground/70">
             {article.aiSummary}
           </p>
         )}
@@ -628,7 +628,7 @@ export function ArticleCard({
               </Badge>
             )}
             {timeAgo && (
-              <span className="flex items-center gap-1 text-slate-500 dark:text-muted-foreground">
+              <span className="flex items-center gap-1 font-medium text-foreground/65">
                 <Clock className="h-3 w-3" />
                 {timeAgo}
               </span>
