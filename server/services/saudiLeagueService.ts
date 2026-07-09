@@ -622,6 +622,8 @@ export async function getOngoingLeagueIds(): Promise<Set<number>> {
 // أنماط ضجيج لا نريدها في «البطولات العالمية القائمة»: ودّيات واحتياط وهواة فقط.
 // الفئات السنّية (U20/Youth) تُعرض — طلب المنتج 2026-07-09.
 const NOISE_LEAGUE_RE = /friendl|reserve|amateur/i;
+// بطولات الفئات السنّية غالبًا غائبة عن leagues?current=true، فلا نُسقطها بفلتر المواسم.
+const YOUTH_LEAGUE_RE = /\bu-?1[5-9]\b|\bu-?2[0-3]\b|youth/i;
 
 /**
  * مفتاح ترجمة الدوري العالمي: أسماء مثل "Premier League" تتكرر عبر دول كثيرة،
@@ -678,7 +680,9 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
       const id = lg.id;
       if (!id) return false;
       if (byId.has(id)) return true; // بطولاتنا المنتقاة تظهر دائمًا
-      if (NOISE_LEAGUE_RE.test(String(lg.name ?? ""))) return false; // ودّيات/فئات سنّية
+      const leagueName = String(lg.name ?? "");
+      if (NOISE_LEAGUE_RE.test(leagueName)) return false; // ودّيات/احتياط/هواة
+      if (YOUTH_LEAGUE_RE.test(leagueName)) return true; // U15–U23/Youth حتى لو غابت عن ongoing
       if (ongoing.size === 0) return true; // تعذّر تحديد المواسم → لا نُفرّغ الصفحة
       return ongoing.has(id); // دوري عالمي موسمه قائم فقط
     });
