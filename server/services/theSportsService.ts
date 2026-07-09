@@ -208,11 +208,19 @@ const i18nCache = new Map<string, string>(); // `${type}:${id}` → الاسم �
 const i18nMissing = new Set<string>(); // معرّفات بلا ترجمة (لا نكرّر طلبها)
 
 // العربية في TheSports هي الحقل `name_aa` (لا `name_ar`) — تحقّق حيّ 2026‑06‑23.
+// عند غياب العربية نأخذ `name_en` بدل عرض المعرّف الخام.
 const I18N_NAME_FIELD = "name_aa";
+const I18N_NAME_EN_FIELD = "name_en";
 // `language/list` **لا يدعم uuid متعدّدًا** (تحقّق حيّ): النداء بـuuid واحد فقط.
 // فنطلب واحدًا تلو الآخر بتزامن محدود، ونحدّ العدد لكل استدعاء حمايةً للحصة.
 const I18N_MAX_LOOKUPS = 80;
 const I18N_CONCURRENCY = 6;
+
+/** معرّفات TheSports القصيرة (مثل 23xmvkh4dzdqg8n) — ليست أسماء للعرض. */
+function looksLikeTsUuid(s: string): boolean {
+  const t = s.trim();
+  return t.length >= 10 && t.length <= 24 && /^[a-z0-9]+$/i.test(t);
+}
 
 export function isTsLanguageEnabled(): boolean {
   // لم تعد تتطلّب THESPORTS_LANG — الأسماء العربية (name_aa) تُجلب متى توفّر الاشتراك.
@@ -248,9 +256,11 @@ export async function resolveTsNames(
             tsGet("language/list", { type: String(type), uuid: id }),
           );
           const row = Array.isArray(data?.results) ? data.results[0] : null;
-          const name = row?.[I18N_NAME_FIELD];
-          if (typeof name === "string" && name.trim()) i18nCache.set(`${type}:${id}`, name.trim());
-          else i18nMissing.add(`${type}:${id}`); // موجود بلا اسم عربي — لا نكرّر
+          const ar = typeof row?.[I18N_NAME_FIELD] === "string" ? row[I18N_NAME_FIELD].trim() : "";
+          const en = typeof row?.[I18N_NAME_EN_FIELD] === "string" ? row[I18N_NAME_EN_FIELD].trim() : "";
+          const name = ar || en;
+          if (name) i18nCache.set(`${type}:${id}`, name);
+          else i18nMissing.add(`${type}:${id}`); // موجود بلا اسم — لا نكرّر
         } catch {
           // مهلة/تهدئة عابرة — لا نُعلّم missing؛ المستدعي يتراجع بهدوء.
         }
@@ -1356,7 +1366,7 @@ export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
     }
     if (enriched.length === 0) return [];
 
-    const teamIds = enriched.flatMap((e) => [e.homeTeamId, e.awayTeamId]);
+    const teamIds = [...new Set(enriched.flatMap((e) => [e.homeTeamId, e.awayTeamId]))];
     const compIds = enriched.map((e) => e.competitionId);
     const [teamTr, compTr] = await Promise.all([
       resolveTsNames(TS_I18N_TYPE.team, teamIds),
@@ -1372,13 +1382,47 @@ export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
       }),
     );
 
+    // أسماء الفرق الناقصة: team/additional يعطي الاسم الإنجليزي (Basic Info).
+    // لا نعرض uuid خامًا أبدًا — كان يظهر كـ «أسماء» غير مفهومة في عالمية.
+    const teamExtraNames = new Map<string, string>();
+    const missingTeams = teamIds.filter((id) => {
+      const n = teamTr(id);
+      return !n || looksLikeTsUuid(n);
+    });
+    for (let i = 0; i < missingTeams.length; i += I18N_CONCURRENCY) {
+      const slice = missingTeams.slice(i, i + I18N_CONCURRENCY);
+      await Promise.all(
+        slice.map(async (tid) => {
+          const ex = await getTsTeamExtra(tid);
+          const name = ex?.name?.trim() ?? "";
+          if (name && !looksLikeTsUuid(name)) teamExtraNames.set(tid, name);
+        }),
+      );
+    }
+
+    const resolveTeamName = (id: string): string | null => {
+      const arOrEn = teamTr(id);
+      if (arOrEn && !looksLikeTsUuid(arOrEn)) return arOrEn;
+      const fromExtra = teamExtraNames.get(id);
+      if (fromExtra) return fromExtra;
+      return null;
+    };
+
     const out: TsLiveBoardItem[] = [];
     for (const e of enriched) {
       const ex = extras.get(e.competitionId);
-      const competitionName =
-        compTr(e.competitionId) || (ex?.name?.trim() ? ex.name.trim() : "") || e.competitionId;
+      let competitionName =
+        compTr(e.competitionId) || (ex?.name?.trim() ? ex.name.trim() : "") || "";
+      if (!competitionName || looksLikeTsUuid(competitionName)) {
+        competitionName = ex?.name?.trim() && !looksLikeTsUuid(ex.name) ? ex.name.trim() : "بطولة";
+      }
       if (TS_BOARD_NOISE_RE.test(competitionName)) continue;
       if (ex?.name && TS_BOARD_NOISE_RE.test(ex.name)) continue;
+
+      const homeName = resolveTeamName(e.homeTeamId);
+      const awayName = resolveTeamName(e.awayTeamId);
+      // بدون اسمين مقروءين لا نُظهر الصف (أفضل من uuid مزيف).
+      if (!homeName || !awayName) continue;
 
       const meta = TS_STATUS_META[e.decoded.statusId] ?? { code: "LIVE", label: "مباشر" };
       let elapsed: number | null = null;
@@ -1396,8 +1440,8 @@ export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
         country: ex?.host?.trim() ? ex.host.trim() : "",
         homeTeamId: e.homeTeamId,
         awayTeamId: e.awayTeamId,
-        homeName: teamTr(e.homeTeamId) || e.homeTeamId,
-        awayName: teamTr(e.awayTeamId) || e.awayTeamId,
+        homeName,
+        awayName,
         goalsHome: e.decoded.home,
         goalsAway: e.decoded.away,
         penHome: e.decoded.penHome,
