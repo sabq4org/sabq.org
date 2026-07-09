@@ -797,6 +797,9 @@ async function detectEventAlerts(
   return out;
 }
 
+/** معرّف حزمة تطبيق VARA الرياضي على iOS — مرجع تفضيل التوجيه أدناه. */
+const SPORTS_APP_BUNDLE_ID = "com.sabq.sports";
+
 /** دفع إشعار لأجهزة مستخدم واحد (APNs + FCM) — أفضل جهد، لا يرمي. */
 export async function pushToUserDevices(
   userId: string,
@@ -832,8 +835,21 @@ export async function pushToUserDevices(
       );
     }
 
-    const apnsDevices = uniqueDevices.filter((d) => d.provider === "apns");
-    const fcmTokens = uniqueDevices.filter((d) => d.provider === "fcm").map((d) => d.token);
+    // تفضيل تطبيق الرياضة (قرار المالك 2026-07-09): المثبِّت للتطبيقين معًا كان
+    // يستلم إشعار المباراة نفسه مرتين — من سبق ومن VARA. كل مستهلكي هذه الدالة
+    // رياضيون (مباريات/انتقالات/سنابات)، فمن يملك توكن VARA نشطًا على iOS تصله
+    // تنبيهات الرياضة فيه وحده ويُتخطى توكن تطبيق الأخبار. يقتصر الفلتر على
+    // أجهزة APNs: أجهزة FCM/أندرويد لا تُمسّ (قد تكون هاتفًا آخر بلا VARA)،
+    // ومن ليس عنده VARA يبقى يستقبل تنبيهات الرياضة في تطبيق الأخبار كما كان.
+    const hasSportsIosDevice = uniqueDevices.some(
+      (d) => d.provider === "apns" && d.bundleId === SPORTS_APP_BUNDLE_ID,
+    );
+    const targetDevices = hasSportsIosDevice
+      ? uniqueDevices.filter((d) => d.provider !== "apns" || d.bundleId === SPORTS_APP_BUNDLE_ID)
+      : uniqueDevices;
+
+    const apnsDevices = targetDevices.filter((d) => d.provider === "apns");
+    const fcmTokens = targetDevices.filter((d) => d.provider === "fcm").map((d) => d.token);
 
     if (apnsDevices.length > 0 && isApnsConfigured()) {
       await Promise.all(
