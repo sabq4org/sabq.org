@@ -1261,6 +1261,163 @@ export interface TsPlayerMatchStat {
   values: Record<string, number>;
 }
 
+// ───────────────────── لوحة المباريات الجارية (لقسم «عالمية») ─────────────────────
+// detail_live يعطي النتيجة فقط؛ diary لنفس اليوم يزوّد competition/home/away/match_time.
+// الأسماء عبر language/list. أفضل جهد: أي فشل/تهدئة → [].
+
+const TS_BOARD_NOISE_RE = /friendl|reserve|amateur|ودّي|ودي|احتياط|هواة/i;
+
+const TS_STATUS_META: Record<number, { code: string; label: string }> = {
+  2: { code: "1H", label: "الشوط الأول" },
+  3: { code: "HT", label: "استراحة" },
+  4: { code: "2H", label: "الشوط الثاني" },
+  5: { code: "ET", label: "وقت إضافي" },
+  6: { code: "ET", label: "وقت إضافي" },
+  7: { code: "PEN", label: "ركلات ترجيح" },
+};
+
+export interface TsLiveBoardItem {
+  matchId: string;
+  competitionId: string;
+  competitionName: string;
+  competitionLogo: string | null;
+  country: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  homeName: string;
+  awayName: string;
+  goalsHome: number;
+  goalsAway: number;
+  penHome: number | null;
+  penAway: number | null;
+  statusId: number;
+  live: boolean;
+  finished: boolean;
+  matchTime: number;
+  statusCode: string;
+  statusLabel: string;
+  elapsed: number | null;
+}
+
+/**
+ * كل المباريات الجارية من TheSports مع أسماء البطولة/الفريق — مصدر احتياطي
+ * لقائمة «عالمية» عندما يكون API-Football فارغًا أو فقيرًا.
+ */
+export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
+  if (!isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  try {
+    const liveMap = await getLiveMap();
+    if (liveMap.size === 0) return [];
+
+    const liveRows: { id: string; decoded: NonNullable<ReturnType<typeof decodeScore>>; raw: any }[] = [];
+    for (const [id, raw] of liveMap) {
+      const decoded = decodeScore(raw?.score);
+      if (!decoded || !TS_LIVE_STATUS.has(decoded.statusId)) continue;
+      liveRows.push({ id: String(id), decoded, raw });
+    }
+    if (liveRows.length === 0) return [];
+
+    // فهرس diary لليوم (بكين + جوار) لربط competition/home/away/match_time
+    const nowSec = Math.floor(Date.now() / 1000);
+    const diaryById = new Map<string, any>();
+    for (const key of candidateDateKeys(nowSec)) {
+      const day = await getDiaryRaw(key);
+      for (const m of day) {
+        if (m?.id == null) continue;
+        const mid = String(m.id);
+        if (!diaryById.has(mid)) diaryById.set(mid, m);
+      }
+    }
+
+    type Enriched = {
+      id: string;
+      decoded: NonNullable<ReturnType<typeof decodeScore>>;
+      competitionId: string;
+      homeTeamId: string;
+      awayTeamId: string;
+      matchTime: number;
+    };
+    const enriched: Enriched[] = [];
+    for (const row of liveRows) {
+      const d = diaryById.get(row.id);
+      const competitionId = String(d?.competition_id ?? row.raw?.competition_id ?? "").trim();
+      const homeTeamId = String(d?.home_team_id ?? row.raw?.home_team_id ?? "").trim();
+      const awayTeamId = String(d?.away_team_id ?? row.raw?.away_team_id ?? "").trim();
+      const matchTime = Number(d?.match_time ?? row.raw?.match_time ?? 0) || 0;
+      if (!competitionId || !homeTeamId || !awayTeamId) continue;
+      enriched.push({
+        id: row.id,
+        decoded: row.decoded,
+        competitionId,
+        homeTeamId,
+        awayTeamId,
+        matchTime,
+      });
+    }
+    if (enriched.length === 0) return [];
+
+    const teamIds = enriched.flatMap((e) => [e.homeTeamId, e.awayTeamId]);
+    const compIds = enriched.map((e) => e.competitionId);
+    const [teamTr, compTr] = await Promise.all([
+      resolveTsNames(TS_I18N_TYPE.team, teamIds),
+      resolveTsNames(TS_I18N_TYPE.competition, compIds),
+    ]);
+
+    const uniqueComps = [...new Set(compIds)];
+    const extras = new Map<string, TsCompetitionExtra>();
+    await Promise.all(
+      uniqueComps.slice(0, 40).map(async (cid) => {
+        const ex = await getTsCompetitionExtra(cid);
+        if (ex) extras.set(cid, ex);
+      }),
+    );
+
+    const out: TsLiveBoardItem[] = [];
+    for (const e of enriched) {
+      const ex = extras.get(e.competitionId);
+      const competitionName =
+        compTr(e.competitionId) || (ex?.name?.trim() ? ex.name.trim() : "") || e.competitionId;
+      if (TS_BOARD_NOISE_RE.test(competitionName)) continue;
+      if (ex?.name && TS_BOARD_NOISE_RE.test(ex.name)) continue;
+
+      const meta = TS_STATUS_META[e.decoded.statusId] ?? { code: "LIVE", label: "مباشر" };
+      let elapsed: number | null = null;
+      if (e.decoded.statusId === 3) {
+        elapsed = 45;
+      } else if (e.matchTime > 0) {
+        elapsed = Math.max(1, Math.min(120, Math.floor((nowSec - e.matchTime) / 60)));
+      }
+
+      out.push({
+        matchId: e.id,
+        competitionId: e.competitionId,
+        competitionName,
+        competitionLogo: ex?.logo?.trim() ? ex.logo : null,
+        country: ex?.host?.trim() ? ex.host.trim() : "",
+        homeTeamId: e.homeTeamId,
+        awayTeamId: e.awayTeamId,
+        homeName: teamTr(e.homeTeamId) || e.homeTeamId,
+        awayName: teamTr(e.awayTeamId) || e.awayTeamId,
+        goalsHome: e.decoded.home,
+        goalsAway: e.decoded.away,
+        penHome: e.decoded.penHome,
+        penAway: e.decoded.penAway,
+        statusId: e.decoded.statusId,
+        live: true,
+        finished: false,
+        matchTime: e.matchTime,
+        statusCode: meta.code,
+        statusLabel: meta.label,
+        elapsed,
+      });
+    }
+    return out;
+  } catch (e) {
+    armCooldown(e);
+    return [];
+  }
+}
+
 export async function getTsMatchPlayerStats(matchUuid: string): Promise<TsPlayerMatchStat[]> {
   if (!matchUuid || !isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
   try {
