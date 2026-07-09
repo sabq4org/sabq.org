@@ -156,15 +156,16 @@ fun WorldCupScreen(
 
 @Composable
 private fun HeroSection(overview: WcOverview?, isLoading: Boolean, onOpenMatch: (Int) -> Unit) {
+    val champion = overview?.champion
     val motd = overview?.matchOfTheDay
-    val liveCount = overview?.live?.size ?: 0
+    val liveCount = overview?.live?.count { it.status.live } ?: 0
 
     // المباريات المعروضة في الأعلى: مباراة اليوم + أي مباراة أخرى تنطلق
     // بنفس التوقيت (نفس الـ timestamp) ولم تنتهِ بعد — تُعرض كبطاقتين بدل
     // واحدة عند تزامن مباراتين. التوقّع متاح لمباراة اليوم فقط؛ البقية بلا
-    // شريط احتمالات.
+    // شريط احتمالات. البطل يتقدّم على كل ذلك بعد حسم النهائي.
     val heroMatches: List<Pair<WcFixture, WcPrediction?>> = remember(overview) {
-        if (motd == null) {
+        if (champion != null || motd == null) {
             emptyList()
         } else {
             val primary = motd.fixture
@@ -185,13 +186,14 @@ private fun HeroSection(overview: WcOverview?, isLoading: Boolean, onOpenMatch: 
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Pill("🏆 تغطية خاصة", WcColors.gold.copy(alpha = 0.16f), WcColors.gold)
-                if (liveCount > 0) {
+                if (liveCount > 0 && champion == null) {
                     Pill(if (liveCount == 1) "مباراة مباشرة" else "$liveCount مباريات مباشرة", WcColors.liveRed, Color.White)
                 }
             }
             Text("مونديال 2026", color = WcColors.emeraldDeep, fontSize = 40.sp, fontWeight = FontWeight.Black)
             Text(
-                "48 منتخبًا · 16 ملعبًا · تغطية حية بتوقيت الرياض",
+                if (champion != null) "اكتملت البطولة — بطل كأس العالم 2026"
+                else "48 منتخبًا · 16 ملعبًا · تغطية حية بتوقيت الرياض",
                 color = WcColors.onDarkDim, fontSize = 12.sp, textAlign = TextAlign.Center,
             )
         }
@@ -201,8 +203,38 @@ private fun HeroSection(overview: WcOverview?, isLoading: Boolean, onOpenMatch: 
                 modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(WcColors.card).padding(vertical = 30.dp),
                 contentAlignment = Alignment.Center,
             ) { CircularProgressIndicator(color = WcColors.emerald, strokeWidth = 2.dp) }
+            champion != null -> ChampionHero(champion)
             heroMatches.isNotEmpty() -> heroMatches.forEach { (f, pred) -> MatchCard(f, pred, onOpenMatch) }
             else -> HeroEmpty()
+        }
+    }
+}
+
+/** بطاقة البطل في هيرو صفحة المونديال — تحل محل مربع المباراة بعد التتويج. */
+@Composable
+private fun ChampionHero(c: WcChampion) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
+            .background(WcColors.card)
+            .border(1.dp, WcColors.gold.copy(alpha = 0.3f), RoundedCornerShape(24.dp))
+            .padding(24.dp),
+    ) {
+        Icon(Icons.Filled.EmojiEvents, null, tint = WcColors.gold, modifier = Modifier.size(34.dp))
+        Text("بطل كأس العالم 2026", color = WcColors.gold, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        WcTeamLogo(c.team, size = 72, ring = WcColors.gold.copy(alpha = 0.6f))
+        Text(c.team.name, color = WcColors.onDark, fontSize = 22.sp, fontWeight = FontWeight.Black, textAlign = TextAlign.Center)
+        val runnerUp = c.runnerUp
+        val score = c.score
+        if (runnerUp != null && score != null) {
+            val pens = c.penalties?.let { " (بركلات الترجيح $it)" } ?: ""
+            Text(
+                "فاز على ${runnerUp.name} في النهائي $score$pens",
+                color = WcColors.emeraldDeep,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }

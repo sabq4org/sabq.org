@@ -59,7 +59,7 @@ class WorldCupStripViewModel @Inject constructor(
     }
 }
 
-/** شريط المونديال أعلى الواجهة الرئيسية — يختفي كليًا عند غياب البيانات. */
+/** شريط المونديال أعلى الواجهة الرئيسية — يختفي كليًا عند إطفاء البلوك أو غياب البيانات. */
 @Composable
 fun WorldCupHomeStrip(onClick: () -> Unit, viewModel: WorldCupStripViewModel = hiltViewModel()) {
     val overview by viewModel.overview.collectAsStateWithLifecycle()
@@ -67,7 +67,7 @@ fun WorldCupHomeStrip(onClick: () -> Unit, viewModel: WorldCupStripViewModel = h
     // بعد انتهاء آخر مباراة حتى يُطفأ البلوك من لوحة التحكم
     val champion = overview?.champion
     val f = overview?.matchOfTheDay?.fixture
-    if (champion == null && f == null) return
+    if (overview?.hidden == true || (champion == null && f == null)) return
 
     val live = champion == null && f?.status?.live == true
     androidx.compose.runtime.CompositionLocalProvider(LocalWcForceDark provides true) {

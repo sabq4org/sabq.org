@@ -313,7 +313,47 @@ function MatchHeroCard({
   );
 }
 
+/** بطاقة البطل — تحلّ محل بطاقة المباراة بعد حسم النهائي (أو التعيين اليدوي). */
+function ChampionHeroCard({ champion }: { champion: NonNullable<WcOverview["champion"]> }) {
+  return (
+    <div
+      className="mx-auto max-w-3xl rounded-3xl bg-white/[0.06] p-6 sm:p-8 ring-1 ring-amber-300/30 backdrop-blur-md shadow-2xl"
+      data-testid="wc-champion-hero"
+    >
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-5">
+        <span className="relative h-24 w-24 rounded-full bg-white p-2 ring-4 ring-amber-300/70 shadow-xl shrink-0">
+          <img src={champion.team.logo} alt={champion.team.name} className="h-full w-full object-contain" />
+          <Trophy className="absolute -bottom-1 -left-1 h-7 w-7 text-amber-300 drop-shadow" />
+        </span>
+        <div className="text-center sm:text-right min-w-0">
+          <p className="text-sm font-bold text-amber-300">🏆 بطل كأس العالم 2026</p>
+          <p className="text-3xl font-black text-white truncate">{champion.team.name}</p>
+          {champion.runnerUp && champion.score && (
+            <p className="mt-1 text-sm text-emerald-100/80">
+              فاز على {champion.runnerUp.name} في النهائي{" "}
+              <span dir="ltr" className="font-black text-amber-300">
+                {champion.score}
+              </span>
+              {champion.penalties && (
+                <>
+                  {" "}
+                  (بركلات الترجيح{" "}
+                  <span dir="ltr" className="font-black text-amber-300">
+                    {champion.penalties}
+                  </span>
+                  )
+                </>
+              )}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionProps) {
+  const champion = overview?.champion ?? null;
   const motd = overview?.matchOfTheDay ?? null;
   const fixture = motd?.fixture;
   const today = Array.isArray(overview?.today) ? overview.today : [];
@@ -343,14 +383,17 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
   // أبرز كل المباريات المتزامنة ببطاقات كبيرة بدل إبراز واحدة وحشر الباقي:
   //  • مباراتان (أو أكثر) تجريان الآن في وقت واحد، أو
   //  • مباراتان قادمتان تنطلقان في التوقيت نفسه (ختام دور المجموعات تحديدًا)
-  const multiHero = liveCount >= 2 || upcomingPeers.length >= 2;
-  const heroFixtures = !multiHero
-    ? fixture
-      ? [fixture]
-      : []
-    : liveCount >= 2
-      ? liveMatches
-      : upcomingPeers;
+  // البطل يتقدّم على كل ذلك بعد حسم النهائي (مثل هيرو كأس الملك).
+  const multiHero = !champion && (liveCount >= 2 || upcomingPeers.length >= 2);
+  const heroFixtures = champion
+    ? []
+    : !multiHero
+      ? fixture
+        ? [fixture]
+        : []
+      : liveCount >= 2
+        ? liveMatches
+        : upcomingPeers;
   const heroIds = new Set(heroFixtures.map((f) => f.id));
   // توقع كل مباراة من خريطة overview.predictions (تُرفق لكل مباراة حيّة/متزامنة)؛
   // المباراة المميّزة تتراجع لتوقعها الجاهز في matchOfTheDay عند الغياب.
@@ -359,8 +402,10 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
     predictions[f.id] ?? (f.id === fixture?.id ? motd?.prediction ?? null : null);
   // متعدد: الشريط يعرض بقية مباريات اليوم فقط (تفاديًا لتكرار البطاقات الكبيرة).
   // مفرد: يعرض كل مباريات اليوم مع إبراز البطاقة المميّزة — كما كان.
+  // مع البطل يُخفى الشريط بالكامل.
   const stripMatches = multiHero ? today.filter((f) => !heroIds.has(f.id)) : today;
-  const showStrip = multiHero ? stripMatches.length >= 1 : today.length >= 2;
+  const showStrip =
+    !champion && (multiHero ? stripMatches.length >= 1 : today.length >= 2);
 
   return (
     <section dir="rtl" className="relative overflow-hidden">
@@ -402,7 +447,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
               <Trophy className="h-3.5 w-3.5" />
               تغطية خاصة
             </Badge>
-            {liveCount > 0 && (
+            {liveCount > 0 && !champion && (
               <Badge className="bg-red-500 text-white border-0 gap-1.5 px-3 py-1">
                 <span className="relative flex h-2 w-2">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
@@ -416,11 +461,13 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
             مونديال <span className="text-emerald-300">2026</span>
           </h1>
           <p className="text-sm sm:text-base text-emerald-100/70 max-w-xl">
-            48 منتخبًا · 16 ملعبًا · ثلاث دول مضيفة — تغطية حية لحظة بلحظة بتوقيت الرياض
+            {champion
+              ? "اكتملت البطولة — بطل كأس العالم 2026"
+              : "48 منتخبًا · 16 ملعبًا · ثلاث دول مضيفة — تغطية حية لحظة بلحظة بتوقيت الرياض"}
           </p>
         </motion.div>
 
-        {/* بطاقة مباراة اليوم — أو بطاقة كبيرة لكل مباراة تجري الآن في وقت واحد */}
+        {/* بطاقة البطل / مباراة اليوم / بطاقات المباريات المتزامنة */}
         {isLoading && (
           <div className="mx-auto max-w-3xl rounded-3xl bg-white/[0.06] p-6 sm:p-8 ring-1 ring-white/10 backdrop-blur-md shadow-2xl">
             <div className="space-y-4">
@@ -434,7 +481,9 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
           </div>
         )}
 
-        {!isLoading && heroFixtures.length === 0 && (
+        {!isLoading && champion && <ChampionHeroCard champion={champion} />}
+
+        {!isLoading && !champion && heroFixtures.length === 0 && (
           <div className="mx-auto max-w-3xl rounded-3xl bg-white/[0.06] p-6 sm:p-8 ring-1 ring-white/10 backdrop-blur-md shadow-2xl">
             <div className="text-center text-emerald-100/80 py-6 flex flex-col items-center gap-2">
               <Sparkles className="h-8 w-8 text-emerald-300" />
@@ -444,7 +493,7 @@ export function HeroSection({ overview, isLoading, onOpenMatch }: HeroSectionPro
           </div>
         )}
 
-        {!isLoading && heroFixtures.length > 0 && (
+        {!isLoading && !champion && heroFixtures.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}

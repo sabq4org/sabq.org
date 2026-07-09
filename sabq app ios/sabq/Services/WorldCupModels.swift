@@ -159,6 +159,9 @@ nonisolated struct WCOverview: Decodable, Hashable {
     let predictions: [String: WCPrediction]?
     /// بطل البطولة بعد حسم النهائي — optional للاستجابات الأقدم.
     let champion: WCChampion?
+    /// true عندما أُطفئ البلوك من لوحة التحكم — الشريط كله يختفي (مثل الويب).
+    /// optional حتى تبقى الاستجابات الأقدم قابلة للفكّ.
+    let hidden: Bool?
 
     /// توقع مباراة بعينها من خريطة overview (إن أرسله الخادم).
     func prediction(for fixtureId: Int) -> WCPrediction? {

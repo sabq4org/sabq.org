@@ -222,7 +222,7 @@ struct WCHeroSection: View {
         VStack(spacing: 18) {
             header
             card
-            if !isLoading, showStrip {
+            if !isLoading, overview?.champion == nil, showStrip {
                 WCHeroTodayStrip(
                     matches: stripMatches,
                     activeId: multiHero ? nil : featured?.id,
@@ -246,7 +246,7 @@ struct WCHeroSection: View {
             HStack(spacing: 8) {
                 pill(icon: "trophy.fill", text: "تغطية خاصة",
                      bg: WCTheme.gold.opacity(0.18), fg: WCTheme.gold)
-                if liveCount > 0 {
+                if liveCount > 0, overview?.champion == nil {
                     pill(icon: "dot.radiowaves.left.and.right",
                          text: liveCount == 1 ? "مباراة مباشرة" : "\(liveCount) مباريات مباشرة",
                          bg: WCTheme.liveRed, fg: .white)
@@ -255,7 +255,9 @@ struct WCHeroSection: View {
             Text("مونديال 2026")
                 .font(SabqFonts.app(size: 28, weight: .semibold))
                 .foregroundStyle(WCTheme.emeraldDeep)
-            Text("48 منتخبًا · 16 ملعبًا · تغطية حية بتوقيت الرياض")
+            Text(overview?.champion != nil
+                  ? "اكتملت البطولة — بطل كأس العالم 2026"
+                  : "48 منتخبًا · 16 ملعبًا · تغطية حية بتوقيت الرياض")
                 .font(SabqFonts.app(size: 12))
                 .foregroundStyle(WCTheme.onDarkDim)
                 .multilineTextAlignment(.center)
@@ -269,6 +271,9 @@ struct WCHeroSection: View {
             }
             .frame(maxWidth: .infinity).padding(.vertical, 30)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(WCTheme.card))
+        } else if let champion = overview?.champion {
+            // البطل يتقدّم على مربع المباراة بعد حسم النهائي (مثل كأس الملك)
+            championHero(champion)
         } else if heroFixtures.isEmpty {
             WCEmptyDark(icon: "sparkles", title: "تغطية المونديال تنطلق قريبًا",
                         subtitle: "جدول المباريات والنتائج الحية ستجدها هنا أولًا بأول")
@@ -282,6 +287,33 @@ struct WCHeroSection: View {
                 }
             }
         }
+    }
+
+    /// بطاقة البطل في هيرو صفحة المونديال — تحل محل مربع المباراة بعد التتويج.
+    private func championHero(_ c: WCChampion) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "trophy.fill").font(.system(size: 34)).foregroundStyle(WCTheme.gold)
+            Text("بطل كأس العالم 2026")
+                .font(SabqFonts.app(size: 12, weight: .medium))
+                .foregroundStyle(WCTheme.gold)
+            WCRemoteImage(url: c.team.logo)
+                .padding(6).frame(width: 72, height: 72)
+                .background(Circle().fill(.white))
+                .overlay(Circle().stroke(WCTheme.gold.opacity(0.6), lineWidth: 2))
+            Text(c.team.name)
+                .font(SabqFonts.app(size: 22, weight: .semibold))
+                .foregroundStyle(WCTheme.onDark)
+            if let runnerUp = c.runnerUp, let score = c.score {
+                Text("فاز على \(runnerUp.name) في النهائي \(score)\(c.penalties.map { " (بركلات الترجيح \($0))" } ?? "")")
+                    .font(SabqFonts.app(size: 11, weight: .regular))
+                    .foregroundStyle(WCTheme.emeraldDeep)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(WCTheme.card))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(WCTheme.gold.opacity(0.3), lineWidth: 1))
     }
 
     private func matchCard(_ f: WCFixture, compact: Bool) -> some View {
