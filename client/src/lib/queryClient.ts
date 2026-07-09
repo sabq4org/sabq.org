@@ -24,6 +24,21 @@ export function apiUrl(path: string): string {
   return path;
 }
 
+/**
+ * بوابة الرياضة تختار ar/en من ?lang= أو Accept-Language. متصفح إنجليزي على
+ * sabq.org العربي كان يستلم أسماء إنجليزية رغم الواجهة العربية. نفرض لغة
+ * المسار: /en → en، وإلا ar — ما لم يُمرَّر lang صراحةً.
+ */
+export function withSportsLang(path: string): string {
+  if (!path.includes("/api/sports")) return path;
+  if (/[?&]lang=/.test(path)) return path;
+  const lang =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/en")
+      ? "en"
+      : "ar";
+  return path + (path.includes("?") ? "&" : "?") + `lang=${lang}`;
+}
+
 function getCsrfTokenFromCookie(): string | null {
   const match = document.cookie.match(/csrf-token=([^;]+)/);
   return match ? match[1] : null;
@@ -497,7 +512,7 @@ export async function apiRequest<T = any>(
         reject(new Error('Network error'));
       });
 
-      xhr.open(options?.method || 'POST', apiUrl(url));
+      xhr.open(options?.method || 'POST', apiUrl(withSportsLang(url)));
       xhr.withCredentials = true;
       
       const token = getCsrfToken();
@@ -527,7 +542,7 @@ export async function apiRequest<T = any>(
       headers["x-csrf-token"] = currentCsrfToken;
     }
     
-    const res = await fetch(apiUrl(url), {
+    const res = await fetch(apiUrl(withSportsLang(url)), {
       method,
       headers,
       body: typeof options?.body === 'string' ? options.body : undefined,
@@ -589,7 +604,7 @@ export function getQueryFn<T = unknown>(options: {
       url += (url.includes('?') ? '&' : '?') + queryString;
     }
     
-    const res = await fetch(apiUrl(url), {
+    const res = await fetch(apiUrl(withSportsLang(url)), {
       credentials: "include",
     });
 
