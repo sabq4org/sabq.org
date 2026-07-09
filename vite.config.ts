@@ -50,7 +50,19 @@ export default defineConfig({
     : {}),
   plugins: [
     react(),
-    runtimeErrorOverlay(),
+    runtimeErrorOverlay({
+      // DMS/GTM injector assumes ≥4 `card-article-grid-*` cards exist and
+      // throws when a page (e.g. /opinion) renders a different card testid
+      // or fewer than 4 nodes. Not our code — don't hijack the page.
+      filter(error) {
+        const message = error?.message || "";
+        if (/card-article-grid/.test(message)) return false;
+        if (/parentNode/.test(message) && /undefined is not an object|Cannot read propert/i.test(message)) {
+          return false;
+        }
+        return true;
+      },
+    }),
     {
       name: "sabq-build-info",
       apply: "build",

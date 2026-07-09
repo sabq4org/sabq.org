@@ -72,7 +72,20 @@ if (import.meta.env.PROD) {
 // `window.onerror` because of cross-origin script tags; nothing we can
 // fix from this side, but we don't want them surfacing in error
 // trackers or polluting the console for the editorial team.
+// Also swallow the known DMS/GTM injector that assumes ≥4
+// `card-article-grid-*` nodes exist — on /opinion (and any sparse grid)
+// it throws TypeError and Replit's runtime-error overlay hijacks the page.
+const isKnownAdDomNoise = (message: string) =>
+  /card-article-grid/.test(message) ||
+  (/parentNode/.test(message) && /undefined is not an object|Cannot read propert/i.test(message));
+
 window.addEventListener("error", (event) => {
+  const message = event.message || "";
+  if (isKnownAdDomNoise(message)) {
+    event.preventDefault();
+    console.warn("[Third-party ad DOM noise suppressed]", message);
+    return false;
+  }
   const src = event.filename || "";
   if (!src) return;
   const isThirdParty =
@@ -84,7 +97,7 @@ window.addEventListener("error", (event) => {
     !src.includes(window.location.origin);
   if (isThirdParty) {
     event.preventDefault();
-    console.warn("[Third-party script error suppressed]", event.message);
+    console.warn("[Third-party script error suppressed]", message);
     return false;
   }
 });
