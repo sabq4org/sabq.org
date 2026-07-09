@@ -1,32 +1,15 @@
-import { useEffect, useState } from "react";
 import { SiApple } from "react-icons/si";
 
-/** رابط App Store لتطبيق VARA Sports (iOS فقط). */
+/** رابط App Store لتطبيق VARA Sports. */
 export const VARA_APP_STORE_URL =
   "https://apps.apple.com/us/app/vara-sports/id6784725221?l=ar";
 
-function isIosDevice(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent || "";
-  // iPhone / iPad / iPod — وعلى iPadOS 13+ قد يظهر كـ Macintosh مع لمس.
-  if (/iPad|iPhone|iPod/.test(ua)) return true;
-  if (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1) return true;
-  return false;
-}
-
 /**
- * إعلان ناعم لتطبيق VARA على بوابة /sports — يظهر على أجهزة iOS فقط.
+ * إعلان ناعم لتطبيق VARA على بوابة /sports.
  * رعاية خفيفة «من سبق»: سطر واحد + رابط App Store، بلا شريط ثابت ولا ضجيج.
+ * يظهر لكل الزوار (الرابط يفتح App Store على iPhone أو Mac).
  */
 export function VaraAppPromo() {
-  const [show, setShow] = useState(false);
-
-  useEffect(() => {
-    setShow(isIosDevice());
-  }, []);
-
-  if (!show) return null;
-
   return (
     <a
       href={VARA_APP_STORE_URL}
