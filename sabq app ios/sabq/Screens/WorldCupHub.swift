@@ -68,14 +68,14 @@ struct WCFactsSection: View {
                     .overlay(Circle().stroke(WCTheme.gold.opacity(0.35), lineWidth: 1))
             } else {
                 Image(systemName: icon)
-                    .font(.system(size: 13, weight: .bold)).foregroundStyle(WCTheme.gold)
+                    .font(.system(size: 13, weight: .medium)).foregroundStyle(WCTheme.gold)
                     .frame(width: 30, height: 30)
                     .background(Circle().fill(WCTheme.gold.opacity(0.14)))
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(caption).font(SabqFonts.app(size: 9, weight: .bold)).foregroundStyle(WCTheme.gold)
+                Text(caption).font(SabqFonts.app(size: 9, weight: .medium)).foregroundStyle(WCTheme.gold)
                 Text(title)
-                    .font(SabqFonts.app(size: 12, weight: .heavy)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                     .lineLimit(1).minimumScaleFactor(0.7)
                 if let detail {
                     Text(detail).font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
@@ -170,7 +170,7 @@ struct WCKnockoutSection: View {
                         let active = round.roundEn == selectedEn
                         Button { withAnimation(.easeOut(duration: 0.2)) { userRound = round.roundEn } } label: {
                             Text(round.round)
-                                .font(SabqFonts.app(size: 13, weight: .semibold))
+                                .font(SabqFonts.app(size: 12, weight: .medium))
                                 .foregroundStyle(active ? .white : WCTheme.onDarkDim)
                                 .padding(.horizontal, 13).padding(.vertical, 7)
                                 .background(Capsule().fill(active ? WCTheme.emeraldDeep : WCTheme.chipFill))
@@ -207,7 +207,7 @@ struct WCKnockoutSection: View {
                     ForEach(["دور الـ32", "دور الـ16", "دور الـ8", "دور الـ4", "النهائي"], id: \.self) { label in
                         HStack {
                             Image(systemName: "flag.checkered").font(.system(size: 12)).foregroundStyle(WCTheme.gold)
-                            Text(label).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                            Text(label).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                             Spacer()
                             Text("يُحدَّد لاحقًا").font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
                         }
@@ -263,10 +263,10 @@ struct WCQualifiedSoFar: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                Image(systemName: "trophy.fill").font(SabqFonts.app(size: 13, weight: .bold))
-                Text("المتأهّلون حتى الآن").font(SabqFonts.app(size: 14, weight: .bold))
+                Image(systemName: "trophy.fill").font(SabqFonts.app(size: 12, weight: .medium))
+                Text("المتأهّلون حتى الآن").font(SabqFonts.app(size: 14, weight: .semibold))
                 Text("\(total)")
-                    .font(SabqFonts.app(size: 11, weight: .black))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 7).padding(.vertical, 2)
                     .background(Capsule().fill(WCTheme.emeraldDeep))
@@ -279,7 +279,7 @@ struct WCQualifiedSoFar: View {
                 HStack(spacing: 6) {
                     ForEach(rounds, id: \.self) { r in
                         Text(r)
-                            .font(SabqFonts.app(size: 11, weight: .semibold))
+                            .font(SabqFonts.app(size: 11, weight: .regular))
                             .foregroundStyle(WCTheme.onDarkDim)
                             .padding(.horizontal, 10).padding(.vertical, 4)
                             .background(Capsule().fill(WCTheme.chipFill))
@@ -294,11 +294,11 @@ struct WCQualifiedSoFar: View {
         VStack(spacing: 0) {
             HStack {
                 Text(item.group.group)
-                    .font(SabqFonts.app(size: 12, weight: .heavy))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(WCTheme.emeraldDeep)
                 Spacer()
                 Text("متأهّل")
-                    .font(SabqFonts.app(size: 9, weight: .semibold))
+                    .font(SabqFonts.app(size: 9, weight: .regular))
                     .foregroundStyle(WCTheme.onDarkDim)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
@@ -318,13 +318,13 @@ struct WCQualifiedSoFar: View {
     private func qualifierRow(_ row: WCStandingRow) -> some View {
         HStack(spacing: 8) {
             Text("\(row.rank)")
-                .font(SabqFonts.app(size: 10, weight: .black))
+                .font(SabqFonts.app(size: 10, weight: .medium))
                 .foregroundStyle(WCTheme.emeraldDeep)
                 .frame(width: 20, height: 20)
                 .background(Circle().fill(WCTheme.emerald.opacity(0.15)))
             WCTeamLogo(team: row.team, size: 24, ring: WCTheme.cardStroke)
             Text(row.team.name)
-                .font(SabqFonts.app(size: 13, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(WCTheme.onDark)
                 .lineLimit(1)
             Spacer(minLength: 4)
@@ -390,7 +390,7 @@ struct WCNewsSection: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 6) {
                     Text(kindLabel(item.kind))
-                        .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                        .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                         .padding(.horizontal, 8).padding(.vertical, 3)
                         .background(Capsule().fill(WCTheme.emerald.opacity(0.14)))
                     Spacer()
@@ -400,7 +400,7 @@ struct WCNewsSection: View {
                     }
                 }
                 Text(item.title)
-                    .font(SabqFonts.app(size: 16, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     .lineLimit(2).multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let excerpt = item.excerpt, !excerpt.isEmpty {
@@ -437,7 +437,7 @@ struct WCNewsSection: View {
             if let home = item.home, let away = item.away {
                 HStack(spacing: 22) {
                     logoBubble(home.logo)
-                    Text("VS").font(SabqFonts.app(size: 16, weight: .black)).foregroundStyle(WCTheme.gold)
+                    Text("VS").font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(WCTheme.gold)
                         .environment(\.layoutDirection, .leftToRight)
                     logoBubble(away.logo)
                 }

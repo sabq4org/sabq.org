@@ -79,7 +79,7 @@ struct WCMatchEventNotificationsView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button { dismiss() } label: {
                     Image(systemName: "chevron.right")
-                        .font(SabqFonts.app(size: 14, weight: .bold))
+                        .font(SabqFonts.app(size: 14, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                         .padding(8)
                         .background(Circle().fill(.ultraThinMaterial))
@@ -87,7 +87,7 @@ struct WCMatchEventNotificationsView: View {
             }
             ToolbarItem(placement: .principal) {
                 Text("تنبيهات المباريات")
-                    .font(SabqFonts.app(size: 15, weight: .bold))
+                    .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
             }
         }
@@ -111,7 +111,7 @@ struct WCMatchEventNotificationsView: View {
                         .font(SabqFonts.app(size: 18, weight: .semibold))
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text("تنبيهات أحداث المباريات")
-                        .font(SabqFonts.app(size: 16, weight: .bold))
+                        .font(SabqFonts.app(size: 16, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                 }
                 Text("تصلك هذه التنبيهات عن الفِرق التي تتابعها فقط. اختر الأنواع التي تهمّك — تطبَّق على كل مبارياتها (المونديال وغيره).")
@@ -134,7 +134,7 @@ struct WCMatchEventNotificationsView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(SabqFonts.app(size: 14, weight: .bold))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
                 Text(subtitle)
                     .font(SabqFonts.app(size: 11, weight: .medium))

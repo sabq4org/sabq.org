@@ -162,7 +162,7 @@ struct WorldCupHomeStrip: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("مونديال 2026")
-                        .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(.white)
                         .lineLimit(1).minimumScaleFactor(0.8)
                     statusLine(f)
                 }
@@ -181,7 +181,7 @@ struct WorldCupHomeStrip: View {
             Spacer(minLength: 2)
 
             Image(systemName: "chevron.left")
-                .font(SabqFonts.app(size: 13, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.9))
         }
         .padding(.horizontal, 16).padding(.vertical, 13)
@@ -225,7 +225,7 @@ struct WorldCupHomeStrip: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("مونديال 2026")
-                        .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(.white)
                         .lineLimit(1).minimumScaleFactor(0.8)
                     Text("اكتملت البطولة")
                         .font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.leaf)
@@ -244,7 +244,7 @@ struct WorldCupHomeStrip: View {
                         .background(Circle().fill(.white))
                         .overlay(Circle().stroke(WCTheme.gold.opacity(0.8), lineWidth: 1.5))
                     Image(systemName: "trophy.fill")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 11, weight: .medium))
                         .foregroundStyle(WCTheme.gold)
                         .shadow(color: .black.opacity(0.35), radius: 2)
                         .offset(x: -4, y: 3)
@@ -252,16 +252,16 @@ struct WorldCupHomeStrip: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("🏆 بطل كأس العالم 2026")
-                        .font(SabqFonts.app(size: 10, weight: .bold))
+                        .font(SabqFonts.app(size: 10, weight: .medium))
                         .foregroundStyle(WCTheme.gold)
                         .lineLimit(1).minimumScaleFactor(0.7)
                     Text(c.team.name)
-                        .font(SabqFonts.app(size: 18, weight: .black))
+                        .font(SabqFonts.app(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .lineLimit(1).minimumScaleFactor(0.75)
                     if let runnerUp = c.runnerUp, let score = c.score {
                         Text("فاز على \(runnerUp.name) \(score)\(c.penalties.map { " (ركلات الترجيح \($0))" } ?? "")")
-                            .font(SabqFonts.app(size: 9, weight: .semibold))
+                            .font(SabqFonts.app(size: 9, weight: .regular))
                             .foregroundStyle(WCTheme.leaf)
                             .lineLimit(1).minimumScaleFactor(0.65)
                     }
@@ -271,7 +271,7 @@ struct WorldCupHomeStrip: View {
             Spacer(minLength: 2)
 
             Image(systemName: "chevron.left")
-                .font(SabqFonts.app(size: 13, weight: .bold))
+                .font(SabqFonts.app(size: 12, weight: .medium))
                 .foregroundStyle(.white.opacity(0.9))
         }
         .padding(.horizontal, 16).padding(.vertical, 13)
@@ -300,7 +300,7 @@ struct WorldCupHomeStrip: View {
             HStack(spacing: 4) {
                 Circle().fill(WCTheme.liveRed).frame(width: 6, height: 6)
                 Text("مباشر الآن")
-                    .font(SabqFonts.app(size: 9, weight: .bold)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 9, weight: .medium)).foregroundStyle(.white)
             }
         } else {
             Text("تغطية حية بتوقيت الرياض")
@@ -314,7 +314,7 @@ struct WorldCupHomeStrip: View {
             VStack(spacing: 2) {
                 // المضيف معروض يمينًا في RTL — الضيف أولًا داخل LTR
                 Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                    .font(SabqFonts.app(size: 19, weight: .black)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 18, weight: .semibold)).foregroundStyle(.white)
                     .environment(\.layoutDirection, .leftToRight)
                 homeLiveStatus(f)
             }
@@ -322,14 +322,14 @@ struct WorldCupHomeStrip: View {
         } else {
             VStack(spacing: 2) {
                 Text(WCFormat.time(f))
-                    .font(SabqFonts.app(size: 14, weight: .black))
+                    .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .fixedSize()
                 // عدّاد يتحرّك كل ثانية (TimelineView) كما في الهيرو
                 TimelineView(.periodic(from: .now, by: 1)) { _ in
                     Text("تنطلق بعد \(WCFormat.countdown(to: f.timestamp))")
-                        .font(SabqFonts.app(size: 10, weight: .semibold))
+                        .font(SabqFonts.app(size: 10, weight: .regular))
                         .foregroundStyle(WCTheme.leaf)
                         .lineLimit(1).fixedSize()
                 }
@@ -358,7 +358,7 @@ struct WorldCupHomeStrip: View {
                     .environment(\.layoutDirection, .leftToRight)
             }
         }
-        .font(SabqFonts.app(size: 10, weight: .black))
+        .font(SabqFonts.app(size: 10, weight: .medium))
         .foregroundStyle(.white)
         .padding(.horizontal, 9)
         .padding(.vertical, 5)

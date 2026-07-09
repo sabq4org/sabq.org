@@ -201,7 +201,7 @@ struct KcHeroSection: View {
                 }
             }
             Text("كأس الملك")
-                .font(SabqFonts.app(size: 40, weight: .black))
+                .font(SabqFonts.app(size: 28, weight: .semibold))
                 .foregroundStyle(WCTheme.emeraldDeep)
             Text("كأس خادم الحرمين الشريفين · تغطية حية بتوقيت الرياض")
                 .font(SabqFonts.app(size: 12))
@@ -233,7 +233,7 @@ struct KcHeroSection: View {
                 Text("·").foregroundStyle(WCTheme.onDarkDim)
                 Text(f.round).foregroundStyle(WCTheme.onDarkDim)
             }
-            .font(SabqFonts.app(size: 12, weight: .semibold))
+            .font(SabqFonts.app(size: 11, weight: .regular))
 
             HStack(alignment: .top, spacing: 8) {
                 teamColumn(f.home)
@@ -253,7 +253,7 @@ struct KcHeroSection: View {
 
             Button { onOpenMatch(f.id) } label: {
                 Text("مركز المباراة")
-                    .font(SabqFonts.app(size: 15, weight: .bold)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(.white)
                     .padding(.horizontal, 24).padding(.vertical, 10)
                     .background(Capsule().fill(WCTheme.royal))
             }
@@ -268,12 +268,12 @@ struct KcHeroSection: View {
     private func championHero(_ c: KcChampion) -> some View {
         VStack(spacing: 12) {
             Image(systemName: "trophy.fill").font(.system(size: 34)).foregroundStyle(WCTheme.gold)
-            Text("بطل كأس الملك").font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.gold)
+            Text("بطل كأس الملك").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.gold)
             KcTeamLogo(team: c.team, size: 72, ring: WCTheme.gold.opacity(0.6))
-            Text(c.team.name).font(SabqFonts.app(size: 24, weight: .black)).foregroundStyle(WCTheme.onDark)
+            Text(c.team.name).font(SabqFonts.app(size: 22, weight: .semibold)).foregroundStyle(WCTheme.onDark)
             if let runnerUp = c.runnerUp, let score = c.score {
                 Text("فاز على \(runnerUp.name) في النهائي \(score)\(c.penalties.map { " (بركلات الترجيح \($0))" } ?? "")")
-                    .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.emeraldDeep)
+                    .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.emeraldDeep)
                     .multilineTextAlignment(.center)
             }
         }
@@ -288,7 +288,7 @@ struct KcHeroSection: View {
             VStack(spacing: 8) {
                 KcTeamLogo(team: team, size: 64, ring: WCTheme.cardStroke)
                 Text(team.name)
-                    .font(SabqFonts.app(size: 16, weight: .heavy)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
@@ -300,16 +300,16 @@ struct KcHeroSection: View {
         VStack(spacing: 6) {
             if f.started {
                 Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                    .font(SabqFonts.app(size: 40, weight: .black)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 28, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     .environment(\.layoutDirection, .leftToRight)
                 if let po = f.penaltyOutcome {
                     Text("فاز \(po.winnerName) بالترجيح (\(po.winnerScore)-\(po.loserScore))")
-                        .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                        .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                         .multilineTextAlignment(.center)
                 }
                 KcStatusPill(fixture: f)
             } else {
-                Text(KcFormat.time(f)).font(SabqFonts.app(size: 26, weight: .black)).foregroundStyle(WCTheme.onDark)
+                Text(KcFormat.time(f)).font(SabqFonts.app(size: 22, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                 Label(KcFormat.day(f), systemImage: "calendar")
                     .font(SabqFonts.app(size: 11)).foregroundStyle(WCTheme.onDarkDim)
                     .labelStyle(.titleAndIcon)
@@ -320,8 +320,8 @@ struct KcHeroSection: View {
 
     private func pill(icon: String, text: String, bg: Color, fg: Color) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: icon).font(SabqFonts.app(size: 11, weight: .bold))
-            Text(text).font(SabqFonts.app(size: 12, weight: .bold))
+            Image(systemName: icon).font(SabqFonts.app(size: 11, weight: .medium))
+            Text(text).font(SabqFonts.app(size: 11, weight: .medium))
         }
         .foregroundStyle(fg)
         .padding(.horizontal, 12).padding(.vertical, 5)
@@ -338,8 +338,8 @@ struct KcHeroTodayStrip: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 5) {
-                Image(systemName: "calendar").font(SabqFonts.app(size: 11, weight: .bold))
-                Text("مباريات اليوم").font(SabqFonts.app(size: 12, weight: .bold))
+                Image(systemName: "calendar").font(SabqFonts.app(size: 11, weight: .medium))
+                Text("مباريات اليوم").font(SabqFonts.app(size: 11, weight: .medium))
                 Text("(\(matches.count))").font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
             }
             .foregroundStyle(WCTheme.emeraldDeep)
@@ -361,7 +361,7 @@ struct KcHeroTodayStrip: View {
                 HStack(spacing: 6) {
                     KcTeamLogo(team: f.home, size: 22, ring: WCTheme.cardStroke)
                     Text(f.started ? "\(f.goals.away ?? 0) - \(f.goals.home ?? 0)" : KcFormat.time(f))
-                        .font(SabqFonts.app(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
+                        .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
                         .environment(\.layoutDirection, .leftToRight).frame(minWidth: 44)
                     KcTeamLogo(team: f.away, size: 22, ring: WCTheme.cardStroke)
                 }
@@ -376,7 +376,7 @@ struct KcHeroTodayStrip: View {
                         Text(f.status.finished ? "انتهت" : "لم تبدأ").foregroundStyle(WCTheme.onDarkDim)
                     }
                 }
-                .font(SabqFonts.app(size: 10, weight: .semibold))
+                .font(SabqFonts.app(size: 10, weight: .regular))
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -393,7 +393,7 @@ struct KcHeroEmpty: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: icon).font(SabqFonts.app(size: 30)).foregroundStyle(WCTheme.emerald)
-            Text(title).font(SabqFonts.app(size: 16, weight: .bold)).foregroundStyle(WCTheme.onDark)
+            Text(title).font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(WCTheme.onDark)
             Text(subtitle).font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
                 .multilineTextAlignment(.center)
         }
@@ -439,8 +439,8 @@ struct KcHistorySection: View {
                 }
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(label).font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(tint)
-                Text(name).font(SabqFonts.app(size: 14, weight: .black)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                Text(label).font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(tint)
+                Text(name).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                 if let sub { Text(sub).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim) }
             }
             Spacer(minLength: 0)
@@ -504,7 +504,7 @@ struct KcMatchesSection: View {
                             HStack(spacing: 5) {
                                 Text(t.rawValue)
                                 if t == .live && count > 0 {
-                                    Text("\(count)").font(SabqFonts.app(size: 10, weight: .bold))
+                                    Text("\(count)").font(SabqFonts.app(size: 10, weight: .medium))
                                         .padding(.horizontal, 5).padding(.vertical, 1)
                                         .background(Capsule().fill(WCTheme.liveRed)).foregroundStyle(.white)
                                 }
@@ -530,7 +530,7 @@ struct KcMatchesSection: View {
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 6) {
                                 Circle().fill(WCTheme.emeraldDeep).frame(width: 7, height: 7)
-                                Text(day.label).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                                Text(day.label).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                                 Text("(\(day.items.count))").font(SabqFonts.app(size: 12)).foregroundStyle(WCTheme.onDarkDim)
                             }
                             ForEach(day.items) { f in
@@ -576,7 +576,7 @@ struct KcMatchCard: View {
         Button(action: onTap) {
             VStack(spacing: 10) {
                 HStack {
-                    Text(fixture.round).font(SabqFonts.app(size: 11, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
+                    Text(fixture.round).font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDarkDim)
                     Spacer()
                     KcStatusPill(fixture: fixture)
                 }
@@ -585,7 +585,7 @@ struct KcMatchCard: View {
                 if let po = fixture.penaltyOutcome {
                     HStack {
                         Text("فاز \(po.winnerName) بركلات الترجيح (\(po.winnerScore)-\(po.loserScore))")
-                            .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                            .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                         Spacer()
                     }
                 }
@@ -615,7 +615,7 @@ struct KcMatchCard: View {
             Text(team.name).font(SabqFonts.app(size: 14, weight: win ? .heavy : .semibold)).foregroundStyle(WCTheme.onDark)
             Spacer()
             if let goals {
-                Text("\(goals)").font(SabqFonts.app(size: 16, weight: .heavy))
+                Text("\(goals)").font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(win ? WCTheme.emeraldDeep : WCTheme.onDark)
             }
         }
@@ -644,7 +644,7 @@ struct KcBracketSection: View {
                         ForEach(rounds) { round in
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(round.round)
-                                    .font(SabqFonts.app(size: 13, weight: .heavy)).foregroundStyle(WCTheme.emeraldDeep)
+                                    .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                                 ForEach(round.matches) { m in
                                     bracketMatch(m)
                                 }
@@ -668,7 +668,7 @@ struct KcBracketSection: View {
                     Spacer()
                     if let po = m.penaltyOutcome {
                         Text("ترجيح \(po.winnerScore)-\(po.loserScore)")
-                            .font(SabqFonts.app(size: 9, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                            .font(SabqFonts.app(size: 9, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                     }
                 }
             }
@@ -686,7 +686,7 @@ struct KcBracketSection: View {
                 .foregroundStyle(WCTheme.onDark).lineLimit(1)
             Spacer(minLength: 4)
             if let goals {
-                Text("\(goals)").font(SabqFonts.app(size: 13, weight: .black))
+                Text("\(goals)").font(SabqFonts.app(size: 11, weight: .regular))
                     .foregroundStyle(win ? WCTheme.emeraldDeep : WCTheme.onDark)
             }
         }
@@ -763,14 +763,14 @@ struct KcRacesSection: View {
             if let c = cards, !(c.yellow.isEmpty && c.red.isEmpty) {
                 VStack(alignment: .leading, spacing: 12) {
                     if !c.red.isEmpty {
-                        Text("البطاقات الحمراء").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.liveRed)
+                        Text("البطاقات الحمراء").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.liveRed)
                         ForEach(Array(c.red.prefix(8))) { l in
                             raceRow(rank: l.rank, name: l.name, photo: l.photo, team: l.team,
                                     value: "\(l.red ?? 0)", valueLabel: "حمراء", sub: nil, valueColor: WCTheme.liveRed)
                         }
                     }
                     if !c.yellow.isEmpty {
-                        Text("البطاقات الصفراء").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.gold)
+                        Text("البطاقات الصفراء").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.gold)
                         ForEach(Array(c.yellow.prefix(8))) { l in
                             raceRow(rank: l.rank, name: l.name, photo: l.photo, team: l.team,
                                     value: "\(l.yellow ?? 0)", valueLabel: "صفراء", sub: nil, valueColor: WCTheme.gold)
@@ -785,15 +785,15 @@ struct KcRacesSection: View {
 
     private func raceRow(rank: Int, name: String, photo: String, team: KcTeam, value: String, valueLabel: String, sub: String?, valueColor: Color = WCTheme.emeraldDeep) -> some View {
         HStack(spacing: 10) {
-            Text("\(rank)").font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(WCTheme.onDarkDim).frame(width: 20)
+            Text("\(rank)").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim).frame(width: 20)
             if photo.isEmpty {
                 Circle().fill(WCTheme.chipFill).frame(width: 34, height: 34)
-                    .overlay(Text(String(name.prefix(1))).font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDarkDim))
+                    .overlay(Text(String(name.prefix(1))).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDarkDim))
             } else {
                 WCRemoteImage(url: photo, contentMode: .fill).frame(width: 34, height: 34).clipShape(Circle())
             }
             VStack(alignment: .leading, spacing: 1) {
-                Text(name).font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
+                Text(name).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.onDark).lineLimit(1)
                 HStack(spacing: 5) {
                     WCRemoteImage(url: team.logo).frame(width: 14, height: 14)
                     Text(team.name).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
@@ -802,7 +802,7 @@ struct KcRacesSection: View {
             }
             Spacer()
             VStack(spacing: 0) {
-                Text(value).font(SabqFonts.app(size: 18, weight: .black)).foregroundStyle(valueColor)
+                Text(value).font(SabqFonts.app(size: 17, weight: .semibold)).foregroundStyle(valueColor)
                     .environment(\.layoutDirection, .leftToRight)
                 Text(valueLabel).font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
             }
@@ -830,7 +830,7 @@ struct KcTeamsSection: View {
                         Button { selectedTeam = team } label: {
                             VStack(spacing: 8) {
                                 KcTeamLogo(team: team, size: 50, ring: WCTheme.cardStroke)
-                                Text(team.name).font(SabqFonts.app(size: 12, weight: .semibold))
+                                Text(team.name).font(SabqFonts.app(size: 11, weight: .regular))
                                     .foregroundStyle(WCTheme.onDark).lineLimit(1).minimumScaleFactor(0.8)
                             }
                             .frame(maxWidth: .infinity)

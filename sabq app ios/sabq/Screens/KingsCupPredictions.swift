@@ -20,21 +20,21 @@ struct KcPredictCTA: View {
                                              startPoint: .top, endPoint: .bottom))
                         .frame(width: 44, height: 44)
                     Image(systemName: "target")
-                        .font(.system(size: 20, weight: .bold))
+                        .font(.system(size: 20, weight: .semibold))
                         .foregroundStyle(WCTheme.heroTop)
                 }
                 .shadow(color: WCTheme.gold.opacity(0.45), radius: 6, y: 2)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("توقّع وتنافس")
-                        .font(SabqFonts.app(size: 16, weight: .black)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 16, weight: .semibold)).foregroundStyle(.white)
                     Text("توقّع نتائج كأس الملك والبطل والهدّاف ونافس على الصدارة")
                         .font(SabqFonts.app(size: 11)).foregroundStyle(.white.opacity(0.85))
                         .lineLimit(2)
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.left")
-                    .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.gold)
+                    .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.gold)
             }
             .padding(.horizontal, 16).padding(.vertical, 14)
             .background(
@@ -125,7 +125,7 @@ struct KcPredictionsView: View {
                 ForEach(Tab.allCases, id: \.self) { t in
                     Button { withAnimation(.easeOut(duration: 0.2)) { tab = t } } label: {
                         Text(t.rawValue)
-                            .font(SabqFonts.app(size: 13, weight: .semibold))
+                            .font(SabqFonts.app(size: 12, weight: .medium))
                             .foregroundStyle(tab == t ? .white : WCTheme.onDarkDim)
                             .padding(.horizontal, 14).padding(.vertical, 8)
                             .background(Capsule().fill(tab == t ? WCTheme.emeraldDeep : WCTheme.chipFill))
@@ -217,12 +217,12 @@ private struct KcPredictMatchCard: View {
                 Spacer()
                 KcStatusPill(fixture: fixture)
             }
-            .font(SabqFonts.app(size: 11, weight: .semibold))
+            .font(SabqFonts.app(size: 11, weight: .regular))
 
             HStack(spacing: 10) {
                 teamCol(fixture.home)
                 stepper(value: $home)
-                Text("-").font(SabqFonts.app(size: 18, weight: .black)).foregroundStyle(WCTheme.onDarkDim)
+                Text("-").font(SabqFonts.app(size: 17, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
                 stepper(value: $away)
                 teamCol(fixture.away)
             }
@@ -232,7 +232,7 @@ private struct KcPredictMatchCard: View {
                 HStack(spacing: 6) {
                     Image(systemName: "checkmark.seal.fill").font(.system(size: 11)).foregroundStyle(WCTheme.emeraldDeep)
                     Text("توقّعك المحفوظ: \(saved.predHome) - \(saved.predAway)")
-                        .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                        .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
@@ -254,7 +254,7 @@ private struct KcPredictMatchCard: View {
                 HStack(spacing: 6) {
                     if submitting { ProgressView().tint(.white).scaleEffect(0.8) }
                     Text(savedFlash ? "تم الحفظ ✓" : (saved != nil ? "تعديل التوقّع" : "احفظ توقّعك"))
-                        .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(.white)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -275,7 +275,7 @@ private struct KcPredictMatchCard: View {
         VStack(spacing: 4) {
             KcTeamLogo(team: team, size: 40, ring: WCTheme.cardStroke)
             Text(team.name)
-                .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDark)
                 .lineLimit(1).minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity)
@@ -284,15 +284,15 @@ private struct KcPredictMatchCard: View {
     private func stepper(value: Binding<Int>) -> some View {
         VStack(spacing: 4) {
             Button { value.wrappedValue = min(15, value.wrappedValue + 1) } label: {
-                Image(systemName: "chevron.up").font(.system(size: 12, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                Image(systemName: "chevron.up").font(.system(size: 12, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
             }
             .buttonStyle(.plain)
             Text("\(value.wrappedValue)")
-                .font(SabqFonts.app(size: 24, weight: .black).monospacedDigit()).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 22, weight: .semibold).monospacedDigit()).foregroundStyle(WCTheme.onDark)
                 .frame(width: 40, height: 36)
                 .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(WCTheme.chipFill))
             Button { value.wrappedValue = max(0, value.wrappedValue - 1) } label: {
-                Image(systemName: "chevron.down").font(.system(size: 12, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                Image(systemName: "chevron.down").font(.system(size: 12, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
             }
             .buttonStyle(.plain)
         }
@@ -333,7 +333,7 @@ private struct KcPredictMineTab: View {
                          subtitle: "توقّعاتك ونقاطك تُحفظ بحسابك في سبق")
             Button { showLogin = true } label: {
                 Text("تسجيل الدخول")
-                    .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(.white)
                     .padding(.horizontal, 28).padding(.vertical, 10)
                     .background(Capsule().fill(WCTheme.emeraldDeep))
             }
@@ -354,7 +354,7 @@ private struct KcPredictMineTab: View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(p.homeName) × \(p.awayName)")
-                    .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     Text("توقّعك \(p.predHome)-\(p.predAway)")
@@ -375,7 +375,7 @@ private struct KcPredictMineTab: View {
     @ViewBuilder private func pointsChip(_ points: Int?) -> some View {
         if let points {
             Text(points == 3 ? "3 نقاط 🎯" : points == 1 ? "نقطة ✓" : "0")
-                .font(SabqFonts.app(size: 11, weight: .black))
+                .font(SabqFonts.app(size: 11, weight: .medium))
                 .foregroundStyle(points > 0 ? .white : WCTheme.onDarkDim)
                 .padding(.horizontal, 8).padding(.vertical, 4)
                 .background(Capsule().fill(points == 3 ? WCTheme.gold : points == 1 ? WCTheme.emeraldDeep : WCTheme.chipFill))
@@ -419,7 +419,7 @@ private struct KcPredictLongTab: View {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.seal.fill").foregroundStyle(WCTheme.emeraldDeep)
                             Text("اختيارك: \(name)")
-                                .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                         }
                     }
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
@@ -438,7 +438,7 @@ private struct KcPredictLongTab: View {
                         HStack(spacing: 6) {
                             Image(systemName: "checkmark.seal.fill").foregroundStyle(WCTheme.emeraldDeep)
                             Text("اختيارك: \(name)")
-                                .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                         }
                     }
                     if !long.locked {
@@ -461,7 +461,7 @@ private struct KcPredictLongTab: View {
                                 if submittingScorer {
                                     ProgressView().tint(.white).frame(width: 60)
                                 } else {
-                                    Text("حفظ").font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(.white)
+                                    Text("حفظ").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(.white)
                                         .padding(.horizontal, 18)
                                 }
                             }
@@ -528,7 +528,7 @@ private struct KcPredictLeadersTab: View {
                 ForEach(leaders) { leader in
                     HStack(spacing: 10) {
                         Text("\(leader.rank)")
-                            .font(SabqFonts.app(size: 13, weight: .black).monospacedDigit())
+                            .font(SabqFonts.app(size: 11, weight: .regular).monospacedDigit())
                             .foregroundStyle(leader.rank <= 3 ? WCTheme.gold : WCTheme.onDarkDim)
                             .frame(width: 26)
                         if let avatar = leader.avatar, !avatar.isEmpty {
@@ -540,14 +540,14 @@ private struct KcPredictLeadersTab: View {
                         }
                         VStack(alignment: .leading, spacing: 0) {
                             Text(leader.name)
-                                .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                                .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                                 .lineLimit(1)
                             Text("\(leader.predictions) توقّعًا · \(leader.exact) دقيق")
                                 .font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                         }
                         Spacer()
                         Text("\(leader.totalPoints)")
-                            .font(SabqFonts.app(size: 16, weight: .black).monospacedDigit())
+                            .font(SabqFonts.app(size: 16, weight: .semibold).monospacedDigit())
                             .foregroundStyle(WCTheme.emeraldDeep)
                         Text("نقطة").font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                     }

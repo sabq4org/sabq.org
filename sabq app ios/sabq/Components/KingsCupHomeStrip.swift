@@ -165,7 +165,7 @@ struct KingsCupHomeStrip: View {
 
             VStack(spacing: 3) {
                 Text(md.round ?? "جولة البطولة")
-                    .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(.white)
                     .lineLimit(1).minimumScaleFactor(0.7)
                 Text("\(md.count) \(md.count == 2 ? "مباراتان" : "مباريات") · \(KcFormat.day(iso: md.date))")
                     .font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.leaf)
@@ -174,12 +174,12 @@ struct KingsCupHomeStrip: View {
                     HStack(spacing: 4) {
                         Circle().fill(WCTheme.liveRed).frame(width: 6, height: 6)
                         Text(md.liveCount == 1 ? "مباراة تجري الآن" : "\(md.liveCount) مباريات تجري الآن")
-                            .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(.white)
+                            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(.white)
                     }
                 } else if let ts = md.nextKickoffTs {
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         Text("تنطلق بعد \(WCFormat.countdown(to: ts))")
-                            .font(SabqFonts.app(size: 11, weight: .semibold)).foregroundStyle(WCTheme.leaf)
+                            .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.leaf)
                             .lineLimit(1).fixedSize()
                     }
                 }
@@ -212,7 +212,7 @@ struct KingsCupHomeStrip: View {
                         .background(Circle().fill(.white))
                         .overlay(Circle().stroke(WCTheme.gold.opacity(0.8), lineWidth: 1.5))
                     Image(systemName: "trophy.fill")
-                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .font(SabqFonts.app(size: 11, weight: .medium))
                         .foregroundStyle(WCTheme.gold)
                         .shadow(color: .black.opacity(0.35), radius: 2)
                         .offset(x: -4, y: 3)
@@ -220,14 +220,14 @@ struct KingsCupHomeStrip: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text("🏆 بطل كأس الملك")
-                        .font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.gold)
+                        .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(WCTheme.gold)
                         .lineLimit(1).minimumScaleFactor(0.7)
                     Text(c.team.name)
-                        .font(SabqFonts.app(size: 18, weight: .black)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 17, weight: .semibold)).foregroundStyle(.white)
                         .lineLimit(1).minimumScaleFactor(0.75)
                     if let runnerUp = c.runnerUp, let score = c.score {
                         Text("فاز على \(runnerUp.name) \(score)\(c.penalties.map { " (ترجيح \($0))" } ?? "")")
-                            .font(SabqFonts.app(size: 9, weight: .semibold)).foregroundStyle(WCTheme.leaf)
+                            .font(SabqFonts.app(size: 9, weight: .regular)).foregroundStyle(WCTheme.leaf)
                             .lineLimit(1).minimumScaleFactor(0.65)
                     }
                 }
@@ -257,7 +257,7 @@ struct KingsCupHomeStrip: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text("كأس الملك")
-                    .font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(.white)
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(.white)
                     .lineLimit(1).minimumScaleFactor(0.8)
                 Text(subtitle)
                     .font(SabqFonts.app(size: 9)).foregroundStyle(subtitleColor)
@@ -279,7 +279,7 @@ struct KingsCupHomeStrip: View {
 
     private var chevron: some View {
         Image(systemName: "chevron.left")
-            .font(SabqFonts.app(size: 13, weight: .bold))
+            .font(SabqFonts.app(size: 12, weight: .medium))
             .foregroundStyle(.white.opacity(0.9))
     }
 
@@ -299,7 +299,7 @@ struct KingsCupHomeStrip: View {
             if f.started {
                 VStack(spacing: 2) {
                     Text("\(f.goals.away ?? 0) - \(f.goals.home ?? 0)")
-                        .font(SabqFonts.app(size: 19, weight: .black)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 18, weight: .semibold)).foregroundStyle(.white)
                         .environment(\.layoutDirection, .leftToRight)
                     liveStatus(f)
                 }
@@ -307,11 +307,11 @@ struct KingsCupHomeStrip: View {
             } else {
                 VStack(spacing: 2) {
                     Text(KcFormat.time(f))
-                        .font(SabqFonts.app(size: 14, weight: .black)).foregroundStyle(.white)
+                        .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(.white)
                         .lineLimit(1).fixedSize()
                     TimelineView(.periodic(from: .now, by: 1)) { _ in
                         Text("تنطلق بعد \(WCFormat.countdown(to: f.timestamp))")
-                            .font(SabqFonts.app(size: 10, weight: .semibold)).foregroundStyle(WCTheme.leaf)
+                            .font(SabqFonts.app(size: 10, weight: .regular)).foregroundStyle(WCTheme.leaf)
                             .lineLimit(1).fixedSize()
                     }
                 }
@@ -330,7 +330,7 @@ struct KingsCupHomeStrip: View {
                 Text(minute).monospacedDigit().environment(\.layoutDirection, .leftToRight)
             }
         }
-        .font(SabqFonts.app(size: 10, weight: .black))
+        .font(SabqFonts.app(size: 10, weight: .medium))
         .foregroundStyle(.white)
         .padding(.horizontal, 9).padding(.vertical, 5)
         .frame(minWidth: 78, maxWidth: 94)

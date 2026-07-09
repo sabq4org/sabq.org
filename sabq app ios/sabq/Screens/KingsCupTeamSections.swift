@@ -23,8 +23,8 @@ struct KcCoachCard: View {
                         .overlay(Circle().stroke(WCTheme.emeraldDeep.opacity(0.4), lineWidth: 2))
                 }
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("المدرّب").font(SabqFonts.app(size: 10, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
-                    Text(coach.name).font(SabqFonts.app(size: 15, weight: .black)).foregroundStyle(WCTheme.onDark)
+                    Text("المدرّب").font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(WCTheme.emeraldDeep)
+                    Text(coach.name).font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     HStack(spacing: 6) {
                         if let nat = coach.nationality, !nat.isEmpty {
                             Text(nat)
@@ -41,12 +41,12 @@ struct KcCoachCard: View {
             if let career = coach.career, career.count > 1 {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("المسيرة التدريبية")
-                        .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                        .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
                     ForEach(Array(career.prefix(5).enumerated()), id: \.offset) { _, stop in
                         HStack(spacing: 6) {
                             Circle().fill(WCTheme.emerald.opacity(0.5)).frame(width: 5, height: 5)
                             Text(stop.team)
-                                .font(SabqFonts.app(size: 12, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                                .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
                                 .lineLimit(1)
                             Spacer(minLength: 4)
                             Text(periodLabel(stop))
@@ -81,9 +81,9 @@ struct KcTeamStatsCard: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Image(systemName: "waveform.path.ecg")
-                    .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(WCTheme.emeraldDeep)
+                    .font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(WCTheme.emeraldDeep)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(title).font(SabqFonts.app(size: 15, weight: .heavy)).foregroundStyle(WCTheme.onDark)
+                    Text(title).font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.onDark)
                     Text(subtitle).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim)
                 }
                 Spacer(minLength: 0)
@@ -130,7 +130,7 @@ struct KcTeamStatsCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("توزيع الأهداف حسب الدقائق")
-                    .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
                 Spacer()
                 HStack(spacing: 8) {
                     legend(color: WCTheme.emeraldDeep, label: "سجّل")
@@ -175,7 +175,7 @@ struct KcStatChips: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 6)], alignment: .leading, spacing: 6) {
             ForEach(chips, id: \.self) { chip in
                 Text(chip)
-                    .font(SabqFonts.app(size: 10, weight: .semibold)).foregroundStyle(WCTheme.onDark)
+                    .font(SabqFonts.app(size: 10, weight: .regular)).foregroundStyle(WCTheme.onDark)
                     .lineLimit(1).minimumScaleFactor(0.8)
                     .padding(.horizontal, 8).padding(.vertical, 5)
                     .frame(maxWidth: .infinity)
@@ -193,7 +193,7 @@ struct KcTeamMatchesBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("مباريات النادي في كأس الملك")
-                .font(SabqFonts.app(size: 15, weight: .heavy)).foregroundStyle(WCTheme.emeraldDeep)
+                .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.emeraldDeep)
 
             if !matches.fixtures.isEmpty {
                 if let season = matches.season {
@@ -212,7 +212,7 @@ struct KcTeamMatchesBlock: View {
 
     private func seasonLabel(_ text: String) -> some View {
         Text(text)
-            .font(SabqFonts.app(size: 11, weight: .bold)).foregroundStyle(WCTheme.onDarkDim)
+            .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(WCTheme.onDarkDim)
     }
 }
 
@@ -223,12 +223,12 @@ struct KcTeamFixtureRow: View {
         HStack(spacing: 8) {
             KcTeamLogo(team: fixture.home, size: 24, ring: WCTheme.cardStroke)
             Text(fixture.started ? "\(fixture.goals.away ?? 0) - \(fixture.goals.home ?? 0)" : KcFormat.time(fixture))
-                .font(SabqFonts.app(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
+                .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
                 .environment(\.layoutDirection, .leftToRight).frame(minWidth: 44)
             KcTeamLogo(team: fixture.away, size: 24, ring: WCTheme.cardStroke)
             Spacer(minLength: 4)
             VStack(alignment: .trailing, spacing: 1) {
-                Text(fixture.round).font(SabqFonts.app(size: 10, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
+                Text(fixture.round).font(SabqFonts.app(size: 10, weight: .regular)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
                 Text(KcFormat.day(fixture)).font(SabqFonts.app(size: 10)).foregroundStyle(WCTheme.onDarkDim).lineLimit(1)
             }
         }
@@ -245,7 +245,7 @@ struct KcTransfersBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("حركة الانتقالات")
-                .font(SabqFonts.app(size: 15, weight: .heavy)).foregroundStyle(WCTheme.emeraldDeep)
+                .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.emeraldDeep)
             if !transfers.arrivals.isEmpty {
                 column(title: "وصل", tint: WCTheme.emeraldDeep, items: transfers.arrivals, incoming: true)
             }
@@ -259,17 +259,17 @@ struct KcTransfersBlock: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
                 Image(systemName: incoming ? "arrow.down.left" : "arrow.up.right")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(.system(size: 10, weight: .medium))
                 Text(title)
                 Text("(\(items.count))").foregroundStyle(WCTheme.onDarkDim)
             }
-            .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(tint)
+            .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(tint)
 
             ForEach(items.prefix(5)) { t in
                 HStack(spacing: 8) {
                     VStack(alignment: .leading, spacing: 0) {
                         Text(t.player)
-                            .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(WCTheme.onDark)
+                            .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(WCTheme.onDark)
                             .lineLimit(1)
                         HStack(spacing: 4) {
                             Text(incoming ? "من" : "إلى")
@@ -283,7 +283,7 @@ struct KcTransfersBlock: View {
                     Spacer(minLength: 4)
                     if !t.type.isEmpty {
                         Text(t.type)
-                            .font(SabqFonts.app(size: 9, weight: .semibold)).foregroundStyle(WCTheme.onDarkDim)
+                            .font(SabqFonts.app(size: 9, weight: .regular)).foregroundStyle(WCTheme.onDarkDim)
                             .padding(.horizontal, 6).padding(.vertical, 3)
                             .background(Capsule().fill(WCTheme.chipFill))
                     }
@@ -311,7 +311,7 @@ struct KcTeamTitlesBlock: View {
                 HStack(spacing: 6) {
                     Image(systemName: "trophy.fill").font(.system(size: 13)).foregroundStyle(WCTheme.gold)
                     Text("ألقابه في كأس الملك")
-                        .font(SabqFonts.app(size: 15, weight: .heavy)).foregroundStyle(WCTheme.emeraldDeep)
+                        .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(WCTheme.emeraldDeep)
                     if let since = record.sinceSeason {
                         Text("ضمن المدى المتاح منذ \(KcFormat.seasonLabel(since))")
                             .font(SabqFonts.app(size: 9)).foregroundStyle(WCTheme.onDarkDim)
@@ -322,7 +322,7 @@ struct KcTeamTitlesBlock: View {
                         Image(systemName: "trophy.fill").font(.system(size: 15)).foregroundStyle(WCTheme.gold)
                         VStack(alignment: .leading, spacing: 1) {
                             Text("نسخة \(KcFormat.seasonLabel(e.season))")
-                                .font(SabqFonts.app(size: 13, weight: .black)).foregroundStyle(WCTheme.onDark)
+                                .font(SabqFonts.app(size: 11, weight: .regular)).foregroundStyle(WCTheme.onDark)
                             if let runnerUp = e.runnerUp {
                                 HStack(spacing: 4) {
                                     Text("على حساب \(runnerUp.name)")
