@@ -514,9 +514,10 @@ struct MatchesCenterView: View {
         let active = selection == slug
         let tint = slug == "all" ? SpTheme.green : SpTheme.compAccent(slug)
         return Button {
-            guard selection != slug else { return }
-            withAnimation(.easeOut(duration: 0.2)) { selection = slug }
-            SpCenterFilter.save(slug)
+            // إعادة الضغط على البطولة النشطة تزيل الفلتر وترجع لنطاق العدسة الحالي.
+            let newSelection = (selection == slug) ? lensScope : slug
+            withAnimation(.easeOut(duration: 0.2)) { selection = newSelection }
+            SpCenterFilter.save(newSelection)
         } label: {
             HStack(spacing: 6) {
                 if let logo, !logo.isEmpty {
