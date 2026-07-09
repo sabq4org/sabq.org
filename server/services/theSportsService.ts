@@ -384,12 +384,22 @@ export interface TsFastScore {
 // دور المجموعات بلا إضافي/ركلات فالخانة [0] تكفي تلقائيًا.
 function decodeScore(
   scoreArr: any
-): { home: number; away: number; penHome: number | null; penAway: number | null; statusId: number } | null {
+): {
+  home: number;
+  away: number;
+  penHome: number | null;
+  penAway: number | null;
+  statusId: number;
+  periodStartTs: number;
+} | null {
   if (!Array.isArray(scoreArr) || scoreArr.length < 4) return null;
   const statusId = Number(scoreArr[1]);
   const homeArr = scoreArr[2];
   const awayArr = scoreArr[3];
   if (!Array.isArray(homeArr) || !Array.isArray(awayArr)) return null;
+  // score[4] عند TheSports = طابع انطلاق «المرحلة الجارية» (يتحدّث لبداية الشوط
+  // الثاني/الإضافي) — أساس حساب الدقيقة الصحيح لكل شوط. 0 إن غاب.
+  const periodStartTs = scoreArr.length > 4 ? Number(scoreArr[4]) || 0 : 0;
 
   const reg = (a: any[]) => Number(a[0]) || 0;
   const ot = (a: any[]) => Number(a[5]) || 0;
@@ -408,7 +418,47 @@ function decodeScore(
     penHome: hasPenalties ? penHomeVal : null,
     penAway: hasPenalties ? penAwayVal : null,
     statusId,
+    periodStartTs,
   };
+}
+
+/**
+ * دقيقة اللوحة العالمية محسوبة لكل شوط — بدل الفرق الساذج عن ضربة البداية الذي
+ * كان يحسب استراحة الشوطين لعبًا (يعرض ~78' واللعب فعليًّا عند ~63').
+ * الأساس: طابع بداية المرحلة الجارية `periodStartTs` (score[4])، وعند غيابه
+ * تقدير من موعد المباراة بإزاحة المرحلة. الصيغة على اصطلاح المزوّدين:
+ * elapsed حتى سقف الشوط، والفائض بدل ضائع في `extra` (45+x / 90+x).
+ */
+function tsBoardMinute(
+  statusId: number,
+  periodStartTs: number,
+  matchTime: number,
+  nowSec: number,
+): { elapsed: number | null; extra: number | null } {
+  const minutesSince = (start: number): number =>
+    start > 0 ? Math.floor((nowSec - start) / 60) + 1 : 0;
+  const phase = (
+    base: number,
+    cap: number,
+    fallbackOffsetMin: number,
+  ): { elapsed: number | null; extra: number | null } => {
+    const start = periodStartTs > 0 ? periodStartTs : matchTime > 0 ? matchTime + fallbackOffsetMin * 60 : 0;
+    const within = minutesSince(start);
+    if (within <= 0) return { elapsed: Math.min(base + 1, cap), extra: null };
+    const m = base + within;
+    if (m <= cap) return { elapsed: Math.max(base + 1, m), extra: null };
+    // بدل الضائع — بسقف أمان كي لا يتضخّم إن علِق المزوّد على حالة قديمة.
+    return { elapsed: cap, extra: Math.min(m - cap, 15) };
+  };
+  switch (statusId) {
+    case 2: return phase(0, 45, 0);        // الشوط الأول
+    case 3: return { elapsed: 45, extra: null }; // استراحة
+    case 4: return phase(45, 90, 60);      // الشوط الثاني (تقدير البداية: البداية+60د)
+    case 5: return phase(90, 105, 110);    // الإضافي الأول
+    case 6: return phase(105, 120, 130);   // الإضافي الثاني
+    case 7: return { elapsed: null, extra: null }; // ركلات الترجيح — لا عدّاد
+    default: return { elapsed: null, extra: null };
+  }
 }
 
 // ───────────────────────── أحداث المباراة (incidents) ─────────────────────────
@@ -1336,6 +1386,8 @@ export interface TsLiveBoardItem {
   statusCode: string;
   statusLabel: string;
   elapsed: number | null;
+  /** دقائق بدل الضائع المحتسبة (45+x ⇒ elapsed=45, extra=x) — null إن لا بدل. */
+  extra: number | null;
 }
 
 /**
@@ -1453,12 +1505,12 @@ export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
       if (!homeName || !awayName) continue;
 
       const meta = TS_STATUS_META[e.decoded.statusId] ?? { code: "LIVE", label: "مباشر" };
-      let elapsed: number | null = null;
-      if (e.decoded.statusId === 3) {
-        elapsed = 45;
-      } else if (e.matchTime > 0) {
-        elapsed = Math.max(1, Math.min(120, Math.floor((nowSec - e.matchTime) / 60)));
-      }
+      const { elapsed, extra } = tsBoardMinute(
+        e.decoded.statusId,
+        e.decoded.periodStartTs,
+        e.matchTime,
+        nowSec,
+      );
 
       out.push({
         matchId: e.id,
@@ -1483,6 +1535,7 @@ export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
         statusCode: meta.code,
         statusLabel: meta.label,
         elapsed,
+        extra,
       });
     }
     return out;

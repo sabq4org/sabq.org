@@ -25,13 +25,19 @@ nonisolated struct TcPlayer: Decodable, Hashable {
     let position: String?
     let birthdate: String?
 
-    /// العمر المحسوب من تاريخ الميلاد (nil عند غيابه/تعذّره).
-    var age: Int? {
-        guard let birthdate, !birthdate.isEmpty else { return nil }
+    /// منسّق تاريخ الميلاد — مرة واحدة لا مع كل قراءة `age`: كانت تُنشأ نسخة
+    /// جديدة لكل صفّ أثناء التمرير (إنشاء DateFormatter من أثقل تهيئات Foundation).
+    private static let birthdateFormatter: DateFormatter = {
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
         fmt.locale = Locale(identifier: "en_US_POSIX")
-        guard let d = fmt.date(from: String(birthdate.prefix(10))) else { return nil }
+        return fmt
+    }()
+
+    /// العمر المحسوب من تاريخ الميلاد (nil عند غيابه/تعذّره).
+    var age: Int? {
+        guard let birthdate, !birthdate.isEmpty else { return nil }
+        guard let d = Self.birthdateFormatter.date(from: String(birthdate.prefix(10))) else { return nil }
         return Calendar(identifier: .gregorian).dateComponents([.year], from: d, to: Date()).year
     }
 }

@@ -336,6 +336,13 @@ app.use(
 // Enable Gzip compression for all responses
 app.use(compression({
   filter: (req, res) => {
+    // no-transform is a RESPONSE directive (SSE live-stream sets it) — the old
+    // check read the request header, so this guard never fired and SSE survived
+    // only via compression's internal shouldTransform. Check the response too.
+    const resCacheControl = String(res.getHeader('cache-control') ?? '');
+    if (resCacheControl.includes('no-transform')) {
+      return false;
+    }
     if (req.headers['cache-control']?.includes('no-transform')) {
       return false;
     }

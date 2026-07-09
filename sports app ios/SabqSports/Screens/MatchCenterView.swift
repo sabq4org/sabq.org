@@ -304,6 +304,11 @@ struct SpMatchCenter: View {
         .onChange(of: liveStream.stamps["s:\(fixtureId)"]) { _, _ in
             Task { await refreshLive() }
         }
+        // مباريات كأس العالم تحمل مفتاح «w:» في الموجز لا «s:» — مراقبة «s:» وحدها
+        // كانت تُفقِد مركز المونديال نبضة الثانيتين فيتأخر لدورة الاستطلاع (10ث).
+        .onChange(of: liveStream.stamps["w:\(fixtureId)"]) { _, _ in
+            Task { await refreshLive() }
+        }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
     }

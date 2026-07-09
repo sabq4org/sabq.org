@@ -1,5 +1,6 @@
 import Foundation
 import ActivityKit
+import CryptoKit
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -30,9 +31,33 @@ enum SpSharedContainer {
     }
 
     /// اسم ملف ثابت مشتق من رابط الشعار (لتفادي إعادة التنزيل).
+    /// SHA256 لا `hashValue`: بذرة hashValue عشوائية مع كل تشغيل، فكان الاسم
+    /// يتبدّل كل إقلاع → إعادة تنزيل كل الشعارات ونموّ الحاوية بلا تنظيف أبدًا.
     static func fileName(for urlString: String) -> String {
-        let hash = urlString.hashValue
-        return "logo_\(UInt(bitPattern: hash)).png"
+        let digest = SHA256.hash(data: Data(urlString.utf8))
+        let hex = digest.prefix(8).map { String(format: "%02x", $0) }.joined()
+        return "logo_\(hex).png"
+    }
+
+    private static let logosCleanupKey = "sp.logos.cleanup.at"
+
+    /// كنس الشعارات غير المستخدمة (>30 يومًا منذ آخر لمسة) — مرة كل أسبوع كحد
+    /// أقصى. يزيل أيضًا مخلّفات الأسماء العشوائية المتراكمة قبل البصمة الثابتة.
+    static func cleanupStaleLogos() {
+        guard let dir = logosDir(), let defaults = UserDefaults(suiteName: appGroup) else { return }
+        let now = Date().timeIntervalSince1970
+        guard now - defaults.double(forKey: logosCleanupKey) >= 7 * 86_400 else { return }
+        defaults.set(now, forKey: logosCleanupKey)
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: [.contentModificationDateKey]) else { return }
+        for url in files {
+            let mtime = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+                .contentModificationDate ?? .distantPast
+            if now - mtime.timeIntervalSince1970 > 30 * 86_400 {
+                try? fm.removeItem(at: url)
+            }
+        }
     }
 
     #if canImport(UIKit)
@@ -49,7 +74,11 @@ enum SpSharedContainer {
         guard !urlString.isEmpty, let url = URL(string: urlString), let dir = logosDir() else { return nil }
         let name = fileName(for: urlString)
         let dest = dir.appendingPathComponent(name)
-        if FileManager.default.fileExists(atPath: dest.path) { return name }
+        if FileManager.default.fileExists(atPath: dest.path) {
+            // لمسة استخدام — تحمي الشعارات النشطة من كنسة الثلاثين يومًا.
+            try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: dest.path)
+            return name
+        }
         guard let (data, _) = try? await URLSession.shared.data(from: url),
               let img = UIImage(data: data) else { return nil }
         // أعد الترميز PNG بحجم معقول (≤120px) لتقليل حجم الحاوية.

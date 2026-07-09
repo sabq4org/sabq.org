@@ -393,13 +393,23 @@ struct NotificationsSettingsView: View {
         return L("إشعارات هذه المباريات فقط + تذكير قبل 10 دقائق")
     }
 
+    /// منسّقا موعد المباراة — مرة واحدة لكل لغة (كان يُنشأ منسّق جديد لكل صفّ)،
+    /// والاختيار وقت النداء بلغة الواجهة الحالية بدل «ar» المثبّتة التي كانت
+    /// تتجاهل الوضع الإنجليزي.
+    private static func makeKickoffFormatter(_ locale: String) -> DateFormatter {
+        let df = DateFormatter()
+        df.locale = Locale(identifier: locale)
+        df.dateFormat = "d MMM · HH:mm"
+        return df
+    }
+    private static let kickoffFormatterAr = makeKickoffFormatter("ar")
+    private static let kickoffFormatterEn = makeKickoffFormatter("en")
+
     private func matchStatusLabel(_ f: SpFixture) -> String {
         if f.status.live { return L("مباشر") }
         if f.status.finished { return L("انتهت") }
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "ar")
-        df.dateFormat = "d MMM · HH:mm"
-        return df.string(from: f.kickoff)
+        let formatter = SpLanguage.shared.isEnglish ? Self.kickoffFormatterEn : Self.kickoffFormatterAr
+        return formatter.string(from: f.kickoff)
     }
 
     private func refreshPushStatus() async {

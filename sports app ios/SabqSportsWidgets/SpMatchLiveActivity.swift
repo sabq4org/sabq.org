@@ -150,15 +150,16 @@ func statusText(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> S
 // عرض الحالة الحيّة على الجزيرة الديناميكية — يفضّل العدّاد الذاتي من
 // `clockStartEpoch` (يتحرّك على الجهاز بلا انتظار APNs)، ويسقط على النصّ المدفوع
 // عند الاستراحة/الترجيح/بدل الضائع («45+2'») حيث الساعة متوقّفة أو الصيغة خاصّة.
+// نفس عدّاد شاشة القفل (SpLA.tickingMinute) حرفيًّا — كانا يحسبان باختلاف طفيف
+// (سقف موجود هنا وغائب هناك) فيختلف الرقمان داخل الجهاز نفسه.
 @ViewBuilder
 func liveStatusContent(_ s: SpMatchActivityAttributes.ContentState, kickoff: Date) -> some View {
     if s.isLive, !s.isFinished,
        let epoch = s.clockStartEpoch, epoch > 0,
        !s.minute.contains("+") {
         TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
-            let elapsed = timeline.date.timeIntervalSince1970 - epoch
-            let m = elapsed >= 0 ? max(1, Int(elapsed / 60.0) + 1) : 1
-            let label = s.statusLabel.isEmpty ? "\(m)'" : "\(m)' · \(s.statusLabel)"
+            let minute = SpLA.tickingMinute(epoch: epoch, at: timeline.date, fallback: s.minute)
+            let label = s.statusLabel.isEmpty ? minute : "\(minute) · \(s.statusLabel)"
             Text(label)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -308,28 +309,11 @@ private struct LockScreenView: View {
        let epoch = s.clockStartEpoch, epoch > 0,
        !s.minute.contains("+") {
         TimelineView(.periodic(from: .now, by: 1.0)) { timeline in
-            Text(Self.minuteLabel(epoch: epoch, at: timeline.date, fallback: s.minute))
+            Text(SpLA.tickingMinute(epoch: epoch, at: timeline.date, fallback: s.minute))
         }
     } else {
         Text(primaryStatusLine)
     }
-}
-
-/// يحسب الدقيقة الجارية من المرساة: نفس معادلة الخادم/التطبيق (m = floor((now−epoch)/60)+1).
-private static func minuteLabel(epoch: Double, at date: Date, fallback: String) -> String {
-    let elapsed = date.timeIntervalSince1970 - epoch
-    guard elapsed >= 0 else { return fallback.isEmpty ? "1'" : fallback }
-    let m = max(1, Int(elapsed / 60.0) + 1)
-    // سقف أمان: لا نتجاوز الدقيقة المدفوعة بأكثر من دقيقتين (مزوّد متأخّر).
-    if let pushed = parseMinute(fallback), m > pushed + 2 {
-        return fallback
-    }
-    return "\(m)'"
-}
-
-private static func parseMinute(_ raw: String) -> Int? {
-    let digits = raw.prefix(while: { $0.isNumber })
-    return digits.isEmpty ? nil : Int(digits)
 }
 
 /// السطر الأول: العدّاد إن وُجد، وإلا نصّ الحالة («مباشر»/«انتهت»/«قريبًا»).
@@ -426,6 +410,22 @@ enum SpLA {
     static let border = Color.white.opacity(0.14)
     static let liveDot = Color(red: 1.0, green: 0.43, blue: 0.34)
     static let green = accent
+
+    /// عدّاد الدقيقة الذاتي الموحّد (شاشة القفل + الجزيرة): m = floor((now−epoch)/60)+1.
+    /// المرساة `clockStartEpoch` تأتي من matchClock على الخادم — نفس مصدر عدّاد
+    /// التطبيق (SpMatchClock) فيتطابق الرقمان. سقف الأمان مطلق (130 دقيقة) لا
+    /// نسبيّ للدقيقة المدفوعة: دفعات الدقيقة لم تعد تُرسَل أثناء جريان الساعة
+    /// (المرساة تغني عنها)، فالنصّ المدفوع يتقادم ولا يصلح مرجعًا للسقف —
+    /// السقف النسبي القديم كان سيجمّد العدّاد على آخر دقيقة مدفوعة.
+    static func tickingMinute(epoch: Double, at date: Date, fallback: String) -> String {
+        let elapsed = date.timeIntervalSince1970 - epoch
+        guard elapsed >= 0 else { return fallback.isEmpty ? "1'" : fallback }
+        let m = max(1, Int(elapsed / 60.0) + 1)
+        guard m <= 130 else {
+            return fallback.isEmpty ? SpWidgetL("مباشر") : fallback
+        }
+        return "\(m)'"
+    }
 
     /// أوّل حرفين بارزين من اسم الفريق (يتخطّى أداة التعريف «ال»).
     static func shortName(_ name: String) -> String {

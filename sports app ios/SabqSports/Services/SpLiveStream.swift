@@ -76,16 +76,24 @@ final class SpLiveStream {
         // المباريات التي غادرت الموجز (انتهت): ختم أخير مميّز ثم تُحذف لاحقًا.
         for (k, v) in stamps where fresh[k] == nil && v != -1 { fresh[k] = -1 }
 
-        let sportsChanged = subset(fresh, "s:") != subset(stamps, "s:")
-        let wcChanged = subset(fresh, "w:") != subset(stamps, "w:")
+        let previous = stamps
+        let sportsChanged = subset(fresh, "s:") != subset(previous, "s:")
+        let wcChanged = subset(fresh, "w:") != subset(previous, "w:")
         stamps = fresh
         if sportsChanged { sportsVersion &+= 1 }
         if wcChanged { wcVersion &+= 1 }
 
-        // نبّه «مبارياتي»/النشاط الحيّ فورًا (جلب مُوجّه بدل انتظار دورته الدورية).
-        // يشمل ختم المونديال (w:) — كانت تُحدَّث sportsVersion فقط فتتأخّر مباريات كأس العالم.
         if sportsChanged || wcChanged {
-            Task { await SpMatchFollows.shared.refresh() }
+            // تطبيق فوري: الموجز يحمل النتيجة/الدقيقة/المرساة بطزاجة TheSports —
+            // نحقنها في «مبارياتي» (البطاقة + الويدجت + النشاط الحيّ) بلا انتظار
+            // رحلة شبكة، ثم جلب /lite يصحّح التفاصيل (الليبل/الترجيح) بعدها بلحظة.
+            SpMatchFollows.shared.applyDigest(digest.items)
+            // جلب /lite التصحيحي فقط حين تتغيّر مباراة متابَعة فعلًا — كان يُطلق مع
+            // كل نبضة لأي مباراة في العالم (20 جارية = جلب متواصل كل ثانيتين عبثًا).
+            let followedKeys = SpMatchFollows.shared.followedDigestKeys()
+            if followedKeys.contains(where: { fresh[$0] != previous[$0] }) {
+                Task { await SpMatchFollows.shared.refresh() }
+            }
         }
     }
 
@@ -105,6 +113,8 @@ nonisolated struct SpLiveDigestItem: Decodable, Hashable {
     let ex: Int?
     let liv: Bool
     let fin: Bool
+    /// مرساة الساعة الموحّدة (matchClock) — نفس قيمة دفعات Live Activity.
+    let cs: Double?
 }
 
 nonisolated struct SpLiveDigest: Decodable {

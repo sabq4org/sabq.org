@@ -39,6 +39,8 @@ struct HomeView: View {
     @State private var featuredDetail: SpMatchDetail?
     @State private var featuredXg: SpXg?
     @State private var featuredCommentary: SpCommentary?
+    /// نبضة هيرو وصلت والتبويب مخفي — تُصرف بتحديث واحد عند العودة.
+    @State private var pendingHeroReload = false
 
     @State private var scorerMode: ScorerMode = .goals
     @State private var selectedMatch: SpFixture?
@@ -140,12 +142,19 @@ struct HomeView: View {
         .task { await pollHero() }
         // عودة التطبيق للمقدّمة أثناء مباراة جارية = تحديث فوري للهيرو.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active, featured?.status.live == true {
+            if phase == .active, featured?.status.live == true, router.selectedTab == .roshn {
                 Task { await refreshHero() }
             }
         }
-        // البث الحيّ (SSE): تغيّر ختم مباراة الهيرو = تحديث فوري للنتيجة والمجريات.
+        // البث الحيّ (SSE): تغيّر ختم مباراة الهيرو = تحديث فوري للنتيجة والمجريات —
+        // والتبويب المخفي يؤجَّل تحديثه لعودة الظهور (لا شبكة وهو غير مرئي).
         .onChange(of: featured.flatMap { liveStream.stamps["s:\($0.id)"] }) { _, _ in
+            guard router.selectedTab == .roshn else { pendingHeroReload = true; return }
+            Task { await refreshHero() }
+        }
+        .onChange(of: router.selectedTab) { _, tab in
+            guard tab == .roshn, pendingHeroReload else { return }
+            pendingHeroReload = false
             Task { await refreshHero() }
         }
         .refreshable { await loadAll(force: true) }
@@ -165,6 +174,11 @@ struct HomeView: View {
             let delay: UInt64 = live ? 10_000_000_000 : (near ? 30_000_000_000 : 60_000_000_000)
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
+            // التبويب مخفي: لا شبكة — يؤجَّل التحديث لعودة الظهور.
+            guard router.selectedTab == .roshn else {
+                if live || near { pendingHeroReload = true }
+                continue
+            }
             if live || near { await refreshHero() }
         }
     }
@@ -449,7 +463,8 @@ struct HomeView: View {
         if f.status.live {
             HStack(spacing: 6) {
                 Circle().fill(.white).frame(width: 6, height: 6)
-                Text("\(L("مباشر")) \(liveMinute(f))")
+                Text(L("مباشر"))
+                SpLiveMinuteText(status: f.status)
                     .environment(\.layoutDirection, .leftToRight)
             }
             .font(SportsFonts.app(size: 11, weight: .bold))
@@ -508,11 +523,6 @@ struct HomeView: View {
         return "\(h) · \(a)"
     }
 
-    private func liveMinute(_ f: SpFixture) -> String {
-        guard let e = f.status.elapsed else { return f.status.label }
-        if let extra = f.status.extra, extra > 0 { return "\(e)+\(extra)'" }
-        return "\(e)'"
-    }
 
     // MARK: - لوحة دوري روشن (تدفّق واحد غنيّ بالأرقام — هادئ، أبيض + أخضر)
 

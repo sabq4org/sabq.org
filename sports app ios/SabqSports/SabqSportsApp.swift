@@ -87,12 +87,17 @@ private struct SpAppEnvironmentRoot: View {
                 liveStream.start()
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active {
+                switch phase {
+                case .active:
                     matchFollows.startAutoRefresh()
                     liveStream.start()
-                } else {
+                case .background:
                     matchFollows.stopAutoRefresh()
                     liveStream.stop()
+                default:
+                    // .inactive عابرة (مركز الإشعارات/مبدّل التطبيقات/Face ID) —
+                    // قطعُ بث SSE وإعادة فتحه لكل لمحة كان تناوبًا مجانيًّا للاتصال.
+                    break
                 }
             }
         // مظهر فاتح نظيف مفروض — تصميم كأس آسيا الأبيض (أبيض + أخضر مقتصد، لا غوامق).

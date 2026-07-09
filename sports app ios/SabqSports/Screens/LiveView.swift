@@ -8,10 +8,13 @@ import SwiftUI
 struct LiveView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(SpLiveStream.self) private var liveStream
+    @Environment(SpAppRouter.self) private var router
     @State private var world: [SpWorldLiveItem] = []
     @State private var catBySlug: [String: String] = [:]
     @State private var loading = true
     @State private var loadError: String?
+    /// تحديث مؤجَّل وصل والتبويب مخفي — يُصرف بتحميل واحد عند العودة.
+    @State private var pendingLiveReload = false
 
     var body: some View {
         NavigationStack {
@@ -34,10 +37,17 @@ struct LiveView: View {
         .refreshable { await load(force: true) }
         // عودة التطبيق للمقدّمة = تحديث فوري (لا انتظار دورة الاستطلاع التالية).
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await load(force: true) } }
+            if phase == .active, router.selectedTab == .world { Task { await load(force: true) } }
         }
-        // البث الحيّ (SSE): أي تغيّر في مباريات العالم الجارية = تحديث فوري.
+        // البث الحيّ (SSE): أي تغيّر في مباريات العالم الجارية = تحديث فوري —
+        // والتبويب المخفي يؤجَّل تحديثه لعودة الظهور (لا شبكة وهو غير مرئي).
         .onChange(of: liveStream.sportsVersion) { _, _ in
+            guard router.selectedTab == .world else { pendingLiveReload = true; return }
+            Task { await load(force: true) }
+        }
+        .onChange(of: router.selectedTab) { _, tab in
+            guard tab == .world, pendingLiveReload else { return }
+            pendingLiveReload = false
             Task { await load(force: true) }
         }
     }
@@ -342,6 +352,11 @@ struct LiveView: View {
             let delay: UInt64 = world.isEmpty ? 30_000_000_000 : 10_000_000_000
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
+            // التبويب مخفي: لا شبكة — يؤجَّل التحديث لعودة الظهور.
+            guard router.selectedTab == .world else {
+                pendingLiveReload = true
+                continue
+            }
             await load(force: true)
         }
     }

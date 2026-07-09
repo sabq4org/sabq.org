@@ -98,10 +98,13 @@ final class SpLiveActivityManager {
         // حافظ على آخر حدث معروض إن لم يحمل المستدعي أحدث — التحديث المحلي من
         // «مبارياتي» بلا أحداث، ومسحه كان يُخفي شريحة الهدف/البطاقة المدفوعة.
         state.lastEvent = lastEvent ?? activity.content.state.lastEvent
-        // ثبات مرساة الساعة: لا نُزحزح مرساةً جاريةً لفرقٍ طفيف (اختلاف لحظة
-        // انقلاب الدقيقة بين مصدرنا ودفعات الخادم كان يجعل العدّاد يسبق ثم
-        // يرتدّ). إعادة الإرساء فقط عند فارق كبير = شوط جديد/تصحيح حقيقي.
-        if let current = activity.content.state.clockStartEpoch,
+        // مرساة الخادم (matchClock) هي السلطة: مثبّتة عنده وتطابق دفعات APNs
+        // حرفيًّا فلا قفز عند تعاقب التحديث المحلي والدفع البعيد — نعتمدها كما هي.
+        // التسامح المحلي (75ث) يبقى فقط للمرساة المحسوبة محليًّا (خادم لم يحقنها):
+        // لا نُزحزح مرساةً جاريةً لفرقٍ طفيف (اختلاف لحظة انقلاب الدقيقة بين
+        // المصادر كان يجعل العدّاد يسبق ثم يرتدّ).
+        if fixture.status.clockStartEpoch == nil,
+           let current = activity.content.state.clockStartEpoch,
            let candidate = state.clockStartEpoch,
            abs(current - candidate) < 75 {
             state.clockStartEpoch = current
@@ -174,7 +177,9 @@ final class SpLiveActivityManager {
             isLive: f.status.live,
             isFinished: f.status.finished,
             lastEvent: nil,
-            clockStartEpoch: Self.clockStartEpoch(for: f.status)
+            // مرساة الخادم أولًا (نفس قيمة دفعات APNs والموجز) — الحساب المحلي
+            // احتياط فقط للمسارات التي لا تحقنها بعد (كأس العالم).
+            clockStartEpoch: f.status.clockStartEpoch ?? Self.clockStartEpoch(for: f.status)
         )
     }
 
@@ -216,10 +221,12 @@ final class SpLiveActivityManager {
         return !paused.contains(code.uppercased())
     }
 
-    /// تاريخ تقادم الحالة: قصير أثناء اللعب؛ وحتى الانطلاق+دقيقتين للمباراة القادمة
-    /// كي لا يُعتَّم العدّاد التنازلي قبل البدء.
+    /// تاريخ تقادم الحالة: أثناء اللعب نافذة واسعة (30 دقيقة) — العدّاد ذاتيّ من
+    /// المرساة ودفعات الخادم تأتي عند التغيّر فقط، فشوط هادئ بلا أهداف ليس تقادمًا
+    /// (نافذة 3 دقائق القديمة افترضت دفعات كل دقيقة). وحتى الانطلاق+دقيقتين
+    /// للمباراة القادمة كي لا يُعتَّم العدّاد التنازلي قبل البدء.
     private func staleDate(for f: SpFixture) -> Date? {
-        if f.status.live { return Date().addingTimeInterval(180) }
+        if f.status.live { return Date().addingTimeInterval(30 * 60) }
         if !f.started, f.kickoff > Date() { return f.kickoff.addingTimeInterval(120) }
         return nil
     }
