@@ -454,15 +454,22 @@ struct SpScoreRow: View {
 struct SpFlatMatchRow: View {
     let fixture: SpFixture
     var body: some View {
-        NavigationLink {
-            SpMatchCenter(fixtureId: fixture.id, preview: fixture)
-        } label: {
+        // مباريات TheSports-only في «عالمية» تحمل id سالبًا اصطناعيًا — لا مركز مباراة AF.
+        if fixture.id < 0 {
             SpScoreRow(fixture: fixture)
                 .padding(.vertical, 10)
                 .padding(.horizontal, 8)
-                .contentShape(Rectangle())
+        } else {
+            NavigationLink {
+                SpMatchCenter(fixtureId: fixture.id, preview: fixture)
+            } label: {
+                SpScoreRow(fixture: fixture)
+                    .padding(.vertical, 10)
+                    .padding(.horizontal, 8)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(SpPressStyle())
         }
-        .buttonStyle(SpPressStyle())
     }
 }
 

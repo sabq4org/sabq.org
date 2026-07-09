@@ -26,6 +26,7 @@ import { isSyntheticFixtureId } from "./wc2026Bracket";
 import { getPlayerForm as smGetPlayerForm, isSportmonksConfigured } from "./sportmonksService";
 import {
   getTheSportsFastScore,
+  getTheSportsLiveBoard,
   getTheSportsMatchLive,
   getTsCompetitionExtra,
   getTsCompetitionId,
@@ -41,6 +42,7 @@ import {
   TS_I18N_TYPE,
   TS_VAR_RESULT_AR,
   type TsEvent,
+  type TsLiveBoardItem,
   type TsLiveStats,
   type TsTeamStatSide,
 } from "./theSportsService";
@@ -665,9 +667,67 @@ function localizeWorldLeagueName(name: string, country: string, tr?: NameLookup)
  * من API-Football + مجموعة المواسم القائمة، كلاهما خلف كاش SWR. الأسماء المعروفة
  * تُعرَّب مع fallback إنجليزي آمن. (مجمّع في الواجهة حسب الدولة ثم الدوري.)
  *
- * المصدر: API-Football (`fixtures?live=all`) — ليس TheSports. TheSports يُستخدم
- * فقط لتسريع النتيجة/الأحداث لبطولات محدودة مربوطة في TS_COMPETITION_IDS.
+ * المصدر الأساسي: API-Football (`fixtures?live=all`).
+ * احتياطي: TheSports `detail_live` عندما تكون نتيجة AF بعد الفلترة فقيرة
+ * (< WORLD_LIVE_AF_MIN) — يغطي دوريات آسيا/الصين وغيرها التي لا تظهر في AF.
  */
+const WORLD_LIVE_AF_MIN = 3;
+
+/** معرّف رقمي سالب مستقر من uuid TheSports — لا يتصادم مع IDs API-Football. */
+function tsUuidToNegativeId(uuid: string): number {
+  let h = 0;
+  for (let i = 0; i < uuid.length; i++) h = (Math.imul(31, h) + uuid.charCodeAt(i)) | 0;
+  const n = Math.abs(h) || 1;
+  return -n;
+}
+
+function mapTsBoardToWorldLive(items: TsLiveBoardItem[]): SplWorldLiveItem[] {
+  return items.map((m) => {
+    const ts = m.matchTime > 0 ? m.matchTime : Math.floor(Date.now() / 1000);
+    const leagueId = tsUuidToNegativeId(m.competitionId);
+    const fixtureId = tsUuidToNegativeId(m.matchId);
+    return {
+      id: fixtureId,
+      date: new Date(ts * 1000).toISOString(),
+      timestamp: ts,
+      status: {
+        code: m.statusCode,
+        label: m.statusLabel,
+        elapsed: m.elapsed,
+        extra: null,
+        live: m.live,
+        finished: m.finished,
+      },
+      round: "",
+      venue: { name: "", city: "" },
+      home: {
+        id: tsUuidToNegativeId(m.homeTeamId),
+        name: m.homeName,
+        logo: "",
+        winner: null,
+      },
+      away: {
+        id: tsUuidToNegativeId(m.awayTeamId),
+        name: m.awayName,
+        logo: "",
+        winner: null,
+      },
+      goals: { home: m.goalsHome, away: m.goalsAway },
+      penalties:
+        m.penHome != null || m.penAway != null
+          ? { home: m.penHome, away: m.penAway }
+          : null,
+      competition: m.competitionName,
+      competitionSlug: null,
+      country: m.country || "",
+      countryAr: m.country ? localizeSplCountry(m.country) : "",
+      flag: null,
+      leagueId,
+      leagueLogo: m.competitionLogo,
+    };
+  });
+}
+
 export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
   return withSWR(`spl:world-live`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
     const [rows, ongoing] = await Promise.all([
@@ -686,6 +746,18 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
       if (ongoing.size === 0) return true; // تعذّر تحديد المواسم → لا نُفرّغ الصفحة
       return ongoing.has(id); // دوري عالمي موسمه قائم فقط
     });
+
+    // احتياطي TheSports عندما يكون AF فارغًا أو فقيرًا بعد الفلترة
+    if (visible.length < WORLD_LIVE_AF_MIN) {
+      const tsBoard = await getTheSportsLiveBoard().catch(() => [] as TsLiveBoardItem[]);
+      if (tsBoard.length > 0) {
+        return mapTsBoardToWorldLive(tsBoard).sort(
+          (a, b) => a.timestamp - b.timestamp,
+        );
+      }
+      if (visible.length === 0) return [];
+    }
+
     // فرق وملاعب + دوريات خارج القواميس → الطبقة الموحّدة (فوري بالمتاح، ملء بالخلفية)
     const tr = await fixtureTranslators(visible);
     const leagueItems = visible
