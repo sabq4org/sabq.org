@@ -52,7 +52,9 @@ export async function parseCSV(buffer: Buffer): Promise<ParsedDataset> {
 export async function parseExcel(buffer: Buffer): Promise<ParsedDataset> {
   try {
     const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(buffer);
+    // TS7 lib.d.ts widened ArrayBuffer; ExcelJS's bundled Buffer type no longer
+    // matches Node's Buffer<ArrayBufferLike> structurally. Runtime is unchanged.
+    await workbook.xlsx.load(buffer as unknown as ArrayBuffer);
 
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {

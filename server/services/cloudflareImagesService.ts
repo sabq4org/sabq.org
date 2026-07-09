@@ -162,7 +162,7 @@ class CloudflareImagesService {
           'Authorization': `Bearer ${apiToken}`,
           'Content-Type': `multipart/form-data; boundary=${boundary}`,
         },
-        body: body,
+        body: new Uint8Array(body),
         signal: AbortSignal.timeout(25_000),
       });
 
@@ -177,7 +177,7 @@ class CloudflareImagesService {
         const retryResp = await fetch(apiEndpoint, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': `multipart/form-data; boundary=${boundary}` },
-          body: body,
+          body: new Uint8Array(body),
           signal: AbortSignal.timeout(20_000),
         });
         if (!retryResp.ok) {
