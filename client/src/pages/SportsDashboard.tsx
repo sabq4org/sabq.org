@@ -29,6 +29,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { VaraMembershipBadge } from "@/components/sports/VaraMembershipBadge";
+import { VaraAppPromo } from "@/components/sports/VaraAppPromo";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getCacheBustedImageUrl, getObjectPosition } from "@/lib/imageUtils";
 import type { ArticleWithDetails, Category } from "@shared/schema";
@@ -256,6 +257,11 @@ function SportsHero({
       <p className="mx-auto mt-3 max-w-2xl text-sm text-muted-foreground sm:mt-4 sm:text-base md:text-lg">
         أخبار ونتائج مباشرة وترتيب وأرقام كل البطولات — من المونديال إلى دوري روشن، في مكان واحد.
       </p>
+
+      {/* إعلان ناعم لتطبيق VARA — iOS فقط، يظهر للزوار على أجهزة آبل. */}
+      <div className="flex justify-center">
+        <VaraAppPromo />
+      </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-center gap-3 sm:mt-6">
         {liveCount > 0 && (
