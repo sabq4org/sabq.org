@@ -25,7 +25,6 @@
 
 - **المظهر:** `SpThemeMode` — تلقائي / فاتح / داكن عبر `.preferredColorScheme(themeMode.colorScheme)` في `SabqSportsApp.swift` (لم يعد مفروضًا فاتحًا).
 - **الخلفية المحيطة** (`SpAmbientBackground`) = `screenGradient` فقط — بلا توهّجات/نقشة.
-- **هامش الشاشة الموحّد:** `SpTheme.screenHPad` + `.screenHPadding()` / `.screenPadding()`.
 - **قاعدة التحويل** (كتلة ملونة → بطاقة): الخلفية `card`+`cardStroke`، الزوايا `cardRadius`، النصّ `onDark*`، الأزرار النشطة = لون التطبيق. **يُستثنى الدلالي** (الكرت الأصفر، تمييز فريقين).
 
 كل الشاشات تتبع هذه الهوية: الرئيسية، البطولات، العالمية، الحساب، مركز المباراة، النادي، اللاعب.

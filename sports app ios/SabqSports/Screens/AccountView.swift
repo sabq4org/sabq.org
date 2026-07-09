@@ -61,7 +61,7 @@ struct AccountView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 2)
                 }
-                .screenPadding()
+                .padding(16)
             }
             .refreshable { await auth.loadUserData() }
             .autoHideTabBar()
