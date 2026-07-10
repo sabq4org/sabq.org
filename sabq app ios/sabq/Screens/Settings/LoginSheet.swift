@@ -26,11 +26,17 @@ struct LoginSheet: View {
         _isRegisterMode = State(initialValue: initialMode)
     }
 
+    private var awaitingName: Bool {
+        authStore.isLoggedIn && authStore.needsDisplayName
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    if authStore.registrationPending {
+                    if awaitingName {
+                        CompleteNameForm(onDone: { dismiss() })
+                    } else if authStore.registrationPending {
                         registrationSuccessView
                     } else {
                         loginFormView
@@ -40,15 +46,18 @@ struct LoginSheet: View {
             }
             .background(SabqTheme.background)
             .sabqRTL()
+            .interactiveDismissDisabled(awaitingName)
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button {
-                        authStore.clearMessages()
-                        dismiss()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(SabqFonts.app(size: 22))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
+                if !awaitingName {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            authStore.clearMessages()
+                            dismiss()
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(SabqFonts.app(size: 22))
+                                .foregroundStyle(SabqTheme.tertiaryInk)
+                        }
                     }
                 }
             }
@@ -57,9 +66,8 @@ struct LoginSheet: View {
             }
             .sheet(isPresented: $showAISignUp, onDismiss: {
                 // Conversational signup auto-logs the user in. If it
-                // succeeded, close this login sheet too so the user lands
-                // back on the dashboard logged in.
-                if authStore.isLoggedIn {
+                // succeeded (and name is complete), close this login sheet too.
+                if authStore.isLoggedIn && !authStore.needsDisplayName {
                     dismiss()
                 }
             }) {
@@ -67,6 +75,7 @@ struct LoginSheet: View {
                     .environment(authStore)
             }
             .onAppear {
+                authStore.isAuthSheetPresented = true
                 // Callers that wanted the register form (initialMode=true)
                 // now skip straight to the conversational signup sheet.
                 if isRegisterMode {
@@ -74,8 +83,14 @@ struct LoginSheet: View {
                     showAISignUp = true
                 }
             }
+            .onDisappear {
+                authStore.isAuthSheetPresented = false
+            }
             .onChange(of: authStore.isLoggedIn) { _, loggedIn in
-                if loggedIn { dismiss() }
+                if loggedIn && !authStore.needsDisplayName { dismiss() }
+            }
+            .onChange(of: authStore.needsDisplayName) { _, needs in
+                if authStore.isLoggedIn && !needs { dismiss() }
             }
         }
     }
@@ -149,7 +164,9 @@ struct LoginSheet: View {
 
             dividerOr
 
-            SocialAuthButtons(onSuccess: { dismiss() })
+            SocialAuthButtons(onSuccess: {
+                if !authStore.needsDisplayName { dismiss() }
+            })
 
             if authStore.errorSource == .social, let error = authStore.errorMessage {
                 credentialsErrorBanner(error)

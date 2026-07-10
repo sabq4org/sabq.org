@@ -78,15 +78,37 @@ fun LoginScreen(
 ) {
     val form by viewModel.form.collectAsStateWithLifecycle()
     val resend by viewModel.resend.collectAsStateWithLifecycle()
+    val currentUser by viewModel.currentUser.collectAsStateWithLifecycle()
 
     var mode by remember { mutableStateOf(LoginMode.Phone) }
     var identifier by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var awaitingName by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.resetForm() }
 
     LaunchedEffect(form) {
-        if (form is AuthFormState.Success) onAuthenticated()
+        val success = form as? AuthFormState.Success ?: return@LaunchedEffect
+        if (success.user.needsDisplayName) {
+            awaitingName = true
+        } else {
+            onAuthenticated()
+        }
+    }
+
+    // بعد حفظ الاسم من الشاشة الإلزامية — أغلق الدخول.
+    LaunchedEffect(currentUser?.firstName, awaitingName) {
+        if (awaitingName && currentUser != null && !currentUser!!.needsDisplayName) {
+            onAuthenticated()
+        }
+    }
+
+    if (awaitingName) {
+        CompleteNameScreen(
+            onDone = onAuthenticated,
+            phoneHint = currentUser?.phone,
+        )
+        return
     }
 
     Column(

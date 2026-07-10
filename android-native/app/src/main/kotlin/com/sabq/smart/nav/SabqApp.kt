@@ -24,7 +24,9 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.sabq.smart.feature.article.ArticleDetailScreen
 import com.sabq.smart.feature.auth.LoginScreen
+import com.sabq.smart.feature.auth.CompleteNameScreen
 import com.sabq.smart.feature.auth.SmartSignUpScreen
+import com.sabq.smart.feature.auth.AuthViewModel
 import com.sabq.smart.feature.bookmarks.BookmarksScreen
 import com.sabq.smart.feature.brief.DailyBriefScreen
 import com.sabq.smart.feature.brief.InterestsPickerScreen
@@ -173,9 +175,11 @@ object SabqRoutes {
 fun SabqApp(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     pushNavViewModel: com.sabq.smart.data.push.PushNavViewModel = hiltViewModel(),
+    authViewModel: AuthViewModel = hiltViewModel(),
 ) {
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val pendingPush by pushNavViewModel.target.collectAsStateWithLifecycle()
+    val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
     val isDarkTheme = if (settings.followsSystemDark)
         androidx.compose.foundation.isSystemInDarkTheme()
     else settings.isDarkMode
@@ -209,6 +213,11 @@ fun SabqApp(
         // Show the floating tab bar only on top-level tab routes; it
         // hides for ArticleDetail so the reader gets the full screen.
         val showTabBar = currentTab != null
+
+        // جلسات قديمة بلا اسم — غطاء إلزامي (شاشة الدخول تتولى الإكمال بعد OTP).
+        val showCompleteName = currentUser?.needsDisplayName == true &&
+            currentRoute != SabqRoutes.Login &&
+            settings.hasCompletedOnboardingV2
 
         Box(
             modifier = Modifier
@@ -786,6 +795,11 @@ fun SabqApp(
             if (!settings.hasCompletedOnboardingV2) {
                 OnboardingScreen(
                     onComplete = { settingsViewModel.completeOnboarding() },
+                )
+            } else if (showCompleteName) {
+                CompleteNameScreen(
+                    onDone = { /* AuthRepository cache updates → needsDisplayName flips */ },
+                    phoneHint = currentUser?.phone,
                 )
             }
         }

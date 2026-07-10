@@ -32,7 +32,7 @@ data class DeleteAccountRequest(val password: String)
 @Serializable
 data class UpdateProfileRequest(
     val firstName: String,
-    val lastName: String,
+    val lastName: String? = null,
     val bio: String? = null,
     val city: String? = null,
     val gender: String? = null,
