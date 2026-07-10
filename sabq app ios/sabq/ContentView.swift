@@ -24,6 +24,7 @@ struct ContentView: View {
     /// reader scrolls inside Home/Detail screens. See TabBarVisibility
     /// in SabqComponents.swift.
     @State private var tabBarVisibility = TabBarVisibility.shared
+    @State private var showCompleteName = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -272,12 +273,33 @@ struct ContentView: View {
             async let auth: Void = authStore.checkAuth()
             async let articles: Void = articlesStore.loadArticles()
             _ = await (auth, articles)
+            syncNameGate()
         }
+        .fullScreenCover(isPresented: $showCompleteName) {
+            NavigationStack {
+                ScrollView {
+                    CompleteNameForm(onDone: { showCompleteName = false })
+                        .padding(24)
+                }
+                .background(SabqTheme.background.ignoresSafeArea())
+                .sabqRTL()
+                .interactiveDismissDisabled(true)
+            }
+            .environment(authStore)
+        }
+        .onChange(of: authStore.isLoggedIn) { _, _ in syncNameGate() }
+        .onChange(of: authStore.needsDisplayName) { _, _ in syncNameGate() }
+        .onChange(of: authStore.isAuthSheetPresented) { _, _ in syncNameGate() }
         .onChange(of: navigationPath.count) { _, _ in
             // Whenever the stack pops/pushes, restore the bar so the
             // reader never lands on a screen with the bar already hidden.
             tabBarVisibility.reset()
         }
+    }
+
+    private func syncNameGate() {
+        // ورقة الدخول تتولى الإكمال بعد OTP؛ الغطاء للجلسات المستعادة فقط.
+        showCompleteName = authStore.needsDisplayName && !authStore.isAuthSheetPresented
     }
 
     /// Translate a parsed deep link from a notification tap into a concrete

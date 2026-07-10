@@ -100,6 +100,21 @@ interface User {
   createdAt: string;
   lastActivityAt: string | null;
   hasPressCard: boolean;
+  phoneNumber?: string | null;
+}
+
+/** عرض أوضح في الإدارة لحسابات الجوال بلا اسم. */
+function adminUserLabel(user: {
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+}): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  if (name) return name;
+  if (user.phoneNumber?.trim()) return `عضو جوال · ${user.phoneNumber.trim()}`;
+  if (user.email?.toLowerCase().includes("@phone.sabq.org")) return "عضو جوال";
+  return "بدون اسم";
 }
 
 interface KPIs {
@@ -292,15 +307,11 @@ export default function AdminUsers() {
   // Delete mutation (soft delete - bans user)
   const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
-      console.log("[DELETE] Sending DELETE request for user:", userId);
-      const result = await apiRequest(`/api/admin/users/${userId}`, {
+      return await apiRequest(`/api/admin/users/${userId}`, {
         method: "DELETE",
       });
-      console.log("[DELETE] Response:", result);
-      return result;
     },
     onSuccess: () => {
-      console.log("[DELETE] Success! Invalidating queries...");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/users/kpis"] });
       toast({ title: "تم الحذف", description: "تم حذف المستخدم بنجاح" });
@@ -345,7 +356,7 @@ export default function AdminUsers() {
       header: "المستخدم",
       cell: (info) => {
         const user = info.row.original;
-        const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ") || "بدون اسم";
+        const fullName = adminUserLabel(user);
         return (
           <div className="flex items-center gap-3">
             <Avatar data-testid={`avatar-${user.id}`}>
@@ -451,7 +462,6 @@ export default function AdminUsers() {
       cell: (info) => {
         const rowUser = info.row.original;
         const isCurrentUser = rowUser.id === user?.id;
-        console.log("[ACTIONS CELL] User:", rowUser.email, "status:", rowUser.status, "isCurrentUser:", isCurrentUser);
         return (
           <div className="flex items-center gap-2">
             {rowUser.hasPressCard && (
@@ -538,7 +548,6 @@ export default function AdminUsers() {
               {(rowUser.status === "banned" || rowUser.status === "deleted") && (
                 <DropdownMenuItem
                   onClick={() => {
-                    console.log("[PERMANENT DELETE] Opening dialog for user:", rowUser.id, rowUser.email, "status:", rowUser.status);
                     setSelectedUser(rowUser);
                     setPermanentDeleteDialogOpen(true);
                   }}
@@ -1113,7 +1122,6 @@ export default function AdminUsers() {
               onClick={(e) => {
                 e.preventDefault();
                 if (selectedUser) {
-                  console.log("[DELETE] Attempting to delete user:", selectedUser.id, selectedUser.email);
                   deleteMutation.mutate(selectedUser.id);
                 } else {
                   console.error("[DELETE] No selected user!");

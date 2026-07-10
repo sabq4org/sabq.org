@@ -118,6 +118,38 @@ class AccountActionViewModel @Inject constructor(
         }
     }
 
+    /** إكمال الاسم الإلزامي — الاسم الأول مطلوب، العائلة اختياري. */
+    fun completeDisplayName(
+        firstName: String,
+        lastName: String?,
+        onSaved: (User) -> Unit,
+    ) {
+        val fn = firstName.trim()
+        if (fn.length < 2) {
+            _state.update {
+                it.copy(errorMessage = "الاسم الأول يجب أن يكون حرفين على الأقل")
+            }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(isLoading = true, errorMessage = null) }
+            try {
+                val ln = lastName?.trim()?.takeIf { it.length >= 2 }
+                val user = accountRepo.completeDisplayName(fn, ln)
+                authRepo.updateCachedUser(user)
+                _state.update { it.copy(isLoading = false, success = true) }
+                onSaved(user)
+            } catch (t: Throwable) {
+                _state.update {
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = t.localizedMessage ?: "تعذر حفظ الاسم",
+                    )
+                }
+            }
+        }
+    }
+
     fun sendContactMessage(
         name: String,
         phone: String,

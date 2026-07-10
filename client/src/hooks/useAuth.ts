@@ -11,9 +11,16 @@ export type User = {
   permissions?: string[]; // All user permissions from RBAC system
   firstName?: string;
   lastName?: string;
+  phoneNumber?: string;
+  authProvider?: string;
   isProfileComplete?: boolean;
   profileImageUrl?: string;
 };
+
+/** هل يحتاج المستخدم إدخال اسم عرض (حسابات الجوال بلا firstName). */
+export function needsDisplayName(user: User | null | undefined): boolean {
+  return Boolean(user?.id) && !(user?.firstName ?? "").trim();
+}
 
 // "*" is a wildcard issued to superuser-equivalent roles (admin,
 // system_admin) by getPermissionsForRoles in rbac-constants. When present
@@ -135,17 +142,22 @@ export function getHighestRole(user: User | null | undefined): string {
 // Get default redirect path based on user's highest role
 export function getDefaultRedirectPath(user: User | null | undefined): string {
   if (!user) return '/';
-  
+
+  // قبل أي وجهة: أكمل الاسم إن كان فارغًا (دخول الجوال).
+  if (needsDisplayName(user)) {
+    return '/complete-name';
+  }
+
   // Comments moderator goes directly to AI moderation dashboard
   if (hasRole(user, 'comments_moderator')) {
     return '/dashboard/ai-moderation';
   }
-  
+
   // Staff members go to dashboard
   if (isStaff(user)) {
     return '/dashboard';
   }
-  
+
   // Regular readers go to home
   return '/';
 }

@@ -131,6 +131,20 @@ interface UserListItem {
   loyalty?: UserLoyalty | null;
 }
 
+/** عرض أوضح في الإدارة لحسابات الجوال بلا اسم. */
+function adminUserLabel(user: {
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+}): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  if (name) return name;
+  if (user.phoneNumber?.trim()) return `عضو جوال · ${user.phoneNumber.trim()}`;
+  if (user.email?.toLowerCase().includes("@phone.sabq.org")) return "عضو جوال";
+  return "بدون اسم";
+}
+
 // Role type
 interface Role {
   id: string;
@@ -216,9 +230,11 @@ export default function UsersManagement() {
       params.append("page", String(page));
       params.append("pageSize", String(pageSize));
 
-      const res = await fetch(`/api/admin/users?${params}`);
-      if (!res.ok) return { items: [], users: [], total: 0, page, pageSize, hasMore: false };
-      return res.json();
+      try {
+        return await apiRequest(`/api/admin/users?${params}`);
+      } catch {
+        return { items: [], users: [], total: 0, page, pageSize, hasMore: false };
+      }
     },
     enabled: !!user,
   });
@@ -238,10 +254,12 @@ export default function UsersManagement() {
   const { data: rolesRaw } = useQuery<Role[]>({
     queryKey: ["/api/roles"],
     queryFn: async () => {
-      const res = await fetch("/api/roles");
-      if (!res.ok) return [];
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
+      try {
+        const data = await apiRequest("/api/roles");
+        return Array.isArray(data) ? data : [];
+      } catch {
+        return [];
+      }
     },
   });
   const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
@@ -375,14 +393,11 @@ export default function UsersManagement() {
 
   const handleEditRoles = async (user: UserListItem) => {
     try {
-      const res = await fetch(`/api/admin/users/${user.id}/roles`);
-      if (res.ok) {
-        const roles = await res.json();
-        setEditingUserRoles({
-          userId: user.id,
-          currentRoles: roles.map((r: Role) => r.id),
-        });
-      }
+      const roles = await apiRequest(`/api/admin/users/${user.id}/roles`);
+      setEditingUserRoles({
+        userId: user.id,
+        currentRoles: (Array.isArray(roles) ? roles : []).map((r: Role) => r.id),
+      });
     } catch (error) {
       toast({
         title: "خطأ",
@@ -669,9 +684,7 @@ export default function UsersManagement() {
                             <div className="min-w-0 flex-1">
                               <div className="font-medium flex items-start gap-1 flex-wrap" data-testid={`text-name-${user.id}`}>
                                 <span className="break-words">
-                                  {user.firstName || user.lastName
-                                    ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
-                                    : "بدون اسم"}
+                                  {adminUserLabel(user)}
                                 </span>
                                 {user.verificationBadge === "gold" && (
                                   <BadgeCheck className="h-4 w-4 text-amber-500 shrink-0 mt-1" aria-label="موثق ذهبي" />
@@ -1015,9 +1028,7 @@ export default function UsersManagement() {
                   <div className="min-w-0">
                     <SheetTitle className="flex items-center gap-1.5 text-base">
                       <span className="truncate">
-                        {viewingDetails.firstName || viewingDetails.lastName
-                          ? `${viewingDetails.firstName || ""} ${viewingDetails.lastName || ""}`.trim()
-                          : "بدون اسم"}
+                        {adminUserLabel(viewingDetails)}
                       </span>
                       {viewingDetails.verificationBadge === "gold" && (
                         <BadgeCheck className="h-5 w-5 text-amber-500" aria-label="موثق ذهبي" />
@@ -1237,9 +1248,11 @@ function UserRoles({ userId }: { userId: string }) {
   const { data: userRoles, isLoading } = useQuery<Role[]>({
     queryKey: ["/api/admin/users", userId, "roles"],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/users/${userId}/roles`);
-      if (!res.ok) return [];
-      return res.json();
+      try {
+        return await apiRequest(`/api/admin/users/${userId}/roles`);
+      } catch {
+        return [];
+      }
     },
   });
 

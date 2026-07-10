@@ -126,6 +126,10 @@ data class User(
     val hasMinimumBasicProfile: Boolean
         get() = !city.isNullOrBlank() && !gender.isNullOrBlank()
 
+    /** حساب جوال بلا اسم عرض — بوابة إلزامية منفصلة عن [hasMinimumBasicProfile]. */
+    val needsDisplayName: Boolean
+        get() = firstName.isNullOrBlank()
+
     /** True when at least one interest category is selected. */
     val hasAtLeastOneInterest: Boolean
         get() = interests.isNotEmpty()

@@ -1906,11 +1906,9 @@ router.put("/members/profile", async (req: Request, res: Response) => {
       }
     }
 
-    // Mirror web storage.updateUser: a full name implies a complete profile
-    // for phone/OAuth accounts that only needed a display name.
-    const nextFirst = (updates.firstName as string | undefined) ?? currentRow?.firstName;
-    const nextLast = (updates.lastName as string | undefined) ?? currentRow?.lastName;
-    if (nextFirst?.trim() && nextLast?.trim()) {
+    // الاسم الأول كافٍ لاكتمال الملف (حسابات الجوال). الاسم العائلي اختياري.
+    const nextFirst = ((updates.firstName as string | undefined) ?? currentRow?.firstName ?? "").trim();
+    if (nextFirst.length >= 2) {
       updates.isProfileComplete = true;
     }
 

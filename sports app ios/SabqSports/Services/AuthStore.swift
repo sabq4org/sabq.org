@@ -32,6 +32,14 @@ final class SpAuthStore {
 
     var isLoggedIn: Bool { token != nil }
 
+    /// حساب بلا اسم عرض (دخول جوال) — يُطلب إكماله قبل إغلاق ورقة الدخول.
+    var needsDisplayName: Bool {
+        guard isLoggedIn, let m = member else { return false }
+        let first = (m.firstName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let full = (m.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return first.isEmpty && full.isEmpty
+    }
+
     func isFollowing(kind: String, refId: String) -> Bool {
         followedKeys.contains("\(kind):\(refId)")
     }

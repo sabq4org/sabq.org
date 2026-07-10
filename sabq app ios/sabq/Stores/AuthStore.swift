@@ -28,6 +28,15 @@ final class AuthStore {
     /// finishes editing their profile or picks at least one interest.
     var needsProfileCompletion: Bool = false
 
+    /// يُضبط من LoginSheet لتفادي غطاء الاسم المزدوج أثناء ورقة الدخول.
+    var isAuthSheetPresented = false
+
+    /// حساب بلا اسم عرض (دخول جوال) — يُطلب إكماله قبل إغلاق ورقة الدخول.
+    var needsDisplayName: Bool {
+        guard isLoggedIn, let user = currentUser else { return false }
+        return (user.firstName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var loginAttempts = 0
     private var lastLoginAttempt: Date?
     private var lastAuthenticatedAt: Date?
