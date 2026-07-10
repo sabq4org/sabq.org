@@ -307,15 +307,11 @@ export default function AdminUsers() {
   // Delete mutation (soft delete - bans user)
   const deleteMutation = useMutation({
     mutationFn: async (userId: string) => {
-      console.log("[DELETE] Sending DELETE request for user:", userId);
-      const result = await apiRequest(`/api/admin/users/${userId}`, {
+      return await apiRequest(`/api/admin/users/${userId}`, {
         method: "DELETE",
       });
-      console.log("[DELETE] Response:", result);
-      return result;
     },
     onSuccess: () => {
-      console.log("[DELETE] Success! Invalidating queries...");
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/users/kpis"] });
       toast({ title: "تم الحذف", description: "تم حذف المستخدم بنجاح" });
@@ -466,7 +462,6 @@ export default function AdminUsers() {
       cell: (info) => {
         const rowUser = info.row.original;
         const isCurrentUser = rowUser.id === user?.id;
-        console.log("[ACTIONS CELL] User:", rowUser.email, "status:", rowUser.status, "isCurrentUser:", isCurrentUser);
         return (
           <div className="flex items-center gap-2">
             {rowUser.hasPressCard && (
@@ -553,7 +548,6 @@ export default function AdminUsers() {
               {(rowUser.status === "banned" || rowUser.status === "deleted") && (
                 <DropdownMenuItem
                   onClick={() => {
-                    console.log("[PERMANENT DELETE] Opening dialog for user:", rowUser.id, rowUser.email, "status:", rowUser.status);
                     setSelectedUser(rowUser);
                     setPermanentDeleteDialogOpen(true);
                   }}
@@ -1128,7 +1122,6 @@ export default function AdminUsers() {
               onClick={(e) => {
                 e.preventDefault();
                 if (selectedUser) {
-                  console.log("[DELETE] Attempting to delete user:", selectedUser.id, selectedUser.email);
                   deleteMutation.mutate(selectedUser.id);
                 } else {
                   console.error("[DELETE] No selected user!");

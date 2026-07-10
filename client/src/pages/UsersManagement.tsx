@@ -230,9 +230,11 @@ export default function UsersManagement() {
       params.append("page", String(page));
       params.append("pageSize", String(pageSize));
 
-      const res = await fetch(`/api/admin/users?${params}`);
-      if (!res.ok) return { items: [], users: [], total: 0, page, pageSize, hasMore: false };
-      return res.json();
+      try {
+        return await apiRequest(`/api/admin/users?${params}`);
+      } catch {
+        return { items: [], users: [], total: 0, page, pageSize, hasMore: false };
+      }
     },
     enabled: !!user,
   });
@@ -252,10 +254,12 @@ export default function UsersManagement() {
   const { data: rolesRaw } = useQuery<Role[]>({
     queryKey: ["/api/roles"],
     queryFn: async () => {
-      const res = await fetch("/api/roles");
-      if (!res.ok) return [];
-      const data = await res.json();
-      return Array.isArray(data) ? data : [];
+      try {
+        const data = await apiRequest("/api/roles");
+        return Array.isArray(data) ? data : [];
+      } catch {
+        return [];
+      }
     },
   });
   const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
@@ -389,14 +393,11 @@ export default function UsersManagement() {
 
   const handleEditRoles = async (user: UserListItem) => {
     try {
-      const res = await fetch(`/api/admin/users/${user.id}/roles`);
-      if (res.ok) {
-        const roles = await res.json();
-        setEditingUserRoles({
-          userId: user.id,
-          currentRoles: roles.map((r: Role) => r.id),
-        });
-      }
+      const roles = await apiRequest(`/api/admin/users/${user.id}/roles`);
+      setEditingUserRoles({
+        userId: user.id,
+        currentRoles: (Array.isArray(roles) ? roles : []).map((r: Role) => r.id),
+      });
     } catch (error) {
       toast({
         title: "خطأ",
@@ -1247,9 +1248,11 @@ function UserRoles({ userId }: { userId: string }) {
   const { data: userRoles, isLoading } = useQuery<Role[]>({
     queryKey: ["/api/admin/users", userId, "roles"],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/users/${userId}/roles`);
-      if (!res.ok) return [];
-      return res.json();
+      try {
+        return await apiRequest(`/api/admin/users/${userId}/roles`);
+      } catch {
+        return [];
+      }
     },
   });
 
