@@ -1075,7 +1075,8 @@ struct SpOtpBoxes: View {
             .environment(\.layoutDirection, .leftToRight)
             .allowsHitTesting(false)
 
-            // فوق الخانات وبشفافية شبه معدومة — iOS يرفض opacity=0 تمامًا لاقتراح الرمز.
+            // الحقل الحقيقي يبقى بكامل alpha حتى يعتبره iOS مؤهلاً لاقتراح رمز الرسالة.
+            // نخفي النص والأشر فقط؛ خفض opacity للحقل نفسه قد يمنع QuickType على أجهزة فعلية.
             TextField("", text: $code)
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
@@ -1086,7 +1087,6 @@ struct SpOtpBoxes: View {
                 .tint(.clear)
                 .multilineTextAlignment(.center)
                 .focused($focused)
-                .opacity(0.02)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
                 .onChange(of: code) { _, v in
@@ -1098,7 +1098,13 @@ struct SpOtpBoxes: View {
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
         .onTapGesture { focused = true }
-        .onAppear { focused = true }
+        .onAppear {
+            // انتظر دورة عرض حتى يكون TextField داخل hierarchy ثم اطلب لوحة المفاتيح.
+            Task { @MainActor in
+                await Task.yield()
+                focused = true
+            }
+        }
     }
 
     private func box(_ i: Int) -> some View {
