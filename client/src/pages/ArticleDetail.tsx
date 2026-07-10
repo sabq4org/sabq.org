@@ -951,9 +951,9 @@ export default function ArticleDetail() {
     try {
       setIsLoadingAudio(true);
       
-      // Cache busting: include article updatedAt + TTS provider version (bump when switching providers)
+      // Cache busting: include article updatedAt + TTS version (bump when normalize/provider changes)
       const timestamp = article?.updatedAt ? new Date(article.updatedAt).toISOString() : new Date().toISOString();
-      const audioUrl = `/api/articles/${slug}/summary-audio?v=${encodeURIComponent(timestamp)}&tts=google-v1`;
+      const audioUrl = `/api/articles/${slug}/summary-audio?v=${encodeURIComponent(timestamp)}&tts=tafqit-v2`;
       
       // Create audio element
       audioRef.current = new Audio(audioUrl);

@@ -97,4 +97,16 @@ describe("normalizeTextForTts", () => {
     const twice = normalizeTextForTts(once);
     expect(twice).toBe(once);
   });
+
+  it("strips HTML before verbalizing", () => {
+    const out = normalizeTextForTts("<p>نمو <strong>15%</strong> اليوم</p>");
+    expect(out).toContain("خمسة عشر بالمئة");
+    expect(out).not.toMatch(/<|>|strong/);
+  });
+
+  it("handles Arabic thousands separators", () => {
+    const out = normalizeTextForTts("بلغت القيمة ١٬٢٥٠ ريال");
+    expect(out).toContain("ريال");
+    expect(out).not.toMatch(/[0-9٠-٩]/);
+  });
 });

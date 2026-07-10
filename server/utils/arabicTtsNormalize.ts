@@ -5,6 +5,9 @@
  * scripts ("2026" → English-style, "15%" → "fifteen percent"). Converting
  * them to spoken Arabic words before synthesis fixes most of that without
  * changing providers.
+ *
+ * Applied at the leaf TTS services so every caller (newsletters, article
+ * summary audio, job queue, voice tests) benefits.
  */
 
 export type TtsNormalizeLanguage = "ar" | "en" | "ur";
@@ -46,8 +49,26 @@ const DIGIT_WORDS = [
   "صفر", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة",
 ];
 
+/** Digits not glued to Latin letters (Arabic letters OK). */
+const NUM = String.raw`(?<![A-Za-z0-9])(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+|\d+)(?![A-Za-z0-9])`;
+
 function toWesternDigits(input: string): string {
-  return input.replace(/[٠-٩۰-۹]/g, (d) => EASTERN_DIGITS[d] ?? d);
+  return input
+    .replace(/[٠-٩۰-۹]/g, (d) => EASTERN_DIGITS[d] ?? d)
+    .replace(/٬/g, ",")
+    .replace(/٫/g, ".");
+}
+
+function stripHtml(input: string): string {
+  return input
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#\d+;/g, " ");
 }
 
 function joinAnd(parts: string[]): string {
@@ -128,7 +149,6 @@ export function integerToArabicWords(value: number): string {
 /** Year like 2026 → "ألفين وستة وعشرين" (common news reading). */
 export function yearToArabicWords(year: number): string {
   if (year < 1000 || year > 9999) return integerToArabicWords(year);
-  // Prefer dual-thousand style for 2000–2999 which dominates current news.
   if (year >= 2000 && year < 3000) {
     const rem = year - 2000;
     if (rem === 0) return "ألفين";
@@ -143,8 +163,6 @@ function decimalToArabicWords(raw: string): string {
   const [intPart, fracPart] = normalized.split(".");
   const intWords = integerToArabicWords(parseInt(intPart, 10));
   if (!fracPart || /^0+$/.test(fracPart)) return intWords;
-  // Read fractional digits individually for clarity (0.75 → صفر فاصلة سبعة خمسة)
-  // but for short fractions use words: 3.5 → ثلاثة فاصلة خمسة
   if (fracPart.length <= 2) {
     const fracNum = parseInt(fracPart, 10);
     return `${intWords} فاصلة ${integerToArabicWords(fracNum)}`;
@@ -158,7 +176,6 @@ function digitsIndividually(digits: string): string {
 }
 
 function looksLikeIdOrPhone(digits: string): boolean {
-  // Long unbroken digit runs (phones, IDs, article refs) read better digit-by-digit.
   return digits.length >= 8;
 }
 
@@ -171,20 +188,15 @@ function verbalizeNumberToken(raw: string): string {
   if (cleaned.includes(".")) return decimalToArabicWords(cleaned);
   const n = parseInt(cleaned, 10);
   if (!Number.isFinite(n)) return raw;
-  // 4-digit years in news range
   if (cleaned.length === 4 && n >= 1900 && n <= 2100) return yearToArabicWords(n);
-  return integerToArabicWords(n);
-}
-
-function padMonthDay(n: number): string {
   return integerToArabicWords(n);
 }
 
 function dateToArabic(year: number, month: number, day: number): string {
   if (month < 1 || month > 12 || day < 1 || day > 31) {
-    return `${padMonthDay(day)}/${padMonthDay(month)}/${yearToArabicWords(year)}`;
+    return `${integerToArabicWords(day)}/${integerToArabicWords(month)}/${yearToArabicWords(year)}`;
   }
-  return `${padMonthDay(day)} ${MONTHS_AR[month]} ${yearToArabicWords(year)}`;
+  return `${integerToArabicWords(day)} ${MONTHS_AR[month]} ${yearToArabicWords(year)}`;
 }
 
 function timeToArabic(hour: number, minute: number): string {
@@ -208,8 +220,8 @@ export interface NormalizeTextForTtsOptions {
 }
 
 /**
- * Normalize a script for Arabic TTS: Eastern→Western digits, then verbalize
- * dates, times, percentages, currency, and remaining numbers.
+ * Normalize a script for Arabic TTS: strip HTML, Eastern→Western digits,
+ * then verbalize dates, times, percentages, currency, and remaining numbers.
  */
 export function normalizeTextForTts(
   text: string,
@@ -221,44 +233,36 @@ export function normalizeTextForTts(
     typeof options === "string" ? { language: options } : options;
   const lang = opts.language ?? "ar";
 
-  let out = toWesternDigits(text);
+  let out = toWesternDigits(stripHtml(text));
 
-  // Non-Arabic scripts: only normalize digit shapes, don't verbalize.
   if (lang === "en" || lang === "ur") return out;
   if (lang === "auto" && !isMostlyArabic(out)) return out;
 
-  // ISO / dashed dates: 2026-07-10 or 10-07-2026
   out = out.replace(
-    /\b(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/g,
-    (_m, a, b, c) => {
-      const y = parseInt(a, 10);
-      const mo = parseInt(b, 10);
-      const d = parseInt(c, 10);
-      // yyyy-mm-dd
-      if (a.length === 4) return dateToArabic(y, mo, d);
-      return _m;
-    },
+    /(?<![A-Za-z0-9])(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?![A-Za-z0-9])/g,
+    (_m, a, b, c) => dateToArabic(parseInt(a, 10), parseInt(b, 10), parseInt(c, 10)),
   );
   out = out.replace(
-    /\b(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})\b/g,
+    /(?<![A-Za-z0-9])(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})(?![A-Za-z0-9])/g,
     (_m, d, mo, y) => dateToArabic(parseInt(y, 10), parseInt(mo, 10), parseInt(d, 10)),
   );
 
-  // Times: "14:30" or "الساعة 14:30" → avoid duplicating "الساعة"
-  out = out.replace(/(?:الساعة\s*)?([01]?\d|2[0-3]):([0-5]\d)\b/g, (_m, hh, mm) =>
+  out = out.replace(/(?:الساعة\s*)?([01]?\d|2[0-3]):([0-5]\d)(?![A-Za-z0-9])/g, (_m, hh, mm) =>
     timeToArabic(parseInt(hh, 10), parseInt(mm, 10)),
   );
 
-  // Percentages: 15% / 15.5٪
   out = out.replace(
-    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*[%٪]/g,
+    new RegExp(`${NUM}\\s*[%٪]`, "g"),
+    (_m, num) => `${decimalToArabicWords(String(num).replace(/,/g, ""))} بالمئة`,
+  );
+  out = out.replace(
+    new RegExp(`${NUM}\\s*بالمئة`, "g"),
     (_m, num) => `${decimalToArabicWords(String(num).replace(/,/g, ""))} بالمئة`,
   );
 
-  // Currency before bare numbers: 1,250 ريال / 3.5 مليون ريال
   out = out.replace(
-    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*(مليون|مليار|ألف)?\s*(ريال|ر\.?\s*س\.?|SAR)\b/gi,
-    (_m, num, scale, _currency) => {
+    new RegExp(`${NUM}\\s*(مليون|مليار|ألف)?\\s*(ريال|ر\\.?\\s*س\\.?|SAR)\\b`, "gi"),
+    (_m, num, scale) => {
       const base = decimalToArabicWords(String(num).replace(/,/g, ""));
       if (scale === "مليون") return `${base} مليون ريال`;
       if (scale === "مليار") return `${base} مليار ريال`;
@@ -267,24 +271,17 @@ export function normalizeTextForTts(
     },
   );
 
-  // Number + Arabic scale word already in text: 3.5 مليون / 12 ألف
   out = out.replace(
-    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?|\d+(?:\.\d+)?)\s*(ملايين|مليونان|مليون|مليارات|ملياران|مليار|آلاف|ألفان|ألف)\b/g,
+    new RegExp(`${NUM}\\s*(ملايين|مليونان|مليون|مليارات|ملياران|مليار|آلاف|ألفان|ألف)(?=\\s|$|[،,.])`, "g"),
     (_m, num, scale) => `${decimalToArabicWords(String(num).replace(/,/g, ""))} ${scale}`,
   );
 
-  // Ranges: 10-15 or 10–15 (en/em dash)
   out = out.replace(
-    /\b(\d{1,4})\s*[–—-]\s*(\d{1,4})\b/g,
+    /(?<![A-Za-z0-9])(\d{1,4})\s*[–—-]\s*(\d{1,4})(?![A-Za-z0-9])/g,
     (_m, a, b) => `${verbalizeNumberToken(a)} إلى ${verbalizeNumberToken(b)}`,
   );
 
-  // Remaining standalone numbers (with optional thousands separators / decimals)
-  out = out.replace(
-    /\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b|\b\d+\.\d+\b|\b\d+\b/g,
-    (num) => verbalizeNumberToken(num),
-  );
+  out = out.replace(new RegExp(NUM, "g"), (_m, num) => verbalizeNumberToken(num));
 
-  // Tidy spaces
   return out.replace(/[ \t]{2,}/g, " ").replace(/ \n/g, "\n").trim();
 }

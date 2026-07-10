@@ -1,5 +1,6 @@
 import { Readable } from 'stream';
 import { retryWithBackoff } from '../utils/retryWithBackoff';
+import { normalizeTextForTts } from '../utils/arabicTtsNormalize';
 
 export interface TTSOptions {
   text: string;
@@ -268,11 +269,13 @@ export class ElevenLabsService {
   private async _textToSpeechRequest(options: TTSOptions, timeoutMs: number): Promise<Buffer> {
     const voiceId = options.voiceId || this.defaultVoiceId;
     const model = options.model || 'eleven_multilingual_v2';
+    // Leaf-level تفقيط so direct callers (summary-audio, job queue) get spoken numbers.
+    const text = normalizeTextForTts(options.text, { language: options.language ?? 'auto' });
     
     const url = `${this.baseUrl}/text-to-speech/${voiceId}`;
     
     const requestBody = {
-      text: options.text,
+      text,
       model_id: model,
       voice_settings: options.voiceSettings || this.defaultVoiceSettings
     };
