@@ -47,9 +47,10 @@ final class SpLiveActivityManager {
 
     // MARK: بدء النشاط
     func start(for fixture: SpFixture) {
-        // مباريات «عالمية» (id سالب): مركزها ومركز /lite يعملان الآن، لكن نؤجّل
-        // Live Activity على شاشة القفل ريثما يُختبر مسار التحديث على جهاز فعلي.
-        guard fixture.id > 0 else { return }
+        // المعرّف الموجب = API-Football، والسالب = مباراة عالمية من TheSports.
+        // الخادم يحلّ المصدرين عبر المسار نفسه؛ رفض السالب هنا كان يجعل زر الهاتف
+        // ظاهرًا لكن بلا استجابة في شاشة «عالمية».
+        guard fixture.id != 0 else { return }
         adoptExistingIfNeeded()
         guard isSupported, activities[fixture.id] == nil else { return }
         // أظهر الحالة فورًا (تفاؤليًّا) ريثما تكتمل عملية البدء غير المتزامنة.

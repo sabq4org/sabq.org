@@ -20,6 +20,7 @@ import { db } from "../db";
 import { liveActivityTokens } from "@shared/schema";
 import {
   getMatchDetail,
+  getWorldLiveMatchDetail,
   SAUDI_COMPETITIONS,
   type SplMatchDetail,
   type SplMatchEvent,
@@ -349,6 +350,18 @@ function gcFixtureToSplDetail(fx: GcFixture): SplMatchDetail {
 }
 
 async function resolveMatchDetailForLiveActivity(fixtureId: number): Promise<SplMatchDetail | null> {
+  // مباريات تبويب «عالمية» تحمل معرّف TheSports سالبًا ولا وجود لها في
+  // API-Football. كان التطبيق يسمح بعرض زر النشاط ثم يرفضه محليًّا، وحتى لو
+  // سُجّل التوكن لم يجد العامل التفاصيل. حلّ المصدر الصحيح هنا يجعل نفس دورة
+  // APNs تعمل للمباريات السعودية والعالمية.
+  if (fixtureId < 0) {
+    try {
+      return await getWorldLiveMatchDetail(fixtureId);
+    } catch (err) {
+      console.warn(`[LiveActivity] world match detail failed for ${fixtureId}:`, err);
+      return null;
+    }
+  }
   try {
     const detail = await getMatchDetail(fixtureId);
     if (detail) return detail;

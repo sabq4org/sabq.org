@@ -2079,7 +2079,21 @@ struct SpMatchCenter: View {
                 liveActivity.update(with: liveActivityFixture(d.fixture), lastEvent: lastEventText(d.events))
             }
         } catch {
-            self.loadError = error.localizedDescription
+            // لوحة المباشر تمنحنا لقطةً كاملة للترويسة. قد تخرج المباراة من
+            // endpoint التفاصيل فور نهايتها أو أثناء تبديل مزوّد البيانات؛ لا
+            // نستبدل النتيجة الظاهرة برسالة 404 ما دام لدينا preview صالح.
+            if let preview {
+                self.detail = SpMatchDetail(
+                    fixture: preview,
+                    events: [],
+                    statistics: nil,
+                    lineups: [],
+                    leagueId: nil
+                )
+                self.loadError = nil
+            } else {
+                self.loadError = error.localizedDescription
+            }
         }
         self.xg = await xgOpt
         self.momentum = await momOpt
