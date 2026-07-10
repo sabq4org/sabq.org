@@ -59,10 +59,28 @@ final class SpLiveActivityManager {
         // المعرّف الموجب = API-Football، والسالب = مباراة عالمية من TheSports.
         // الخادم يحلّ المصدرين عبر المسار نفسه؛ رفض السالب هنا كان يجعل زر الهاتف
         // ظاهرًا لكن بلا استجابة في شاشة «عالمية».
-        guard fixture.id != 0 else { return }
+        guard fixture.id != 0 else {
+            startErrorMessage = L("تعذّر تحديد المباراة")
+            return
+        }
         adoptExistingIfNeeded()
         pruneInactiveActivities()
-        guard isSupported, activities[fixture.id] == nil else { return }
+        guard isSupported else {
+            startErrorMessage = L("فعّل Live Activities من إعدادات الجهاز لهذا التطبيق.")
+            return
+        }
+        // نشاط قائم فعلًا → زامن الواجهة بدل ابتلاع النقرة بصمت.
+        if let existing = activities[fixture.id] {
+            let state = existing.activityState
+            if state == .active || state == .stale {
+                activeFixtureIds.insert(fixture.id)
+                return
+            }
+            activities[fixture.id] = nil
+            pushTokens[fixture.id] = nil
+            activeFixtureIds.remove(fixture.id)
+            observedActivityIds.remove(existing.id)
+        }
         startErrorMessage = nil
         // أظهر الحالة فورًا (تفاؤليًّا) ريثما تكتمل عملية البدء غير المتزامنة.
         activeFixtureIds.insert(fixture.id)

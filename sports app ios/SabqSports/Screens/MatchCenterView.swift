@@ -253,26 +253,38 @@ struct SpMatchCenter: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let f = fixture {
+                // زرّان في ToolbarItem واحد (HStack) بدل ToolbarItemَين منفصلين —
+                // على iOS 26 Liquid Glass كان تجميع العنصرين في كبسولة مشتركة يوسّع
+                // منطقة لمس النجمة فوق أيقونة الهاتف فيبدو زر شاشة القفل ميتًا.
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        matchFollows.toggle(f)
-                    } label: {
-                        let following = matchFollows.isFollowing(f.id)
-                        Image(systemName: following ? "star.fill" : "star")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(following ? SpTheme.gold : acc)
-                    }
-                }
-                // متابعة لحظية على شاشة القفل (Live Activity) — جارية أو قريبة (≤ ساعة).
-                if liveActivity.isSupported && liveFollowEligible(f) {
-                    ToolbarItem(placement: .topBarLeading) {
+                    HStack(spacing: 2) {
                         Button {
-                            liveActivity.toggle(for: liveActivityFixture(f))
+                            matchFollows.toggle(f)
                         } label: {
-                            let on = liveActivity.isActive(f.id)
-                            Image(systemName: on ? "lock.iphone" : "platter.filled.bottom.iphone")
+                            let following = matchFollows.isFollowing(f.id)
+                            Image(systemName: following ? "star.fill" : "star")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(on ? acc : SpTheme.onDarkDim)
+                                .foregroundStyle(following ? SpTheme.gold : acc)
+                                .frame(width: 36, height: 36)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(L("متابعة المباراة"))
+
+                        // متابعة لحظية على شاشة القفل (Live Activity) — جارية أو قريبة (≤ ساعة).
+                        if liveActivity.isSupported && liveFollowEligible(f) {
+                            Button {
+                                liveActivity.toggle(for: liveActivityFixture(f))
+                            } label: {
+                                let on = liveActivity.isActive(f.id)
+                                Image(systemName: on ? "lock.iphone" : "platter.filled.bottom.iphone")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(on ? acc : SpTheme.onDarkDim)
+                                    .frame(width: 36, height: 36)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(L("شاشة القفل"))
                         }
                     }
                 }
