@@ -54,7 +54,7 @@ class AudioPlayerController @Inject constructor(
      *  with Google TTS fallback, 24h cache). */
     fun toggle(slug: String) {
         if (slug.isBlank()) return
-        val url = "https://sabq.org/api/articles/$slug/summary-audio"
+        val url = "https://sabq.org/api/articles/$slug/summary-audio?tts=tafqit-v2"
         toggleUrl(id = slug, url = url)
     }
 

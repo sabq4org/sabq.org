@@ -13037,8 +13037,8 @@ Respond in valid JSON format only:
       res.setHeader("Content-Type", "audio/mpeg");
       res.setHeader("Content-Length", audioBuffer.length.toString());
       res.setHeader("Cache-Control", "public, max-age=86400, must-revalidate"); // Cache 24h but always revalidate via ETag
-      // Include provider + tafqit version so old digit-audio caches invalidate after normalize deploy
-      res.setHeader("ETag", `"${article.id}-${article.updatedAt}-${usedProvider}-tafqit-v2"`);
+      // Include provider in ETag so switching TTS providers invalidates old cached audio
+      res.setHeader("ETag", `"${article.id}-${article.updatedAt}-${usedProvider}"`);
       res.send(audioBuffer);
     } catch (error) {
       console.error("Error generating summary audio:", error);

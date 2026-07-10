@@ -306,7 +306,7 @@ struct OpinionDetailView: View {
         // bytes. Opinions live in the same `articles` table, so the
         // slug works for both kinds.
         guard let slug = displayOpinion.slug, !slug.isEmpty,
-              let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio")
+              let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio?tts=tafqit-v2")
         else { return }
         SabqHaptics.medium()
         SabqAudioSession.activate()

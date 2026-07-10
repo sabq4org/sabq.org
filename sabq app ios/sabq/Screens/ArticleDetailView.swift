@@ -566,7 +566,7 @@ struct ArticleDetailView: View {
         // synthesis takes ~3-8s the first time; subsequent loads hit
         // the backend's 24h Cache-Control header.
         guard let slug = displayArticle.slug, !slug.isEmpty,
-              let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio")
+              let url = URL(string: "\(URLConstants.publicAPI)/articles/\(slug)/summary-audio?tts=tafqit-v2")
         else { return }
         SabqHaptics.medium()
         SabqAudioSession.activate()
