@@ -68,6 +68,7 @@ final class WorldCupHomeStore {
 // (مطابق WorldCupHomeSection على الويب وKingsCupHomeStrip).
 
 struct WorldCupHomeStrip: View {
+    @Environment(SabqLiveStream.self) private var liveStream
     private let store = WorldCupHomeStore.shared
 
     // المباريات المتزامنة: مباراتان (أو أكثر) تجريان الآن، أو قادمتان تنطلقان في
@@ -117,38 +118,36 @@ struct WorldCupHomeStrip: View {
             }
         }
         .task {
-            // تحميل أولي ثم استطلاع لحظي أثناء جريان مباراة اليوم — تتحدّث
-            // النتيجة/الدقيقة على الواجهة دون مغادرة الصفحة (كما في الويب).
-            // الحلقة لا تخرج لمجرد أن المباراة «ليست حيّة الآن»: قبل الصافرة
-            // تستطلع بوتيرة أبطأ كي تلتقط التحوّل قادمة→مباشر (كان العدّاد
-            // يتجمّد على 00:00:00 لمن بقي على الرئيسية لحظة الانطلاق).
-            // بعد التتويج نبقي نبضة دقيقة خفيفة لالتقاط إطفاء البلوك من اللوحة.
+            // تحميل أولي ثم استطلاع كشبكة أمان؛ SSE يحدّث فور تغيّر الموجز.
             await store.loadIfNeeded()
             while !Task.isCancelled {
                 let interval: UInt64
                 var lightRefresh = false
                 if store.matchOfTheDayLive {
-                    interval = 15_000_000_000
+                    interval = liveStream.connected ? 30_000_000_000 : 15_000_000_000
                 } else if let ts = store.nextKickoffTimestamp {
                     let untilKickoff = TimeInterval(ts) - Date().timeIntervalSince1970
                     if untilKickoff <= -900 {
-                        return          // مضى ربع ساعة بلا بث: تأجيل/إلغاء — لا نستطلع للأبد
+                        return
                     } else if untilKickoff <= 600 {
-                        interval = 20_000_000_000   // وشيكة/انطلقت للتو: التقاط التحوّل
+                        interval = 20_000_000_000
                     } else {
-                        interval = 60_000_000_000   // بعيدة: نبضة دقيقة صديقة للكاش تكفي
+                        interval = 60_000_000_000
                         lightRefresh = true
                     }
                 } else if store.overview?.champion != nil, store.overview?.hidden != true {
-                    interval = 60_000_000_000       // بطل ظاهر: التقاط إطفاء البلوك
+                    interval = 60_000_000_000
                     lightRefresh = true
                 } else {
-                    return              // لا حيّة ولا قادمة ولا بطل — لا شيء يُستطلع
+                    return
                 }
                 try? await Task.sleep(nanoseconds: interval)
                 if Task.isCancelled { return }
                 if lightRefresh { await store.loadIfNeeded() } else { await store.refreshLive() }
             }
+        }
+        .onChange(of: liveStream.wcVersion) { _, _ in
+            Task { await store.refreshLive() }
         }
     }
 
