@@ -249,7 +249,7 @@ struct AdminDashboardView: View {
                     title: "رسائل التواصل",
                     subtitle: "عرض الرسائل الواردة والرد عليها",
                     icon: "envelope.badge.fill",
-                    tint: SabqTheme.teal
+                    tint: AdminInboxPalette.success
                 )
             }
             .buttonStyle(.plain)
@@ -259,7 +259,7 @@ struct AdminDashboardView: View {
                     title: "استفسارات كتّاب الرأي",
                     subtitle: "متابعة المحادثات مع الكتّاب",
                     icon: "text.bubble.fill",
-                    tint: SabqTheme.gold
+                    tint: AdminInboxPalette.warning
                 )
             }
             .buttonStyle(.plain)
@@ -286,13 +286,17 @@ struct AdminDashboardView: View {
             }
             Spacer(minLength: 0)
             Image(systemName: "chevron.forward")
-                .font(SabqFonts.app(size: 12, weight: .semibold))
-                .foregroundStyle(SabqTheme.tertiaryInk)
+                .font(SabqFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(SabqTheme.secondaryInk)
         }
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
+        .background(
+            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                .fill(SabqTheme.surface)
+                .shadow(color: SabqTheme.shadow, radius: 7, y: 3)
+        )
+        .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.8), lineWidth: 0.7))
     }
 
     // MARK: Metrics strip

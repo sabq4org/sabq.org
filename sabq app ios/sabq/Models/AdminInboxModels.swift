@@ -1,5 +1,39 @@
 import SwiftUI
 
+// Inbox accents stay dark enough for small labels; primaryButton stays dark
+// in both appearances so white send-button text always remains readable.
+nonisolated enum AdminInboxPalette {
+    static let action = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.50, green: 0.69, blue: 1.00, alpha: 1)
+            : UIColor(red: 0.07, green: 0.29, blue: 0.68, alpha: 1)
+    })
+
+    static let success = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.42, green: 0.86, blue: 0.76, alpha: 1)
+            : UIColor(red: 0.00, green: 0.39, blue: 0.33, alpha: 1)
+    })
+
+    static let warning = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1.00, green: 0.79, blue: 0.42, alpha: 1)
+            : UIColor(red: 0.47, green: 0.29, blue: 0.00, alpha: 1)
+    })
+
+    static let danger = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 1.00, green: 0.60, blue: 0.56, alpha: 1)
+            : UIColor(red: 0.69, green: 0.12, blue: 0.10, alpha: 1)
+    })
+
+    static let primaryButton = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.16, green: 0.34, blue: 0.68, alpha: 1)
+            : UIColor(red: 0.07, green: 0.29, blue: 0.68, alpha: 1)
+    })
+}
+
 // MARK: - Contact-message inbox
 
 nonisolated enum AdminContactMessageStatus: String, CaseIterable, Codable, Identifiable {
@@ -27,9 +61,9 @@ nonisolated enum AdminContactMessageStatus: String, CaseIterable, Codable, Ident
 
     var tint: Color {
         switch self {
-        case .pending: return SabqTheme.gold
-        case .read: return SabqTheme.sky
-        case .replied: return SabqTheme.teal
+        case .pending: return AdminInboxPalette.warning
+        case .read: return AdminInboxPalette.action
+        case .replied: return AdminInboxPalette.success
         }
     }
 }
@@ -124,8 +158,8 @@ nonisolated enum AdminOpinionTicketStatus: String, CaseIterable, Codable, Identi
 
     var tint: Color {
         switch self {
-        case .open: return SabqTheme.gold
-        case .answered: return SabqTheme.teal
+        case .open: return AdminInboxPalette.warning
+        case .answered: return AdminInboxPalette.success
         case .closed: return SabqTheme.secondaryInk
         }
     }
