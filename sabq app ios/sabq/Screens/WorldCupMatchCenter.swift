@@ -10,6 +10,7 @@ import Charts
 struct WorldCupMatchCenter: View {
     let fixtureId: Int
     @Environment(\.dismiss) private var dismiss
+    @Environment(SabqLiveStream.self) private var liveStream
 
     @State private var detail: WCMatchDetail?
     @State private var loading = true
@@ -70,23 +71,29 @@ struct WorldCupMatchCenter: View {
                 }
             }
             .task { await load() }
-            // تحديث لحظي للنتيجة/الدقيقة أثناء اللعب (الخادم يركّب نتيجة SportMonks الحيّة)
+            // شبكة أمان: استطلاع أبطأ عند انقطاع SSE؛ مع البث الحي يكفي ~20ث.
             .task(id: detail?.fixture.id) {
                 var tick = 0
                 while !Task.isCancelled {
-                    try? await Task.sleep(nanoseconds: 8_000_000_000)
+                    let interval: UInt64 = liveStream.connected ? 20_000_000_000 : 8_000_000_000
+                    try? await Task.sleep(nanoseconds: interval)
                     if Task.isCancelled { return }
                     tick += 1
                     guard let f = detail?.fixture else { continue }
                     if f.status.live {
                         await load(force: true)
                     } else if !f.status.finished, tick % 2 == 0 {
-                        // قبل الصافرة: من فتح المركز مبكرًا كان يبقى على «لم تبدأ»
-                        // طوال الشوط الأول ما لم يسحب يدويًا — حدّث كل ~16ث حول الانطلاق.
                         let dt = Double(f.timestamp) - Date().timeIntervalSince1970
                         if dt <= 600 && dt >= -900 { await load(force: true) }
                     }
                 }
+            }
+            // البث الحي (SSE): تغيّر ختم المباراة ≈ جلب فوري (~2ث من الخادم).
+            .onChange(of: liveStream.stamps["w:\(fixtureId)"]) { _, _ in
+                Task { await load(force: true) }
+            }
+            .onChange(of: liveStream.stamps["s:\(fixtureId)"]) { _, _ in
+                Task { await load(force: true) }
             }
             .refreshable { await load(force: true) }
             .sheet(item: $selectedPlayer) { sel in
@@ -105,6 +112,7 @@ struct WorldCupMatchCenter: View {
             }
         }
         .sabqRTL()
+        .environment(liveStream)
     }
 
     // MARK: زر المتابعة المباشرة (Live Activity)

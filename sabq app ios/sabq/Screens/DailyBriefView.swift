@@ -2,9 +2,15 @@ import SwiftUI
 
 struct DailyBriefRoute: Hashable {}
 
-/// «موجز سبق» — five published must-know stories in roughly two minutes.
-/// Guests receive the shared edition; members can receive up to two
-/// interest-based stories without hiding the common top news.
+/// Two-mode landing reached by tapping the homepage greeting block.
+///
+/// - **Guest**: the member-value-prop landing that explains what an account
+///   unlocks (interests, daily brief, saved articles, reading stats). Has
+///   register + login CTAs.
+/// - **Member**: a personal dashboard built from `authStore.currentUser`
+///   (name, avatar, role, interests). NO call to `/api/ai/daily-summary` —
+///   that endpoint only exists in `en` flavour today, so we render the
+///   profile-driven view instead and let the user manage their interests.
 struct DailyBriefView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthStore.self) private var authStore
@@ -14,61 +20,22 @@ struct DailyBriefView: View {
     @State private var showSignUp = false
     @State private var showInterestsPicker = false
     @State private var allCategories: [APICategory] = []
-    @State private var brief: APIDailyBrief?
-    @State private var isBriefLoading = true
-    @State private var briefError: String?
-    @State private var didLogBriefOpen = false
-    @AppStorage("sabq_daily_brief_progress_edition") private var progressEdition = ""
-    @AppStorage("sabq_daily_brief_progress_count") private var progressCount = 0
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(showsIndicators: false) {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    if isBriefLoading, brief == nil {
-                        dailyBriefLoadingState
-                    } else if let briefError, brief == nil {
-                        EmptyStateView(
-                            icon: "wifi.exclamationmark",
-                            tint: SabqTheme.coral,
-                            title: "تعذّر تحميل موجز سبق",
-                            subtitle: briefError,
-                            action: { Task { await loadDailyBrief(ignoreCache: true) } },
-                            actionTitle: "إعادة المحاولة"
-                        )
-                        .padding(.top, 70)
-                    } else if let brief, brief.items.isEmpty {
-                        EmptyStateView(
-                            icon: "newspaper",
-                            tint: SabqTheme.primaryEnd,
-                            title: "لا توجد أخبار في الموجز الآن",
-                            subtitle: "سنحدّث الموجز فور وصول أخبار جديدة."
-                        )
-                        .padding(.top, 70)
-                    } else if let brief {
-                        dailyBriefHero(brief)
-                        ForEach(Array(brief.items.enumerated()), id: \.element.id) { index, item in
-                            dailyBriefStory(item, index: index, brief: brief)
-                                .id(item.id)
-                        }
-                        dailyBriefPersonalizationFooter(brief)
-                    }
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 18) {
+                if authStore.isLoggedIn, let user = authStore.currentUser {
+                    memberDashboard(user: user)
+                } else {
+                    guestLanding
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
-                .padding(.bottom, 60)
             }
-            .refreshable { await loadDailyBrief(ignoreCache: true) }
-            .task {
-                await loadDailyBrief()
-                await InterestsCategoryCache.shared.loadIfStale()
-                allCategories = InterestsCategoryCache.shared.get()
-                await resumeDailyBriefIfNeeded(using: proxy)
-            }
+            .padding(.horizontal, 18)
+            .padding(.top, 18)
+            .padding(.bottom, 60)
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .sabqScreen("Daily Brief")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .toolbar {
@@ -79,538 +46,24 @@ struct DailyBriefView: View {
                         .foregroundStyle(SabqTheme.ink)
                 }
             }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task { await loadDailyBrief(ignoreCache: true) }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(SabqFonts.app(size: 14, weight: .semibold))
-                        .foregroundStyle(SabqTheme.primaryEnd)
-                }
-                .disabled(isBriefLoading)
-                .accessibilityLabel("تحديث موجز سبق")
-            }
         }
-        .sheet(isPresented: $showLogin, onDismiss: {
-            Task { await loadDailyBrief(ignoreCache: true) }
-        }) {
+        .sheet(isPresented: $showLogin, onDismiss: { }) {
             LoginSheet(initialMode: false)
         }
         .sheet(isPresented: $showSignUp) {
             SignUpFlowView()
                 .environment(authStore)
         }
-        .sheet(isPresented: $showInterestsPicker, onDismiss: {
-            Task { await loadDailyBrief(ignoreCache: true) }
-        }) {
+        .sheet(isPresented: $showInterestsPicker) {
             InterestsPickerSheet(allCategories: allCategories, selectedIds: Set(authStore.currentUser?.interests.map(\.id) ?? []))
                 .environment(authStore)
         }
-    }
-
-    // MARK: - Daily brief
-
-    private func dailyBriefHero(_ brief: APIDailyBrief) -> some View {
-        let progress = dailyBriefProgress(brief)
-        let complete = progress >= brief.itemCount && brief.itemCount > 0
-
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .center, spacing: 13) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(SabqTheme.brandGradient)
-                        .frame(width: 58, height: 58)
-                    Image(systemName: "newspaper.fill")
-                        .font(SabqFonts.app(size: 24, weight: .semibold))
-                        .foregroundStyle(.white)
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("موجز سبق")
-                        .font(SabqFonts.app(size: 24, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
-                    Text("\(brief.editionLabel) • \(dailyBriefUpdatedText(brief.updatedAt))")
-                        .font(SabqFonts.app(size: 11.5, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            Text(brief.headline)
-                .font(SabqFonts.app(size: 18, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.leading)
-
-            HStack(spacing: 14) {
-                dailyBriefMeta(icon: "doc.text", text: "\(brief.itemCount) أخبار")
-                dailyBriefMeta(
-                    icon: "clock",
-                    text: dailyBriefDurationText(brief.estimatedReadingSeconds)
-                )
-                if brief.personalization.isPersonalized {
-                    dailyBriefMeta(
-                        icon: "person.crop.circle.badge.checkmark",
-                        text: "\(brief.personalization.personalizedItemCount) لك"
-                    )
-                }
-            }
-
-            if progress > 0 {
-                VStack(alignment: .leading, spacing: 7) {
-                    HStack {
-                        Text(complete ? "اكتمل موجزك" : "تقدمك")
-                            .font(SabqFonts.app(size: 11.5, weight: .semibold))
-                            .foregroundStyle(complete ? SabqTheme.teal : SabqTheme.secondaryInk)
-                        Spacer()
-                        Text("\(min(progress, brief.itemCount)) من \(brief.itemCount)")
-                            .font(SabqFonts.app(size: 11, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundStyle(SabqTheme.primaryEnd)
-                    }
-                    ProgressView(
-                        value: Double(min(progress, brief.itemCount)),
-                        total: Double(max(1, brief.itemCount))
-                    )
-                    .tint(complete ? SabqTheme.teal : SabqTheme.primaryEnd)
-                }
-            }
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    SabqTheme.primaryEnd.opacity(0.10),
-                                    SabqTheme.sky.opacity(0.035),
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.20), lineWidth: 0.75)
-        )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            "موجز سبق، \(brief.editionLabel)، \(brief.itemCount) أخبار، \(dailyBriefDurationText(brief.estimatedReadingSeconds))"
-        )
-    }
-
-    private func dailyBriefMeta(icon: String, text: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: icon)
-                .font(SabqFonts.app(size: 10, weight: .medium))
-            Text(text)
-                .font(SabqFonts.app(size: 10.5, weight: .medium))
-                .lineLimit(1)
-        }
-        .foregroundStyle(SabqTheme.secondaryInk)
-    }
-
-    private func dailyBriefStory(
-        _ item: APIDailyBrief.Item,
-        index: Int,
-        brief: APIDailyBrief
-    ) -> some View {
-        let tint = ArticleCategory(fromSection: item.category.name).tint
-        let isRead = dailyBriefProgress(brief) > index
-
-        return VStack(alignment: .leading, spacing: 0) {
-            if let imageUrl = item.imageUrl,
-               let url = URL(string: imageUrl) {
-                FocalCachedAsyncImage(url: url, focalPoint: item.imageFocalPoint) {
-                    Rectangle().fill(tint.opacity(0.12))
-                }
-                .frame(maxWidth: .infinity)
-                .frame(height: 188)
-                .clipped()
-                .aiImageBadgeOverlay(
-                    isVisible: item.isAiGeneratedImage,
-                    model: item.aiImageModel,
-                    inset: 8,
-                    sizeScale: 0.8
-                )
-            }
-
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 7) {
-                    Text("\(index + 1) من \(brief.itemCount)")
-                        .font(SabqFonts.app(size: 10, weight: .bold))
-                        .monospacedDigit()
-                        .foregroundStyle(SabqTheme.primaryEnd)
-
-                    Circle()
-                        .fill(SabqTheme.outline)
-                        .frame(width: 3, height: 3)
-
-                    Text(item.category.name)
-                        .font(SabqFonts.app(size: 10.5, weight: .semibold))
-                        .foregroundStyle(tint)
-
-                    if item.isBreaking {
-                        Text("عاجل")
-                            .font(SabqFonts.app(size: 9, weight: .heavy))
-                            .foregroundStyle(SabqTheme.coral)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(SabqTheme.coral.opacity(0.10)))
-                    } else if item.isPersonalized {
-                        Text("مختار لك")
-                            .font(SabqFonts.app(size: 9, weight: .bold))
-                            .foregroundStyle(SabqTheme.primaryEnd)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 3)
-                            .background(Capsule().fill(SabqTheme.primaryEnd.opacity(0.09)))
-                    }
-
-                    Spacer(minLength: 4)
-
-                    if let relative = dailyBriefRelativeDate(item.publishedAt) {
-                        Text(relative)
-                            .font(SabqFonts.app(size: 9.5))
-                            .foregroundStyle(SabqTheme.tertiaryInk)
-                            .lineLimit(1)
-                    }
-                }
-
-                Text(item.title)
-                    .font(SabqFonts.app(size: 18, weight: .heavy))
-                    .foregroundStyle(SabqTheme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .multilineTextAlignment(.leading)
-
-                if item.bullets.isEmpty {
-                    Text(item.summary)
-                        .font(SabqFonts.app(size: 13.5, weight: .regular))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                        .lineSpacing(5)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.leading)
-                } else {
-                    VStack(alignment: .leading, spacing: 9) {
-                        ForEach(Array(item.bullets.enumerated()), id: \.offset) { _, bullet in
-                            HStack(alignment: .top, spacing: 8) {
-                                Circle()
-                                    .fill(tint)
-                                    .frame(width: 5, height: 5)
-                                    .padding(.top, 7)
-                                Text(bullet)
-                                    .font(SabqFonts.app(size: 13.5, weight: .regular))
-                                    .foregroundStyle(SabqTheme.secondaryInk)
-                                    .lineSpacing(4)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                        }
-                    }
-                }
-
-                Rectangle()
-                    .fill(SabqTheme.outline.opacity(0.55))
-                    .frame(height: 0.5)
-
-                HStack(spacing: 10) {
-                    NavigationLink(value: ArticleSlugRoute(slug: item.slug)) {
-                        HStack(spacing: 5) {
-                            Text("اقرأ الخبر")
-                            Image(systemName: "arrow.left")
-                        }
-                        .font(SabqFonts.app(size: 12.5, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 13)
-                        .padding(.vertical, 9)
-                        .background(
-                            Capsule().fill(SabqTheme.primaryEnd)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .simultaneousGesture(TapGesture().onEnded {
-                        markDailyBriefProgress(index + 1, brief: brief)
-                        SabqAnalytics.log("daily_brief_article_open", parameters: [
-                            "brief_id": brief.id,
-                            "article_id": item.id,
-                            "position": index + 1,
-                            "personalized": item.isPersonalized,
-                        ])
-                    })
-
-                    Spacer(minLength: 0)
-
-                    Button {
-                        markDailyBriefProgress(index + 1, brief: brief)
-                        SabqHaptics.light()
-                    } label: {
-                        Image(systemName: isRead ? "checkmark.circle.fill" : "checkmark.circle")
-                            .foregroundStyle(isRead ? SabqTheme.teal : SabqTheme.secondaryInk)
-                    }
-                    .accessibilityLabel(isRead ? "تمت قراءة الخبر" : "تحديد الخبر كمقروء")
-
-                    Button {
-                        let article = dailyBriefArticle(item)
-                        bookmarksStore.toggle(item.id, article: article)
-                        SabqHaptics.light()
-                    } label: {
-                        Image(systemName: bookmarksStore.isBookmarked(item.id) ? "bookmark.fill" : "bookmark")
-                            .foregroundStyle(
-                                bookmarksStore.isBookmarked(item.id)
-                                    ? SabqTheme.primaryEnd
-                                    : SabqTheme.secondaryInk
-                            )
-                    }
-                    .accessibilityLabel(
-                        bookmarksStore.isBookmarked(item.id) ? "إزالة من المحفوظات" : "حفظ الخبر"
-                    )
-
-                    Button {
-                        shareDailyBriefItem(item)
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                    }
-                    .accessibilityLabel("مشاركة الخبر")
-                }
-                .font(SabqFonts.app(size: 17, weight: .medium))
-                .buttonStyle(.plain)
-            }
-            .padding(16)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .fill(SabqTheme.surface)
-        )
-        .clipShape(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(
-                    isRead ? SabqTheme.teal.opacity(0.25) : SabqTheme.outline.opacity(0.45),
-                    lineWidth: isRead ? 1 : 0.5
-                )
-        )
-        .accessibilityElement(children: .contain)
-    }
-
-    @ViewBuilder
-    private func dailyBriefPersonalizationFooter(_ brief: APIDailyBrief) -> some View {
-        if brief.personalization.isPersonalized {
-            HStack(alignment: .top, spacing: 9) {
-                Image(systemName: "checkmark.seal.fill")
-                    .foregroundStyle(SabqTheme.teal)
-                Text("أبقينا أهم الأخبار للجميع، واخترنا لك \(brief.personalization.personalizedItemCount) حسب اهتماماتك.")
-                    .font(SabqFonts.app(size: 11.5))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.horizontal, 4)
-        } else if authStore.isLoggedIn {
-            Button {
-                showInterestsPicker = true
-            } label: {
-                HStack(spacing: 9) {
-                    Image(systemName: "slider.horizontal.3")
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("خصّص خبرين من الموجز")
-                            .font(SabqFonts.app(size: 12.5, weight: .bold))
-                        Text("اختر اهتماماتك، وستبقى الأخبار الأساسية كما هي.")
-                            .font(SabqFonts.app(size: 10.5))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.left")
-                        .font(SabqFonts.app(size: 10, weight: .semibold))
-                }
-                .foregroundStyle(SabqTheme.primaryEnd)
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                        .fill(SabqTheme.primaryEnd.opacity(0.06))
-                )
-            }
-            .buttonStyle(.plain)
-        } else {
-            Button {
-                showLogin = true
-            } label: {
-                HStack(spacing: 9) {
-                    Image(systemName: "person.crop.circle.badge.plus")
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("اجعل الموجز أقرب لك")
-                            .font(SabqFonts.app(size: 12.5, weight: .bold))
-                        Text("سجّل الدخول لتخصيص خبرين، والموجز العام سيبقى متاحاً دائماً.")
-                            .font(SabqFonts.app(size: 10.5))
-                            .foregroundStyle(SabqTheme.secondaryInk)
-                    }
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.left")
-                        .font(SabqFonts.app(size: 10, weight: .semibold))
-                }
-                .foregroundStyle(SabqTheme.primaryEnd)
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                        .fill(SabqTheme.primaryEnd.opacity(0.06))
-                )
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
-    private var dailyBriefLoadingState: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(SabqTheme.paleFill)
-                    .frame(width: 58, height: 58)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("موجز سبق")
-                        .font(SabqFonts.app(size: 23, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
-                    Text("نرتب أهم الأخبار لك…")
-                        .font(SabqFonts.app(size: 12))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                }
-            }
-
-            ForEach(0..<3, id: \.self) { _ in
-                VStack(alignment: .leading, spacing: 10) {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(SabqTheme.paleFill)
-                        .frame(height: 160)
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(SabqTheme.paleFill)
-                        .frame(height: 16)
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(SabqTheme.paleFill)
-                        .frame(width: 250, height: 13)
-                }
-                .padding(14)
-                .background(
-                    RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                        .fill(SabqTheme.surface)
-                )
-            }
-        }
-        .accessibilityLabel("جارٍ تحميل موجز سبق")
-    }
-
-    private func dailyBriefProgress(_ brief: APIDailyBrief) -> Int {
-        guard progressEdition == brief.id else { return 0 }
-        return min(max(progressCount, 0), brief.itemCount)
-    }
-
-    private func markDailyBriefProgress(_ count: Int, brief: APIDailyBrief) {
-        let previous = progressEdition == brief.id ? progressCount : 0
-        if progressEdition != brief.id {
-            progressEdition = brief.id
-            progressCount = 0
-        }
-        progressCount = max(progressCount, min(count, brief.itemCount))
-        if previous < brief.itemCount, progressCount >= brief.itemCount {
-            SabqAnalytics.log("daily_brief_complete", parameters: [
-                "brief_id": brief.id,
-                "item_count": brief.itemCount,
-            ])
-        }
-    }
-
-    private func resumeDailyBriefIfNeeded(using proxy: ScrollViewProxy) async {
-        guard let brief,
-              progressEdition == brief.id,
-              progressCount > 0,
-              progressCount < brief.itemCount,
-              brief.items.indices.contains(progressCount) else { return }
-
-        try? await Task.sleep(for: .milliseconds(250))
-        guard !Task.isCancelled else { return }
-        withAnimation(.easeOut(duration: 0.25)) {
-            proxy.scrollTo(brief.items[progressCount].id, anchor: .top)
-        }
-    }
-
-    private func dailyBriefDurationText(_ seconds: Int) -> String {
-        let minutes = max(1, Int(ceil(Double(seconds) / 60)))
-        switch minutes {
-        case 1: return "دقيقة"
-        case 2: return "دقيقتان"
-        default: return "\(minutes) دقائق"
-        }
-    }
-
-    private func dailyBriefUpdatedText(_ raw: String) -> String {
-        guard let date = SabqFormatters.parseISO8601(raw) else { return "محدّث الآن" }
-        return "حُدّث \(SabqFormatters.riyadhTime.string(from: date))"
-    }
-
-    private func dailyBriefRelativeDate(_ raw: String?) -> String? {
-        guard let raw, let date = SabqFormatters.parseISO8601(raw) else { return nil }
-        return SabqFormatters.relativeArabic.localizedString(for: date, relativeTo: Date())
-    }
-
-    private func dailyBriefArticle(_ item: APIDailyBrief.Item) -> Article {
-        var article = Article(
-            id: item.id,
-            title: item.title,
-            excerpt: item.summary,
-            aiSummary: item.summary,
-            body: item.summary,
-            bodyHTML: "",
-            category: ArticleCategory(fromSection: item.category.name),
-            author: "سبق",
-            publishDate: item.publishedAt.flatMap(SabqFormatters.parseISO8601) ?? Date(),
-            isBreaking: item.isBreaking,
-            isFeatured: false,
-            tags: [],
-            imageURL: item.imageUrl,
-            slug: item.slug,
-            articleURL: item.articleUrl
-        )
-        article.imageFocalPoint = item.imageFocalPoint
-        article.isAiGeneratedImage = item.isAiGeneratedImage
-        article.aiImageModel = item.aiImageModel
-        return article
-    }
-
-    private func shareDailyBriefItem(_ item: APIDailyBrief.Item) {
-        guard let url = URL(string: item.articleUrl) else { return }
-        SabqAnalytics.log("daily_brief_share", parameters: ["article_id": item.id])
-        SabqShareHelper.presentShareSheet(with: url)
-    }
-
-    @MainActor
-    private func loadDailyBrief(ignoreCache: Bool = false) async {
-        if brief == nil { isBriefLoading = true }
-        briefError = nil
-        defer { isBriefLoading = false }
-
-        do {
-            let loaded = try await APIClient.shared.fetchDailyBrief(ignoreCache: ignoreCache)
-            brief = loaded
-            if progressEdition != loaded.id {
-                progressEdition = loaded.id
-                progressCount = 0
-            }
-            if !didLogBriefOpen {
-                didLogBriefOpen = true
-                SabqAnalytics.log("daily_brief_open", parameters: [
-                    "brief_id": loaded.id,
-                    "edition": loaded.edition,
-                    "item_count": loaded.itemCount,
-                    "personalized": loaded.personalization.isPersonalized,
-                ])
-            }
-        } catch {
-            if brief == nil {
-                briefError = "تحقّق من اتصالك بالإنترنت ثم أعد المحاولة."
-            }
+        .task {
+            // Warm the shared cache so opening the interests sheet is
+            // instant. The sheet itself also refreshes the cache, so the
+            // user never sees a long blank state.
+            await InterestsCategoryCache.shared.loadIfStale()
+            allCategories = InterestsCategoryCache.shared.get()
         }
     }
 
@@ -655,7 +108,7 @@ struct DailyBriefView: View {
                 .monospacedDigit()
             Text(label)
                 .font(SabqFonts.app(size: 10, weight: .regular))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .foregroundStyle(SabqTheme.ink.opacity(0.72))
                 .lineLimit(1)
         }
         .padding(12)
@@ -666,7 +119,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.16), lineWidth: 0.5)
+                .stroke(tint.opacity(0.28), lineWidth: 0.7)
         )
     }
 
@@ -729,7 +182,7 @@ struct DailyBriefView: View {
             }
             Text(article.category.title)
                 .font(SabqFonts.app(size: 10, weight: .regular))
-                .foregroundStyle(article.category.tint)
+                .foregroundStyle(SabqTheme.secondaryInk)
             Text(article.title)
                 .font(SabqFonts.app(size: 13.5, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
@@ -759,7 +212,7 @@ struct DailyBriefView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("مزاجك القرائي اليوم")
                     .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.secondaryInk)
                 Text(label)
                     .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
@@ -775,11 +228,11 @@ struct DailyBriefView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(tint.opacity(0.06))
+                .fill(tint.opacity(0.09))
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.20), lineWidth: 0.5)
+                .stroke(tint.opacity(0.32), lineWidth: 0.7)
         )
     }
 
@@ -819,13 +272,13 @@ struct DailyBriefView: View {
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text(user.localizedRole)
                         .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .foregroundStyle(SabqTheme.ink.opacity(0.72))
                         .lineLimit(1)
                 }
                 if let email = user.email, !email.isEmpty {
                     Text(email)
                         .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .foregroundStyle(SabqTheme.secondaryInk)
                         .lineLimit(1)
                 }
             }
@@ -839,7 +292,7 @@ struct DailyBriefView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                         .fill(LinearGradient(
-                            colors: [SabqTheme.primaryEnd.opacity(0.08), SabqTheme.sky.opacity(0.04)],
+                            colors: [SabqTheme.primaryEnd.opacity(0.11), SabqTheme.sky.opacity(0.06)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ))
@@ -847,7 +300,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+                .stroke(SabqTheme.primaryEnd.opacity(0.28), lineWidth: 0.7)
         )
     }
 
@@ -863,7 +316,7 @@ struct DailyBriefView: View {
                 avatarPlaceholder(user: user)
             }
         }
-        .overlay(Circle().stroke(SabqTheme.primaryEnd.opacity(0.3), lineWidth: 1.5))
+        .overlay(Circle().stroke(SabqTheme.primaryEnd.opacity(0.45), lineWidth: 1.5))
     }
 
     private func avatarPlaceholder(user: APIUser) -> some View {
@@ -929,18 +382,21 @@ struct DailyBriefView: View {
                     ForEach(interests) { interest in
                         Text(interest.name ?? interest.slug ?? "—")
                             .font(SabqFonts.app(size: 11, weight: .regular))
-                            .foregroundStyle(SabqTheme.primaryEnd)
+                            .foregroundStyle(SabqTheme.ink.opacity(0.76))
                             .padding(.horizontal, 11)
                             .padding(.vertical, 7)
                             .background(
                                 Capsule().fill(SabqTheme.primaryEnd.opacity(0.12))
+                            )
+                            .overlay(
+                                Capsule().stroke(SabqTheme.primaryEnd.opacity(0.20), lineWidth: 0.5)
                             )
                     }
                 }
 
                 Text("\(interests.count) تصنيف نختار لك منه أخباراً يومية")
                     .font(SabqFonts.app(size: 10, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.secondaryInk)
             }
         }
         .padding(16)
@@ -951,7 +407,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
+                .stroke(SabqTheme.outline.opacity(0.65), lineWidth: 0.7)
         )
     }
 
@@ -968,7 +424,7 @@ struct DailyBriefView: View {
     private func featureTile(title: String, subtitle: String, icon: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack {
-                Circle().fill(tint.opacity(0.13)).frame(width: 34, height: 34)
+                Circle().fill(tint.opacity(0.18)).frame(width: 34, height: 34)
                 Image(systemName: icon)
                     .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(tint)
@@ -978,7 +434,7 @@ struct DailyBriefView: View {
                 .foregroundStyle(SabqTheme.ink)
             Text(subtitle)
                 .font(SabqFonts.app(size: 11))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .foregroundStyle(SabqTheme.ink.opacity(0.70))
                 .lineLimit(2)
         }
         .padding(14)
@@ -989,7 +445,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.16), lineWidth: 0.5)
+                .stroke(tint.opacity(0.28), lineWidth: 0.7)
         )
     }
 
@@ -1009,7 +465,7 @@ struct DailyBriefView: View {
         VStack(alignment: .leading, spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(SabqTheme.primaryEnd.opacity(0.12))
+                    .fill(SabqTheme.primaryEnd.opacity(0.18))
                     .frame(width: 74, height: 74)
                 Image(systemName: "sparkles.rectangle.stack.fill")
                     .font(SabqFonts.app(size: 32, weight: .light))
@@ -1023,7 +479,7 @@ struct DailyBriefView: View {
                     .foregroundStyle(SabqTheme.ink)
                 Text("صفحة شخصية تبدأ من اهتماماتك: تختار ما يهمك، وسبق ترتّب لك موجزاً يومياً، توصيات، وإحصاءات قراءة واضحة.")
                     .font(SabqFonts.app(size: 14))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .foregroundStyle(SabqTheme.ink.opacity(0.72))
                     .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1036,7 +492,7 @@ struct DailyBriefView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                         .fill(LinearGradient(
-                            colors: [SabqTheme.primaryEnd.opacity(0.08), SabqTheme.sky.opacity(0.04)],
+                            colors: [SabqTheme.primaryEnd.opacity(0.11), SabqTheme.sky.opacity(0.06)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ))
@@ -1044,7 +500,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+                .stroke(SabqTheme.primaryEnd.opacity(0.28), lineWidth: 0.7)
         )
     }
 
@@ -1063,13 +519,17 @@ struct DailyBriefView: View {
                 ForEach(["محليات", "اقتصاد", "رياضة", "تقنية", "رأي", "لحظة بلحظة", "العالم", "صحة"], id: \.self) { item in
                     Text(item)
                         .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .foregroundStyle(SabqTheme.ink.opacity(0.74))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
                         .frame(maxWidth: .infinity)
                         .background(
                             Capsule(style: .continuous)
-                                .fill(SabqTheme.primaryEnd.opacity(0.08))
+                                .fill(SabqTheme.primaryEnd.opacity(0.11))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
                         )
                 }
             }
@@ -1082,7 +542,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
+                .stroke(SabqTheme.outline.opacity(0.65), lineWidth: 0.7)
         )
     }
 
@@ -1100,7 +560,7 @@ struct DailyBriefView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.primaryEnd.opacity(0.05))
+                .fill(SabqTheme.primaryEnd.opacity(0.075))
         )
     }
 
@@ -1112,7 +572,7 @@ struct DailyBriefView: View {
                 .frame(width: 18)
             Text(text)
                 .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .foregroundStyle(SabqTheme.ink.opacity(0.72))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

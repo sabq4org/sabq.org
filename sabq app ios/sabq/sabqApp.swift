@@ -57,7 +57,11 @@ struct sabqApp: App {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
-                .task { await requestPushPermissionIfNeeded() }
+                .environment(SabqLiveStream.shared)
+                .task {
+                    SabqLiveStream.shared.start()
+                    await requestPushPermissionIfNeeded()
+                }
                 .fullScreenCover(isPresented: .constant(!hasOnboarded)) {
                     OnboardingView()
                         .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
@@ -71,6 +75,12 @@ struct sabqApp: App {
             // next timer fired" cases.
             if newPhase == .background || newPhase == .inactive {
                 Task { await LoyaltyEventQueue.shared.flushNow() }
+            }
+            // أوقف SSE في الخلفية لتوفير البطارية؛ يُعاد عند العودة.
+            if newPhase == .active {
+                SabqLiveStream.shared.start()
+            } else if newPhase == .background {
+                SabqLiveStream.shared.stop()
             }
         }
     }

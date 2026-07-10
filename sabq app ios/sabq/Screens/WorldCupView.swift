@@ -9,6 +9,7 @@ import SwiftUI
 private struct WCMatchSelection: Identifiable { let id: Int }
 
 struct WorldCupView: View {
+    @Environment(SabqLiveStream.self) private var liveStream
     @State private var overview: WCOverview?
     @State private var fixtures: [WCFixture] = []
     @State private var standings: [WCGroup] = []
@@ -64,25 +65,26 @@ struct WorldCupView: View {
         // لا خلفية صلبة لشريط التنقّل — يبقى شفّافًا فتظهر خلفية الصفحة الخفيفة خلف
         // العنوان. لون العنوان يتبع النظام (داكن على الفاتح، أبيض في الليلي).
         .task { await loadAll() }
-        // متابعة لحظية: استطلاع كل 8ث أثناء وجود مباراة جارية فتتحدّث النتيجة
-        // والدقيقة تلقائيًّا (كما في مركز المباراة). بدونه كانت الشاشة تُحمّل مرة
-        // واحدة فلا يتغيّر الوقت إلا بسحب يدوي. force=true لتجاوز الكاش.
+        // شبكة أمان عند انقطاع SSE؛ مع البث يكفي ~20ث أثناء المباشر.
         .task {
             var tick = 0
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                let interval: UInt64 = liveStream.connected ? 20_000_000_000 : 8_000_000_000
+                try? await Task.sleep(nanoseconds: interval)
                 if Task.isCancelled { return }
                 tick += 1
                 if isAnyLive {
                     await loadAll(force: true)
                 } else if isKickoffImminent, tick % 3 == 0 {
-                    // قبل الصافرة: تحديث خفيف كل ~24ث (النظرة والمباريات فقط —
-                    // الترتيب والهدّافون لا يتغيّران قبل البدء) لالتقاط قادمة→مباشر.
                     async let a: Void = loadOverview(force: true)
                     async let b: Void = loadFixtures(force: true)
                     _ = await (a, b)
                 }
             }
+        }
+        // نبضة SSE لأي مباراة مونديال جارية → تحديث القائمة فورًا.
+        .onChange(of: liveStream.wcVersion) { _, _ in
+            Task { await loadAll(force: true) }
         }
         .refreshable { await loadAll(force: true) }
         .sheet(item: $selectedMatch) { sel in

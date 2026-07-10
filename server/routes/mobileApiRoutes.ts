@@ -61,7 +61,6 @@ import { generateAndUploadImage } from "../services/nanoBananaService";
 import { autoGenerateImage } from "../services/autoImageGenerationService";
 import { notifyArticleStakeholders } from "../services/editorialNotifications";
 import { invalidateArticleWrite } from "../services/contentInvalidation";
-import { buildDailyBrief } from "../services/dailyBriefService";
 import { notifySearchEngines } from "../indexNow";
 import oauthMobileRouter from "./v1/oauthMobile";
 import { isWorldCupConfigured } from "../services/worldCupService";
@@ -899,38 +898,6 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
   
   return session || null;
 }
-
-// ==========================================
-// موجز سبق — أهم 5 أخبار في دقيقتين
-// GET /api/v1/daily-brief
-//
-// Public by default. A valid mobile Bearer token adds at most two stories
-// from the member's interests while preserving three common must-know items.
-// The service only reads already-published editorial fields; it never calls
-// a generative model during the request. Tracked by #750.
-// ==========================================
-router.get("/daily-brief", async (req: Request, res: Response) => {
-  try {
-    const session = await verifyMemberSession(req);
-    const brief = await buildDailyBrief(session?.userId ?? null);
-
-    res.vary("Authorization");
-    // Never let a response produced in an authenticated context enter a
-    // shared CDN cache, even when that account has no interests yet.
-    if (req.headers.authorization) {
-      res.set("Cache-Control", "private, no-store");
-    } else {
-      res.set("Cache-Control", "public, max-age=60, s-maxage=180, stale-while-revalidate=300");
-    }
-
-    res.json(brief);
-  } catch (error) {
-    console.error("[Mobile API] GET /daily-brief error:", error);
-    res.status(500).json({
-      error: { code: "SERVER_ERROR", message: "تعذر إعداد موجز سبق حالياً", status: 500 },
-    });
-  }
-});
 
 // ==========================================
 // 1. تسجيل جديد - Register New User

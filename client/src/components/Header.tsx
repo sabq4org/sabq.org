@@ -477,10 +477,13 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
 
       {/* Mobile menu sheet */}
       <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-        <SheetContent side="right" className="w-[300px] flex flex-col p-0">
-          <SheetHeader className="flex-shrink-0 p-4 border-b">
-            <div className="flex items-center justify-between">
-              <SheetTitle className="text-right text-lg font-bold">القائمة</SheetTitle>
+        <SheetContent
+          side="right"
+          dir="rtl"
+          className="w-[300px] flex flex-col p-0 text-right [&>button]:left-4 [&>button]:right-auto"
+        >
+          <SheetHeader className="flex-shrink-0 p-4 pl-12 border-b text-right sm:text-right">
+            <div className="flex items-center gap-3">
               <Link href="/" onClick={(e) => {
                 setMobileMenuOpen(false);
                 if (window.location.pathname === '/') {
@@ -498,10 +501,11 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                   decoding="async"
                 />
               </Link>
+              <SheetTitle className="flex-1 text-right text-lg font-bold">القائمة</SheetTitle>
             </div>
           </SheetHeader>
           
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto text-right [&_a]:block [&_a>span]:w-full">
             {/* التصفح الرئيسي - Main Navigation */}
             <div className="p-3">
               <h3 className="px-3 py-2 text-xs font-semibold text-foreground/65 uppercase tracking-wider">

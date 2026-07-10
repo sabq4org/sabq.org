@@ -1,6 +1,6 @@
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +10,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAngleDetail } from "@/lib/muqtarab";
 import { apiUrl } from "@/lib/queryClient";
-import { ArrowRight, ChevronRight, Share2, Calendar, FileText, Circle } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, Share2, Calendar, FileText, Circle } from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
 import { angleTheme } from "@/lib/angleTheme";
 import { formatDate } from "@/lib/format";
 import type { Topic } from "@shared/schema";
+
+const TOPICS_PER_PAGE = 16;
+const TOPICS_FETCH_LIMIT = 500;
 
 function getIconComponent(iconKey: string) {
   return getLucideIcon(iconKey, Circle);
@@ -22,6 +25,7 @@ function getIconComponent(iconKey: string) {
 
 export default function MuqtarabDetail() {
   const { slug } = useParams<{ slug: string }>();
+  const [currentPage, setCurrentPage] = useState(1);
   
   // Fetch current user
   const { data: user } = useQuery<{ id: string; name?: string; email?: string }>({
@@ -43,7 +47,7 @@ export default function MuqtarabDetail() {
   } = useQuery<{ topics: Topic[] }>({
     queryKey: ["/api/muqtarab/angles", slug, "topics"],
     queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/muqtarab/angles/${slug}/topics?limit=10`));
+      const res = await fetch(apiUrl(`/api/muqtarab/angles/${slug}/topics?limit=${TOPICS_FETCH_LIMIT}`));
       if (!res.ok) throw new Error("Failed to fetch topics");
       return res.json();
     },
@@ -51,6 +55,28 @@ export default function MuqtarabDetail() {
   });
 
   const topics = topicsData?.topics || [];
+  const totalPages = Math.max(1, Math.ceil(topics.length / TOPICS_PER_PAGE));
+  const pageStart = (currentPage - 1) * TOPICS_PER_PAGE;
+  const paginatedTopics = topics.slice(pageStart, pageStart + TOPICS_PER_PAGE);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [slug]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const goToPage = (page: number) => {
+    const nextPage = Math.min(Math.max(page, 1), totalPages);
+    setCurrentPage(nextPage);
+    requestAnimationFrame(() => {
+      document.getElementById("muqtarab-topics")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  };
 
   // Set page title and meta tags for SEO
   useEffect(() => {
@@ -124,12 +150,12 @@ export default function MuqtarabDetail() {
         </div>
 
         {/* Content skeleton */}
-        <main className="flex-1 container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+        <main id="muqtarab-topics" className="flex-1 container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 scroll-mt-24">
           <div className="space-y-6">
             <Skeleton className="h-8 w-48" />
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-64" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {Array.from({ length: 8 }, (_, index) => index + 1).map((i) => (
+                <Skeleton key={i} className="h-56" />
               ))}
             </div>
           </div>
@@ -349,7 +375,7 @@ export default function MuqtarabDetail() {
       </div>
 
       {/* Topics Section */}
-      <main className="container mx-auto flex-1 max-w-7xl px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
+      <main id="muqtarab-topics" className="container mx-auto flex-1 max-w-7xl scroll-mt-24 px-4 py-7 sm:px-6 lg:px-8 lg:py-10">
         <div className="mb-5 flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-4">
           <div>
             <h2 className="mb-2 flex items-center gap-2 text-2xl font-bold md:text-3xl" data-testid="heading-topics">
@@ -380,15 +406,15 @@ export default function MuqtarabDetail() {
 
         {/* Loading state for topics */}
         {isLoadingTopics ? (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3" data-testid="grid-topics-loading">
-            {[1, 2, 3].map((i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" data-testid="grid-topics-loading">
+            {Array.from({ length: 8 }, (_, index) => index + 1).map((i) => (
               <Card key={i} className="overflow-hidden">
-                <Skeleton className="h-44 w-full" />
-                <CardContent className="p-4 space-y-3">
-                  <Skeleton className="h-6 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-2/3" />
-                  <Skeleton className="h-4 w-1/4" />
+                <Skeleton className="h-40 w-full" />
+                <CardContent className="p-3 space-y-2">
+                  <Skeleton className="h-5 w-3/4" />
+                  <Skeleton className="h-3 w-full" />
+                  <Skeleton className="h-3 w-2/3" />
+                  <Skeleton className="h-3 w-1/4" />
                 </CardContent>
               </Card>
             ))}
@@ -411,8 +437,9 @@ export default function MuqtarabDetail() {
           </div>
         ) : (
           // Topics grid
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3" data-testid="grid-topics">
-            {topics.map((topic: Topic) => (
+          <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" data-testid="grid-topics">
+            {paginatedTopics.map((topic: Topic) => (
               <Link key={topic.id} href={`/muqtarab/${slug}/topic/${topic.slug}`} className="block h-full">
                 <Card 
                   className="group h-full cursor-pointer overflow-hidden rounded-xl border border-border/70 border-t-2 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md"
@@ -421,7 +448,7 @@ export default function MuqtarabDetail() {
                 >
                   {/* Hero Image */}
                   {topic.heroImageUrl && (
-                    <div className="relative h-44 overflow-hidden sm:h-48">
+                    <div className="relative h-40 overflow-hidden">
                       <img 
                         src={topic.heroImageUrl} 
                         alt={topic.title}
@@ -431,10 +458,10 @@ export default function MuqtarabDetail() {
                     </div>
                   )}
                   
-                  <CardContent className="p-4 space-y-3">
+                  <CardContent className="p-3 space-y-2">
                     {/* Title */}
                     <h3 
-                      className="font-bold text-lg line-clamp-2 transition-colors group-hover:text-[color:var(--angle)]"
+                      className="font-bold text-base line-clamp-2 transition-colors group-hover:text-[color:var(--angle)]"
                       data-testid={`text-topic-title-${topic.id}`}
                     >
                       {topic.title}
@@ -443,7 +470,7 @@ export default function MuqtarabDetail() {
                     {/* Excerpt */}
                     {topic.excerpt && (
                       <p 
-                        className="text-muted-foreground text-sm line-clamp-2"
+                        className="text-muted-foreground text-xs line-clamp-2"
                         data-testid={`text-topic-excerpt-${topic.id}`}
                       >
                         {topic.excerpt}
@@ -453,7 +480,7 @@ export default function MuqtarabDetail() {
                     {/* Published Date */}
                     {topic.publishedAt && (
                       <div 
-                        className="flex items-center gap-2 text-xs text-muted-foreground"
+                        className="flex items-center gap-1.5 text-[11px] text-muted-foreground"
                         data-testid={`text-topic-date-${topic.id}`}
                       >
                         <Calendar className="h-3 w-3" />
@@ -465,6 +492,55 @@ export default function MuqtarabDetail() {
               </Link>
             ))}
           </div>
+
+          {totalPages > 1 && (
+            <nav
+              className="mt-8 flex flex-wrap items-center justify-center gap-2"
+              aria-label="صفحات مواضيع الزاوية"
+              data-testid="topics-pagination"
+            >
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+                aria-label="الصفحة السابقة"
+                data-testid="button-page-previous"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <Button
+                  key={page}
+                  variant={page === currentPage ? "default" : "outline"}
+                  size="icon"
+                  onClick={() => goToPage(page)}
+                  aria-current={page === currentPage ? "page" : undefined}
+                  data-testid={`button-page-${page}`}
+                  style={page === currentPage ? { backgroundColor: theme.color } : undefined}
+                >
+                  {page}
+                </Button>
+              ))}
+
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                aria-label="الصفحة التالية"
+                data-testid="button-page-next"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <span className="w-full text-center text-xs text-muted-foreground mt-1">
+                صفحة {currentPage} من {totalPages} · {topics.length} موضوع
+              </span>
+            </nav>
+          )}
+          </>
         )}
       </main>
 
