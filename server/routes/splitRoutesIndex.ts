@@ -58,6 +58,7 @@ import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
 import keywordRouter from "./keywordRoutes";
 import editorAlertsRouter from "./editorAlerts";
+import audioNewsletterRoutes from "./audioNewsletterRoutes";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -65,6 +66,11 @@ import editorAlertsRouter from "./editorAlerts";
  * behavior is identical to the original inline definitions.
  */
 export function registerSplitRoutes(app: Express) {
+  // Must run after setupAuth (caller guarantees that). Mount before the legacy
+  // /api/audio-newsletters/:slug handlers still living in routes.ts so TTS
+  // settings / voices / providers are not swallowed as slugs or 401'd.
+  app.use("/api/audio-newsletters", audioNewsletterRoutes);
+
   app.use(systemSettingsRouter);
   app.use(aiHubRouter);
   app.use(adminActivityLogsRouter);
