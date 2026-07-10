@@ -5,6 +5,7 @@ import type { TTSOptions, Voice } from './elevenlabs';
 import { getElevenLabsService, ARABIC_NEWS_VOICES } from './elevenlabs';
 import { getGoogleTTSService, GOOGLE_ARABIC_VOICES } from './googleTts';
 import { getOpenAITTSService, OPENAI_VOICES, isOpenAIVoiceId } from './openaiTts';
+import { normalizeTextForTts } from '../utils/arabicTtsNormalize';
 
 export type TTSProviderName = 'openai' | 'elevenlabs' | 'google';
 
@@ -16,6 +17,19 @@ export interface TTSProvider {
   charLimit: number;
   // USD per 1M characters — used for cost estimation only.
   costPer1MChars: number;
+}
+
+function prepareTtsOptions(opts: TTSOptions): TTSOptions {
+  const language = opts.language ?? 'auto';
+  return {
+    ...opts,
+    text: normalizeTextForTts(opts.text, { language }),
+  };
+}
+
+function prepareSampleText(sampleText: string | undefined): string | undefined {
+  if (sampleText == null) return sampleText;
+  return normalizeTextForTts(sampleText, { language: 'auto' });
 }
 
 export interface TtsSettings {
@@ -66,9 +80,10 @@ function buildOpenAIProvider(): TTSProvider | null {
   if (!svc) return null;
   return {
     name: 'openai',
-    textToSpeech: (opts, timeoutMs) => svc.textToSpeech(opts, timeoutMs),
+    textToSpeech: (opts, timeoutMs) => svc.textToSpeech(prepareTtsOptions(opts), timeoutMs),
     getVoices: () => svc.getVoices(),
-    testVoice: (voiceId, sampleText, voiceSettings) => svc.testVoice(voiceId, sampleText, voiceSettings),
+    testVoice: (voiceId, sampleText, voiceSettings) =>
+      svc.testVoice(voiceId, prepareSampleText(sampleText), voiceSettings),
     charLimit: 4000,
     costPer1MChars: 15.0,
   };
@@ -79,9 +94,10 @@ function buildElevenLabsProvider(): TTSProvider | null {
   if (!svc) return null;
   return {
     name: 'elevenlabs',
-    textToSpeech: (opts, timeoutMs) => svc.textToSpeech(opts, timeoutMs),
+    textToSpeech: (opts, timeoutMs) => svc.textToSpeech(prepareTtsOptions(opts), timeoutMs),
     getVoices: () => svc.getVoices(),
-    testVoice: (voiceId, sampleText, voiceSettings) => svc.testVoice(voiceId, sampleText, voiceSettings),
+    testVoice: (voiceId, sampleText, voiceSettings) =>
+      svc.testVoice(voiceId, prepareSampleText(sampleText), voiceSettings),
     charLimit: 4000,
     costPer1MChars: 30.0,
   };
@@ -92,9 +108,10 @@ function buildGoogleProvider(): TTSProvider | null {
   if (!svc) return null;
   return {
     name: 'google',
-    textToSpeech: (opts, timeoutMs) => svc.textToSpeech(opts, timeoutMs),
+    textToSpeech: (opts, timeoutMs) => svc.textToSpeech(prepareTtsOptions(opts), timeoutMs),
     getVoices: () => svc.getVoices(),
-    testVoice: (voiceId, sampleText, voiceSettings) => svc.testVoice(voiceId, sampleText, voiceSettings),
+    testVoice: (voiceId, sampleText, voiceSettings) =>
+      svc.testVoice(voiceId, prepareSampleText(sampleText), voiceSettings),
     charLimit: 4500,
     costPer1MChars: 16.0,
   };
