@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { SpeechCreateParams } from 'openai/resources/audio/speech';
 import { retryWithBackoff } from '../utils/retryWithBackoff';
+import { normalizeTextForTts } from '../utils/arabicTtsNormalize';
 import type { TTSOptions, Voice } from './elevenlabs';
 
 // OpenAI TTS voices — available across openai gpt-audio-mini / gpt-4o-mini-tts.
@@ -44,6 +45,7 @@ export class OpenAITTSService {
     const requestedVoice = options.voiceId || this.defaultVoiceId;
     const voice = VALID_VOICE_IDS.has(requestedVoice) ? requestedVoice : this.defaultVoiceId;
     const model = options.model || this.defaultModel;
+    const input = normalizeTextForTts(options.text, { language: options.language ?? 'auto' });
 
     // Optional natural-language tone instructions (gpt-4o-mini-tts only).
     const instructions = options.instructions;
@@ -52,7 +54,7 @@ export class OpenAITTSService {
     const params: SpeechCreateParams = {
       model,
       voice,
-      input: options.text,
+      input,
       response_format: 'mp3',
       speed,
       ...(instructions ? { instructions } : {}),
