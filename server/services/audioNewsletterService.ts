@@ -28,6 +28,7 @@ import {
   type TTSProvider,
   type TTSProviderName,
 } from './ttsProviderRegistry';
+import { normalizeTextForTts } from '../utils/arabicTtsNormalize';
 
 // Voice configurations for different narrators
 // Using Gulf/Saudi Arabic voices for authentic Saudi news experience
@@ -442,8 +443,22 @@ export class AudioNewsletterService extends EventEmitter {
       job.progress = 20;
       this.emit('job:progress', job);
       
-      // Build script from template
-      const script = await this.buildScript(newsletter);
+      // Build script from template, then verbalize numbers/dates/% for Arabic TTS.
+      const rawScript = await this.buildScript(newsletter);
+      interface NewsletterTtsMeta {
+        ttsVoice?: string;
+        ttsTone?: string;
+        language?: 'ar' | 'en' | 'ur';
+        voicePreset?: string;
+        voiceId?: string;
+        voiceSettings?: Record<string, unknown>;
+      }
+      const newsletterMeta = (newsletter.metadata as NewsletterTtsMeta | null) || {};
+      const language: 'ar' | 'en' | 'ur' =
+        newsletterMeta.language === 'en' || newsletterMeta.language === 'ur'
+          ? newsletterMeta.language
+          : 'ar';
+      const script = normalizeTextForTts(rawScript, { language });
       
       job.progress = 30;
       this.emit('job:progress', job);
@@ -461,24 +476,16 @@ export class AudioNewsletterService extends EventEmitter {
       const audioBuffers: Buffer[] = [];
       
       // Get voice configuration based on preset or custom settings
-      const voicePreset = newsletter.metadata?.voicePreset || 'MALE_NEWS';
+      const voicePreset = newsletterMeta.voicePreset || newsletter.metadata?.voicePreset || 'MALE_NEWS';
       const voiceConfig = ARABIC_VOICES[voicePreset as keyof typeof ARABIC_VOICES] || ARABIC_VOICES.MALE_NEWS;
-      const voiceId = newsletter.metadata?.voiceId || voiceConfig.id;
-      const voiceSettings = newsletter.metadata?.voiceSettings || voiceConfig.settings;
+      const voiceId = newsletterMeta.voiceId || newsletter.metadata?.voiceId || voiceConfig.id;
+      const voiceSettings = newsletterMeta.voiceSettings || newsletter.metadata?.voiceSettings || voiceConfig.settings;
       const modelId = voiceConfig.model_id || 'eleven_flash_v2_5'; // Use Flash v2.5 for low latency
       
-      // Per-newsletter overrides (from metadata.ttsProvider/ttsVoice/ttsTone)
-      interface NewsletterTtsMeta {
-        ttsVoice?: string;
-        ttsTone?: string;
-        language?: 'ar' | 'en' | 'ur';
-      }
-      const newsletterMeta = (newsletter.metadata as NewsletterTtsMeta | null) || {};
       const overrideVoice = newsletterMeta.ttsVoice;
       // Fall back to system-wide defaultTone when newsletter doesn't override.
       const systemSettings = await loadTtsSettings();
       const overrideTone = newsletterMeta.ttsTone ?? systemSettings.defaultTone;
-      const language: 'ar' | 'en' | 'ur' = newsletterMeta.language === 'en' || newsletterMeta.language === 'ur' ? newsletterMeta.language : 'ar';
 
       // Provider-specific TTS request builder. Voice IDs are namespaced per
       // provider so we resolve a usable voice id for whichever provider runs.
@@ -491,6 +498,7 @@ export class AudioNewsletterService extends EventEmitter {
             voiceId: resolvedVoice,
             voiceSettings,
             model: modelId,
+            language,
           };
         }
         if (providerName === 'openai') {
@@ -498,10 +506,11 @@ export class AudioNewsletterService extends EventEmitter {
             text: chunkText,
             voiceId: resolvedVoice,
             voiceSettings: { speed: voiceSettings?.speed ?? 1.0 },
+            language,
             ...(overrideTone ? { instructions: overrideTone } : {}),
           };
         }
-        return { text: chunkText, voiceId: resolvedVoice };
+        return { text: chunkText, voiceId: resolvedVoice, language };
       };
 
       // Active provider index — stays on the working provider once we fall back.

@@ -14,6 +14,8 @@ export interface TTSOptions {
   };
   /** Optional natural-language tone instructions (used by OpenAI gpt-4o-mini-tts). */
   instructions?: string;
+  /** Language hint for Arabic number verbalization before synthesis. */
+  language?: 'ar' | 'en' | 'ur';
 }
 
 export interface Voice {
