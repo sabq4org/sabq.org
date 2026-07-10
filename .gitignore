@@ -115,3 +115,7 @@ playwright-report/
 # they describe the attack surface and must not be published.
 docs/security/تقرير_المراجعة_الأمنية_سبق.docx
 docs/security/تقرير_المراجعة_الأمنية_سبق.json
+
+# Claude Code personal settings
+.claude/settings.local.json
+.claude/worktrees/

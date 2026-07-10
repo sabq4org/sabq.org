@@ -32,10 +32,78 @@ private struct AdminInboxStatusPill: View {
     }
 }
 
+private struct AdminInboxCardModifier: ViewModifier {
+    var accent: Color?
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .fill(SabqTheme.surface)
+                    .shadow(color: SabqTheme.shadow, radius: 7, y: 3)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+                    .stroke(SabqTheme.outline.opacity(0.8), lineWidth: 0.7)
+            )
+            .overlay(alignment: .leading) {
+                if let accent {
+                    Capsule()
+                        .fill(accent)
+                        .frame(width: 3.5)
+                        .padding(.vertical, 13)
+                        .padding(.leading, 1)
+                }
+            }
+    }
+}
+
+private extension View {
+    func adminInboxCard(accent: Color? = nil) -> some View {
+        modifier(AdminInboxCardModifier(accent: accent))
+    }
+}
+
+private struct AdminInboxReplyEditor: View {
+    @Binding var text: String
+    let placeholder: String
+    var minHeight: CGFloat = 130
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            TextEditor(text: $text)
+                .font(SabqFonts.app(size: 15))
+                .foregroundStyle(SabqTheme.ink)
+                .scrollContentBackground(.hidden)
+                .frame(minHeight: minHeight)
+                .padding(8)
+
+            if text.isEmpty {
+                Text(placeholder)
+                    .font(SabqFonts.app(size: 14))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 17)
+                    .allowsHitTesting(false)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(SabqTheme.background)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(SabqTheme.outline.opacity(0.65), lineWidth: 0.5)
+        )
+        .accessibilityLabel(placeholder)
+    }
+}
+
 private struct AdminInboxEmptyState: View {
     let icon: String
     let title: String
     let subtitle: String
+    var compact = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -50,8 +118,9 @@ private struct AdminInboxEmptyState: View {
                 .foregroundStyle(SabqTheme.secondaryInk)
                 .multilineTextAlignment(.center)
         }
-        .frame(maxWidth: .infinity, minHeight: 250)
+        .frame(maxWidth: .infinity, minHeight: compact ? 150 : 250)
         .padding(24)
+        .adminInboxCard()
     }
 }
 
@@ -63,15 +132,18 @@ private struct AdminInboxErrorState: View {
         VStack(spacing: 14) {
             Image(systemName: "exclamationmark.triangle")
                 .font(SabqFonts.app(size: 34, weight: .light))
-                .foregroundStyle(SabqTheme.coral)
+                .foregroundStyle(AdminInboxPalette.danger)
             Text(text)
                 .font(SabqFonts.app(size: 14, weight: .medium))
                 .foregroundStyle(SabqTheme.secondaryInk)
+                .multilineTextAlignment(.center)
             Button("إعادة المحاولة", action: retry)
                 .font(SabqFonts.app(size: 14, weight: .bold))
-                .foregroundStyle(SabqTheme.sky)
+                .foregroundStyle(AdminInboxPalette.action)
         }
         .frame(maxWidth: .infinity, minHeight: 250)
+        .padding(24)
+        .adminInboxCard()
     }
 }
 
@@ -150,6 +222,9 @@ struct AdminContactMessagesView: View {
         .onChange(of: vm.selectedStatus) { _, _ in Task { await vm.load(search: search) } }
         .task { await vm.load(search: search) }
         .refreshable { await vm.load(search: search) }
+        .navigationDestination(for: AdminContactMessageRoute.self) { route in
+            AdminContactMessageDetailView(id: route.id)
+        }
         .sabqScreen("AdminContactMessages")
     }
 
@@ -157,11 +232,11 @@ struct AdminContactMessagesView: View {
         HStack(alignment: .top, spacing: 12) {
             ZStack {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(SabqTheme.teal.opacity(0.13))
+                    .fill(AdminInboxPalette.success.opacity(0.12))
                     .frame(width: 46, height: 46)
                 Image(systemName: "envelope.badge.fill")
                     .font(SabqFonts.app(size: 20, weight: .semibold))
-                    .foregroundStyle(SabqTheme.teal)
+                    .foregroundStyle(AdminInboxPalette.success)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text("رسائل التواصل")
@@ -189,10 +264,10 @@ struct AdminContactMessagesView: View {
                 Image(systemName: "chevron.down").font(SabqFonts.app(size: 10, weight: .bold))
             }
             .font(SabqFonts.app(size: 13, weight: .bold))
-            .foregroundStyle(SabqTheme.sky)
+            .foregroundStyle(AdminInboxPalette.action)
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(Capsule().fill(SabqTheme.sky.opacity(0.10)))
+            .background(Capsule().fill(AdminInboxPalette.action.opacity(0.10)))
         }
     }
 
@@ -221,7 +296,7 @@ struct AdminContactMessagesView: View {
                             Text(vm.isLoadingMore ? "جارٍ الجلب…" : "جلب المزيد")
                         }
                         .font(SabqFonts.app(size: 14, weight: .bold))
-                        .foregroundStyle(SabqTheme.sky)
+                        .foregroundStyle(AdminInboxPalette.action)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 13)
                     }
@@ -241,14 +316,14 @@ private struct AdminContactMessageRow: View {
                 AdminInboxStatusPill(title: message.status.label, icon: message.status.icon, tint: message.status.tint)
                 Spacer(minLength: 0)
                 Text(adminInboxDate(message.createdAt))
-                    .font(SabqFonts.app(size: 10, weight: .medium))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(1)
             }
             Text(message.subject)
                 .font(SabqFonts.app(size: 16, weight: .heavy))
                 .foregroundStyle(SabqTheme.ink)
-                .lineLimit(1)
+                .lineLimit(2)
             Text(message.message)
                 .font(SabqFonts.app(size: 13))
                 .foregroundStyle(SabqTheme.secondaryInk)
@@ -257,27 +332,30 @@ private struct AdminContactMessageRow: View {
             HStack(spacing: 6) {
                 Image(systemName: "person.fill")
                 Text(message.name)
-                Text("·")
-                Text(message.email)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward")
             }
-            .font(SabqFonts.app(size: 11, weight: .medium))
-            .foregroundStyle(SabqTheme.tertiaryInk)
+            .font(SabqFonts.app(size: 12, weight: .medium))
+            .foregroundStyle(SabqTheme.secondaryInk)
             .lineLimit(1)
+            Text(message.email)
+                .font(SabqFonts.app(size: 11, weight: .medium))
+                .foregroundStyle(SabqTheme.secondaryInk)
+                .lineLimit(1)
+                .environment(\.layoutDirection, .leftToRight)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.55), lineWidth: 0.5))
+        .contentShape(Rectangle())
+        .adminInboxCard(accent: message.status.tint)
     }
 }
 
 // MARK: - Contact message detail
 
 @MainActor
-private final class AdminContactMessageDetailViewModel: ObservableObject {
-    let objectWillChange = ObservableObjectPublisher()
+final class AdminContactMessageDetailViewModel: ObservableObject {
     @Published var detail: AdminContactMessageDetailResponse?
     @Published var isLoading = true
     @Published var isSaving = false
@@ -372,8 +450,11 @@ struct AdminContactMessageDetailView: View {
                         }
                     } label: {
                         Label("تغيير الحالة", systemImage: "ellipsis.circle")
-                            .font(SabqFonts.app(size: 13, weight: .bold))
-                            .foregroundStyle(SabqTheme.sky)
+                            .font(SabqFonts.app(size: 12, weight: .bold))
+                            .foregroundStyle(AdminInboxPalette.action)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background(Capsule().fill(AdminInboxPalette.action.opacity(0.10)))
                     }
                     .disabled(vm.isSaving)
                 }
@@ -397,7 +478,7 @@ struct AdminContactMessageDetailView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(SabqTheme.surface))
+            .adminInboxCard(accent: message.status.tint)
 
             if !detail.replies.isEmpty || message.replyText != nil {
                 VStack(alignment: .leading, spacing: 10) {
@@ -412,20 +493,26 @@ struct AdminContactMessageDetailView: View {
                                 Text(adminInboxDate(reply.createdAt))
                             }
                             .font(SabqFonts.app(size: 11, weight: .bold))
-                            .foregroundStyle(SabqTheme.teal)
+                            .foregroundStyle(AdminInboxPalette.success)
                             Text(reply.replyText)
                                 .font(SabqFonts.app(size: 14))
                                 .foregroundStyle(SabqTheme.ink)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         .padding(13)
-                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.teal.opacity(0.08)))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(AdminInboxPalette.success.opacity(0.10)))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AdminInboxPalette.success.opacity(0.30), lineWidth: 0.6))
                     }
                     if detail.replies.isEmpty, let reply = message.replyText {
                         Text(reply)
                             .font(SabqFonts.app(size: 14))
+                            .foregroundStyle(SabqTheme.ink)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(13)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.teal.opacity(0.08)))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(AdminInboxPalette.success.opacity(0.10)))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AdminInboxPalette.success.opacity(0.30), lineWidth: 0.6))
                     }
                 }
             }
@@ -434,12 +521,10 @@ struct AdminContactMessageDetailView: View {
                 Text("إرسال رد بالبريد")
                     .font(SabqFonts.app(size: 16, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
-                TextEditor(text: $replyText)
-                    .font(SabqFonts.app(size: 15))
-                    .frame(minHeight: 135)
-                    .padding(8)
-                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.surface))
-                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(SabqTheme.outline.opacity(0.65), lineWidth: 0.5))
+                Text("سيصل الرد إلى البريد المسجّل أعلاه ويُحفظ في سجل المحادثة.")
+                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                AdminInboxReplyEditor(text: $replyText, placeholder: "اكتب ردك هنا…", minHeight: 135)
                 Button {
                     Task {
                         if await vm.reply(replyText) {
@@ -456,12 +541,14 @@ struct AdminContactMessageDetailView: View {
                     .font(SabqFonts.app(size: 14, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(Capsule().fill(SabqTheme.brandGradient))
+                    .frame(minHeight: 50)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(AdminInboxPalette.primaryButton))
                 }
                 .buttonStyle(.plain)
                 .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isSaving)
             }
+            .padding(14)
+            .adminInboxCard()
         }
     }
 }
@@ -519,12 +606,20 @@ struct AdminOpinionTicketsView: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 12) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SabqTheme.gold.opacity(0.14)).frame(width: 46, height: 46)
-                        Image(systemName: "text.bubble.fill").font(SabqFonts.app(size: 20, weight: .semibold)).foregroundStyle(SabqTheme.gold)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(AdminInboxPalette.warning.opacity(0.12))
+                            .frame(width: 46, height: 46)
+                        Image(systemName: "text.bubble.fill")
+                            .font(SabqFonts.app(size: 20, weight: .semibold))
+                            .foregroundStyle(AdminInboxPalette.warning)
                     }
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("استفسارات كتّاب الرأي").font(SabqFonts.app(size: 20, weight: .heavy)).foregroundStyle(SabqTheme.ink)
-                        Text(vm.isLoading ? "جارٍ التحميل…" : "\(vm.total) استفسار").font(SabqFonts.app(size: 13, weight: .medium)).foregroundStyle(SabqTheme.secondaryInk)
+                        Text("استفسارات كتّاب الرأي")
+                            .font(SabqFonts.app(size: 20, weight: .heavy))
+                            .foregroundStyle(SabqTheme.ink)
+                        Text(vm.isLoading ? "جارٍ التحميل…" : "\(vm.total) استفسار")
+                            .font(SabqFonts.app(size: 13, weight: .medium))
+                            .foregroundStyle(SabqTheme.secondaryInk)
                     }
                     Spacer()
                 }
@@ -538,8 +633,11 @@ struct AdminOpinionTicketsView: View {
                         Text(vm.selectedStatus?.label ?? "كل الحالات")
                         Image(systemName: "chevron.down").font(SabqFonts.app(size: 10, weight: .bold))
                     }
-                    .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(SabqTheme.sky)
-                    .padding(.horizontal, 12).padding(.vertical, 9).background(Capsule().fill(SabqTheme.sky.opacity(0.10)))
+                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(AdminInboxPalette.action)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(Capsule().fill(AdminInboxPalette.action.opacity(0.10)))
                 }
                 ticketContent
             }
@@ -556,6 +654,9 @@ struct AdminOpinionTicketsView: View {
         .onChange(of: vm.selectedStatus) { _, _ in Task { await vm.load(search: search) } }
         .task { await vm.load(search: search) }
         .refreshable { await vm.load(search: search) }
+        .navigationDestination(for: AdminOpinionTicketRoute.self) { route in
+            AdminOpinionTicketDetailView(id: route.id)
+        }
         .sabqScreen("AdminOpinionTickets")
     }
 
@@ -575,8 +676,14 @@ struct AdminOpinionTicketsView: View {
                 }
                 if vm.canLoadMore {
                     Button { Task { await vm.loadMore(search: search) } } label: {
-                        HStack(spacing: 8) { if vm.isLoadingMore { ProgressView().controlSize(.small) }; Text(vm.isLoadingMore ? "جارٍ الجلب…" : "جلب المزيد") }
-                            .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(SabqTheme.sky).frame(maxWidth: .infinity).padding(.vertical, 13)
+                        HStack(spacing: 8) {
+                            if vm.isLoadingMore { ProgressView().controlSize(.small) }
+                            Text(vm.isLoadingMore ? "جارٍ الجلب…" : "جلب المزيد")
+                        }
+                        .font(SabqFonts.app(size: 14, weight: .bold))
+                        .foregroundStyle(AdminInboxPalette.action)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
                     }
                     .disabled(vm.isLoadingMore)
                 }
@@ -597,34 +704,39 @@ private struct AdminOpinionTicketRow: View {
                         .font(SabqFonts.app(size: 10, weight: .heavy))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 7).padding(.vertical, 4)
-                        .background(Capsule().fill(SabqTheme.coral))
+                        .background(Capsule().fill(AdminInboxPalette.danger))
                 }
                 Spacer()
                 Text(adminInboxDate(ticket.lastMessageAt))
-                    .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(SabqTheme.tertiaryInk).lineLimit(1)
+                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(1)
             }
             Text(ticket.title)
-                .font(SabqFonts.app(size: 16, weight: .heavy)).foregroundStyle(SabqTheme.ink).lineLimit(2).multilineTextAlignment(.leading)
+                .font(SabqFonts.app(size: 16, weight: .heavy))
+                .foregroundStyle(SabqTheme.ink)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
             HStack(spacing: 6) {
                 Image(systemName: "person.fill")
                 Text(ticket.writerName ?? ticket.writerEmail ?? "كاتب الرأي")
                 Spacer()
                 Image(systemName: "chevron.forward")
             }
-            .font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(SabqTheme.secondaryInk)
+            .font(SabqFonts.app(size: 12, weight: .medium))
+            .foregroundStyle(SabqTheme.secondaryInk)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(SabqTheme.surface))
-        .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(ticket.hasUnread ? SabqTheme.coral.opacity(0.7) : SabqTheme.outline.opacity(0.55), lineWidth: ticket.hasUnread ? 1 : 0.5))
+        .contentShape(Rectangle())
+        .adminInboxCard(accent: ticket.hasUnread ? AdminInboxPalette.danger : ticket.status.tint)
     }
 }
 
 // MARK: - Opinion-ticket detail
 
 @MainActor
-private final class AdminOpinionTicketDetailViewModel: ObservableObject {
-    let objectWillChange = ObservableObjectPublisher()
+final class AdminOpinionTicketDetailViewModel: ObservableObject {
     @Published var detail: AdminOpinionTicketDetailResponse?
     @Published var isLoading = true
     @Published var isSaving = false
@@ -704,7 +816,11 @@ struct AdminOpinionTicketDetailView: View {
                         ForEach(AdminOpinionTicketStatus.allCases) { status in Button(status.label) { Task { await vm.updateStatus(status) } } }
                     } label: {
                         Label("تغيير الحالة", systemImage: "ellipsis.circle")
-                            .font(SabqFonts.app(size: 13, weight: .bold)).foregroundStyle(SabqTheme.sky)
+                            .font(SabqFonts.app(size: 12, weight: .bold))
+                            .foregroundStyle(AdminInboxPalette.action)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 7)
+                            .background(Capsule().fill(AdminInboxPalette.action.opacity(0.10)))
                     }
                     .disabled(vm.isSaving)
                 }
@@ -712,28 +828,32 @@ struct AdminOpinionTicketDetailView: View {
                 Label(ticket.writerName ?? ticket.writerEmail ?? "كاتب الرأي", systemImage: "person.fill")
                     .font(SabqFonts.app(size: 13, weight: .medium)).foregroundStyle(SabqTheme.secondaryInk)
                 Text("فتح في \(adminInboxDate(ticket.createdAt))")
-                    .font(SabqFonts.app(size: 11)).foregroundStyle(SabqTheme.tertiaryInk)
+                    .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(SabqTheme.secondaryInk)
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(SabqTheme.surface))
+            .adminInboxCard(accent: ticket.status.tint)
 
             ForEach(detail.messages) { message in
                 let parent = message.parentMessageId.flatMap { parentId in detail.messages.first(where: { $0.id == parentId }) }
+                let senderTint = message.isFromAdmin ? AdminInboxPalette.action : AdminInboxPalette.success
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
                         Label(message.senderName ?? (message.isFromAdmin ? "الإدارة" : "الكاتب"), systemImage: message.isFromAdmin ? "shield.fill" : "person.fill")
+                            .font(SabqFonts.app(size: 12, weight: .bold))
+                            .foregroundStyle(senderTint)
                         Spacer()
                         Text(adminInboxDate(message.createdAt))
+                            .font(SabqFonts.app(size: 11, weight: .medium))
+                            .foregroundStyle(SabqTheme.secondaryInk)
                     }
-                    .font(SabqFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(message.isFromAdmin ? SabqTheme.sky : SabqTheme.teal)
                     if let parent {
                         Text("رد على: \(parent.message)")
                             .font(SabqFonts.app(size: 11))
                             .foregroundStyle(SabqTheme.secondaryInk)
                             .lineLimit(2)
                             .padding(9)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(SabqTheme.background))
                     }
                     Text(message.message)
@@ -743,36 +863,35 @@ struct AdminOpinionTicketDetailView: View {
                     if ticket.status != .closed {
                         Button { replyTo = message } label: {
                             Label("رد على هذه الرسالة", systemImage: "arrowshape.turn.up.left")
-                                .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(SabqTheme.sky)
+                                .font(SabqFonts.app(size: 12, weight: .bold))
+                                .foregroundStyle(AdminInboxPalette.action)
                         }
                         .buttonStyle(.plain)
                     }
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(message.isFromAdmin ? SabqTheme.sky.opacity(0.08) : SabqTheme.teal.opacity(0.08)))
-                .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke((message.isFromAdmin ? SabqTheme.sky : SabqTheme.teal).opacity(0.25), lineWidth: 0.5))
+                .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(senderTint.opacity(0.10)))
+                .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(senderTint.opacity(0.32), lineWidth: 0.6))
             }
 
             if ticket.status == .closed {
                 AdminInboxEmptyState(icon: "lock.fill", title: "الاستفسار مغلق", subtitle: "أعد فتحه من قائمة الحالة لإضافة رد جديد.")
             } else {
                 VStack(alignment: .leading, spacing: 10) {
+                    Text("إضافة رد")
+                        .font(SabqFonts.app(size: 16, weight: .heavy))
+                        .foregroundStyle(SabqTheme.ink)
                     if let replyTo {
                         HStack(spacing: 8) {
-                            Image(systemName: "arrowshape.turn.up.left").foregroundStyle(SabqTheme.sky)
+                            Image(systemName: "arrowshape.turn.up.left").foregroundStyle(AdminInboxPalette.action)
                             Text("رد على: \(replyTo.senderName ?? "الرسالة")").lineLimit(1)
                             Spacer()
                             Button { self.replyTo = nil } label: { Image(systemName: "xmark.circle.fill") }
                         }
                         .font(SabqFonts.app(size: 12, weight: .bold)).foregroundStyle(SabqTheme.secondaryInk)
                     }
-                    TextEditor(text: $replyText)
-                        .font(SabqFonts.app(size: 15))
-                        .frame(minHeight: 125)
-                        .padding(8)
-                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(SabqTheme.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(SabqTheme.outline.opacity(0.65), lineWidth: 0.5))
+                    AdminInboxReplyEditor(text: $replyText, placeholder: "اكتب ردك للكاتب هنا…", minHeight: 125)
                     Button {
                         Task {
                             if await vm.reply(replyText, parentMessageId: replyTo?.id) {
@@ -788,11 +907,14 @@ struct AdminOpinionTicketDetailView: View {
                             Text(vm.isSaving ? "جارٍ الإرسال…" : "إرسال الرد")
                         }
                         .font(SabqFonts.app(size: 14, weight: .bold)).foregroundStyle(.white)
-                        .frame(maxWidth: .infinity).padding(.vertical, 13).background(Capsule().fill(SabqTheme.brandGradient))
+                        .frame(maxWidth: .infinity).frame(minHeight: 50)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(AdminInboxPalette.primaryButton))
                     }
                     .buttonStyle(.plain)
                     .disabled(replyText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isSaving)
                 }
+                .padding(14)
+                .adminInboxCard()
             }
         }
     }
