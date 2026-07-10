@@ -49,9 +49,10 @@ export function ContactMessagesWidget({ canViewDetails = true, deferLoading = fa
     refetchInterval: 300000, // Refetch every 5 minutes (optimized from 30 seconds)
   });
 
-  const pendingCount = data?.messages.filter(m => m.status === "pending").length || 0;
-  const readCount = data?.messages.filter(m => m.status === "read").length || 0;
-  const repliedCount = data?.messages.filter(m => m.status === "replied").length || 0;
+  const messages = Array.isArray(data?.messages) ? data.messages : [];
+  const pendingCount = messages.filter((m) => m.status === "pending").length;
+  const readCount = messages.filter((m) => m.status === "read").length;
+  const repliedCount = messages.filter((m) => m.status === "replied").length;
 
   if (isLoading) {
     return (

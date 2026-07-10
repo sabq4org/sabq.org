@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { STATUS_META, STATUS_OPTIONS, type OpinionTicketStatus } from "@/components/opinion-tickets/statusMeta";
+import { apiUrl } from "@/lib/queryClient";
 
 interface AdminTicketRow {
   id: string;
@@ -97,7 +98,7 @@ export default function OpinionTicketsAdmin() {
   const { data, isLoading } = useQuery<ListResponse>({
     queryKey: ["/api/opinion-tickets", { status: statusFilter, writerId: writerFilter }],
     queryFn: async () => {
-      const res = await fetch(`/api/opinion-tickets${queryParams}`, { credentials: "include" });
+      const res = await fetch(apiUrl(`/api/opinion-tickets${queryParams}`), { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load tickets");
       return res.json();
     },
@@ -105,6 +106,11 @@ export default function OpinionTicketsAdmin() {
 
   const { data: writersData } = useQuery<WritersResponse>({
     queryKey: ["/api/opinion-tickets/writers/list"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/opinion-tickets/writers/list"), { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load writers");
+      return res.json();
+    },
   });
 
   const tickets = Array.isArray(data?.tickets) ? data!.tickets : [];
@@ -133,11 +139,11 @@ export default function OpinionTicketsAdmin() {
       <div className="space-y-6 p-4 md:p-6" dir="rtl">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-amber-500/10">
-            <MessageSquare className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+          <div className="p-2.5 rounded-xl bg-amber-600">
+            <MessageSquare className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold" data-testid="text-page-title">
+            <h1 className="text-2xl font-bold text-foreground" data-testid="text-page-title">
               استفسارات كتّاب الرأي
             </h1>
             <p className="text-muted-foreground text-sm mt-0.5">
@@ -171,22 +177,22 @@ export default function OpinionTicketsAdmin() {
               label="مفتوحة"
               value={stats.open}
               icon={Clock}
-              iconColor="text-yellow-600 dark:text-yellow-400"
-              iconBg="bg-yellow-500/10"
+              iconColor="text-amber-800 dark:text-amber-200"
+              iconBg="bg-amber-100 dark:bg-amber-500/20"
             />
             <StatCard
               label="تمت الإجابة"
               value={stats.answered}
               icon={CheckCircle}
-              iconColor="text-green-600 dark:text-green-400"
-              iconBg="bg-green-500/10"
+              iconColor="text-emerald-800 dark:text-emerald-200"
+              iconBg="bg-emerald-100 dark:bg-emerald-500/20"
             />
             <StatCard
               label="مغلقة"
               value={stats.closed}
               icon={Lock}
-              iconColor="text-muted-foreground"
-              iconBg="bg-muted"
+              iconColor="text-slate-700 dark:text-slate-200"
+              iconBg="bg-slate-100 dark:bg-slate-500/20"
             />
           </div>
         )}
@@ -252,9 +258,9 @@ export default function OpinionTicketsAdmin() {
               <p className="text-muted-foreground">لا توجد استفسارات مطابقة</p>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border bg-card">
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               {filtered.map((t, idx) => {
-                const meta = STATUS_META[t.status];
+                const meta = STATUS_META[t.status] ?? STATUS_META.open;
                 return (
                   <div
                     key={t.id}
@@ -266,21 +272,21 @@ export default function OpinionTicketsAdmin() {
                       navigate(`/dashboard/opinion-tickets/${t.id}`)
                     }
                     className={cn(
-                      "flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/40",
-                      idx !== filtered.length - 1 && "border-b",
-                      t.hasUnread && "bg-amber-50/40 dark:bg-amber-500/5"
+                      "flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors hover:bg-muted/50",
+                      idx !== filtered.length - 1 && "border-b border-border/70",
+                      t.hasUnread && "bg-amber-50/70 dark:bg-amber-500/10"
                     )}
                     data-testid={`row-admin-ticket-${t.id}`}
                   >
-                    <div className="h-9 w-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                      <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <div className="h-10 w-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shrink-0">
+                      <MessageSquare className="h-4 w-4 text-amber-800 dark:text-amber-200" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-medium text-sm line-clamp-1">{t.title}</h3>
+                        <h3 className="font-semibold text-sm text-foreground line-clamp-1">{t.title}</h3>
                         {t.hasUnread && (
                           <span
-                            className="inline-block h-2 w-2 rounded-full bg-amber-500"
+                            className="inline-block h-2.5 w-2.5 rounded-full bg-amber-600 ring-2 ring-background"
                             aria-label="جديد"
                           />
                         )}
@@ -291,7 +297,7 @@ export default function OpinionTicketsAdmin() {
                         {formatDate(t.lastMessageAt)}
                       </p>
                     </div>
-                    <Badge variant="outline" className={cn("shrink-0", meta.className)}>
+                    <Badge variant="outline" className={cn("shrink-0 font-medium", meta.className)}>
                       {meta.label}
                     </Badge>
                   </div>

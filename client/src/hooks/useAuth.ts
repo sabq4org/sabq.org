@@ -52,12 +52,24 @@ export function hasAllPermissions(user: User | null | undefined, ...permissionsT
   return permissionsToCheck.every(p => user.permissions?.includes(p) ?? false);
 }
 
+// Superuser roles that should satisfy any check asking for "admin"
+// (matches server/rbac.ts requireRole + SUPERUSER_ROLE_NAMES).
+const SUPERUSER_ROLES = ["system_admin", "system.admin", "superadmin", "super_admin"] as const;
+
 // Helper function to check if user has any of the specified roles
 // Accepts any user object with role/roles properties
 export function hasRole(user: { role?: string; roles?: string[] } | null | undefined, ...rolesToCheck: string[]): boolean {
   if (!user) return false;
-  const userRoles = user.roles || [user.role].filter(Boolean);
-  return rolesToCheck.some(roleToCheck => userRoles.includes(roleToCheck));
+  const userRoles = (user.roles || [user.role].filter(Boolean)) as string[];
+  if (rolesToCheck.some((roleToCheck) => userRoles.includes(roleToCheck))) {
+    return true;
+  }
+  // system_admin-only accounts must pass ProtectedRoute requireRoles={["admin", ...]}
+  // the same way the sidebar maps them to admin via resolveUserRole.
+  const isSuperuser = userRoles.some((r) =>
+    (SUPERUSER_ROLES as readonly string[]).includes(r),
+  );
+  return isSuperuser && rolesToCheck.includes("admin");
 }
 
 // Check if user is staff (has any role beyond reader)

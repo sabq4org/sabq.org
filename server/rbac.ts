@@ -331,8 +331,17 @@ export function requireRole(...roleNames: string[]) {
       }
     }
 
-    // Check if user has any of the required roles
-    const hasRole = roleNames.some(roleName => userRoleNames.includes(roleName));
+    // Check if user has any of the required roles.
+    // Superusers (system_admin / superadmin / …) satisfy any gate that
+    // includes "admin" — otherwise a system_admin-only account gets 403 on
+    // routes written as requireRole("admin", "editor") while still seeing
+    // those pages in the sidebar (nav maps system_admin → admin).
+    const isSuperuser = userRoleNames.some((r) =>
+      (SUPERUSER_ROLE_NAMES as readonly string[]).includes(r),
+    );
+    const hasRole =
+      roleNames.some((roleName) => userRoleNames.includes(roleName)) ||
+      (isSuperuser && roleNames.includes("admin"));
 
     if (!hasRole) {
       console.error(`[RBAC] Access denied - user roles: ${userRoleNames.join(', ')}, required: ${roleNames.join(', ')}`);

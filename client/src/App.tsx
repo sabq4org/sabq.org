@@ -1011,18 +1011,22 @@ function Router() {
         <Route path="/dashboard/contact-messages/:id">
           {() => (
             <ProtectedRoute requireStaff={true} requireRoles={["admin", "editor"]}>
-              <Suspense fallback={<PageLoader />}>
-                <ContactMessageDetail />
-              </Suspense>
+              <ErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <ContactMessageDetail />
+                </Suspense>
+              </ErrorBoundary>
             </ProtectedRoute>
           )}
         </Route>
         <Route path="/dashboard/contact-messages">
           {() => (
             <ProtectedRoute requireStaff={true} requireRoles={["admin", "editor"]}>
-              <Suspense fallback={<PageLoader />}>
-                <ContactMessagesManagement />
-              </Suspense>
+              <ErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <ContactMessagesManagement />
+                </Suspense>
+              </ErrorBoundary>
             </ProtectedRoute>
           )}
         </Route>
