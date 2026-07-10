@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo, Fragment } from "react";
+import { useEffect, useRef, useState, useMemo, Fragment, type CSSProperties } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { formatDistanceToNow, parseISO, startOfDay, subDays, subHours, differenceInMinutes, isToday, isYesterday } from "date-fns";
@@ -12,7 +12,6 @@ import {
   Clock,
   RefreshCw,
   FolderOpen,
-  TrendingUp,
   Activity,
   BarChart3,
   Timer,
@@ -35,6 +34,8 @@ import { formatTime, formatNumber } from "@/lib/format";
 import { DmsLeaderboardAd, DmsMpuAd, useAdTracking } from "@/components/DmsAdSlot";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 
 interface LiveUpdate {
   id: string;
@@ -143,17 +144,16 @@ function resolveCategoryColor(raw?: string | null): string {
 
 function StatisticsSkeleton() {
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-testid="skeleton-statistics">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3" data-testid="skeleton-statistics">
       {[1, 2, 3, 4].map((i) => (
-        <div key={i} className="bg-card rounded-xl p-5 border">
-          <div className="flex items-center gap-3 mb-4">
-            <Skeleton className="h-12 w-12 rounded-xl" />
-            <div className="flex-1">
-              <Skeleton className="h-4 w-20 mb-2" />
+        <div key={i} className="bg-card rounded-xl p-3 border border-border/70">
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-2">
               <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-6 w-12" />
             </div>
+            <Skeleton className="h-9 w-9 rounded-lg" />
           </div>
-          <Skeleton className="h-8 w-24" />
         </div>
       ))}
     </div>
@@ -216,7 +216,6 @@ function StatisticsCards({ items }: StatisticsCardsProps) {
       value: statistics.todayTotal,
       unit: "تحديث مباشر",
       icon: Activity,
-      gradient: "stat-card-gradient-1",
       iconBg: "bg-primary/15",
       iconColor: "text-primary",
     },
@@ -226,7 +225,6 @@ function StatisticsCards({ items }: StatisticsCardsProps) {
       value: statistics.breakingCount,
       unit: "خبر عاجل",
       icon: Zap,
-      gradient: "stat-card-gradient-2",
       iconBg: "bg-destructive/15",
       iconColor: "text-destructive",
     },
@@ -236,7 +234,6 @@ function StatisticsCards({ items }: StatisticsCardsProps) {
       value: statistics.mostActiveCategory,
       unit: "تصنيف",
       icon: BarChart3,
-      gradient: "stat-card-gradient-3",
       iconBg: "bg-purple-500/15",
       iconColor: "text-purple-600 dark:text-purple-400",
       isText: true,
@@ -247,46 +244,33 @@ function StatisticsCards({ items }: StatisticsCardsProps) {
       value: statistics.avgFrequency > 0 ? statistics.avgFrequency : "—",
       unit: statistics.avgFrequency > 0 ? "دقيقة" : "غير متوفر",
       icon: Timer,
-      gradient: "stat-card-gradient-4",
       iconBg: "bg-info/15",
       iconColor: "text-info",
     },
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-1.5 sm:gap-4">
-      {statCards.map((stat, index) => (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+      {statCards.map((stat) => (
         <div
           key={stat.id}
-          className="bg-card rounded-lg sm:rounded-xl p-1.5 sm:p-5 hover-elevate border border-border shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
+          className="bg-card rounded-xl border border-border/70 px-3 py-2.5 sm:px-4 sm:py-3 shadow-sm"
           data-testid={`stat-${stat.id}`}
         >
-          {/* Mobile: Ultra compact vertical layout */}
-          <div className="sm:hidden flex flex-col items-center text-center gap-0.5">
-            <div className={`p-1 rounded-md ${stat.iconBg}`}>
-              <stat.icon className={`h-3 w-3 ${stat.iconColor}`} />
-            </div>
-            <div className={`${stat.isText ? 'text-[10px]' : 'text-sm'} font-bold line-clamp-1`}>
-              {stat.value}
-            </div>
-            <span className="text-[8px] text-muted-foreground leading-tight line-clamp-1">{stat.label}</span>
-          </div>
-          {/* Desktop: Original layout */}
-          <div className="hidden sm:block">
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`p-3 rounded-xl ${stat.iconBg}`}>
-                <stat.icon className={`h-5 w-5 ${stat.iconColor}`} />
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <span className="block text-[10px] sm:text-xs text-muted-foreground font-medium mb-0.5">
+                {stat.label}
+              </span>
+              <div className={`${stat.isText ? "text-sm sm:text-base" : "text-xl sm:text-2xl"} font-black leading-none line-clamp-1`}>
+                {stat.value}
               </div>
-              <span className="text-sm text-muted-foreground font-medium">{stat.label}</span>
             </div>
-            <div className={`${stat.isText ? 'text-lg' : 'text-3xl'} font-bold mb-1 line-clamp-1`}>
-              {stat.value}
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <TrendingUp className="h-3 w-3" />
-              <span>{stat.unit}</span>
+            <div className={`p-2 rounded-lg shrink-0 ${stat.iconBg}`}>
+              <stat.icon className={`h-4 w-4 ${stat.iconColor}`} />
             </div>
           </div>
+          <span className="block text-[9px] sm:text-[10px] text-muted-foreground mt-1">{stat.unit}</span>
         </div>
       ))}
     </div>
@@ -302,7 +286,10 @@ interface TimelineEntryProps {
 // just-arrived entries get a breathing ring so the freshest news pops.
 function TimelineEntry({ item }: TimelineEntryProps) {
   const isNew = isNewUpdate(item.publishedAt);
-  const color = resolveCategoryColor(item.categoryColor);
+  const categoryColor = resolveCategoryColor(item.categoryColor);
+  const nodeColor = item.isBreaking
+    ? "hsl(var(--destructive))"
+    : "hsl(var(--primary))";
   const accent = isNew || item.isBreaking;
 
   return (
@@ -314,41 +301,40 @@ function TimelineEntry({ item }: TimelineEntryProps) {
       <article className="relative group" data-testid={`card-news-${item.id}`}>
         {/* Timeline node — centred on the parent spine (right gutter, RTL) */}
         <span
-          className={`absolute top-4 right-[9px] z-[1] h-3.5 w-3.5 rounded-full ring-4 ring-background ${accent ? "mbm-node-pulse" : ""}`}
-          style={{ backgroundColor: color, ["--mbm-dot" as any]: color }}
+          className={`absolute top-4 right-[10px] z-[1] h-3 w-3 rounded-full ring-[3px] ring-background ${accent ? "mbm-node-pulse" : ""}`}
+          style={{ backgroundColor: nodeColor, "--mbm-dot": nodeColor } as CSSProperties}
           aria-hidden="true"
           data-testid={`node-${item.id}`}
         />
 
-        <div className="rounded-xl bg-card border border-border/50 shadow-[0_1px_3px_rgba(0,0,0,0.05)] hover:shadow-md transition-all duration-300 p-3 sm:p-4">
+        <div className="rounded-xl bg-card border border-border/70 shadow-sm hover:shadow-md transition-all duration-300 p-3">
           {/* Meta row: clock + category + state badges */}
-          <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2 flex-wrap">
+          <div className="flex items-center gap-1.5 sm:gap-2 mb-1.5 flex-wrap">
             <span
-              className="inline-flex items-center gap-1 text-xs sm:text-sm font-bold tabular-nums"
-              style={{ color }}
+              className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold tabular-nums text-primary"
               data-testid={`text-clock-${item.id}`}
             >
-              <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              <Clock className="h-3 w-3" />
               {formatClock(item.publishedAt)}
             </span>
 
             <span
-              className="text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: `${color}1A`, color }}
+              className="text-[10px] sm:text-[11px] font-medium px-1.5 py-0.5 rounded bg-muted text-foreground/75"
+              style={{ borderRight: `3px solid ${categoryColor}` }}
               data-testid={`badge-category-${item.id}`}
             >
               {item.categoryNameAr}
             </span>
 
             {item.isBreaking && (
-              <Badge variant="destructive" className="text-[10px] sm:text-xs gap-0.5 sm:gap-1 shadow-sm px-1.5 sm:px-2 py-0 h-4 sm:h-5" data-testid={`badge-breaking-${item.id}`}>
-                <Zap className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+              <Badge variant="destructive" className="text-[10px] gap-0.5 shadow-sm px-1.5 py-0 h-4" data-testid={`badge-breaking-${item.id}`}>
+                <Zap className="h-2.5 w-2.5" />
                 عاجل
               </Badge>
             )}
             {isNew && (
-              <Badge className="text-[10px] sm:text-xs bg-emerald-500 text-white border-0 shadow-sm gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0 h-4 sm:h-5 animate-pulse" data-testid={`badge-new-${item.id}`}>
-                <Zap className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
+              <Badge className="text-[10px] bg-emerald-600 text-white border-0 shadow-sm gap-0.5 px-1.5 py-0 h-4" data-testid={`badge-new-${item.id}`}>
+                <Zap className="h-2.5 w-2.5" />
                 جديد
               </Badge>
             )}
@@ -358,32 +344,32 @@ function TimelineEntry({ item }: TimelineEntryProps) {
             </span>
           </div>
 
-          <div className="flex gap-3 sm:gap-4">
+          <div className="flex gap-3">
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-sm sm:text-[17px] mb-1 sm:mb-1.5 line-clamp-2 leading-relaxed text-[#0F172A] dark:text-foreground group-hover:text-primary transition-colors" data-testid={`text-title-${item.id}`}>
+              <h3 className="font-bold text-sm sm:text-base mb-1 line-clamp-2 leading-relaxed text-foreground group-hover:text-primary transition-colors" data-testid={`text-title-${item.id}`}>
                 {item.title}
               </h3>
 
               {item.summary && (
-                <p className="text-xs sm:text-sm text-[#475569] dark:text-muted-foreground line-clamp-2 leading-relaxed hidden sm:block mb-2" data-testid={`text-summary-${item.id}`}>
+                <p className="text-xs text-foreground/65 line-clamp-1 leading-relaxed hidden sm:block mb-1.5" data-testid={`text-summary-${item.id}`}>
                   {item.summary}
                 </p>
               )}
 
-              <div className="flex items-center gap-2 sm:gap-3 text-[11px] sm:text-xs text-muted-foreground">
-                <span className="flex items-center gap-1 sm:gap-1.5 bg-muted/50 px-1.5 sm:px-2 py-0.5 rounded-full" data-testid={`text-views-${item.id}`}>
-                  <Eye className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              <div className="flex items-center gap-3 text-[10px] sm:text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1" data-testid={`text-views-${item.id}`}>
+                  <Eye className="h-3 w-3" />
                   {formatNumber(item.viewsCount)}
                 </span>
-                <span className="flex items-center gap-1 sm:gap-1.5 bg-muted/50 px-1.5 sm:px-2 py-0.5 rounded-full" data-testid={`text-comments-${item.id}`}>
-                  <MessageSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                <span className="flex items-center gap-1" data-testid={`text-comments-${item.id}`}>
+                  <MessageSquare className="h-3 w-3" />
                   {formatNumber(item.commentsCount)}
                 </span>
               </div>
             </div>
 
             {item.imageUrl && (
-              <div className="relative flex-shrink-0 w-20 h-16 sm:w-28 sm:h-24 rounded-lg overflow-hidden self-center">
+              <div className="relative flex-shrink-0 w-20 h-16 sm:w-24 sm:h-20 rounded-lg overflow-hidden self-center">
                 <OptimizedImage
                   src={item.imageUrl}
                   alt={item.title}
@@ -404,11 +390,11 @@ function TimelineEntry({ item }: TimelineEntryProps) {
 // Header chip that introduces each time bucket; its marker sits on the spine.
 function TimelineGroupHeader({ label, count, icon: Icon }: { label: string; count: number; icon: typeof Radio }) {
   return (
-    <div className="relative mb-3" data-testid={`group-header-${label}`}>
+    <div className="relative mb-2.5" data-testid={`group-header-${label}`}>
       <span className="absolute top-1/2 -translate-y-1/2 right-[4px] z-[1] h-6 w-6 rounded-full bg-background ring-4 ring-background flex items-center justify-center">
         <Icon className="h-3.5 w-3.5 text-primary" />
       </span>
-      <div className="inline-flex items-center gap-2 mr-9 rounded-full border bg-muted/70 backdrop-blur-sm px-3 py-1 text-xs sm:text-sm font-bold">
+      <div className="inline-flex items-center gap-2 mr-9 rounded-lg border border-border/70 bg-card px-3 py-1.5 text-xs sm:text-sm font-bold shadow-sm">
         {label}
         <span className="text-muted-foreground font-medium">({count})</span>
       </div>
@@ -423,8 +409,8 @@ function TimelineSkeleton({ count = 8 }: { count?: number }) {
       <div className="space-y-3 sm:space-y-4">
         {Array.from({ length: count }).map((_, i) => (
           <div key={i} className="relative">
-            <span className="absolute top-4 right-[9px] z-[1] h-3.5 w-3.5 rounded-full ring-4 ring-background bg-muted" />
-            <div className="rounded-xl bg-card border border-border/50 shadow-[0_1px_3px_rgba(0,0,0,0.05)] p-3 sm:p-4">
+            <span className="absolute top-4 right-[10px] z-[1] h-3 w-3 rounded-full ring-[3px] ring-background bg-muted" />
+            <div className="rounded-xl bg-card border border-border/70 shadow-sm p-3">
               <div className="flex items-center gap-2 mb-2">
                 <Skeleton className="h-4 w-12" />
                 <Skeleton className="h-4 w-16 rounded-full" />
@@ -439,7 +425,7 @@ function TimelineSkeleton({ count = 8 }: { count?: number }) {
                     <Skeleton className="h-5 w-14 rounded-full" />
                   </div>
                 </div>
-                <Skeleton className="w-20 h-16 sm:w-28 sm:h-24 rounded-lg shrink-0" />
+                <Skeleton className="w-20 h-16 sm:w-24 sm:h-20 rounded-lg shrink-0" />
               </div>
             </div>
           </div>
@@ -470,7 +456,7 @@ function BreakingTicker({ items }: { items: LiveUpdate[] }) {
 
   return (
     <div className="bg-destructive/10 backdrop-blur-sm border-y border-destructive/20 py-1.5 sm:py-3 overflow-hidden" data-testid="breaking-ticker">
-      <div className="container max-w-6xl px-3 sm:px-6">
+      <div className="container max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-2 sm:gap-4">
           <div className="shrink-0 flex items-center gap-1 sm:gap-2">
             <div className="relative">
@@ -504,6 +490,18 @@ function BreakingTicker({ items }: { items: LiveUpdate[] }) {
 
 export default function MomentByMoment() {
   useAdTracking('لحظة بلحظة');
+
+  const { data: user } = useQuery<{
+    id: string;
+    name?: string;
+    email?: string;
+    role?: string;
+    profileImageUrl?: string | null;
+    permissions?: string[];
+  }>({
+    queryKey: ["/api/auth/user"],
+    retry: false,
+  });
   
   const [filter, setFilter] = useState<"all" | "breaking">("all");
   const [timeRange, setTimeRange] = useState<TimeRange>("today");
@@ -718,60 +716,62 @@ export default function MomentByMoment() {
   }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl" data-testid="page-moment-by-moment">
-      {/* Slim, on-brand page heading (replaces the standalone glassmorphism hero
-          so the page reads as part of سبق, not a separate micro-site). */}
-      <div className="border-b bg-background" data-testid="header-hero">
-        <div className="container max-w-6xl px-3 sm:px-6 py-3 sm:py-5">
-          {/* Breadcrumb / Home Navigation */}
-          <div className="flex items-center gap-1 sm:gap-2 mb-2 sm:mb-3 text-[10px] sm:text-sm">
-            <Link href="/" data-testid="link-home">
-              <Button variant="ghost" size="sm" className="gap-1 sm:gap-2 text-muted-foreground hover:text-foreground h-6 sm:h-8 px-1 sm:px-3 text-[10px] sm:text-sm">
-                <Home className="h-3 sm:h-4 w-3 sm:w-4" />
+    <div className="min-h-screen bg-background flex flex-col" dir="rtl" data-testid="page-moment-by-moment">
+      <Header user={user} />
+
+      <main className="flex-1">
+        {/* Official Sabq editorial heading: same shell and width as news pages.
+            Red is reserved for live state; brand blue anchors the section. */}
+        <section className="border-b bg-card/40" data-testid="header-hero">
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
+            <nav className="flex items-center gap-2 mb-4 text-xs text-muted-foreground" aria-label="مسار الصفحة">
+              <Link href="/" className="inline-flex items-center gap-1.5 hover:text-primary transition-colors" data-testid="link-home">
+                <Home className="h-3.5 w-3.5" />
                 الرئيسية
-              </Button>
-            </Link>
-            <ChevronRight className="h-3 sm:h-4 w-3 sm:w-4 text-muted-foreground rotate-180" />
-            <span className="font-medium">لحظة بلحظة</span>
+              </Link>
+              <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+              <span className="text-foreground font-medium">لحظة بلحظة</span>
+            </nav>
+
+            <div className="flex items-center justify-between gap-6">
+              <div className="flex items-start gap-3 sm:gap-4">
+                <span className="w-1.5 h-14 sm:h-16 rounded-full bg-primary shrink-0" aria-hidden="true" />
+                <div>
+                  <p className="text-xs sm:text-sm font-bold text-primary mb-1">مركز سبق المباشر</p>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h1 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight" data-testid="text-page-title">
+                      لحظة بلحظة
+                    </h1>
+                    <Badge variant="destructive" className="gap-1.5 px-2 py-0.5" data-testid="badge-live">
+                      <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+                      مباشر
+                    </Badge>
+                  </div>
+                  <p className="mt-1.5 text-sm text-foreground/65" data-testid="text-page-subtitle">
+                    متابعة فورية لأهم الأخبار العاجلة والتحديثات من غرفة أخبار سبق
+                  </p>
+                </div>
+              </div>
+
+              {lastUpdate && (
+                <div className="hidden md:flex items-center gap-2 rounded-lg border border-border/70 bg-background px-3 py-2 text-xs text-muted-foreground">
+                  <RefreshCw className="h-3.5 w-3.5 text-primary" />
+                  آخر تحديث {lastUpdate}
+                </div>
+              )}
+            </div>
           </div>
+        </section>
 
-          <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            <span className="relative inline-flex items-center justify-center p-1.5 sm:p-2.5 bg-destructive rounded-lg" data-testid="icon-live">
-              <Radio className="h-4 sm:h-6 w-4 sm:w-6 text-destructive-foreground" />
-              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive live-pulse-ring" />
-            </span>
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-bold tracking-tight" data-testid="text-page-title">
-              لحظة بلحظة
-            </h1>
-            <Badge
-              variant="destructive"
-              className="text-[9px] sm:text-xs px-1.5 sm:px-2.5 py-0 sm:py-0.5 h-4 sm:h-auto"
-              data-testid="badge-live"
-            >
-              <span className="flex items-center gap-1 sm:gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
-                LIVE
-              </span>
-            </Badge>
-            <p className="w-full sm:w-auto sm:mr-1 text-muted-foreground text-[10px] sm:text-sm" data-testid="text-page-subtitle">
-              متابعة مباشرة للأخبار العاجلة والتحديثات اللحظية
-            </p>
-          </div>
-        </div>
-      </div>
+        <BreakingTicker items={breakingNews} />
 
-      {/* Breaking News Ticker */}
-      <BreakingTicker items={breakingNews} />
-
-      {/* Content container — leaderboard + statistics span the full width; the
-          live feed then occupies the right (main) column with a sidebar on the
-          left, so the page mirrors the rest of سبق's two-column news layout. */}
-      <div className="container max-w-6xl px-3 sm:px-6 py-3 sm:py-6">
+        {/* Standard Sabq content width and two-column editorial grid. */}
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-7">
         {/* DMS Leaderboard (full width) */}
         <DmsLeaderboardAd />
 
         {/* Statistics Section - Compact on mobile */}
-        <section className="mb-4 sm:mb-6" data-testid="section-statistics">
+        <section className="mb-4 sm:mb-5" data-testid="section-statistics">
           {isLoading ? (
             <StatisticsSkeleton />
           ) : (
@@ -780,13 +780,13 @@ export default function MomentByMoment() {
         </section>
 
         {/* Two-column layout: live feed (right) + sidebar (left) in RTL */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6">
           {/* MAIN — live feed, occupies the right side of the page */}
           <main data-testid="main-content">
             {/* Enhanced Sticky Filter Bar - Compact on mobile */}
-            <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b py-2 sm:py-3 mb-4 sm:mb-6" data-testid="header-status-bar">
+            <div className="sticky top-16 z-20 rounded-xl bg-card/95 backdrop-blur-sm border border-border/70 shadow-sm p-3 mb-4" data-testid="header-status-bar">
               {/* Status Row - Ultra compact on mobile */}
-              <div className="flex items-center justify-between gap-2 sm:gap-4 flex-wrap mb-2 sm:mb-3">
+              <div className="flex items-center justify-between gap-2 sm:gap-4 flex-wrap mb-2.5">
                 <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
                   {/* Live Indicator with Pulse Ring */}
                   <div className="flex items-center gap-1 sm:gap-2 bg-destructive/10 px-1.5 sm:px-3 py-0.5 sm:py-1.5 rounded-full">
@@ -822,7 +822,7 @@ export default function MomentByMoment() {
               </div>
 
               {/* Pill-Style Filters Row - Compact on mobile */}
-              <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
+              <div className="flex flex-wrap items-center gap-2">
                 {/* Filter Pills */}
                 <div className="flex gap-1 sm:gap-2">
                   <button
@@ -891,7 +891,7 @@ export default function MomentByMoment() {
 
             {/* "New updates" live pill */}
             {newCount > 0 && (
-              <div className="sticky top-20 z-30 flex justify-center pointer-events-none mb-3">
+              <div className="sticky top-36 z-30 flex justify-center pointer-events-none mb-3">
                 <button
                   onClick={revealNewUpdates}
                   className="mbm-enter pointer-events-auto flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-xs sm:text-sm font-semibold shadow-lg hover:brightness-110 transition"
@@ -909,15 +909,15 @@ export default function MomentByMoment() {
             {!isLoading && filteredItems.length === 0 && <EmptyState />}
 
             {!isLoading && timelineGroups.length > 0 && (
-              <div className="space-y-6 sm:space-y-8" data-testid="list-news">
+              <div className="space-y-5" data-testid="list-news">
                 {(() => {
                   let globalIndex = -1;
                   return timelineGroups.map((group) => (
-                    <section key={group.key} className="relative pr-7 sm:pr-8" data-testid={`group-${group.key}`}>
+                    <section key={group.key} className="relative pr-7" data-testid={`group-${group.key}`}>
                       {/* Continuous spine for this time bucket */}
                       <div className="mbm-spine pointer-events-none absolute top-7 bottom-0 right-[15px] w-0.5" />
                       <TimelineGroupHeader label={group.label} count={group.items.length} icon={group.icon} />
-                      <div className="space-y-3 sm:space-y-4">
+                      <div className="space-y-3">
                         {group.items.map((item) => {
                           globalIndex += 1;
                           const showAd = (globalIndex + 1) % 6 === 0;
@@ -959,7 +959,7 @@ export default function MomentByMoment() {
 
           {/* SIDEBAR — secondary content, occupies the left side of the page */}
           <aside className="mt-6 lg:mt-0" data-testid="sidebar">
-            <div className="lg:sticky lg:top-4 space-y-4 sm:space-y-6">
+            <div className="lg:sticky lg:top-20 space-y-4 sm:space-y-6">
               {/* MPU ad (moved out of the main feed top into the sidebar) */}
               <DmsMpuAd />
 
@@ -992,6 +992,9 @@ export default function MomentByMoment() {
           </aside>
         </div>
       </div>
+      </main>
+
+      <Footer />
     </div>
   );
 }
