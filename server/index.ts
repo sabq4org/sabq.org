@@ -2116,6 +2116,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // تغذية TheSports MQTT (WebSocket) — نتائج/أحداث لحظية فوق detail_live.
+      // للتعطيل: THESPORTS_MQTT_ENABLED=false
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startTheSportsMqttWorker } = await import("./jobs/theSportsMqttWorker");
+            startTheSportsMqttWorker();
+          } catch (error) {
+            console.error("[Server] Error starting TheSports MQTT worker:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
     // Handle server errors
     server.on("error", (error: any) => {
       console.error("[Server] ❌ Server error:", error);
