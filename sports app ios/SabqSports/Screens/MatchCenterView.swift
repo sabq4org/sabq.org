@@ -311,6 +311,17 @@ struct SpMatchCenter: View {
         }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
+        .alert(
+            L("تعذّر إضافة المباراة إلى شاشة القفل"),
+            isPresented: Binding(
+                get: { liveActivity.startErrorMessage != nil },
+                set: { if !$0 { liveActivity.clearStartError() } }
+            )
+        ) {
+            Button(L("حسنًا")) { liveActivity.clearStartError() }
+        } message: {
+            Text(liveActivity.startErrorMessage ?? "")
+        }
     }
 
     // MARK: - الترويسة (مسطّحة بلا إطار — كمرجع كأس العالم)

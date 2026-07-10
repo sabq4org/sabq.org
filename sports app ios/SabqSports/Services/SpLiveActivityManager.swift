@@ -23,6 +23,8 @@ final class SpLiveActivityManager {
 
     /// معرّفات المباريات التي لها نشاط حيّ قائم (لعكس حالة الزرّ في الواجهة).
     private(set) var activeFixtureIds: Set<Int> = []
+    /// يظهر للمستخدم بدل ابتلاع فشل ActivityKit بصمت.
+    private(set) var startErrorMessage: String?
 
     /// النشاطات القائمة مفهرسة بمعرّف المباراة.
     private var activities: [Int: Activity<SpMatchActivityAttributes>] = [:]
@@ -59,7 +61,9 @@ final class SpLiveActivityManager {
         // ظاهرًا لكن بلا استجابة في شاشة «عالمية».
         guard fixture.id != 0 else { return }
         adoptExistingIfNeeded()
+        pruneInactiveActivities()
         guard isSupported, activities[fixture.id] == nil else { return }
+        startErrorMessage = nil
         // أظهر الحالة فورًا (تفاؤليًّا) ريثما تكتمل عملية البدء غير المتزامنة.
         activeFixtureIds.insert(fixture.id)
         Task { await startAsync(for: fixture) }
@@ -84,20 +88,43 @@ final class SpLiveActivityManager {
             kickoff: fixture.kickoff
         )
         let state = makeState(from: fixture)
+        let content = ActivityContent(state: state, staleDate: staleDate(for: fixture))
         do {
             let activity = try Activity.request(
                 attributes: attrs,
-                content: .init(state: state, staleDate: staleDate(for: fixture)),
+                content: content,
                 pushType: .token   // نطلب توكن دفع لتمكين تحديثات APNs لاحقًا
             )
-            activities[fixture.id] = activity
-            activeFixtureIds.insert(fixture.id)
-            observePushToken(activity)
-        } catch {
-            // فشل الطلب (الإذن مغلق/تجاوز الحدّ) — تراجَع عن الإظهار التفاؤلي.
-            activeFixtureIds.remove(fixture.id)
+            adopt(activity)
+        } catch let pushError {
+            // بعض أجهزة/TestFlight ترفض إنشاء push token مؤقتًا رغم سماح Live
+            // Activities. لا نجعل الزر ميتًا: ابدأ نشاطًا محليًّا فورًا؛ سيستمر
+            // تحديثه من التطبيق، بينما النسخة ذات التوكن تبقى المسار المفضّل.
+            do {
+                let activity = try Activity.request(
+                    attributes: attrs,
+                    content: content,
+                    pushType: nil
+                )
+                adopt(activity)
+                #if DEBUG
+                print("[LiveActivity] push token unavailable; local fallback started: \(pushError)")
+                #endif
+            } catch let localError {
+                activeFixtureIds.remove(fixture.id)
+                let ns = localError as NSError
+                startErrorMessage = Lf(
+                    "رفض iOS بدء النشاط المباشر (%d). تأكد من تفعيل Live Activities وعدم وجود أنشطة كثيرة مفتوحة.",
+                    ns.code
+                )
+                #if DEBUG
+                print("[LiveActivity] start failed: push=\(pushError), local=\(localError)")
+                #endif
+            }
         }
     }
+
+    func clearStartError() { startErrorMessage = nil }
 
     // MARK: تحديث الحالة الحيّة
     func update(with fixture: SpFixture, lastEvent: String? = nil) {
@@ -192,6 +219,39 @@ final class SpLiveActivityManager {
         activeFixtureIds.insert(fixtureId)
         guard observedActivityIds.insert(activity.id).inserted else { return }
         observePushToken(activity)
+        observeActivityState(activity)
+    }
+
+    /// يزيل نشاطات انتهت أو أغلقها المستخدم/النظام من الحالة المحلية؛ بقاؤها
+    /// كان يجعل الزر يظنها قائمة وقد يراكم النشاطات حتى حد ActivityKit.
+    private func observeActivityState(_ activity: Activity<SpMatchActivityAttributes>) {
+        let fixtureId = activity.attributes.fixtureId
+        Task { [weak self] in
+            for await state in activity.activityStateUpdates {
+                guard !Task.isCancelled else { return }
+                if state == .ended || state == .dismissed {
+                    guard let self else { return }
+                    if self.activities[fixtureId]?.id == activity.id {
+                        self.activities[fixtureId] = nil
+                        self.pushTokens[fixtureId] = nil
+                        self.activeFixtureIds.remove(fixtureId)
+                    }
+                    self.observedActivityIds.remove(activity.id)
+                    return
+                }
+            }
+        }
+    }
+
+    private func pruneInactiveActivities() {
+        for (fixtureId, activity) in activities {
+            if activity.activityState == .ended || activity.activityState == .dismissed {
+                activities[fixtureId] = nil
+                pushTokens[fixtureId] = nil
+                activeFixtureIds.remove(fixtureId)
+                observedActivityIds.remove(activity.id)
+            }
+        }
     }
 
     /// يعيد رفع آخر Push-to-Start token بعد استعادة الجلسة أو تسجيل دخول جديد.

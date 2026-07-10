@@ -66,6 +66,8 @@ nonisolated enum SpEnglishStrings {
         "العالمية": "World",
         "عدسة العرض": "View lens",
         "تعذّر التحميل": "Couldn’t load",
+        "تعذّر إضافة المباراة إلى شاشة القفل": "Couldn’t add the match to the Lock Screen",
+        "رفض iOS بدء النشاط المباشر (%d). تأكد من تفعيل Live Activities وعدم وجود أنشطة كثيرة مفتوحة.": "iOS refused to start the Live Activity (%d). Make sure Live Activities are enabled and too many activities aren’t already open.",
         "تفاصيل هذه المباراة غير متاحة حاليًا": "Match details aren’t available for this fixture yet",
         "اختر بطولاتك": "Choose your competitions",
         "فعّل البطولات التي تهمّك من أيقونة الضبط أعلى الشاشة ليظهر جدولها الموحّد هنا":
