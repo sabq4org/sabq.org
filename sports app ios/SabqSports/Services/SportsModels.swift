@@ -914,6 +914,8 @@ nonisolated struct SpDeviceRegisterBody: Encodable {
     let timezone: String?
     /// معرّف الحزمة (apns-topic). يميّز تطبيق الرياضة عن الأخبار على نفس خادم APNs.
     let bundleId: String?
+    /// IDFV — يوحّد توكنات سبق وفارا على نفس الجهاز لمنع تكرار الإشعار.
+    let installationId: String?
 }
 
 /// إلغاء تسجيل رمز جهاز APNs — /api/v1/devices/unregister (عند تسجيل الخروج).
@@ -1637,7 +1639,8 @@ extension APIClient {
             deviceToken: deviceToken, platform: "ios", tokenProvider: "apns",
             userId: userId, language: "ar", appVersion: info.appVersion,
             osVersion: info.osVersion, timezone: TimeZone.current.identifier,
-            bundleId: Bundle.main.bundleIdentifier
+            bundleId: Bundle.main.bundleIdentifier,
+            installationId: info.deviceId
         )
         let data = try JSONEncoder().encode(body)
         try await send(method: "POST", path: "/devices/register", jsonBody: data, apiRoot: URLConstants.mobileAPI)

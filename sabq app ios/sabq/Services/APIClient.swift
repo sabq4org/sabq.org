@@ -893,7 +893,8 @@ actor APIClient {
         osVersion: String? = nil,
         appVersion: String? = nil,
         locale: String? = nil,
-        timezone: String? = nil
+        timezone: String? = nil,
+        installationId: String? = nil
     ) async throws {
         struct Body: Encodable {
             let token: String
@@ -905,12 +906,14 @@ actor APIClient {
             let locale: String?
             let timezone: String?
             let bundleId: String?
+            let installationId: String?
         }
         try await postRaw(path: "/members/push-token", body: Body(
             token: token, provider: provider, platform: platform,
             deviceName: deviceName, osVersion: osVersion, appVersion: appVersion,
             locale: locale, timezone: timezone,
-            bundleId: Bundle.main.bundleIdentifier
+            bundleId: Bundle.main.bundleIdentifier,
+            installationId: installationId
         ))
     }
 

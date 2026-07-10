@@ -87,7 +87,8 @@ final class NotificationsStore {
                 osVersion: UIDevice.current.systemVersion,
                 appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
                 locale: langCode,
-                timezone: TimeZone.current.identifier
+                timezone: TimeZone.current.identifier,
+                installationId: UIDevice.current.identifierForVendor?.uuidString
             )
             print("[Push] APNs token registered with backend")
         } catch {

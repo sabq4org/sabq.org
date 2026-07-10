@@ -12897,6 +12897,9 @@ export const pushDevices = pgTable("push_devices", {
   // معرّف حزمة التطبيق (apns-topic). يميّز تطبيقات APNs المتعددة على نفس الخادم
   // (الأخبار com.sabq.sabqorg، الرياضة com.sabq.sports). فارغ = الـbundle الافتراضي.
   bundleId: text("bundle_id"),
+  // معرّف التثبيت/الجهاز (IDFV على iOS). يوحّد توكنات سبق وفارا على نفس الجهاز
+  // لمنع تكرار إشعار المباراة عبر حسابين مختلفين على هاتف واحد.
+  installationId: text("installation_id"),
   deviceName: text("device_name"),
   osVersion: text("os_version"),
   appVersion: text("app_version"),
@@ -12912,6 +12915,7 @@ export const pushDevices = pgTable("push_devices", {
   index("idx_push_devices_active").on(table.isActive),
   index("idx_push_devices_platform").on(table.platform),
   index("idx_push_devices_provider").on(table.tokenProvider),
+  index("idx_push_devices_installation").on(table.installationId),
 ]);
 
 /**

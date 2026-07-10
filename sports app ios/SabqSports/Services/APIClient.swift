@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 extension Notification.Name {
     nonisolated static let spSessionUnauthorized = Notification.Name("com.sabq.sports.sessionUnauthorized")
@@ -142,12 +145,21 @@ actor APIClient {
         let b = Bundle.main
         let v = (b.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
         let build = (b.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
+        #if canImport(UIKit)
+        let installationId = UIDevice.current.identifierForVendor?.uuidString
+        let osVersion = UIDevice.current.systemVersion
+        let deviceName = UIDevice.current.model
+        #else
+        let installationId: String? = nil
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+        let deviceName = "iPhone"
+        #endif
         return SpDeviceInfo(
             platform: "ios",
-            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            osVersion: osVersion,
             appVersion: "\(v) (\(build))",
-            deviceName: "iPhone",
-            deviceId: nil
+            deviceName: deviceName,
+            deviceId: installationId
         )
     }
 

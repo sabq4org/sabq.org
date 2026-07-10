@@ -799,16 +799,31 @@ async function detectEventAlerts(
   return out;
 }
 
-/** معرّف حزمة تطبيق VARA الرياضي على iOS — مرجع تفضيل التوجيه أدناه. */
-const SPORTS_APP_BUNDLE_ID = "com.sabq.sports";
+/** معرّف حزمة تطبيق VARA الرياضي على iOS — مرجع توجيه الإشعارات الرياضية. */
+export const SPORTS_APP_BUNDLE_ID = "com.sabq.sports";
 
-/** دفع إشعار لأجهزة مستخدم واحد (APNs + FCM) — أفضل جهد، لا يرمي. */
+/** هل الجهاز ينتمي لتطبيق فارا الرياضي (وليس سبق الأخبار)؟ */
+function isSportsAppDevice(bundleId: string | null | undefined): boolean {
+  return bundleId === SPORTS_APP_BUNDLE_ID;
+}
+
+export type PushToUserDevicesOptions = {
+  interruptionLevel?: "active" | "time-sensitive";
+  apnsPriority?: "5" | "10";
+  /**
+   * مجموعة مشتركة عبر مستخدمي نفس التنبيه لمنع تكرار الإشعار على جهاز واحد
+   * عندما يكون حسابان مختلفان (سبق/فارا أو جلستان) على نفس الـinstallationId.
+   */
+  claimedInstallations?: Set<string>;
+};
+
+/** دفع إشعار لأجهزة مستخدم واحد — حصرية لفارا فقط، أفضل جهد، لا يرمي. */
 export async function pushToUserDevices(
   userId: string,
   title: string,
   body: string,
   data: Record<string, string>,
-  options: { interruptionLevel?: "active" | "time-sensitive"; apnsPriority?: "5" | "10" } = {},
+  options: PushToUserDevicesOptions = {},
 ): Promise<void> {
   try {
     const devices = await db
@@ -817,45 +832,55 @@ export async function pushToUserDevices(
         provider: pushDevices.tokenProvider,
         platform: pushDevices.platform,
         bundleId: pushDevices.bundleId,
+        installationId: pushDevices.installationId,
       })
       .from(pushDevices)
       .where(and(eq(pushDevices.userId, userId), eq(pushDevices.isActive, true)))
       .orderBy(desc(pushDevices.updatedAt));
     if (devices.length === 0) return;
 
+    // قرار المنتج 2026-07-10: إشعارات المباريات/الرياضة حصرية لتطبيق فارا.
+    // تطبيق سبق (com.sabq.sabqorg) لا يستلم أي إشعار مباراة — حتى لو كان
+    // المستخدم يتابع فريقاً من سبق أو لا يملك توكن فارا نشطاً.
+    const sportsDevices = devices.filter((d) => isSportsAppDevice(d.bundleId));
+    if (sportsDevices.length === 0) return;
+
     const uniqueDevices = [];
     const seenRoutes = new Set<string>();
-    for (const device of devices) {
+    for (const device of sportsDevices) {
       const route = `${device.platform}:${device.provider}:${device.bundleId ?? "default"}`;
       if (seenRoutes.has(route)) continue;
       seenRoutes.add(route);
       uniqueDevices.push(device);
     }
-    if (uniqueDevices.length < devices.length) {
+    if (uniqueDevices.length < sportsDevices.length) {
       console.warn(
-        `[SportsAlerts] collapsed ${devices.length - uniqueDevices.length} duplicate active push token(s) for user=${userId}`,
+        `[SportsAlerts] collapsed ${sportsDevices.length - uniqueDevices.length} duplicate active sports token(s) for user=${userId}`,
       );
     }
 
-    // تفضيل تطبيق الرياضة (قرار المالك 2026-07-09): المثبِّت للتطبيقين معًا كان
-    // يستلم إشعار المباراة نفسه مرتين — من سبق ومن VARA. كل مستهلكي هذه الدالة
-    // رياضيون (مباريات/انتقالات/سنابات)، فمن يملك توكن VARA نشطًا على iOS تصله
-    // تنبيهات الرياضة فيه وحده ويُتخطى توكن تطبيق الأخبار. يقتصر الفلتر على
-    // أجهزة APNs: أجهزة FCM/أندرويد لا تُمسّ (قد تكون هاتفًا آخر بلا VARA)،
-    // ومن ليس عنده VARA يبقى يستقبل تنبيهات الرياضة في تطبيق الأخبار كما كان.
-    const hasSportsIosDevice = uniqueDevices.some(
-      (d) => d.provider === "apns" && d.bundleId === SPORTS_APP_BUNDLE_ID,
-    );
-    const targetDevices = hasSportsIosDevice
-      ? uniqueDevices.filter((d) => d.provider !== "apns" || d.bundleId === SPORTS_APP_BUNDLE_ID)
-      : uniqueDevices;
+    // منع التكرار على مستوى الجهاز: إن وُجد installationId سبق أن استلم هذا
+    // التنبيه (حساب آخر على نفس الهاتف)، نتخطى التوكن.
+    const claimed = options.claimedInstallations;
+    const targetDevices = uniqueDevices.filter((d) => {
+      const installKey = d.installationId?.trim();
+      if (!installKey || !claimed) return true;
+      if (claimed.has(installKey)) {
+        console.warn(
+          `[SportsAlerts] skip duplicate installation=${installKey.slice(0, 8)}… user=${userId}`,
+        );
+        return false;
+      }
+      claimed.add(installKey);
+      return true;
+    });
+    if (targetDevices.length === 0) return;
 
     const apnsDevices = targetDevices.filter((d) => d.provider === "apns");
     const fcmTokens = targetDevices.filter((d) => d.provider === "fcm").map((d) => d.token);
 
     if (apnsDevices.length > 0 && isApnsConfigured()) {
       await Promise.all(
-        // apns-topic لكل جهاز حسب تطبيقه (الرياضة com.sabq.sports، الأخبار الافتراضي).
         apnsDevices.map(async (d) => {
           try {
             const resp = await sendPushNotification(
@@ -864,10 +889,12 @@ export async function pushToUserDevices(
                 ...data,
                 priority: options.interruptionLevel ?? "time-sensitive",
               }),
-              { priority: options.apnsPriority ?? "10", pushType: "alert", topic: d.bundleId ?? undefined },
+              {
+                priority: options.apnsPriority ?? "10",
+                pushType: "alert",
+                topic: d.bundleId ?? SPORTS_APP_BUNDLE_ID,
+              },
             );
-            // تشخيص: نطبع نتيجة كل دفعة (نجاح/فشل + السبب) لكشف الرفض الصامت
-            // (BadDeviceToken/DeviceTokenNotForTopic) الذي يمنع وصول إشعارات الرياضة.
             if (!resp.success) {
               console.warn(
                 `[SportsAlerts] push fail user=${userId} topic=${d.bundleId ?? "default"} status=${resp.statusCode ?? "-"} reason=${resp.reason ?? "-"}`,
@@ -930,12 +957,19 @@ async function dispatchAlert(alert: DetectedAlert): Promise<number> {
       } catch (err) {
         console.error(`[SportsAlerts] inbox/emit for user ${userId} failed:`, err);
       }
-      await pushToUserDevices(userId, alert.title, alert.body, pushData, {
-        interruptionLevel: alert.kind === "stat_insight" ? "active" : "time-sensitive",
-        apnsPriority: alert.kind === "stat_insight" ? "5" : "10",
-      });
     }),
   );
+
+  // دفع واحد لكل جهاز فعلي: نشارك claimedInstallations عبر كل المتابعين
+  // حتى لا يصل نفس الهدف لحسابين على نفس الهاتف (سبق+فارا أو جلستان).
+  const claimedInstallations = new Set<string>();
+  for (const userId of userIds) {
+    await pushToUserDevices(userId, alert.title, alert.body, pushData, {
+      interruptionLevel: alert.kind === "stat_insight" ? "active" : "time-sensitive",
+      apnsPriority: alert.kind === "stat_insight" ? "5" : "10",
+      claimedInstallations,
+    });
+  }
 
   return userIds.length;
 }
