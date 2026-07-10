@@ -1,36 +1,40 @@
 import SwiftUI
 
-// Inbox accents stay dark enough for small labels; primaryButton stays dark
-// in both appearances so white send-button text always remains readable.
+// Soft status tints for inbox labels — light enough to stay calm, distinct enough to scan.
+// primaryButton stays dark enough that white send-button text remains readable.
 nonisolated enum AdminInboxPalette {
+    /// Soft blue — read / filter default
     static let action = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.50, green: 0.69, blue: 1.00, alpha: 1)
-            : UIColor(red: 0.07, green: 0.29, blue: 0.68, alpha: 1)
+            ? UIColor(red: 0.55, green: 0.70, blue: 0.92, alpha: 1)
+            : UIColor(red: 0.28, green: 0.45, blue: 0.72, alpha: 1)
     })
 
+    /// Soft green — replied / answered
     static let success = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.42, green: 0.86, blue: 0.76, alpha: 1)
-            : UIColor(red: 0.00, green: 0.39, blue: 0.33, alpha: 1)
+            ? UIColor(red: 0.48, green: 0.78, blue: 0.68, alpha: 1)
+            : UIColor(red: 0.18, green: 0.52, blue: 0.42, alpha: 1)
     })
 
+    /// Soft amber — pending / open
     static let warning = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 1.00, green: 0.79, blue: 0.42, alpha: 1)
-            : UIColor(red: 0.47, green: 0.29, blue: 0.00, alpha: 1)
+            ? UIColor(red: 0.92, green: 0.78, blue: 0.48, alpha: 1)
+            : UIColor(red: 0.62, green: 0.42, blue: 0.12, alpha: 1)
     })
 
+    /// Soft rose — unread / new
     static let danger = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 1.00, green: 0.60, blue: 0.56, alpha: 1)
-            : UIColor(red: 0.69, green: 0.12, blue: 0.10, alpha: 1)
+            ? UIColor(red: 0.92, green: 0.62, blue: 0.60, alpha: 1)
+            : UIColor(red: 0.72, green: 0.32, blue: 0.30, alpha: 1)
     })
 
     static let primaryButton = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.16, green: 0.34, blue: 0.68, alpha: 1)
-            : UIColor(red: 0.07, green: 0.29, blue: 0.68, alpha: 1)
+            ? UIColor(red: 0.30, green: 0.34, blue: 0.40, alpha: 1)
+            : UIColor(red: 0.22, green: 0.26, blue: 0.32, alpha: 1)
     })
 }
 

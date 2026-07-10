@@ -53,14 +53,7 @@ struct SettingsView: View {
 
                 profileSection
                 if authStore.isLoggedIn {
-                    if let user = authStore.currentUser, user.isPlatformAdmin {
-                        adminDashboardEntrySection
-                    }
-                    if let user = authStore.currentUser, user.isWriter || user.isReporter || user.isAdminLike {
-                        contributorDashboardEntrySection
-                    }
-                    loyaltyEntrySection
-                    pressCardEntrySection
+                    accountShortcutsGrid
                 }
                 displaySection
                 browsingExperienceSection
@@ -718,168 +711,98 @@ struct SettingsView: View {
 
     // MARK: - Loyalty entry
 
-    // MARK: - Admin Dashboard entry
+    // MARK: - Account shortcuts (2-column grid)
 
-    /// Platform-admin-only shortcut into the streamlined in-app newsroom
-    /// dashboard. Mirrors `contributorDashboardEntrySection`'s row styling.
-    private var adminDashboardEntrySection: some View {
-        NavigationLink(value: AdminDashboardRoute()) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(SabqTheme.sky.opacity(0.14))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "shield.lefthalf.filled")
-                        .font(SabqFonts.app(size: 19, weight: .semibold))
-                        .foregroundStyle(SabqTheme.sky)
+    /// Dashboard / loyalty / press-card entries share one compact grid so the
+    /// account screen uses horizontal space instead of four full-width rows.
+    private var accountShortcutsGrid: some View {
+        let columns = [
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible(), spacing: 10)
+        ]
+        return LazyVGrid(columns: columns, spacing: 10) {
+            if let user = authStore.currentUser, user.isPlatformAdmin {
+                NavigationLink(value: AdminDashboardRoute()) {
+                    accountShortcutTile(
+                        title: "لوحة التحكم",
+                        subtitle: "إدارة الأخبار والمؤشّرات",
+                        icon: "shield.lefthalf.filled",
+                        tint: SabqTheme.sky
+                    )
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("لوحة التحكم")
-                        .font(SabqFonts.app(size: 15, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
-                    Text("إدارة الأخبار والمؤشّرات")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                .buttonStyle(.plain)
             }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-            )
+            if let user = authStore.currentUser, user.isWriter || user.isReporter || user.isAdminLike {
+                NavigationLink(value: ContributorDashboardRoute()) {
+                    accountShortcutTile(
+                        title: "مركز الأداء",
+                        subtitle: "إحصائيات مقالاتك وتفاعل جمهورك",
+                        icon: "chart.bar.xaxis.ascending",
+                        tint: Color(red: 0.30, green: 0.69, blue: 0.31)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            NavigationLink(value: LoyaltyAccountRoute()) {
+                accountShortcutTile(
+                    title: "نقاطي والمكافآت",
+                    subtitle: "تابع مستواك واستبدل نقاطك",
+                    icon: "trophy.fill",
+                    tint: Color(red: 0.96, green: 0.62, blue: 0.04)
+                )
+            }
+            .buttonStyle(.plain)
+            NavigationLink(value: PressCardRoute()) {
+                accountShortcutTile(
+                    title: "بطاقتي الصحفية",
+                    subtitle: "أضف بطاقتك إلى Apple Wallet",
+                    icon: "checkmark.seal.fill",
+                    tint: Color(red: 0.11, green: 0.64, blue: 0.94)
+                )
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
     }
 
-    // MARK: - Contributor Dashboard entry
-
-    private var contributorDashboardEntrySection: some View {
-        NavigationLink(value: ContributorDashboardRoute()) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(red: 0.30, green: 0.69, blue: 0.31).opacity(0.14))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "chart.bar.xaxis.ascending")
-                        .font(SabqFonts.app(size: 19, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.30, green: 0.69, blue: 0.31))
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("مركز الأداء")
-                        .font(SabqFonts.app(size: 15, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
-                    Text("إحصائيات مقالاتك وتفاعل جمهورك")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+    private func accountShortcutTile(
+        title: String,
+        subtitle: String,
+        icon: String,
+        tint: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 36, height: 36)
+                Image(systemName: icon)
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
+                    .foregroundStyle(tint)
             }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    // Quick-tap row that pushes LoyaltyAccountView. Sits right under
-    // profileSection so signed-in users see their loyalty surface before
-    // the display/subscription rows. Avoids duplicating the full hero
-    // card here — that lives inside LoyaltyAccountView.
-    private var loyaltyEntrySection: some View {
-        NavigationLink(value: LoyaltyAccountRoute()) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(red: 0.96, green: 0.62, blue: 0.04).opacity(0.14))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "trophy.fill")
-                        .font(SabqFonts.app(size: 19, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.96, green: 0.62, blue: 0.04))
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("نقاطي والمكافآت")
-                        .font(SabqFonts.app(size: 15, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
-                    Text("تابع مستواك واستبدل نقاطك")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
+                    .foregroundStyle(SabqTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+                Text(subtitle)
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-            )
+            Spacer(minLength: 0)
         }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Press card entry
-
-    // Shown to every signed-in user; the row itself is harmless for
-    // non-eligible users — tapping it surfaces the server's "غير مصرّح
-    // لك" message inside PressCardActivationView rather than silently
-    // hiding the feature.
-    private var pressCardEntrySection: some View {
-        NavigationLink(value: PressCardRoute()) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(red: 0.11, green: 0.64, blue: 0.94).opacity(0.14))
-                        .frame(width: 44, height: 44)
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(SabqFonts.app(size: 19, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.11, green: 0.64, blue: 0.94))
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("بطاقتي الصحفية")
-                        .font(SabqFonts.app(size: 15, weight: .heavy))
-                        .foregroundStyle(SabqTheme.ink)
-                    Text("أضف بطاقتك إلى Apple Wallet")
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(SabqTheme.secondaryInk)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.forward")
-                    .font(SabqFonts.app(size: 12, weight: .medium))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-            }
-            .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .fill(.ultraThinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                    .stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(SabqTheme.surface)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(SabqTheme.outline, lineWidth: 0.5)
+        )
     }
 
     // MARK: - Display
