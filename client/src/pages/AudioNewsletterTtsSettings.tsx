@@ -187,6 +187,8 @@ function VoicePicker({
     mutationFn: async (voice: Voice & { provider: Provider }) => {
       return apiRequest("/api/audio-newsletters/voices/test", {
         method: "POST",
+        // Don't treat endpoint auth failures as a global session expiry.
+        silent: true,
         body: JSON.stringify({
           voiceId: voice.voice_id,
           provider: voice.provider,
@@ -212,7 +214,10 @@ function VoicePicker({
     },
     onError: (err: Error) => {
       setTestingId(null);
-      toast({ title: "فشل اختبار الصوت", description: err.message || "حاول مرة أخرى", variant: "destructive" });
+      const msg = /unauthorized/i.test(err.message)
+        ? "تعذر التحقق من صلاحيتك لاختبار الصوت. حدّث الصفحة وحاول مرة أخرى."
+        : (err.message || "حاول مرة أخرى");
+      toast({ title: "فشل اختبار الصوت", description: msg, variant: "destructive" });
     },
   });
 
@@ -400,6 +405,8 @@ export default function AudioNewsletterTtsSettings() {
     mutationFn: async () => {
       return apiRequest("/api/audio-newsletters/tts-settings", {
         method: "PATCH",
+        // Don't treat endpoint auth failures as a global session expiry.
+        silent: true,
         body: JSON.stringify({
           primaryProvider,
           fallbackProviders: fallbackProviders.filter(p => p !== primaryProvider),
@@ -415,7 +422,10 @@ export default function AudioNewsletterTtsSettings() {
       toast({ title: "تم الحفظ", description: "تم تحديث إعدادات TTS بنجاح" });
     },
     onError: (err: Error) => {
-      toast({ title: "خطأ في الحفظ", description: err.message || "فشل الحفظ", variant: "destructive" });
+      const msg = /unauthorized/i.test(err.message)
+        ? "تعذر التحقق من صلاحيتك للحفظ. حدّث الصفحة وحاول مرة أخرى."
+        : (err.message || "فشل الحفظ");
+      toast({ title: "خطأ في الحفظ", description: msg, variant: "destructive" });
     },
   });
 

@@ -529,6 +529,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // Apply CSRF validation to all state-changing API routes
   app.use("/api", validateCsrfToken);
 
+  // Audio newsletters — mount immediately after session/CSRF so Passport is
+  // available, and before the legacy duplicate handlers later in this file
+  // (those older /api/audio-newsletters/* routes stay as fallbacks only).
+  const audioNewsletterRoutes = (await import("./routes/audioNewsletterRoutes")).default;
+  app.use("/api/audio-newsletters", audioNewsletterRoutes);
+  console.log("[Server] ✅ Audio Newsletter routes registered (after auth)");
+
   // Mount route modules that have been split out of this monolithic file.
   // See server/routes/splitRoutesIndex.ts for the list of mounted groups.
   registerSplitRoutes(app);

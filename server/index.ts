@@ -924,10 +924,11 @@ if (!(globalThis as any).__sabqServer) {
     const { edgeExistsHandler } = await import("./routes/edgeExistsRoute");
     app.get("/api/edge-exists", edgeExistsHandler);
 
-    const audioNewsletterRoutes = await import("./routes/audioNewsletterRoutes");
-    app.use("/api/audio-newsletters", audioNewsletterRoutes.default);
-    console.log("[Server] ✅ Audio Newsletter routes registered (priority)");
-
+    // Mobile API uses Bearer tokens (verifyMemberSession), not Passport cookies,
+    // so it is safe to mount before setupAuth. Audio newsletter routes MUST be
+    // mounted inside registerRoutes() after setupAuth — otherwise requireRole /
+    // requirePermission see an unauthenticated request and return 401 Unauthorized
+    // (which the dashboard treats as session expiry and kicks the admin out).
     const mobileApiRoutes = (await import("./routes/mobileApiRoutes")).default;
     app.use("/api/v1", mobileApiRoutes);
     console.log("[Server] ✅ Mobile API routes registered (v1)");
