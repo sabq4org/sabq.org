@@ -131,6 +131,20 @@ interface UserListItem {
   loyalty?: UserLoyalty | null;
 }
 
+/** عرض أوضح في الإدارة لحسابات الجوال بلا اسم. */
+function adminUserLabel(user: {
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+}): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  if (name) return name;
+  if (user.phoneNumber?.trim()) return `عضو جوال · ${user.phoneNumber.trim()}`;
+  if (user.email?.toLowerCase().includes("@phone.sabq.org")) return "عضو جوال";
+  return "بدون اسم";
+}
+
 // Role type
 interface Role {
   id: string;
@@ -669,9 +683,7 @@ export default function UsersManagement() {
                             <div className="min-w-0 flex-1">
                               <div className="font-medium flex items-start gap-1 flex-wrap" data-testid={`text-name-${user.id}`}>
                                 <span className="break-words">
-                                  {user.firstName || user.lastName
-                                    ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
-                                    : "بدون اسم"}
+                                  {adminUserLabel(user)}
                                 </span>
                                 {user.verificationBadge === "gold" && (
                                   <BadgeCheck className="h-4 w-4 text-amber-500 shrink-0 mt-1" aria-label="موثق ذهبي" />
@@ -1015,9 +1027,7 @@ export default function UsersManagement() {
                   <div className="min-w-0">
                     <SheetTitle className="flex items-center gap-1.5 text-base">
                       <span className="truncate">
-                        {viewingDetails.firstName || viewingDetails.lastName
-                          ? `${viewingDetails.firstName || ""} ${viewingDetails.lastName || ""}`.trim()
-                          : "بدون اسم"}
+                        {adminUserLabel(viewingDetails)}
                       </span>
                       {viewingDetails.verificationBadge === "gold" && (
                         <BadgeCheck className="h-5 w-5 text-amber-500" aria-label="موثق ذهبي" />

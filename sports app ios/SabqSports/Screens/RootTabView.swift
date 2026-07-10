@@ -7,11 +7,13 @@ import SwiftUI
 struct RootTabView: View {
     @Environment(SpTabBarVisibility.self) private var tabBarVis
     @Environment(SpAppRouter.self) private var router
+    @Environment(SpAuthStore.self) private var auth
 
     // شاشات الترحيب — تظهر مرّة واحدة عند أول تشغيل (مفتاح جديد كي تظهر أيضًا
     // لمن حدّث من نسخة سابقة بلا Onboarding).
     @AppStorage("sabqsports.onboarding.seen.v2") private var onboardingSeen = false
     @State private var showOnboarding = false
+    @State private var showCompleteName = false
 
     init() {
         // شريط تبويب أبيض نظيف (تصميم كأس آسيا الأبيض على الويب).
@@ -67,8 +69,33 @@ struct RootTabView: View {
         .fullScreenCover(isPresented: $showOnboarding) {
             SpOnboardingView { onboardingSeen = true; showOnboarding = false }
         }
-        .onAppear { if !onboardingSeen { showOnboarding = true } }
+        // جلسات قديمة بلا اسم — غطاء إلزامي (ورقة الدخول تتولى الإكمال بعد OTP).
+        .fullScreenCover(isPresented: $showCompleteName) {
+            NavigationStack {
+                ScrollView {
+                    SpCompleteNameForm(onDone: { showCompleteName = false })
+                        .padding(.horizontal, 22)
+                        .padding(.top, 24)
+                        .padding(.bottom, 40)
+                }
+                .background(SpTheme.surface.ignoresSafeArea())
+                .navigationBarTitleDisplayMode(.inline)
+                .interactiveDismissDisabled(true)
+            }
+        }
+        .onAppear {
+            if !onboardingSeen { showOnboarding = true }
+            syncNameGate()
+        }
+        .onChange(of: auth.needsDisplayName) { _, _ in syncNameGate() }
+        .onChange(of: auth.isLoggedIn) { _, _ in syncNameGate() }
+        .onChange(of: router.showLogin) { _, _ in syncNameGate() }
         .onOpenURL { router.handle(url: $0) }
+    }
+
+    private func syncNameGate() {
+        // أثناء ورقة الدخول يُعرض نموذج الاسم داخلها؛ الغطاء للجلسات المستعادة فقط.
+        showCompleteName = auth.needsDisplayName && !router.showLogin && !showOnboarding
     }
 }
 

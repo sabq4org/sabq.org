@@ -2604,8 +2604,12 @@ export class DatabaseStorage implements IStorage {
     // and Drizzle threw "No values to set" on .set({}).
     if (userData.isProfileComplete !== undefined) updateData.isProfileComplete = userData.isProfileComplete;
 
-    // Convenience: a full name implies a complete profile.
-    if (userData.firstName && userData.lastName) {
+    // Convenience: الاسم الأول كافٍ لاعتبار الملف مكتملًا (حسابات الجوال
+    // كانت تُترك بلا اسم لأننا كنّا نشترط الاسمين معًا).
+    const nextFirst = (userData.firstName ?? "").trim();
+    if (nextFirst.length >= 2) {
+      updateData.isProfileComplete = true;
+    } else if (userData.firstName && userData.lastName) {
       updateData.isProfileComplete = true;
     }
 

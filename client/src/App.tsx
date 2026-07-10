@@ -14,7 +14,7 @@ import { lazy, Suspense, useEffect, Component, ErrorInfo, ReactNode } from "reac
 import { useVoiceCommands } from "@/hooks/useVoiceCommands";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { resetAdsTriggerFlag } from "@/components/DmsAdSlot";
-import { useAuth } from "@/hooks/useAuth";
+import { needsDisplayName, useAuth } from "@/hooks/useAuth";
 import { setReadingHistoryAuth } from "@/lib/readingHistory";
 import { useWebMCP } from "@/hooks/useWebMCP";
 import { syncGuestFocusSessionsToUser } from "@/hooks/useFocusSession";
@@ -42,6 +42,35 @@ function FocusSessionSync() {
     if (isLoading || !isAuthenticated) return;
     void syncGuestFocusSessionsToUser();
   }, [isAuthenticated, isLoading]);
+  return null;
+}
+
+/** حسابات الجوال بلا اسم — توجيه إلزامي لشاشة إكمال الاسم (جلسات قديمة وجديدة). */
+function NameCompletionGuard() {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !user) return;
+    if (!needsDisplayName(user)) return;
+
+    const path = location.split("?")[0] || "/";
+    const exempt =
+      path === "/complete-name" ||
+      path === "/login" ||
+      path === "/logout" ||
+      path === "/register" ||
+      path === "/forgot-password" ||
+      path.startsWith("/reset-password") ||
+      path === "/verify-email" ||
+      path === "/set-password" ||
+      path === "/two-factor" ||
+      path === "/admin-login";
+    if (exempt) return;
+
+    setLocation("/complete-name");
+  }, [user, isAuthenticated, isLoading, location, setLocation]);
+
   return null;
 }
 
@@ -113,6 +142,7 @@ const PreferencesCenter = lazy(() => retryImport(() => import("@/pages/Preferenc
 const PublicProfile = lazy(() => retryImport(() => import("@/pages/PublicProfile")));
 const DiscoverUsers = lazy(() => retryImport(() => import("@/pages/DiscoverUsers")));
 const CompleteProfile = lazy(() => retryImport(() => import("@/pages/CompleteProfile")));
+const CompleteName = lazy(() => retryImport(() => import("@/pages/CompleteName")));
 const SelectInterests = lazy(() => retryImport(() => import("@/pages/SelectInterests")));
 const EditInterests = lazy(() => retryImport(() => import("@/pages/EditInterests")));
 const NotificationSettings = lazy(() => retryImport(() => import("@/pages/NotificationSettings")));
@@ -830,6 +860,7 @@ function Router() {
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>
         {/* discover-users hidden */}
         <Route path="/complete-profile">{() => <LazyRoute component={CompleteProfile} />}</Route>
+        <Route path="/complete-name">{() => <LazyRoute component={CompleteName} />}</Route>
         <Route path="/select-interests">{() => <LazyRoute component={SelectInterests} />}</Route>
         <Route path="/interests/edit">{() => <LazyRoute component={EditInterests} />}</Route>
         <Route path="/notification-settings">{() => <LazyRoute component={NotificationSettings} />}</Route>
@@ -1109,6 +1140,7 @@ function App() {
                   <VoiceCommandsManager />
                   <ReadingHistorySync />
                   <FocusSessionSync />
+                  <NameCompletionGuard />
                   <WebMCPProvider />
                   <ErrorBoundary>
                     <div id="main-content" tabIndex={-1}>

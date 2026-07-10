@@ -100,6 +100,21 @@ interface User {
   createdAt: string;
   lastActivityAt: string | null;
   hasPressCard: boolean;
+  phoneNumber?: string | null;
+}
+
+/** عرض أوضح في الإدارة لحسابات الجوال بلا اسم. */
+function adminUserLabel(user: {
+  firstName?: string | null;
+  lastName?: string | null;
+  phoneNumber?: string | null;
+  email?: string | null;
+}): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+  if (name) return name;
+  if (user.phoneNumber?.trim()) return `عضو جوال · ${user.phoneNumber.trim()}`;
+  if (user.email?.toLowerCase().includes("@phone.sabq.org")) return "عضو جوال";
+  return "بدون اسم";
 }
 
 interface KPIs {
@@ -345,7 +360,7 @@ export default function AdminUsers() {
       header: "المستخدم",
       cell: (info) => {
         const user = info.row.original;
-        const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ") || "بدون اسم";
+        const fullName = adminUserLabel(user);
         return (
           <div className="flex items-center gap-3">
             <Avatar data-testid={`avatar-${user.id}`}>

@@ -162,8 +162,7 @@ struct AccountView: View {
     }
 
     private var needsNameCompletion: Bool {
-        let n = (auth.member?.name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return n.isEmpty
+        auth.needsDisplayName
     }
 
     // شارة العضوية «عضو سبق» + تعديل الملف داخل التطبيق.
@@ -1116,10 +1115,15 @@ struct SpOtpBoxes: View {
 }
 
 /// ورقة الدخول المنبثقة (Bottom Sheet) — تُستضاف عامّةً على RootTabView وتُفتح من
-/// أي محفّز عبر SpAppRouter.requestLogin(). تُغلق ذاتيًّا عند نجاح الدخول.
+/// أي محفّز عبر SpAppRouter.requestLogin(). تُغلق ذاتيًّا عند نجاح الدخول
+/// (وبعد إكمال الاسم إن لزم لحسابات الجوال).
 struct SpLoginSheet: View {
     @Environment(SpAuthStore.self) private var auth
     @Environment(\.dismiss) private var dismiss
+
+    private var awaitingName: Bool {
+        auth.isLoggedIn && auth.needsDisplayName
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1127,18 +1131,161 @@ struct SpLoginSheet: View {
                 .frame(width: 40, height: 4)
                 .padding(.top, 10).padding(.bottom, 2)
             ScrollView {
-                SpMembershipLogin()
-                    .padding(.horizontal, 22)
-                    .padding(.top, 12)
-                    .padding(.bottom, 28)
+                Group {
+                    if awaitingName {
+                        SpCompleteNameForm(onDone: { dismiss() })
+                    } else {
+                        SpMembershipLogin()
+                    }
+                }
+                .padding(.horizontal, 22)
+                .padding(.top, 12)
+                .padding(.bottom, 28)
             }
         }
         .background(SpTheme.surface.ignoresSafeArea())
         .presentationDetents([.height(580), .large])
         .presentationDragIndicator(.hidden)
         .presentationCornerRadius(26)
+        .interactiveDismissDisabled(awaitingName)
         .onChange(of: auth.isLoggedIn) { _, logged in
-            if logged { dismiss() }
+            if logged && !auth.needsDisplayName { dismiss() }
         }
+        .onChange(of: auth.needsDisplayName) { _, needs in
+            if auth.isLoggedIn && !needs { dismiss() }
+        }
+    }
+}
+
+/// نموذج إكمال الاسم الإلزامي بعد OTP / للجلسات القديمة بلا firstName.
+struct SpCompleteNameForm: View {
+    @Environment(SpAuthStore.self) private var auth
+    var onDone: () -> Void = {}
+
+    @State private var firstName = ""
+    @State private var lastName = ""
+    @State private var localError: String?
+    @FocusState private var focused: Bool
+
+    private var canSave: Bool {
+        firstName.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+    }
+
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "person.crop.circle.badge.plus")
+                .font(.system(size: 36, weight: .semibold))
+                .foregroundStyle(SpTheme.green)
+                .padding(.top, 8)
+
+            Text(L("أكمل اسمك"))
+                .font(SportsFonts.app(size: 22, weight: .heavy))
+                .foregroundStyle(SpTheme.onDark)
+
+            Text(L("سجّلت بجوالك بنجاح. أضف اسمك ليظهر في عضويتك وتعليقاتك."))
+                .font(SportsFonts.app(size: 13))
+                .foregroundStyle(SpTheme.onDarkDim)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let phone = auth.member?.phone, !phone.isEmpty {
+                Text(phone)
+                    .font(SportsFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(SpTheme.onDark)
+                    .environment(\.layoutDirection, .leftToRight)
+            }
+
+            VStack(spacing: 10) {
+                nameField(
+                    label: L("الاسم الأول"),
+                    placeholder: L("أدخل الاسم الأول"),
+                    text: $firstName,
+                    required: true
+                )
+                .focused($focused)
+
+                nameField(
+                    label: L("اسم العائلة") + " (" + L("اختياري") + ")",
+                    placeholder: L("أدخل اسم العائلة"),
+                    text: $lastName,
+                    required: false
+                )
+            }
+
+            Text(L("لا يمكن تعديل الاسم بعد تعيينه لاعتبارات أمنية ومصداقية التعليقات"))
+                .font(SportsFonts.app(size: 11))
+                .foregroundStyle(SpTheme.onDarkFaint)
+                .multilineTextAlignment(.center)
+
+            if let err = localError ?? auth.errorMessage {
+                Text(err)
+                    .font(SportsFonts.app(size: 12))
+                    .foregroundStyle(SpTheme.crimson)
+                    .multilineTextAlignment(.center)
+            }
+
+            Button {
+                Task { await save() }
+            } label: {
+                HStack(spacing: 8) {
+                    if auth.isLoading { ProgressView().tint(.white) }
+                    Text(L("متابعة")).font(SportsFonts.app(size: 16, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 50)
+                .background(
+                    RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous)
+                        .fill(canSave ? SpTheme.green : SpTheme.green.opacity(0.4))
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSave || auth.isLoading)
+        }
+        .onAppear { focused = true }
+    }
+
+    private func nameField(label: String, placeholder: String, text: Binding<String>, required: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 4) {
+                Text(label)
+                    .font(SportsFonts.app(size: 12, weight: .bold))
+                    .foregroundStyle(SpTheme.onDarkDim)
+                if required {
+                    Text("*").foregroundStyle(SpTheme.crimson)
+                        .font(SportsFonts.app(size: 12, weight: .bold))
+                }
+            }
+            TextField("", text: text, prompt: Text(placeholder).foregroundStyle(SpTheme.onDarkFaint))
+                .font(SportsFonts.app(size: 15))
+                .foregroundStyle(SpTheme.onDark)
+                .tint(SpTheme.green)
+                .textInputAutocapitalization(.words)
+                .autocorrectionDisabled()
+                .padding(.horizontal, 14).padding(.vertical, 13)
+                .background(
+                    RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                        .fill(SpTheme.cardFill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: SpTheme.tileRadius, style: .continuous)
+                                .stroke(SpTheme.outline, lineWidth: 1)
+                        )
+                )
+        }
+    }
+
+    private func save() async {
+        localError = nil
+        let fn = firstName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard fn.count >= 2 else {
+            localError = L("الاسم الأول يجب أن يكون حرفين على الأقل")
+            return
+        }
+        let ln = lastName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let ok = await auth.updateProfile(
+            firstName: fn,
+            lastName: ln.count >= 2 ? ln : nil,
+            email: nil
+        )
+        if ok { onDone() }
     }
 }
