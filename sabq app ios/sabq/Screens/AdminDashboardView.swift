@@ -241,62 +241,71 @@ struct AdminDashboardView: View {
     private var inboxSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("صندوق الإدارة")
-                .font(SabqFonts.app(size: 18, weight: .heavy))
+                .font(SabqFonts.app(size: 16, weight: .semibold))
                 .foregroundStyle(SabqTheme.ink)
 
-            NavigationLink(value: AdminContactMessagesRoute()) {
-                adminShortcut(
-                    title: "رسائل التواصل",
-                    subtitle: "عرض الرسائل الواردة والرد عليها",
-                    icon: "envelope.badge.fill",
-                    tint: AdminInboxPalette.success
-                )
-            }
-            .buttonStyle(.plain)
+            let columns = [
+                GridItem(.flexible(), spacing: 10),
+                GridItem(.flexible(), spacing: 10)
+            ]
+            LazyVGrid(columns: columns, spacing: 10) {
+                NavigationLink(value: AdminContactMessagesRoute()) {
+                    adminShortcut(
+                        title: "رسائل التواصل",
+                        subtitle: "عرض الرسائل الواردة والرد عليها",
+                        icon: "envelope",
+                        tint: AdminInboxPalette.success
+                    )
+                }
+                .buttonStyle(.plain)
 
-            NavigationLink(value: AdminOpinionTicketsRoute()) {
-                adminShortcut(
-                    title: "استفسارات كتّاب الرأي",
-                    subtitle: "متابعة المحادثات مع الكتّاب",
-                    icon: "text.bubble.fill",
-                    tint: AdminInboxPalette.warning
-                )
+                NavigationLink(value: AdminOpinionTicketsRoute()) {
+                    adminShortcut(
+                        title: "استفسارات كتّاب الرأي",
+                        subtitle: "متابعة المحادثات مع الكتّاب",
+                        icon: "text.bubble",
+                        tint: AdminInboxPalette.warning
+                    )
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
     private func adminShortcut(title: String, subtitle: String, icon: String, tint: Color) -> some View {
-        HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(tint.opacity(0.13))
-                    .frame(width: 42, height: 42)
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                    .frame(width: 36, height: 36)
                 Image(systemName: icon)
-                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .font(SabqFonts.app(size: 16, weight: .semibold))
                     .foregroundStyle(tint)
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(SabqFonts.app(size: 15, weight: .heavy))
+                    .font(SabqFonts.app(size: 14, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
                 Text(subtitle)
-                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.secondaryInk)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            Image(systemName: "chevron.forward")
-                .font(SabqFonts.app(size: 13, weight: .bold))
-                .foregroundStyle(SabqTheme.secondaryInk)
         }
-        .padding(13)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 118, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(SabqTheme.surface)
-                .shadow(color: SabqTheme.shadow, radius: 7, y: 3)
         )
-        .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.8), lineWidth: 0.7))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(SabqTheme.outline, lineWidth: 0.5)
+        )
     }
 
     // MARK: Metrics strip
