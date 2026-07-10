@@ -1,9 +1,11 @@
-// TheSports — مصدر نتيجة لحظية فائق السرعة (sub-minute) لمباريات المونديال.
+// TheSports — مصدر نتيجة لحظية فائق السرعة لمباريات المونديال والبطولات المربوطة.
 //
 // لماذا: مزوّدونا الحاليون (API-Football للأسماء/التشكيلات، SportMonks للنتيجة
-// الحيّة) يتأخّران ~دقيقة على النتيجة، فتتأخّر المتابعة الحيّة وقفل الشاشة.
-// TheSports يحدّث النتيجة فورًا. نستخدمه نتيجةً سريعةً فقط — لا أسماء ولا تشكيلات
-// (الاشتراك «لحظي فقط»: detail_live + match/diary يعملان، وكل نقاط الأسماء محجوبة).
+// الحيّة) يتأخّران على النتيجة، فتتأخّر المتابعة الحيّة وقفل الشاشة.
+// TheSports يحدّث النتيجة فورًا عبر:
+//   1) MQTT/WebSocket (topic thesports/football/match/v1) — المسار الأسرع
+//   2) REST match/detail_live — احتياطي/بذرة كل ~2ث
+// الاشتراك الحالي يشمل BASIC INFO + BASIC DATA + ADVANCED DATA.
 //
 // الجسر (لا نحتاج أسماء TheSports إطلاقًا):
 //   1) بطولة المونديال ثابتة في TheSports: competition_id = WC_COMPETITION_ID
@@ -12,8 +14,7 @@
 //   2) لمباراتنا (WcFixture لها timestamp = وقت البداية) نبحث diary لذلك اليوم،
 //      نُرشّح competition==WC، ونطابق match_time == fx.timestamp. مباريات المونديال
 //      متباعدة ~3 ساعات داخل البطولة فلا تصادم على الدقيقة → ربط أحادي مؤكّد.
-//   3) detail_live (نداء واحد يرجع كل المباريات الجارية) → نقرأ النتيجة بمعرّف
-//      مباراة TheSports المربوط.
+//   3) detail_live / MQTT → نقرأ النتيجة بمعرّف مباراة TheSports المربوط.
 //
 // أفضل جهد بالكامل: أي فشل (IP غير مُدرَج في الإنتاج، نقطة محجوبة، شبكة) يرجع
 // null فيتراجع overlayLiveScore بهدوء إلى SportMonks ثم API-Football.
@@ -93,12 +94,36 @@ function armCooldown(reason: unknown): void {
   console.warn(`[TheSports] cooldown armed (${TS_FAIL_COOLDOWN_MS}ms): ${msg}`);
 }
 
+/** حالة مستهلك MQTT (يحدّثها theSportsMqttClient) — للتشخيص في /health. */
+export type TsMqttStatus = {
+  enabled: boolean;
+  connected: boolean;
+  lastMessageAt: number | null;
+  lastError: string | null;
+  messagesReceived: number;
+  matchesTracked: number;
+};
+
+let mqttStatus: TsMqttStatus = {
+  enabled: false,
+  connected: false,
+  lastMessageAt: null,
+  lastError: null,
+  messagesReceived: 0,
+  matchesTracked: 0,
+};
+
+export function setTheSportsMqttStatus(patch: Partial<TsMqttStatus>): void {
+  mqttStatus = { ...mqttStatus, ...patch, matchesTracked: mqttLiveById.size };
+}
+
 /**
  * لقطة تشخيصية لحالة مزوّد TheSports — تُستهلك من /health فقط. تكشف ما يلي:
  *   - configured: هل ضُبطت THESPORTS_USER/SECRET؟
  *   - inCooldown: هل نحن داخل فترة التهدئة (أي فشل حديث)؟
  *   - cooldownRemainingMs: كم بقي على انتهاء التهدئة (0 لو لسنا فيها).
  *   - lastError / lastErrorAt: آخر رسالة خطأ خام وزمنها (أداة التشخيص الرئيسية).
+ *   - mqtt: حالة تغذية WebSocket/MQTT اللحظية (إن وُجدت).
  * لا تكشف أسرارًا (لا user/secret).
  */
 export function getTheSportsStatus(): {
@@ -107,6 +132,7 @@ export function getTheSportsStatus(): {
   cooldownRemainingMs: number;
   lastError: string | null;
   lastErrorAt: number | null;
+  mqtt: TsMqttStatus;
 } {
   const now = Date.now();
   const inCooldown = now < tsCooldownUntil;
@@ -116,7 +142,193 @@ export function getTheSportsStatus(): {
     cooldownRemainingMs: inCooldown ? tsCooldownUntil - now : 0,
     lastError: tsLastError,
     lastErrorAt: tsLastErrorAt,
+    mqtt: { ...mqttStatus, matchesTracked: mqttLiveById.size },
   };
+}
+
+// ───────────────────── تغذية MQTT (WebSocket) فوق detail_live ─────────────────────
+// TheSports يدفع score/stats/incidents/tlive تزايديًا عبر
+// topic `thesports/football/match/v1`. ندمجها فوق لقطة REST فتفوز الرسالة
+// اللحظية دون انتظار دورة الاستطلاع (~2ث).
+
+const MQTT_ENTRY_TTL_MS = 20 * 60 * 1000;
+type MqttLiveSlot = { entry: Record<string, any>; updatedAt: number };
+const mqttLiveById = new Map<string, MqttLiveSlot>();
+
+function pruneMqttLive(now = Date.now()): void {
+  for (const [id, slot] of mqttLiveById) {
+    if (now - slot.updatedAt > MQTT_ENTRY_TTL_MS) mqttLiveById.delete(id);
+  }
+}
+
+function mergeMqttLiveEntry(
+  prev: Record<string, any> | undefined,
+  patch: Record<string, any>,
+): Record<string, any> {
+  const next: Record<string, any> = { ...(prev ?? {}) };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === undefined) continue;
+    next[k] = v;
+  }
+  if (!next.id && patch.id) next.id = patch.id;
+  return next;
+}
+
+function upsertMqttLive(id: string, patch: Record<string, any>): void {
+  if (!id) return;
+  const prev = mqttLiveById.get(id)?.entry;
+  const entry = mergeMqttLiveEntry(prev, { ...patch, id });
+  mqttLiveById.set(id, { entry, updatedAt: Date.now() });
+}
+
+/** يستخرج معرّف المباراة من عنصر score (الخانة 0) أو من حقل id. */
+function mqttMatchIdFromRow(row: any): string | null {
+  if (row == null) return null;
+  if (typeof row === "string" || typeof row === "number") return String(row);
+  if (Array.isArray(row) && row.length > 0 && (typeof row[0] === "string" || typeof row[0] === "number")) {
+    return String(row[0]);
+  }
+  if (typeof row === "object") {
+    const id = row.id ?? row.match_id ?? row.matchId;
+    if (id != null && id !== "") return String(id);
+  }
+  return null;
+}
+
+/**
+ * يطبّق حمولة MQTT الخام على خريطة اللحظي. مرن لأشكال TheSports الشائعة:
+ * `{ score: [...], stats: [...], incidents: [...], tlive: [...] }` حيث كل حقل
+ * مصفوفة صفوف (صف النتيجة = مصفوفة تبدأ بـmatch id؛ وبقية الحقول كائن بـid).
+ * تُرجع عدد المباريات التي لمسها التحديث.
+ */
+export function applyTheSportsMqttPayload(raw: unknown): number {
+  if (raw == null) return 0;
+  let data: any = raw;
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(raw)) {
+    try {
+      data = JSON.parse(raw.toString("utf8"));
+    } catch {
+      return 0;
+    }
+  } else if (typeof raw === "string") {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return 0;
+    }
+  }
+  if (typeof data !== "object" || data == null) return 0;
+
+  // بعض البوابات تلفّ الحمولة في { data } / { results }.
+  if (data.data && typeof data.data === "object" && !Array.isArray(data.data)
+      && (data.data.score != null || data.data.stats != null || data.data.incidents != null)) {
+    data = data.data;
+  }
+  if (Array.isArray(data.results) && data.score == null && data.id == null) {
+    let n = 0;
+    for (const row of data.results) n += applyTheSportsMqttPayload(row);
+    return n;
+  }
+
+  const touched = new Set<string>();
+
+  const touchScoreRow = (row: any) => {
+    const id = mqttMatchIdFromRow(row);
+    if (!id || !Array.isArray(row)) return;
+    upsertMqttLive(id, { score: row });
+    touched.add(id);
+  };
+
+  const touchStatsRow = (row: any) => {
+    const id = mqttMatchIdFromRow(row);
+    if (!id) return;
+    if (row && typeof row === "object" && !Array.isArray(row) && Array.isArray(row.stats)) {
+      upsertMqttLive(id, { stats: row.stats });
+    } else if (Array.isArray(row)) {
+      upsertMqttLive(id, { stats: row.slice(1) });
+    } else if (Array.isArray(row?.stats)) {
+      upsertMqttLive(id, { stats: row.stats });
+    }
+    touched.add(id);
+  };
+
+  const touchIncidentsRow = (row: any) => {
+    const id = mqttMatchIdFromRow(row);
+    if (!id) return;
+    if (row && typeof row === "object" && !Array.isArray(row)) {
+      if (Array.isArray(row.incidents)) {
+        upsertMqttLive(id, { incidents: row.incidents });
+      } else if (row.type != null) {
+        const prev = mqttLiveById.get(id)?.entry?.incidents;
+        const list = Array.isArray(prev) ? prev.slice() : [];
+        list.push(row);
+        upsertMqttLive(id, { incidents: list });
+      }
+    } else if (Array.isArray(row)) {
+      upsertMqttLive(id, { incidents: row.slice(1) });
+    }
+    touched.add(id);
+  };
+
+  const touchTliveRow = (row: any) => {
+    const id = mqttMatchIdFromRow(row);
+    if (!id) return;
+    if (row && typeof row === "object" && !Array.isArray(row)) {
+      if (Array.isArray(row.tlive)) upsertMqttLive(id, { tlive: row.tlive });
+      else if (row.data != null && !Array.isArray(row.tlive)) {
+        // عنصر تعليق مفرد — نُلحقه.
+        const prev = mqttLiveById.get(id)?.entry?.tlive;
+        const list = Array.isArray(prev) ? prev.slice() : [];
+        list.push(row);
+        upsertMqttLive(id, { tlive: list });
+      }
+    } else if (Array.isArray(row)) {
+      upsertMqttLive(id, { tlive: row.slice(1) });
+    }
+    touched.add(id);
+  };
+
+  // مباراة كاملة بشكل detail_live: { id, score, stats?, incidents?, tlive? }
+  // حيث score لمباراة واحدة يبدأ بالمعرّف وليس بمصفوفة مباريات.
+  const selfId = typeof data.id === "string" || typeof data.id === "number" ? String(data.id) : null;
+  if (selfId && Array.isArray(data.score) && !Array.isArray(data.score[0])) {
+    upsertMqttLive(selfId, {
+      score: data.score,
+      ...(data.stats != null ? { stats: data.stats } : {}),
+      ...(data.incidents != null ? { incidents: data.incidents } : {}),
+      ...(data.tlive != null ? { tlive: data.tlive } : {}),
+      ...(data.competition_id != null ? { competition_id: data.competition_id } : {}),
+      ...(data.home_team_id != null ? { home_team_id: data.home_team_id } : {}),
+      ...(data.away_team_id != null ? { away_team_id: data.away_team_id } : {}),
+      ...(data.match_time != null ? { match_time: data.match_time } : {}),
+    });
+    touched.add(selfId);
+  }
+
+  // الشكل القياسي للوثائق: حقول متوازية كمصفوفات صفوف.
+  if (Array.isArray(data.score)) {
+    if (Array.isArray(data.score[0])) {
+      for (const row of data.score) touchScoreRow(row);
+    } else if (data.score.length >= 4 && (typeof data.score[0] === "string" || typeof data.score[0] === "number") && !selfId) {
+      touchScoreRow(data.score);
+    }
+  }
+  if (Array.isArray(data.stats)) for (const row of data.stats) touchStatsRow(row);
+  if (Array.isArray(data.incidents)) for (const row of data.incidents) touchIncidentsRow(row);
+  if (Array.isArray(data.tlive)) for (const row of data.tlive) touchTliveRow(row);
+
+  pruneMqttLive();
+  return touched.size;
+}
+
+/** للاختبارات والتشخيص — عدد المباريات في طبقة MQTT. */
+export function getTheSportsMqttMatchCount(): number {
+  pruneMqttLive();
+  return mqttLiveById.size;
+}
+
+export function clearTheSportsMqttLiveForTests(): void {
+  mqttLiveById.clear();
 }
 
 // مهلة قصيرة: نتيجة لحظية لا قيمة لها إن تأخّرت، والأهم ألّا تُبطئ صفحة المستخدم.
@@ -341,16 +553,35 @@ export async function resolveTsMatchId(
 // كل المباريات الجارية الآن (نداء واحد يخدم جميع المباريات) — يُكاش بالثواني.
 // يرجع كل عنصر بحقوله الكاملة: score + stats + incidents + tlive — فنقرأ النتيجة
 // والأحداث والإحصاءات والتعليق من النداء نفسه بلا تكلفة شبكة إضافية.
+// طبقة MQTT تُدمَج فوق REST بعد الكاش: أي دفعة WebSocket تفوز فورًا دون انتظار
+// دورة الاستطلاع، وحتى أثناء تهدئة REST إن بقيت لقطات MQTT حيّة.
 async function getLiveMap(): Promise<Map<string, any>> {
-  const data = await withSWR(
-    "ts:detail_live",
-    LIVE_TTL,
-    LIVE_SWR,
-    () => tsGet("match/detail_live")
-  );
-  const results: any[] = Array.isArray(data?.results) ? data.results : [];
   const map = new Map<string, any>();
-  for (const m of results) if (m?.id) map.set(m.id, m);
+  if (!(Date.now() < tsCooldownUntil)) {
+    try {
+      const data = await withSWR(
+        "ts:detail_live",
+        LIVE_TTL,
+        LIVE_SWR,
+        () => tsGet("match/detail_live")
+      );
+      const results: any[] = Array.isArray(data?.results) ? data.results : [];
+      for (const m of results) if (m?.id) map.set(String(m.id), m);
+    } catch (e) {
+      // لا نرمي هنا — قد تكفي طبقة MQTT. المستدعي الأعلى يلتقط الفشل عبر
+      // getLiveEntry/getTheSports* عند فراغ الخريطة.
+      armCooldown(e);
+    }
+  }
+
+  pruneMqttLive();
+  for (const [id, slot] of mqttLiveById) {
+    const merged = mergeMqttLiveEntry(
+      map.get(id) && typeof map.get(id) === "object" ? map.get(id) : undefined,
+      slot.entry,
+    );
+    map.set(id, merged);
+  }
   return map;
 }
 
@@ -363,7 +594,7 @@ async function getLiveEntry(
   const tsMatchId = await resolveTsMatchId(fixtureId, kickoffTs, competitionId);
   if (!tsMatchId) return null;
   const liveMap = await getLiveMap();
-  return liveMap.get(tsMatchId) ?? null;
+  return liveMap.get(String(tsMatchId)) ?? null;
 }
 
 export interface TsFastScore {
@@ -673,8 +904,7 @@ export async function getTheSportsFastScore(
   competitionId: string = WC_COMPETITION_ID
 ): Promise<TsFastScore | null> {
   if (!isTheSportsConfigured()) return null;
-  // قاطع الدائرة: أثناء التهدئة لا نلمس الشبكة إطلاقًا → تراجع فوري لـ SportMonks.
-  if (Date.now() < tsCooldownUntil) return null;
+  // لا نقطع عند التهدئة إن وُجدت طبقة MQTT — التهدئة تخص REST فقط.
   try {
     const live = await getLiveEntry(fixtureId, kickoffTs, competitionId);
     if (!live) return null; // ليست جارية الآن (منتهية/لم تبدأ) → اترك المصدر الحالي
@@ -682,9 +912,9 @@ export async function getTheSportsFastScore(
     if (!decoded) return null;
     return buildFastScore(decoded, kickoffTs);
   } catch (e) {
-    // فشل (IP غير مُدرَج/نقطة محجوبة/شبكة) → فعّل التهدئة فلا نُبطئ الطلبات التالية.
-    armCooldown(e); // يُسجّل رسالة TheSports الخام للتشخيص (URL/IP not authorized، إلخ).
-    return null; // تراجع صامت لـ SportMonks ثم API-Football
+    // فشل جسر/شبكة — إن كان MQTT يحمل المباراة سيُغطّيها getLiveMap؛ هنا فشل كامل.
+    armCooldown(e);
+    return null;
   }
 }
 
@@ -699,7 +929,6 @@ export async function getTheSportsMatchLive(
   competitionId: string = WC_COMPETITION_ID
 ): Promise<TsMatchLive | null> {
   if (!isTheSportsConfigured()) return null;
-  if (Date.now() < tsCooldownUntil) return null;
   try {
     const live = await getLiveEntry(fixtureId, kickoffTs, competitionId);
     if (!live) return null;
@@ -726,9 +955,8 @@ export async function getTheSportsMatchLiveByUuid(
   matchUuid: string
 ): Promise<TsMatchLive | null> {
   if (!isTheSportsConfigured()) return null;
-  if (Date.now() < tsCooldownUntil) return null;
   try {
-    const live = (await getLiveMap()).get(matchUuid);
+    const live = (await getLiveMap()).get(String(matchUuid));
     if (!live) return null;
     const decoded = decodeScore(live.score);
     if (!decoded) return null;
@@ -1422,7 +1650,7 @@ export interface TsLiveBoardItem {
  * لقائمة «عالمية» عندما يكون API-Football فارغًا أو فقيرًا.
  */
 export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
-  if (!isTheSportsConfigured() || Date.now() < tsCooldownUntil) return [];
+  if (!isTheSportsConfigured()) return [];
   try {
     const liveMap = await getLiveMap();
     if (liveMap.size === 0) return [];
