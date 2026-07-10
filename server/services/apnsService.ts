@@ -376,6 +376,128 @@ export interface LiveActivityUpdateOptions {
   priority?: "5" | "10";
 }
 
+export interface LiveActivityStartAttributes {
+  fixtureId: number;
+  homeName: string;
+  awayName: string;
+  homeLogo: string;
+  awayLogo: string;
+  homeLogoFile: string | null;
+  awayLogoFile: string | null;
+  competition: string;
+  /** Swift Codable Date: seconds from Apple's 2001-01-01 reference date. */
+  kickoff: number;
+}
+
+export interface LiveActivityStartOptions {
+  contentState: LiveActivityContentState;
+  attributes: LiveActivityStartAttributes;
+  attributesType: string;
+  bundleId: string;
+  alert: { title: string; body: string };
+  staleDate?: number;
+  priority?: "5" | "10";
+}
+
+/** Starts a new ActivityKit activity through an iOS push-to-start token. */
+export async function sendLiveActivityStart(
+  pushToStartToken: string,
+  options: LiveActivityStartOptions,
+): Promise<ApnsResponse> {
+  const credentials = getApnsCredentials(options.bundleId);
+  if (!credentials) return { success: false, reason: "APNs not configured" };
+
+  const preferredHost = tokenHostCache.get(pushToStartToken) ?? getApnsHost();
+  const first = await sendLiveActivityStartRaw(preferredHost, credentials, pushToStartToken, options);
+  if (first.success) {
+    rememberTokenHost(pushToStartToken, preferredHost);
+    return first;
+  }
+  if (first.reason === "BadDeviceToken") {
+    const fallback = otherHost(preferredHost);
+    const retry = await sendLiveActivityStartRaw(fallback, credentials, pushToStartToken, options);
+    if (retry.success) rememberTokenHost(pushToStartToken, fallback);
+    return retry;
+  }
+  return first;
+}
+
+function sendLiveActivityStartRaw(
+  host: string,
+  credentials: NonNullable<ReturnType<typeof getApnsCredentials>>,
+  pushToStartToken: string,
+  options: LiveActivityStartOptions,
+): Promise<ApnsResponse> {
+  const payload = {
+    aps: {
+      timestamp: Math.floor(Date.now() / 1000),
+      event: "start",
+      "content-state": options.contentState,
+      "attributes-type": options.attributesType,
+      attributes: options.attributes,
+      alert: options.alert,
+      ...(options.staleDate ? { "stale-date": options.staleDate } : {}),
+    },
+  };
+
+  return sendLiveActivityHttp2(
+    host,
+    credentials,
+    pushToStartToken,
+    options.bundleId,
+    options.priority || "10",
+    payload,
+  );
+}
+
+function sendLiveActivityHttp2(
+  host: string,
+  credentials: NonNullable<ReturnType<typeof getApnsCredentials>>,
+  deviceToken: string,
+  bundleId: string,
+  priority: "5" | "10",
+  payload: Record<string, unknown>,
+): Promise<ApnsResponse> {
+  const token = generateApnsToken(credentials);
+  return new Promise((resolve) => {
+    try {
+      const client = http2.connect(`https://${host}:${APNS_PORT}`);
+      client.on("error", (err) => resolve({ success: false, reason: err.message }));
+      const req = client.request({
+        ":method": "POST",
+        ":path": `/3/device/${deviceToken}`,
+        authorization: `bearer ${token}`,
+        "apns-topic": `${bundleId}.push-type.liveactivity`,
+        "apns-push-type": "liveactivity",
+        "apns-priority": priority,
+      });
+      let responseData = "";
+      let apnsId: string | undefined;
+      let statusCode: number | undefined;
+      req.on("response", (h) => {
+        apnsId = h["apns-id"] as string;
+        statusCode = h[":status"] as number;
+      });
+      req.on("data", (chunk) => { responseData += chunk; });
+      req.on("end", () => {
+        client.close();
+        if (statusCode === 200) return resolve({ success: true, apnsId, statusCode });
+        let reason = "Unknown error";
+        try { reason = JSON.parse(responseData).reason || reason; } catch {}
+        resolve({ success: false, apnsId, statusCode, reason });
+      });
+      req.on("error", (err) => {
+        client.close();
+        resolve({ success: false, reason: err.message });
+      });
+      req.write(JSON.stringify(payload));
+      req.end();
+    } catch (error: any) {
+      resolve({ success: false, reason: error.message });
+    }
+  });
+}
+
 /**
  * يدفع تحديث Live Activity لتوكن نشاط (ActivityKit push token) عبر APNs.
  *

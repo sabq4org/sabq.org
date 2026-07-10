@@ -6237,6 +6237,8 @@ router.get("/sports/predictions/division/:division", async (req: Request, res: R
 // Live Activity push tokens (iOS lock-screen live match)
 // POST /api/v1/live-activity/register   { fixtureId, token }
 // POST /api/v1/live-activity/end        { token }
+// PUT  /api/v1/live-activity/start-token { token, deviceId? }
+// DELETE /api/v1/live-activity/start-token { token }
 // ==========================================
 // عام (لا يتطلب تسجيل دخول): النشاط المباشر قد يعمل لزائر غير مسجّل. نلتقط
 // userId إن وُجدت جلسة فقط. التوكن هنا توكن ActivityKit (مختلف عن توكن الجهاز).
@@ -6282,6 +6284,50 @@ router.post("/live-activity/end", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] /live-activity/end error:", error);
     res.status(500).json({ success: false, message: "تعذر إنهاء النشاط المباشر" });
+  }
+});
+
+router.put("/live-activity/start-token", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+    const token = typeof req.body?.token === "string" ? req.body.token.trim().toLowerCase() : "";
+    const rawDeviceId = typeof req.body?.deviceId === "string" ? req.body.deviceId.trim() : "";
+    const deviceId = rawDeviceId.length > 0 && rawDeviceId.length <= 255 ? rawDeviceId : null;
+    // ActivityKit tokens are raw bytes represented as lowercase hexadecimal.
+    if (!/^[0-9a-f]{40,512}$/.test(token)) {
+      return res.status(400).json({ success: false, message: "توكن ActivityKit غير صالح" });
+    }
+    const { registerLiveActivityStartToken } = await import("../services/liveActivityStartService");
+    await registerLiveActivityStartToken({
+      userId: session.userId,
+      pushToken: token,
+      bundleId: process.env.APNS_SPORTS_BUNDLE_ID || "com.sabq.sports",
+      deviceId,
+    });
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] PUT /live-activity/start-token error:", error);
+    res.status(500).json({ success: false, message: "تعذر تسجيل البدء التلقائي" });
+  }
+});
+
+router.delete("/live-activity/start-token", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+    const token = typeof req.body?.token === "string" ? req.body.token.trim().toLowerCase() : "";
+    if (!token) return res.status(400).json({ success: false, message: "token مطلوب" });
+    const { deleteLiveActivityStartToken } = await import("../services/liveActivityStartService");
+    await deleteLiveActivityStartToken(session.userId, token);
+    res.json({ success: true });
+  } catch (error) {
+    console.error("[Mobile API] DELETE /live-activity/start-token error:", error);
+    res.status(500).json({ success: false, message: "تعذر إيقاف البدء التلقائي" });
   }
 });
 

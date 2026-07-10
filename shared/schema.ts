@@ -12945,6 +12945,53 @@ export const liveActivityTokens = pgTable("live_activity_tokens", {
 ]);
 
 /**
+ * iOS ActivityKit push-to-start tokens (one rotating token per app install).
+ *
+ * Unlike `live_activity_tokens`, this token is not tied to a fixture. It lets
+ * the server automatically create a new match Live Activity for a signed-in
+ * user who follows that match. Tokens rotate, so registration identifies the
+ * installation with `deviceId` and deactivates its previous token.
+ */
+export const liveActivityStartTokens = pgTable("live_activity_start_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  pushToken: text("push_token").notNull().unique(),
+  bundleId: text("bundle_id").notNull(),
+  deviceId: text("device_id"),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_la_start_tokens_user").on(table.userId),
+  index("idx_la_start_tokens_active").on(table.isActive),
+  index("idx_la_start_tokens_device").on(table.userId, table.deviceId),
+]);
+
+/** Durable idempotency ledger for remote Live Activity starts. */
+export const liveActivityStartDeliveries = pgTable("live_activity_start_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  startTokenId: varchar("start_token_id")
+    .references(() => liveActivityStartTokens.id, { onDelete: "cascade" })
+    .notNull(),
+  fixtureId: integer("fixture_id").notNull(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  apnsId: text("apns_id"),
+  error: text("error"),
+  attemptedAt: timestamp("attempted_at").defaultNow().notNull(),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_la_start_deliveries_unique").on(table.startTokenId, table.fixtureId),
+  index("idx_la_start_deliveries_fixture").on(table.fixtureId),
+  index("idx_la_start_deliveries_status").on(table.status, table.attemptedAt),
+]);
+
+export type LiveActivityStartToken = typeof liveActivityStartTokens.$inferSelect;
+export type InsertLiveActivityStartToken = typeof liveActivityStartTokens.$inferInsert;
+
+/**
  * Per-user log of every targeted push notification we've sent for editorial
  * events (article scheduled / published / rejected / needs revision). Powers
  * the "Notifications" tab inside the iOS app — even when push delivery
