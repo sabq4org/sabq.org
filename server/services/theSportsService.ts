@@ -374,6 +374,12 @@ export interface TsFastScore {
   statusId: number;
   live: boolean;
   finished: boolean;
+  /** دقيقة المباراة المحسوبة من طابع بداية المرحلة لدى TheSports. */
+  elapsed: number | null;
+  /** بدل الضائع ضمن المرحلة الحالية. */
+  extra: number | null;
+  /** مرساة Unix لساعة المباراة كاملة، وليست ساعة الشوط فقط. */
+  clockStartEpoch: number | null;
 }
 
 // score: [matchId, statusId, [home: reg,ht,red,yel,corner,ot,pen], [away...], ts, ""]
@@ -621,7 +627,25 @@ export interface TsMatchLive extends TsFastScore {
   commentary: TsCommentaryItem[];
 }
 
-function buildFastScore(decoded: NonNullable<ReturnType<typeof decodeScore>>): TsFastScore {
+function buildFastScore(
+  decoded: NonNullable<ReturnType<typeof decodeScore>>,
+  matchTime = 0,
+): TsFastScore {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const { elapsed, extra } = tsBoardMinute(
+    decoded.statusId,
+    decoded.periodStartTs,
+    matchTime,
+    nowSec,
+  );
+  const phaseBase: Record<number, number> = { 2: 0, 4: 45, 5: 90, 6: 105 };
+  const base = phaseBase[decoded.statusId];
+  const played = (elapsed ?? 0) + (extra ?? 0);
+  const clockStartEpoch = base != null && played > 0
+    ? decoded.periodStartTs > 0
+      ? decoded.periodStartTs - base * 60
+      : nowSec - (played - 1) * 60
+    : null;
   return {
     home: decoded.home,
     away: decoded.away,
@@ -630,6 +654,9 @@ function buildFastScore(decoded: NonNullable<ReturnType<typeof decodeScore>>): T
     statusId: decoded.statusId,
     live: TS_LIVE_STATUS.has(decoded.statusId),
     finished: decoded.statusId === TS_FINISHED_STATUS,
+    elapsed,
+    extra,
+    clockStartEpoch,
   };
 }
 
@@ -653,7 +680,7 @@ export async function getTheSportsFastScore(
     if (!live) return null; // ليست جارية الآن (منتهية/لم تبدأ) → اترك المصدر الحالي
     const decoded = decodeScore(live.score);
     if (!decoded) return null;
-    return buildFastScore(decoded);
+    return buildFastScore(decoded, kickoffTs);
   } catch (e) {
     // فشل (IP غير مُدرَج/نقطة محجوبة/شبكة) → فعّل التهدئة فلا نُبطئ الطلبات التالية.
     armCooldown(e); // يُسجّل رسالة TheSports الخام للتشخيص (URL/IP not authorized، إلخ).
@@ -679,7 +706,7 @@ export async function getTheSportsMatchLive(
     const decoded = decodeScore(live.score);
     if (!decoded) return null;
     return {
-      ...buildFastScore(decoded),
+      ...buildFastScore(decoded, kickoffTs),
       events: decodeEvents(live.incidents),
       stats: decodeStats(live.stats),
       commentary: decodeCommentary(live.tlive),

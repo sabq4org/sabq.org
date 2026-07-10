@@ -130,7 +130,13 @@ function parseSeason(req: Request): number | undefined {
  * عدّادًا ذاتيًّا مطابقًا لما تدفعه Live Activity عبر APNs (نفس الوحدة والتثبيت).
  */
 function withClockAnchor<T extends SplFixture>(f: T): T {
-  return { ...f, status: { ...f.status, clockStartEpoch: clockStartEpochFor(f.id, f.status) } };
+  return {
+    ...f,
+    status: {
+      ...f.status,
+      clockStartEpoch: f.status.clockStartEpoch ?? clockStartEpochFor(f.id, f.status),
+    },
+  };
 }
 
 /**

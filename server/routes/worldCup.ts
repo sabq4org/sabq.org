@@ -96,6 +96,8 @@ async function overlayLiveScore(fx: WcFixture): Promise<WcFixture> {
             : fx.penalties,
         status: {
           ...fx.status,
+          elapsed: ts.elapsed ?? fx.status.elapsed,
+          extra: ts.extra ?? fx.status.extra,
           live: ts.live,
           finished: ts.finished || fx.status.finished,
         },

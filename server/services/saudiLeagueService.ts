@@ -1539,7 +1539,14 @@ async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: s
         ts.penHome != null || ts.penAway != null
           ? { home: ts.penHome, away: ts.penAway }
           : f.penalties,
-      status: { ...f.status, live: ts.live, finished: ts.finished || f.status.finished },
+      status: {
+        ...f.status,
+        elapsed: ts.elapsed ?? f.status.elapsed,
+        extra: ts.extra ?? f.status.extra,
+        live: ts.live,
+        finished: ts.finished || f.status.finished,
+        clockStartEpoch: ts.clockStartEpoch ?? f.status.clockStartEpoch,
+      },
     };
   } catch {
     return f;
@@ -1593,7 +1600,14 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
         ts.penHome != null || ts.penAway != null
           ? { home: ts.penHome, away: ts.penAway }
           : fx.penalties,
-      status: { ...fx.status, live: ts.live, finished: ts.finished || fx.status.finished },
+      status: {
+        ...fx.status,
+        elapsed: ts.elapsed ?? fx.status.elapsed,
+        extra: ts.extra ?? fx.status.extra,
+        live: ts.live,
+        finished: ts.finished || fx.status.finished,
+        clockStartEpoch: ts.clockStartEpoch ?? fx.status.clockStartEpoch,
+      },
     };
     const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fx) : detail.events;
     const statistics = ts.stats ? mapTsStatsToSpl(ts.stats, detail) : detail.statistics;
