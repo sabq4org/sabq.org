@@ -1911,6 +1911,19 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // Push-to-start: يبدأ Live Activity تلقائيًا للمباريات المتابَعة قبل
+      // انطلاقها بعشر دقائق. عامل منفصل ودورة أبطأ من تحديث النتيجة الحية.
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startLiveActivityStartWorker } = await import("./jobs/liveActivityStartWorker");
+            startLiveActivityStartWorker();
+          } catch (error) {
+            console.error("[Server] Error starting live activity start worker:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // أخبار كأس خادم الحرمين الشريفين: نفس نمط التسجيل الدائم وفحص القيادة
       // داخل الدورة (kingsCupNewsJob). خلف KC_NEWS_ENABLED.
       if (enableBackgroundWorkers) {
