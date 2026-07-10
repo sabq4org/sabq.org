@@ -918,6 +918,7 @@ struct SpPhoneLoginFlow: View {
     @State private var number = ""     // أرقام المشترك فقط (5XXXXXXXX)
     @State private var code = ""
     @State private var resend = 0      // عدّاد إعادة الإرسال (ثوانٍ)
+    @FocusState private var phoneFocused: Bool
 
     private var normalized: String { String(number.filter(\.isNumber).prefix(9)) }
     private var phoneValid: Bool { normalized.count == 9 && normalized.first == "5" }
@@ -939,19 +940,26 @@ struct SpPhoneLoginFlow: View {
                 }
                 .environment(\.layoutDirection, .leftToRight)
                 Rectangle().fill(SpTheme.outline).frame(width: 1, height: 22)
+                // خط النظام الموحّد للأرقام — الخط العربي المخصّص كان يخفي الأحرف أثناء الكتابة أحيانًا.
                 TextField("", text: $number, prompt: Text(verbatim: "5XXXXXXXX").foregroundStyle(SpTheme.onDarkFaint))
                     .keyboardType(.numberPad)
                     .textContentType(.telephoneNumber)
-                    .font(SportsFonts.app(size: 16, weight: .semibold))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 17, weight: .semibold, design: .rounded).monospacedDigit())
                     .foregroundStyle(SpTheme.onDark)
                     .tint(SpTheme.green)
-                    .multilineTextAlignment(.leading)   // الرقم يبدأ بجانب +966 مباشرة (لا يطفو للطرف البعيد)
+                    .multilineTextAlignment(.leading)
+                    .focused($phoneFocused)
                     .onChange(of: number) { _, v in number = String(v.filter(\.isNumber).prefix(9)) }
             }
             // الصفّ كاملًا LTR: المفتاح +966 يسار، الرقم يمينه (كالويب).
             .environment(\.layoutDirection, .leftToRight)
             .padding(.horizontal, 14).padding(.vertical, 13)
             .background(fieldBg)
+            .contentShape(Rectangle())
+            .onTapGesture { phoneFocused = true }
+            .onAppear { phoneFocused = true }
 
             Text(L("سنرسل رمز تحقّق برسالة نصية إلى جوالك."))
                 .font(SportsFonts.app(size: 11.5)).foregroundStyle(SpTheme.onDarkFaint)
@@ -1051,7 +1059,8 @@ struct SpPhoneLoginFlow: View {
     }
 }
 
-/// حقل رمز OTP — 6 خانات مرئية فوق حقل خفيّ يحمل التعبئة الآلية (.oneTimeCode).
+/// حقل رمز OTP — خانات مرئية + TextField فوقها بشفافية منخفضة جدًا ليفعّل شريط
+/// «من الرسائل» (QuickType) عند وصول SMS مع `.oneTimeCode`.
 struct SpOtpBoxes: View {
     @Binding var code: String
     var onComplete: () -> Void
@@ -1060,22 +1069,31 @@ struct SpOtpBoxes: View {
 
     var body: some View {
         ZStack {
-            TextField("", text: $code)
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .focused($focused)
-                .foregroundStyle(.clear)
-                .tint(.clear)
-                .onChange(of: code) { _, v in
-                    let d = String(v.filter(\.isNumber).prefix(length))
-                    if d != code { code = d }
-                    if d.count == length { focused = false; onComplete() }
-                }
             HStack(spacing: 8) {
                 ForEach(0..<length, id: \.self) { i in box(i) }
             }
             .environment(\.layoutDirection, .leftToRight)
             .allowsHitTesting(false)
+
+            // فوق الخانات وبشفافية شبه معدومة — iOS يرفض opacity=0 تمامًا لاقتراح الرمز.
+            TextField("", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(size: 22, weight: .heavy, design: .rounded).monospacedDigit())
+                .foregroundStyle(.clear)
+                .tint(.clear)
+                .multilineTextAlignment(.center)
+                .focused($focused)
+                .opacity(0.02)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .onChange(of: code) { _, v in
+                    let d = String(v.filter(\.isNumber).prefix(length))
+                    if d != code { code = d }
+                    if d.count == length { focused = false; onComplete() }
+                }
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
@@ -1088,7 +1106,7 @@ struct SpOtpBoxes: View {
         let digit: String = i < chars.count ? String(chars[i]) : ""
         let active = i == chars.count
         return Text(digit)
-            .font(SportsFonts.app(size: 22, weight: .heavy))
+            .font(.system(size: 22, weight: .heavy, design: .rounded).monospacedDigit())
             .foregroundStyle(SpTheme.onDark)
             .frame(maxWidth: .infinity).frame(height: 54)
             .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(SpTheme.cardFill))
