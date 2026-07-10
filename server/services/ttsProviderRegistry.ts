@@ -154,9 +154,11 @@ export async function resolveProvidersForNewsletter(
 /** Detect the provider that owns a given voice id (best-effort). */
 export function detectProviderForVoice(voiceId: string | undefined | null): TTSProviderName | null {
   if (!voiceId) return null;
-  if (voiceId.startsWith('ar-') || voiceId.startsWith('en-')) return 'google';
+  if (voiceId.startsWith('ar-') || voiceId.startsWith('en-') || voiceId.startsWith('ur-')) return 'google';
   if (isOpenAIVoiceId(voiceId)) return 'openai';
   if (ARABIC_NEWS_VOICES.some(v => v.voice_id === voiceId)) return 'elevenlabs';
+  // ElevenLabs IDs are typically 20+ alphanumeric chars (shared library + custom).
+  if (/^[a-zA-Z0-9]{20,}$/.test(voiceId)) return 'elevenlabs';
   return null;
 }
 
@@ -179,7 +181,7 @@ export async function resolveVoiceIdForProvider(
 
   // Hard-coded sensible defaults per provider when no setting matches.
   if (provider === 'openai') return 'alloy';
-  if (provider === 'elevenlabs') return 'G1HOkzin3NMwRHSq60UI';
+  if (provider === 'elevenlabs') return 'yXEnnEln9armDCyhkXcA'; // Jeddawi Echo — Saudi radio
   if (provider === 'google') return 'ar-XA-Wavenet-C';
   return undefined;
 }
