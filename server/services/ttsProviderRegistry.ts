@@ -25,15 +25,15 @@ export interface TtsSettings {
   defaultTone?: string;
 }
 
-// OpenAI is the new primary path (gpt-4o-mini-tts). Fallback chain:
-// OpenAI → ElevenLabs → Google. Admins can override via /tts-settings.
+// ElevenLabs is the primary TTS path. Fallback chain:
+// ElevenLabs → OpenAI → Google. Admins can override via /tts-settings.
 export const DEFAULT_TTS_SETTINGS: TtsSettings = {
-  primaryProvider: 'openai',
-  fallbackProviders: ['elevenlabs', 'google'],
+  primaryProvider: 'elevenlabs',
+  fallbackProviders: ['openai', 'google'],
   defaultVoices: {
-    ar: 'alloy',
-    en: 'alloy',
-    ur: 'alloy',
+    ar: 'G1HOkzin3NMwRHSq60UI',
+    en: 'G1HOkzin3NMwRHSq60UI',
+    ur: 'G1HOkzin3NMwRHSq60UI',
   },
 };
 
