@@ -30,6 +30,13 @@ final class SpLiveActivityManager {
     /// آخر توكن دفع لكل مباراة (لإبلاغ الخادم بالإلغاء عند الإيقاف اليدوي).
     private var pushTokens: [Int: String] = [:]
     private var didAdoptExisting = false
+    private var didStartObservers = false
+    private var observedActivityIds: Set<String> = []
+    private var activityUpdatesTask: Task<Void, Never>?
+    private var pushToStartTask: Task<Void, Never>?
+
+    private let pushToStartTokenKey = "sabqsports.liveActivity.pushToStartToken"
+    private let installationIdKey = "sabqsports.installation.id"
 
     var isSupported: Bool { ActivityAuthorizationInfo().areActivitiesEnabled }
 
@@ -151,14 +158,79 @@ final class SpLiveActivityManager {
         adoptExisting()
     }
 
+    /// يبدأ مراقبي ActivityKit مرة واحدة عند إقلاع التطبيق. `activityUpdates`
+    /// ضروري للنشاط الذي يبدأه APNs في الخلفية؛ قائمة `activities` وحدها تلتقط
+    /// الموجود لحظة الإقلاع فقط وقد تفوّت نشاطًا يصل لاحقًا.
+    func startObservers() {
+        guard !didStartObservers else { return }
+        didStartObservers = true
+        adoptExistingIfNeeded()
+
+        activityUpdatesTask = Task { [weak self] in
+            for await activity in Activity<SpMatchActivityAttributes>.activityUpdates {
+                guard !Task.isCancelled else { return }
+                self?.adopt(activity)
+            }
+        }
+
+        if #available(iOS 17.2, *) {
+            observePushToStartTokenUpdates()
+        }
+    }
+
     /// يلتقط النشاطات الباقية من جلسة سابقة بعد إعادة تشغيل التطبيق.
     private func adoptExisting() {
         for activity in Activity<SpMatchActivityAttributes>.activities {
-            let id = activity.attributes.fixtureId
-            activities[id] = activity
-            activeFixtureIds.insert(id)
-            observePushToken(activity)
+            adopt(activity)
         }
+    }
+
+    private func adopt(_ activity: Activity<SpMatchActivityAttributes>) {
+        let fixtureId = activity.attributes.fixtureId
+        activities[fixtureId] = activity
+        activeFixtureIds.insert(fixtureId)
+        guard observedActivityIds.insert(activity.id).inserted else { return }
+        observePushToken(activity)
+    }
+
+    /// يعيد رفع آخر Push-to-Start token بعد استعادة الجلسة أو تسجيل دخول جديد.
+    /// إن وصل التوكن قبل استعادة Keychain يبقى محليًّا حتى هذه المزامنة.
+    func syncPushToStartToken() async {
+        guard SpAuthStore.shared.isLoggedIn,
+              let token = UserDefaults.standard.string(forKey: pushToStartTokenKey),
+              !token.isEmpty else { return }
+        try? await APIClient.shared.registerLiveActivityStartToken(
+            token, deviceId: installationId())
+    }
+
+    /// يُستدعى أثناء تسجيل الخروج قبل إزالة Bearer token. نبقي القيمة محليًّا
+    /// لأنها توكن للتثبيت لا للحساب؛ ستُربط بالحساب التالي بعد دخوله فقط.
+    func unregisterPushToStartToken() async {
+        guard let token = UserDefaults.standard.string(forKey: pushToStartTokenKey),
+              !token.isEmpty else { return }
+        try? await APIClient.shared.unregisterLiveActivityStartToken(
+            token, deviceId: installationId())
+    }
+
+    @available(iOS 17.2, *)
+    private func observePushToStartTokenUpdates() {
+        pushToStartTask = Task { [weak self] in
+            for await tokenData in Activity<SpMatchActivityAttributes>.pushToStartTokenUpdates {
+                guard !Task.isCancelled, let self else { return }
+                let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                UserDefaults.standard.set(token, forKey: self.pushToStartTokenKey)
+                await self.syncPushToStartToken()
+            }
+        }
+    }
+
+    private func installationId() -> String {
+        if let existing = UserDefaults.standard.string(forKey: installationIdKey), !existing.isEmpty {
+            return existing
+        }
+        let value = UUID().uuidString.lowercased()
+        UserDefaults.standard.set(value, forKey: installationIdKey)
+        return value
     }
 
     private func makeState(from f: SpFixture) -> SpMatchActivityAttributes.ContentState {

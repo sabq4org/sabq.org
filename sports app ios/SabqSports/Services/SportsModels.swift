@@ -933,6 +933,12 @@ nonisolated struct SpLiveActivityEndBody: Encodable {
     let token: String
 }
 
+/// توكن ActivityKit الذي يسمح للخادم ببدء نشاط جديد تلقائيًّا (iOS 17.2+).
+nonisolated struct SpLiveActivityStartTokenBody: Encodable {
+    let token: String
+    let deviceId: String
+}
+
 // MARK: - إثراء المباراة (SportMonks) — xG/الزخم/الضغط/الوقائع
 
 nonisolated struct SpXgSide: Decodable, Hashable { let xg: Double; let xgot: Double }
@@ -1661,6 +1667,23 @@ extension APIClient {
         let body = SpLiveActivityEndBody(token: pushToken)
         let data = try JSONEncoder().encode(body)
         try await send(method: "POST", path: "/live-activity/end",
+                       jsonBody: data, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// يربط Push-to-Start token بالعضو الحالي. التوكن دوّار والخادم يستبدل
+    /// توكن التثبيت السابق اعتمادًا على deviceId.
+    func registerLiveActivityStartToken(_ token: String, deviceId: String) async throws {
+        let body = SpLiveActivityStartTokenBody(token: token, deviceId: deviceId)
+        let data = try JSONEncoder().encode(body)
+        try await send(method: "PUT", path: "/live-activity/start-token",
+                       jsonBody: data, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// يلغي ربط Push-to-Start token عند تسجيل الخروج قبل مسح Bearer token.
+    func unregisterLiveActivityStartToken(_ token: String, deviceId: String) async throws {
+        let body = SpLiveActivityStartTokenBody(token: token, deviceId: deviceId)
+        let data = try JSONEncoder().encode(body)
+        try await send(method: "DELETE", path: "/live-activity/start-token",
                        jsonBody: data, apiRoot: URLConstants.mobileAPI)
     }
 

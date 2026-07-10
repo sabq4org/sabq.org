@@ -83,7 +83,7 @@ private struct SpAppEnvironmentRoot: View {
             .task {
                 await Task.yield()
                 try? await Task.sleep(nanoseconds: 500_000_000)
-                liveActivity.adoptExistingIfNeeded()
+                liveActivity.startObservers()
                 liveStream.start()
             }
             .onChange(of: scenePhase) { _, phase in

@@ -306,7 +306,7 @@
 
 **الأصل المشترك** `Services/SpMatchActivity.swift` (يُجمَّع في الهدفين): `SpMatchActivityAttributes` — ثوابت (الفريقان/الشعارات/البطولة/الانطلاق) + `ContentState` ديناميكية. ⚠️ **أسماء حقول `ContentState` تُطابق `LiveActivityContentState` في الخادم حرفيًّا** (`homeScore/awayScore/minute(String)/statusLabel/isLive/isFinished/lastEvent`) — أي اختلاف يكسر فكّ ترميز دفعات APNs.
 
-**المدير** `Services/SpLiveActivityManager.swift` (`@Observable` singleton، يُحقن في `SabqSportsApp`): `start/update/end/toggle`، يلتقط النشاطات الباقية بعد إعادة التشغيل (`adoptExisting`)، ويراقب `pushTokenUpdates` لكل نشاط فيرفعها للخادم. التحديث المحلّي يجري من `MatchCenterView.load` و`SpMatchFollows.update` (no-op إن لا نشاط).
+**المدير** `Services/SpLiveActivityManager.swift` (`@Observable` singleton، يُحقن في `SabqSportsApp`): `start/update/end/toggle`، يلتقط النشاطات الباقية بعد إعادة التشغيل (`adoptExisting`)، ويراقب `pushTokenUpdates` لكل نشاط فيرفعها للخادم. ويراقب أيضًا `activityUpdates` كي يتبنّى النشاط الذي يبدأه APNs والتطبيق في الخلفية. التحديث المحلّي يجري من `MatchCenterView.load` و`SpMatchFollows.update` (no-op إن لا نشاط).
 
 **عرض الدقيقة الحيّة:** الويدجت يعرض **نصّ الدقيقة المدفوع** (`ContentState.minute` مثل «45'»/«45+2'»/«90+3'») كما يظهر داخل التطبيق تمامًا — لا عدّاد ذاتيًّا (`Text(timerInterval:)`). الخادم يعيد حساب الدقيقة ويدفعها كل ثانيتين بأولوية عالية فتبقى حيّة ومتزامنة. **سبب التخلّي عن العدّاد الذاتي:** `Text(timerInterval:)` كان (١) يعرض صيغة الساعات فوق الدقيقة 60 («1:12:30» بدل «72'»)، (٢) يتأخّر دقيقةً كاملة بإزاحة `−1` في `clockStartEpoch`، (٣) يعجز عن تمثيل بدل الضائع — فيخالف رقم التطبيق. حقل `clockStartEpoch` باقٍ في `ContentState` (عقد APNs مشترك مع سبق/الخليج) لكنّ ويدجت الرياضي لا يقرؤه. العدّ التنازلي قبل الانطلاق (`Date()...kickoff`) باقٍ كما هو.
 
@@ -317,6 +317,11 @@
 - نقطتان (عامّتان، تعملان للزوّار): `POST /api/v1/live-activity/register` (`{ fixtureId, token, bundleId }`) و`/live-activity/end` (`{ token }`).
 - `liveActivityService.runLiveActivityCycle` (عامل `liveActivityWorker`، كل 5ث، قائد فقط، مع `ENABLE_BACKGROUND_WORKERS`): يبني الحالة من `worldCupService`+`sportmonksService`، يدفع عند تغيّر البصمة فقط، يُنهي عند النهاية، ويُلغي التوكنات الفاسدة.
 - `apnsService.sendLiveActivityUpdate`: `apns-push-type=liveactivity` و`apns-topic=<bundleId>.push-type.liveactivity` — يستخدم `bundleId` المخزّن للتوكن (`com.sabq.sports`) بدل الافتراضي.
+
+### البدء التلقائي Push-to-Start (iOS 17.2+)
+- يراقب التطبيق `Activity<SpMatchActivityAttributes>.pushToStartTokenUpdates` ويحفظ أحدث توكن للتثبيت، ثم يرفعه بعد استعادة/بدء جلسة العضو عبر `PUT /api/v1/live-activity/start-token`.
+- معرّف تثبيت ثابت محلي يسمح للخادم بإبطال التوكن الدوّار السابق. عند تسجيل الخروج يُستدعى `DELETE` قبل مسح Bearer token كي لا يبدأ نشاط لمتابعات العضو السابق.
+- عامل الخادم يبدأ النشاط للمباراة التي يتابعها العضو قبل الانطلاق بعشر دقائق. عند إيقاظ التطبيق، يلتقط `activityUpdates` النشاط الجديد ثم يرفع `pushTokenUpdates` لتستمر تحديثات النتيجة المعتادة.
 
 **تشغيل Production:** نفس مفتاح APNs المشترك + `ENABLE_BACKGROUND_WORKERS` (تعطيل: `LIVE_ACTIVITY_PUSH_ENABLED=false`). SQL الإنتاج: `ALTER TABLE live_activity_tokens ADD COLUMN IF NOT EXISTS bundle_id text;`. اختبار على جهاز حقيقي.
 

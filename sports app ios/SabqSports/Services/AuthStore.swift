@@ -106,6 +106,8 @@ final class SpAuthStore {
         // مزامنة متابعات المباريات المحلّية كي تصلها الإشعارات اللحظية.
         SpMatchFollows.shared.syncAllToServer()
         await uploadPushToken()
+        // قد يصل Push-to-Start token قبل استعادة الجلسة؛ اربطه الآن بالعضو.
+        await SpLiveActivityManager.shared.syncPushToStartToken()
     }
 
     func toggleFollow(kind: String, refId: String, refName: String, refLogo: String?) async {
@@ -376,9 +378,7 @@ final class SpAuthStore {
 
     func signOut() {
         // إلغاء ربط رمز الدفع على الخادم أولًا كي لا تستمر تنبيهات العضو السابق لهذا الجهاز.
-        if let push = pushToken {
-            Task { try? await APIClient.shared.unregisterDevice(deviceToken: push) }
-        }
+        let devicePushToken = pushToken
         token = nil
         member = nil
         // نمسح فقط ما هو مرتبط بالحساب: المتابعات وتفضيلات التنبيهات المُحمَّلة من
@@ -393,7 +393,15 @@ final class SpAuthStore {
         SpLiveActivityManager.shared.endAll()
         SpKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
-        Task { await APIClient.shared.setAuthToken(nil) }
+        // الترتيب مهم: مسار Push-to-Start محمي بالجلسة، لذلك نلغيه قبل مسح
+        // Bearer token. إلغاء توكن الجهاز العام لا يحتاج جلسة لكنه يسير معه.
+        Task {
+            await SpLiveActivityManager.shared.unregisterPushToStartToken()
+            if let devicePushToken {
+                try? await APIClient.shared.unregisterDevice(deviceToken: devicePushToken)
+            }
+            await APIClient.shared.setAuthToken(nil)
+        }
     }
 
     /// الخادم رفض التوكن المخزّن: ننهي الحالة المحلية فورًا بدل إبقاء واجهة
@@ -1037,6 +1045,7 @@ final class SpAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCe
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        SpLiveActivityManager.shared.startObservers()
         return true
     }
 
