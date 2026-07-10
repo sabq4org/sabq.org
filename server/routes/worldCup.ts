@@ -342,7 +342,7 @@ export function registerWorldCupRoutes(app: Express) {
         },
       };
       // s-maxage=5: النتيجة الحيّة لحظية، فلا نُبقيها على الـCDN أكثر من ٥ ثوانٍ
-      res.set("Cache-Control", "public, max-age=0, s-maxage=5, stale-while-revalidate=15");
+      res.set("Cache-Control", "public, max-age=0, s-maxage=2, stale-while-revalidate=4");
       res.json(overlaid);
     } catch (error) {
       console.error("[WorldCup] overview failed:", error);
@@ -375,7 +375,7 @@ export function registerWorldCupRoutes(app: Express) {
       res.set(
         "Cache-Control",
         hasLive
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=15, s-maxage=30, stale-while-revalidate=120",
       );
       res.json({ fixtures });
@@ -388,7 +388,7 @@ export function registerWorldCupRoutes(app: Express) {
   app.get("/api/world-cup/live", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=0, s-maxage=5, stale-while-revalidate=15");
+      res.set("Cache-Control", "public, max-age=0, s-maxage=2, stale-while-revalidate=4");
       res.json({ fixtures: await overlayLiveList(await getLiveFixtures()) });
     } catch (error) {
       console.error("[WorldCup] live failed:", error);
@@ -412,7 +412,7 @@ export function registerWorldCupRoutes(app: Express) {
       res.set(
         "Cache-Control",
         hasLive
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
       );
       res.json({ groups });
@@ -433,7 +433,7 @@ export function registerWorldCupRoutes(app: Express) {
       res.set(
         "Cache-Control",
         hasLive
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
       );
       res.json(bracket);
@@ -919,7 +919,7 @@ export function registerWorldCupRoutes(app: Express) {
       res.set(
         "Cache-Control",
         overlaid.fixture.status.live
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=60, s-maxage=120, stale-while-revalidate=300"
       );
       res.json(overlaid);

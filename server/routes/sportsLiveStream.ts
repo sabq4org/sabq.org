@@ -1,14 +1,13 @@
 /**
- * بثّ SSE للنتائج والأحداث الحية — «الوقت الفعلي» لتطبيق VARA الرياضي (والويب لاحقًا).
+ * بثّ SSE للنتائج والأحداث الحية — VARA + الويب (useSportsLiveStream).
  *
- * بدل استطلاع العميل كل 10 ثوانٍ، يفتح اتصال `GET /api/sports/live-stream` واحدًا
+ * بدل استطلاع العميل كل 10–15 ثانية، يفتح اتصال `GET /api/sports/live-stream` واحدًا
  * ويستقبل «موجزًا» مضغوطًا لكل المباريات الجارية (رياضة + مونديال) فور تغيّره.
  * الخادم يبني الموجز مرة كل ثانيتين (نفس إيقاع liveActivityWorker، ومصادره مكاشة
  * SWR فلا ضغط إضافيًا على المزوّد) ويبثّه لكل المتصلين فقط عند الاختلاف.
  *
- * النتيجة داخل الموجز بطزاجة TheSports (~2ث): getWorldLiveFixtures تُطبّق الطبقة
- * اللحظية على البطولات المُدرَجة، وعناصر المونديال تُركَّب عليها SportMonks هنا —
- * فالعميل يطبّق `gh/ga/el/cs` مباشرةً على بطاقاته ثم يجلب التفاصيل للإثراء فقط.
+ * النتيجة داخل الموجز بطزاجة TheSports (MQTT ثم detail_live): getWorldLiveFixtures
+ * تُطبّق الطبقة اللحظية، وعناصر المونديال تُركَّب عليها TheSports→SportMonks هنا.
  * `cs` = مرساة الساعة الموحّدة (matchClock) — نفس القيمة التي تدفعها Live Activity
  * عبر APNs، فيتطابق العدّاد داخل التطبيق مع شاشة القفل حرفيًّا.
  *
@@ -21,6 +20,7 @@ import {
 } from "../services/saudiLeagueService";
 import { getLiveFixtures, isWorldCupConfigured, type WcFixture } from "../services/worldCupService";
 import { getLiveScore, isSportmonksConfigured } from "../services/sportmonksService";
+import { getTheSportsFastScore } from "../services/theSportsService";
 import { clockStartEpochFor } from "../services/matchClock";
 
 /** عنصر موجز مضغوط — مفاتيح قصيرة لتقليل حجم كل دفعة. */
@@ -50,9 +50,32 @@ let lastPayload = "";
 let building = false;
 let version = 0;
 
-/** تركيب نتيجة TheSports اللحظية على مباراة مونديال (نفس منطق overlayLiveScore في worldCup.ts). */
+/** تركيب النتيجة اللحظية على مباراة مونديال — TheSports أولًا ثم SportMonks (مطابق لـ worldCup.ts). */
 async function overlayWc(fx: WcFixture): Promise<WcFixture> {
-  if (!isSportmonksConfigured() || fx.status.finished) return fx;
+  if (fx.status.finished) return fx;
+  try {
+    const ts = await getTheSportsFastScore(fx.id, fx.timestamp);
+    if (ts && (ts.live || ts.finished)) {
+      return {
+        ...fx,
+        goals: { home: ts.home, away: ts.away },
+        penalties:
+          ts.penHome != null || ts.penAway != null
+            ? { home: ts.penHome, away: ts.penAway }
+            : fx.penalties,
+        status: {
+          ...fx.status,
+          elapsed: ts.elapsed ?? fx.status.elapsed,
+          extra: ts.extra ?? fx.status.extra,
+          live: ts.live,
+          finished: ts.finished || fx.status.finished,
+        },
+      };
+    }
+  } catch {
+    /* تراجع لـSportMonks */
+  }
+  if (!isSportmonksConfigured()) return fx;
   try {
     const live = await getLiveScore(fx.id);
     if (!live) return fx;

@@ -157,16 +157,16 @@ final class LiveMatchActivityManager {
         }
     }
 
-    /// أثناء اللعب: 12 ثانية. حول الانطلاق (−3 دقائق حتى +30 دقيقة): 15 ثانية.
+    /// أثناء اللعب: 5 ثوانٍ (الخادم يحدّث عبر MQTT/TheSports). حول الانطلاق (−3 دقائق حتى +30 دقيقة): 10 ثوانٍ.
     /// قبل ذلك بكثير: 60 ثانية — العدّاد التنازلي ذاتي التحديث فلا حاجة لسحب أسرع.
     /// nil = أوقف السحب نهائيًا: مضت 30 دقيقة على الموعد بلا بث (تأجيل/إلغاء) —
     /// الشرط القديم `< 180` يصبح صحيحًا دائمًا بعد الموعد فكان يسحب كل 15ث للأبد.
     private func nextPollInterval() -> UInt64? {
-        if livePhase { return 12_000_000_000 }
+        if livePhase { return 5_000_000_000 }
         if let k = kickoff {
             let untilKickoff = k.timeIntervalSinceNow
             if untilKickoff > 180 { return 60_000_000_000 }
-            if untilKickoff > -1800 { return 15_000_000_000 }
+            if untilKickoff > -1800 { return 10_000_000_000 }
             return nil
         }
         return 60_000_000_000

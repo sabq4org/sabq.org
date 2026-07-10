@@ -302,7 +302,7 @@ export function registerSportsRoutes(app: Express) {
       res.set(
         "Cache-Control",
         live.some(isHotFixture)
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
       );
       res.json({ configured: true, live });
@@ -328,7 +328,7 @@ export function registerSportsRoutes(app: Express) {
       res.set(
         "Cache-Control",
         matches.some(isHotFixture)
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
       );
       res.json({ configured: true, matches });
@@ -354,7 +354,7 @@ export function registerSportsRoutes(app: Express) {
       res.set(
         "Cache-Control",
         today.some(isHotFixture)
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
       );
       res.json({ configured: true, date: date ?? null, today });
@@ -398,7 +398,7 @@ export function registerSportsRoutes(app: Express) {
       res.set(
         "Cache-Control",
         fixtures.some(isHotFixture)
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
       );
       res.json({ configured: true, from, to, fixtures });
@@ -436,7 +436,7 @@ export function registerSportsRoutes(app: Express) {
       res.set(
         "Cache-Control",
         live.some(isHotFixture) || buckets.today.some(isHotFixture)
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
       );
       res.json({ configured: true, live, today: buckets.today, upcoming: buckets.upcoming, results: buckets.results });
@@ -514,7 +514,7 @@ export function registerSportsRoutes(app: Express) {
       res.set(
         "Cache-Control",
         hasLive
-          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          ? "public, max-age=0, s-maxage=2, stale-while-revalidate=4"
           : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
       );
       res.json({ configured: true, standings });

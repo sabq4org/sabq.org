@@ -63,6 +63,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useSportsLiveStream } from "@/hooks/useSportsLiveStream";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -2143,10 +2144,11 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
     refetchInterval: (q) => {
       const f = q.state.data?.fixture;
       if (!f) return false;
-      if (f.status?.live) return 15_000;
+      // شبكة أمان — النتيجة عبر SSE؛ 5ث أثناء الحيّ لالتقاط أحداث/تفاصيل أغنى.
+      if (f.status?.live) return 5_000;
       if (f.status?.finished) return false;
       const msToKickoff = (f.timestamp ?? 0) * 1000 - Date.now();
-      return msToKickoff <= 30 * 60_000 && msToKickoff > -2 * 3_600_000 ? 25_000 : false;
+      return msToKickoff <= 30 * 60_000 && msToKickoff > -2 * 3_600_000 ? 10_000 : false;
     },
   });
   const [tab, setTab] = useState("events");
@@ -2618,6 +2620,7 @@ export function MatchCenter({ id, scrollable = false }: { id: number | null; scr
 // نافذة المباراة (modal) — غلاف رفيع حول MatchCenter: تعتيم + قفل تمرير الخلفية +
 // زر إغلاق. نفس المحتوى الغني يُعاد استخدامه في صفحة /sports/match/:id المستقلّة.
 export function MatchDialog({ id, onClose }: { id: number | null; onClose: () => void }) {
+  useSportsLiveStream(id != null);
   // قفل تمرير صفحة الخلفية أثناء فتح النافذة (يمنع تحرّك الصفحة الخلفية على الجوال
   // بدل محتوى النافذة). نثبّت الجسم ونعيد موضع التمرير عند الإغلاق.
   useEffect(() => {

@@ -26,6 +26,7 @@ import {
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
+import { useSportsLiveStream } from "@/hooks/useSportsLiveStream";
 import { useCanonical } from "@/hooks/useCanonical";
 import { OptimizedImage } from "@/components/OptimizedImage";
 import { VaraMembershipBadge } from "@/components/sports/VaraMembershipBadge";
@@ -1008,6 +1009,7 @@ export default function SportsDashboard() {
   const [compSlug, setCompSlug] = useState(DEFAULT_COMPETITION_SLUG);
   const [openMatch, setOpenMatch] = useState<number | null>(null);
   const [scorersTab, setScorersTab] = useState<"scorers" | "assists" | "cards">("scorers");
+  useSportsLiveStream(true);
 
   useEffect(() => { document.title = "الرياضة | سبق"; }, []);
   useCanonical("https://sabq.org/sports");
@@ -1097,7 +1099,7 @@ export default function SportsDashboard() {
   // نبض المباشر: نداء مخصّص أسرع (7ث) لكل المباريات الجارية عبر بطولاتنا —
   // هنا تظهر النتيجة/الدقيقة اللحظية من TheSports فور توفّرها في الإنتاج.
   const { data: liveData } = useQuery<{ live: SpLiveItem[] }>({
-    queryKey: ["/api/sports/live"], refetchInterval: 7_000, refetchIntervalInBackground: false, refetchOnWindowFocus: true,
+    queryKey: ["/api/sports/live"], refetchInterval: 5_000, refetchIntervalInBackground: false, refetchOnWindowFocus: true,
   });
   const liveMatches = (Array.isArray(liveData?.live) ? liveData!.live : []).filter((f) => f.status.live);
 

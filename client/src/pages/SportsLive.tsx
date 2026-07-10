@@ -18,6 +18,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useSportsLiveStream } from "@/hooks/useSportsLiveStream";
 import { ACCENT, MatchDialog, competitionHref, type SpLiveItem } from "./SportsHub";
 import { MatchRow } from "./SportsMatchesBoard";
 
@@ -58,7 +59,8 @@ function HeroChip({
   );
 }
 
-const LIVE_REFETCH_MS = 15_000;
+// شبكة أمان فقط — التحديث اللحظي يأتي من SSE (useSportsLiveStream).
+const LIVE_REFETCH_MS = 5_000;
 
 // مباراة من البث المباشر العالمي — توسعة SpLiveItem بحقول الدولة/الدوري للتجميع.
 interface SpWorldLiveItem extends SpLiveItem {
@@ -108,6 +110,7 @@ export default function SportsLive() {
   const { user } = useAuth();
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [openMatch, setOpenMatch] = useState<number | null>(null);
+  useSportsLiveStream(true);
 
   useEffect(() => {
     document.title = "البث المباشر · العالم | سبق";

@@ -16,6 +16,7 @@ import { NavigationBar } from "@/components/NavigationBar";
 import { SportsNewsBlock } from "@/components/sports/SportsNewsBlock";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useSportsLiveStream } from "@/hooks/useSportsLiveStream";
 import { MatchDialog } from "@/pages/SportsHub";
 import { TeamOfTheWeekSection } from "@/components/worldcup/TeamOfTheWeekSection";
 import { RslHero } from "@/components/rsl/RslHero";
@@ -34,6 +35,7 @@ import {
 export default function RoshnHub() {
   const { user } = useAuth();
   const [openMatchId, setOpenMatchId] = useState<number | null>(null);
+  useSportsLiveStream(true);
 
   useEffect(() => {
     document.title = "دوري روشن السعودي — تغطية حية وجدول وترتيب وتوقّعات | سبق";
@@ -42,9 +44,9 @@ export default function RoshnHub() {
 
   const { data: hero, isLoading: heroLoading } = useQuery<RslHeroData>({
     queryKey: ["/api/rsl/hero"],
-    // مباراة حية → 15ث؛ غير ذلك → دقيقة (ما قبل الموسم بيانات شبه ثابتة)
+    // شبكة أمان — النتيجة عبر SSE
     refetchInterval: (query) =>
-      (query.state.data?.live?.length ?? 0) > 0 ? 15_000 : 60_000,
+      (query.state.data?.live?.length ?? 0) > 0 ? 5_000 : 60_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
@@ -54,14 +56,14 @@ export default function RoshnHub() {
   >({
     queryKey: [`/api/sports/${RSL_SLUG}/matches`],
     refetchInterval: (query) =>
-      (query.state.data?.live ?? []).some((f) => f.status.live) ? 15_000 : 60_000,
+      (query.state.data?.live ?? []).some((f) => f.status.live) ? 5_000 : 60_000,
     refetchIntervalInBackground: false,
   });
 
   const { data: standingsData, isLoading: standingsLoading } = useQuery<{ standings: RslStandingRow[] }>({
     queryKey: [`/api/sports/${RSL_SLUG}/standings`],
     refetchInterval: (query) =>
-      (query.state.data?.standings ?? []).some((r) => r.live) ? 15_000 : 5 * 60_000,
+      (query.state.data?.standings ?? []).some((r) => r.live) ? 5_000 : 5 * 60_000,
     refetchIntervalInBackground: false,
   });
 

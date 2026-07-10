@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useCanonical } from "@/hooks/useCanonical";
+import { useSportsLiveStream } from "@/hooks/useSportsLiveStream";
 import {
   ACCENT,
   COMP_CATEGORY_LABELS,
@@ -98,10 +99,11 @@ const RIYADH_TZ = "Asia/Riyadh";
 // رفع التأخير في #465): نتيجة لحظية كل 8ث أثناء وجود مباراة جارية، وتهدئة إلى
 // 30ث عند غياب المباشر (توفير الحصة)، مع اعتبار اللحظي قديمًا بعد 5ث ليُعاد جلبه
 // فورًا عند العودة للتبويب/الشبكة بدل انتظار دورة الاستطلاع التالية.
-const LIVE_ACTIVE_MS = 8_000;
+// شبكة أمان — التحديث اللحظي عبر SSE (useSportsLiveStream).
+const LIVE_ACTIVE_MS = 5_000;
 const LIVE_IDLE_MS = 30_000;
-const TODAY_ACTIVE_MS = 10_000;
-const LIVE_STALE_MS = 5_000;
+const TODAY_ACTIVE_MS = 5_000;
+const LIVE_STALE_MS = 3_000;
 
 // بطولات تُثبّت أعلى لوحة المباريات بالترتيب (كأس العالم 2026 أولًا).
 const PINNED_COMP_SLUGS = ["world-cup"];
@@ -604,6 +606,7 @@ export default function SportsMatchesBoard() {
 
   const today = riyadhToday();
   const isToday = date === today;
+  useSportsLiveStream(isToday);
 
   useEffect(() => {
     document.title = "مباريات اليوم | سبق";

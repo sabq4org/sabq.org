@@ -4,6 +4,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
 import { useAuth } from "@/hooks/useAuth";
+import { useSportsLiveStream } from "@/hooks/useSportsLiveStream";
 import { HeroSection } from "@/components/worldcup/HeroSection";
 import { KnockoutBracket } from "@/components/worldcup/KnockoutBracket";
 import { MatchCenterDialog } from "@/components/worldcup/MatchCenterDialog";
@@ -24,6 +25,7 @@ export default function WorldCup() {
   const [openFixtureId, setOpenFixtureId] = useState<number | null>(null);
   // بطاقة اللاعب تعلو أي نافذة مفتوحة (قائمة منتخب / مركز مباراة) دون إغلاقها
   const [openPlayerId, setOpenPlayerId] = useState<number | null>(null);
+  useSportsLiveStream(true);
 
   useEffect(() => {
     document.title = "مونديال 2026 — تغطية حية لكأس العالم | سبق";
@@ -31,20 +33,18 @@ export default function WorldCup() {
 
   const { data: overview, isLoading: overviewLoading } = useQuery<WcOverview>({
     queryKey: ["/api/world-cup/overview"],
-    // مباراة حية → 15ث (نتيجة/دقيقة طازجة)؛ حول لحظة الانطلاق (الموعد مرّ
-    // والمزود لم يرفع «حية» بعد) → 10ث لتنقلب الواجهة للوضع المباشر بأسرع ما يمكن؛
-    // غير ذلك → 30ث
+    // شبكة أمان — النتيجة اللحظية عبر SSE. حيّ → 5ث؛ حول الانطلاق → 6ث؛ غير ذلك → 30ث
     refetchInterval: (query) => {
       const data = query.state.data;
       const fixture = data?.matchOfTheDay?.fixture;
       const hasLive = (data?.live?.length ?? 0) > 0 || Boolean(fixture?.status.live);
-      if (hasLive) return 7_000;
+      if (hasLive) return 5_000;
       const kickoffPassed =
         fixture &&
         !fixture.status.live &&
         !fixture.status.finished &&
         fixture.timestamp * 1000 <= Date.now();
-      return kickoffPassed ? 8_000 : 30_000;
+      return kickoffPassed ? 6_000 : 30_000;
     },
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -52,18 +52,16 @@ export default function WorldCup() {
 
   const { data: fixturesData, isLoading: fixturesLoading } = useQuery<{ fixtures: WcFixture[] }>({
     queryKey: ["/api/world-cup/fixtures"],
-    // مباراة حية في الجدول → 8ث لتطازج نتائج بطاقات المباريات؛ غير ذلك → 60ث
     refetchInterval: (query) =>
-      (query.state.data?.fixtures ?? []).some((f) => f.status.live) ? 8_000 : 60_000,
+      (query.state.data?.fixtures ?? []).some((f) => f.status.live) ? 5_000 : 60_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
 
   const { data: standingsData, isLoading: standingsLoading } = useQuery<{ groups: WcGroup[] }>({
     queryKey: ["/api/world-cup/standings"],
-    // ترتيب لحظي مفعّل (صفّ live) → 8ث لتطازج الجدول أثناء المباراة؛ غير ذلك → 5د
     refetchInterval: (query) =>
-      (query.state.data?.groups ?? []).some((g) => g.rows.some((r) => r.live)) ? 8_000 : 5 * 60_000,
+      (query.state.data?.groups ?? []).some((g) => g.rows.some((r) => r.live)) ? 5_000 : 5 * 60_000,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
   });
