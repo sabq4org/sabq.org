@@ -112,17 +112,29 @@ final class SpAuthStore {
         guard isLoggedIn else { return }
         let key = "\(kind):\(refId)"
         let wasFollowing = followedKeys.contains(key)
-        if wasFollowing { followedKeys.remove(key) } else { followedKeys.insert(key) }  // تفاؤليًّا
+        let optimistic = SpFollow(id: key, kind: kind, refId: refId, refName: refName, refLogo: refLogo)
+        if wasFollowing {
+            followedKeys.remove(key)
+            follows.removeAll { $0.key == key }
+        } else {
+            followedKeys.insert(key)
+            if !follows.contains(where: { $0.key == key }) { follows.append(optimistic) }
+        }
         do {
             if wasFollowing {
                 try await APIClient.shared.removeFollow(kind: kind, refId: refId)
-                follows.removeAll { $0.key == key }
             } else {
                 try await APIClient.shared.addFollow(kind: kind, refId: refId, refName: refName, refLogo: refLogo)
             }
         } catch {
             // تراجُع عند الفشل
-            if wasFollowing { followedKeys.insert(key) } else { followedKeys.remove(key) }
+            if wasFollowing {
+                followedKeys.insert(key)
+                if !follows.contains(where: { $0.key == key }) { follows.append(optimistic) }
+            } else {
+                followedKeys.remove(key)
+                follows.removeAll { $0.key == key }
+            }
         }
     }
 
@@ -382,6 +394,14 @@ final class SpAuthStore {
         SpKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
         Task { await APIClient.shared.setAuthToken(nil) }
+    }
+
+    /// الخادم رفض التوكن المخزّن: ننهي الحالة المحلية فورًا بدل إبقاء واجهة
+    /// تبدو مسجّلة بجلسة منتهية. تسجيل الخروج آمن للتكرار.
+    func handleUnauthorizedSession() {
+        guard token != nil else { return }
+        errorMessage = L("انتهت جلستك، يرجى تسجيل الدخول")
+        signOut()
     }
 
     /// حذف الحساب نهائيًّا (Apple 5.1.1(v)). أصحاب كلمة المرور: تُطلب للتأكيد؛
@@ -1043,5 +1063,20 @@ final class SpAppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCe
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
         [.banner, .sound, .badge]
+    }
+
+    /// فتح وجهة الإشعار (هدف/بطاقة/فار) مباشرةً داخل مركز المباراة.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let info = response.notification.request.content.userInfo
+        if let raw = info["deeplink"] as? String, let url = URL(string: raw) {
+            SpAppRouter.shared.handle(url: url)
+            return
+        }
+        let rawFixture = info["fixtureId"]
+        let fixtureId = (rawFixture as? Int) ?? Int(rawFixture as? String ?? "")
+        if let fixtureId { SpAppRouter.shared.openMatch(fixtureId) }
     }
 }

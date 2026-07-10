@@ -1,5 +1,9 @@
 import Foundation
 
+extension Notification.Name {
+    nonisolated static let spSessionUnauthorized = Notification.Name("com.sabq.sports.sessionUnauthorized")
+}
+
 // عميل شبكة عام لتطبيق VARA الرياضي — نمط مطابق لتطبيق كأس آسيا (نقاط البوابة
 // عامة بلا مصادقة في v1). يدعم:
 //   - جلسة افتراضية بـ URLCache (ذاكرة 10ميجا + قرص 50ميجا).
@@ -113,7 +117,7 @@ actor APIClient {
         request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-        try ensureSuccess(http, data: data)
+        try ensureSuccess(http, data: data, request: request)
         return http.statusCode
     }
 
@@ -182,7 +186,7 @@ actor APIClient {
     private func decode<T: Decodable>(_ type: T.Type, from session: URLSession, request: URLRequest) async throws -> T {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-        try ensureSuccess(http, data: data)
+        try ensureSuccess(http, data: data, request: request)
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
@@ -193,10 +197,19 @@ actor APIClient {
         }
     }
 
-    private func ensureSuccess(_ http: HTTPURLResponse, data: Data) throws {
+    private func ensureSuccess(_ http: HTTPURLResponse, data: Data, request: URLRequest) throws {
         switch http.statusCode {
         case 200..<300: return
-        case 401: throw APIError.unauthorized
+        case 401:
+            // 401 في مسارات الدخول أو تأكيد حذف الحساب يعني بيانات اعتماد خاطئة،
+            // لا انتهاء الجلسة الحالية. بقية الطلبات الحاملة لـBearer تُبطل الجلسة.
+            let path = request.url?.path ?? ""
+            let isCredentialCheck = path.contains("/auth/") || path.hasSuffix("/members/account")
+            if request.value(forHTTPHeaderField: "Authorization") != nil && !isCredentialCheck {
+                authToken = nil
+                NotificationCenter.default.post(name: .spSessionUnauthorized, object: nil)
+            }
+            throw APIError.unauthorized
         case 403: throw APIError.forbidden
         case 404: throw APIError.notFound
         case 429: throw APIError.rateLimited
