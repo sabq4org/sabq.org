@@ -38,8 +38,12 @@ import {
   bookmarks,
   socialFollows,
   articleDailyStats,
+  contactMessages,
+  contactMessageReplies,
+  opinionTickets,
+  opinionTicketMessages,
 } from "@shared/schema";
-import { eq, sql, and, gt, gte, lt, desc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
+import { eq, sql, and, gt, gte, lt, desc, asc, or, ne, ilike, aliasedTable, inArray, isNull } from "drizzle-orm";
 
 // Aliased users join target so we can pull both authorId (the staff member who
 // entered the article) AND reporterId (the actual byline) in the same query.
@@ -47,6 +51,8 @@ import { eq, sql, and, gt, gte, lt, desc, or, ne, ilike, aliasedTable, inArray, 
 const reporterUsers = aliasedTable(users, "reporter_user");
 // Separate alias for the opinion author (articles.authorId) in the editor detail.
 const authorUsers = aliasedTable(users, "author_user");
+// Used when returning the sender of a reply to an admin contact message.
+const contactReplyUsers = aliasedTable(users, "contact_reply_user");
 import { articleCardSelect } from "../selectHelpers";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -8487,6 +8493,390 @@ router.delete("/admin/articles/:id/permanent", async (req: Request, res: Respons
   } catch (error) {
     console.error("[Mobile API] DELETE /admin/articles/:id/permanent error:", error);
     res.status(500).json({ success: false, message: "تعذّر حذف الخبر نهائياً" });
+  }
+});
+
+// ==========================================
+// Admin inbox — opinion tickets + contact messages
+// ==========================================
+// These are mobile-session counterparts to the web dashboard systems. They
+// intentionally use the same strict `verifyAdminSession` guard as the rest
+// of the iOS newsroom dashboard: only platform admins can access visitor
+// contact data or writer/editorial conversations.
+
+const ADMIN_CONTACT_STATUSES = ["pending", "read", "replied"] as const;
+const ADMIN_TICKET_STATUSES = ["open", "answered", "closed"] as const;
+
+function displayName(firstName?: string | null, lastName?: string | null): string | null {
+  const name = [firstName, lastName].filter(Boolean).join(" ").trim();
+  return name || null;
+}
+
+function escapeEmailHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+// GET /api/v1/admin/contact-messages — paginated inbox with status/search filters.
+router.get("/admin/contact-messages", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+
+    const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.max(1, Math.min(50, Number.parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const status = String(req.query.status ?? "all");
+    const search = String(req.query.search ?? "").trim().slice(0, 120);
+    const conditions = [] as any[];
+
+    if ((ADMIN_CONTACT_STATUSES as readonly string[]).includes(status)) {
+      conditions.push(eq(contactMessages.status, status));
+    }
+    if (search) {
+      const term = `%${search}%`;
+      conditions.push(or(
+        ilike(contactMessages.name, term),
+        ilike(contactMessages.email, term),
+        ilike(contactMessages.subject, term),
+      ));
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+    const [messages, counts] = await Promise.all([
+      db.select().from(contactMessages).where(where).orderBy(desc(contactMessages.createdAt)).limit(limit).offset((page - 1) * limit),
+      db.select({ count: sql<number>`count(*)::int` }).from(contactMessages).where(where),
+    ]);
+    const total = counts[0]?.count ?? 0;
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+      success: true,
+      messages,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/contact-messages error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحميل رسائل التواصل" });
+  }
+});
+
+// GET /api/v1/admin/contact-messages/:id — detail plus every recorded reply.
+// Opening a pending message marks it read, just as an inbox should, without
+// changing messages that were already replied to.
+router.get("/admin/contact-messages/:id", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+
+    const [message] = await db.select().from(contactMessages)
+      .where(eq(contactMessages.id, req.params.id)).limit(1);
+    if (!message) return res.status(404).json({ success: false, message: "الرسالة غير موجودة" });
+
+    if (message.status === "pending") {
+      await db.update(contactMessages).set({ status: "read" }).where(eq(contactMessages.id, message.id));
+      message.status = "read";
+    }
+
+    const replies = await db
+      .select({
+        id: contactMessageReplies.id,
+        messageId: contactMessageReplies.messageId,
+        replyText: contactMessageReplies.replyText,
+        repliedBy: contactMessageReplies.repliedBy,
+        createdAt: contactMessageReplies.createdAt,
+        updatedAt: contactMessageReplies.updatedAt,
+        isEdited: contactMessageReplies.isEdited,
+        responderFirstName: contactReplyUsers.firstName,
+        responderLastName: contactReplyUsers.lastName,
+      })
+      .from(contactMessageReplies)
+      .leftJoin(contactReplyUsers, eq(contactMessageReplies.repliedBy, contactReplyUsers.id))
+      .where(eq(contactMessageReplies.messageId, message.id))
+      .orderBy(asc(contactMessageReplies.createdAt));
+
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+      success: true,
+      message,
+      replies: replies.map((reply) => ({
+        ...reply,
+        responderName: displayName(reply.responderFirstName, reply.responderLastName),
+      })),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/contact-messages/:id error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحميل الرسالة" });
+  }
+});
+
+// PATCH /api/v1/admin/contact-messages/:id — update inbox state.
+router.patch("/admin/contact-messages/:id", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const status = String(req.body?.status ?? "");
+    if (!(ADMIN_CONTACT_STATUSES as readonly string[]).includes(status)) {
+      return res.status(400).json({ success: false, message: "حالة الرسالة غير صالحة" });
+    }
+
+    const updates: Partial<typeof contactMessages.$inferInsert> = { status };
+    if (status === "replied") {
+      updates.repliedAt = new Date();
+      updates.repliedBy = admin.userId;
+    }
+    const [message] = await db.update(contactMessages).set(updates)
+      .where(eq(contactMessages.id, req.params.id)).returning();
+    if (!message) return res.status(404).json({ success: false, message: "الرسالة غير موجودة" });
+    res.json({ success: true, message: "تم تحديث حالة الرسالة", data: message });
+  } catch (error) {
+    console.error("[Mobile API] PATCH /admin/contact-messages/:id error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحديث حالة الرسالة" });
+  }
+});
+
+// POST /api/v1/admin/contact-messages/:id/reply — records the reply and sends
+// it to the visitor. Email input is escaped before interpolation so a contact
+// form submission can never alter the outgoing email markup.
+router.post("/admin/contact-messages/:id/reply", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const replyText = typeof req.body?.replyText === "string" ? req.body.replyText.trim() : "";
+    if (!replyText || replyText.length > 10_000) {
+      return res.status(400).json({ success: false, message: "نص الرد مطلوب ولا يتجاوز 10000 حرف" });
+    }
+
+    const [message] = await db.select().from(contactMessages)
+      .where(eq(contactMessages.id, req.params.id)).limit(1);
+    if (!message) return res.status(404).json({ success: false, message: "الرسالة غير موجودة" });
+
+    const name = escapeEmailHtml(message.name);
+    const subject = escapeEmailHtml(message.subject);
+    const original = escapeEmailHtml(message.message);
+    const reply = escapeEmailHtml(replyText);
+    const emailResult = await sendEmailNotification({
+      to: message.email,
+      subject: `رد على رسالتك: ${message.subject}`,
+      text: `مرحباً ${message.name}،\n\nشكراً لتواصلك معنا.\n\nرسالتك الأصلية:\n${message.message}\n\nردنا:\n${replyText}\n\nمع تحيات،\nصحيفة سبق الإلكترونية`,
+      html: `<div dir="rtl" style="font-family:Arial,sans-serif;line-height:1.8"><h2>رد على رسالتك</h2><p>مرحباً ${name}،</p><p>شكراً لتواصلك معنا.</p><div style="padding:12px;background:#f5f5f5;border-radius:8px"><strong>موضوع رسالتك:</strong> ${subject}<br/>${original}</div><div style="margin-top:16px;padding:12px;background:#ecfdf5;border-right:4px solid #10b981;border-radius:8px"><strong>ردنا:</strong><br/>${reply}</div><p>صحيفة سبق الإلكترونية</p></div>`,
+    });
+    if (!emailResult.success) {
+      console.error("[Mobile API] contact reply email failed:", emailResult.error);
+      return res.status(502).json({ success: false, message: "تعذّر إرسال الرد بالبريد الإلكتروني" });
+    }
+
+    const now = new Date();
+    const [createdReply] = await db.insert(contactMessageReplies).values({
+      messageId: message.id,
+      replyText,
+      repliedBy: admin.userId,
+    }).returning();
+    const [updatedMessage] = await db.update(contactMessages).set({
+      status: "replied",
+      repliedAt: now,
+      repliedBy: admin.userId,
+      replyText,
+    }).where(eq(contactMessages.id, message.id)).returning();
+
+    res.status(201).json({ success: true, message: "تم إرسال الرد بنجاح", data: updatedMessage, reply: createdReply, emailSent: true });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/contact-messages/:id/reply error:", error);
+    res.status(500).json({ success: false, message: "تعذّر إرسال الرد" });
+  }
+});
+
+// GET /api/v1/admin/opinion-tickets — editorial ticket inbox.
+router.get("/admin/opinion-tickets", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+
+    const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.max(1, Math.min(50, Number.parseInt(String(req.query.limit ?? "20"), 10) || 20));
+    const status = String(req.query.status ?? "all");
+    const search = String(req.query.search ?? "").trim().slice(0, 120);
+    const conditions = [] as any[];
+    if ((ADMIN_TICKET_STATUSES as readonly string[]).includes(status)) {
+      conditions.push(eq(opinionTickets.status, status));
+    }
+    if (search) {
+      const term = `%${search}%`;
+      conditions.push(or(
+        ilike(opinionTickets.title, term),
+        ilike(users.firstName, term),
+        ilike(users.lastName, term),
+        ilike(users.email, term),
+      ));
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+    const [rows, counts] = await Promise.all([
+      db.select({
+        id: opinionTickets.id,
+        writerId: opinionTickets.writerId,
+        title: opinionTickets.title,
+        status: opinionTickets.status,
+        lastMessageAt: opinionTickets.lastMessageAt,
+        lastReadByAdminAt: opinionTickets.lastReadByAdminAt,
+        createdAt: opinionTickets.createdAt,
+        updatedAt: opinionTickets.updatedAt,
+        writerFirstName: users.firstName,
+        writerLastName: users.lastName,
+        writerEmail: users.email,
+      }).from(opinionTickets).leftJoin(users, eq(opinionTickets.writerId, users.id))
+        .where(where).orderBy(desc(opinionTickets.lastMessageAt)).limit(limit).offset((page - 1) * limit),
+      db.select({ count: sql<number>`count(*)::int` }).from(opinionTickets)
+        .leftJoin(users, eq(opinionTickets.writerId, users.id)).where(where),
+    ]);
+    const total = counts[0]?.count ?? 0;
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+      success: true,
+      tickets: rows.map((ticket) => ({
+        id: ticket.id,
+        writerId: ticket.writerId,
+        writerName: displayName(ticket.writerFirstName, ticket.writerLastName),
+        writerEmail: ticket.writerEmail,
+        title: ticket.title,
+        status: ticket.status,
+        lastMessageAt: ticket.lastMessageAt,
+        createdAt: ticket.createdAt,
+        updatedAt: ticket.updatedAt,
+        hasUnread: !ticket.lastReadByAdminAt || ticket.lastMessageAt > ticket.lastReadByAdminAt,
+      })),
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/opinion-tickets error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحميل استفسارات الرأي" });
+  }
+});
+
+// GET /api/v1/admin/opinion-tickets/:id — ticket thread and read marker.
+router.get("/admin/opinion-tickets/:id", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const [ticket] = await db.select({
+      id: opinionTickets.id,
+      writerId: opinionTickets.writerId,
+      title: opinionTickets.title,
+      status: opinionTickets.status,
+      lastMessageAt: opinionTickets.lastMessageAt,
+      createdAt: opinionTickets.createdAt,
+      updatedAt: opinionTickets.updatedAt,
+      writerFirstName: users.firstName,
+      writerLastName: users.lastName,
+      writerEmail: users.email,
+    }).from(opinionTickets).leftJoin(users, eq(opinionTickets.writerId, users.id))
+      .where(eq(opinionTickets.id, req.params.id)).limit(1);
+    if (!ticket) return res.status(404).json({ success: false, message: "الاستفسار غير موجود" });
+
+    const messages = await db.select({
+      id: opinionTicketMessages.id,
+      ticketId: opinionTicketMessages.ticketId,
+      senderId: opinionTicketMessages.senderId,
+      senderRole: opinionTicketMessages.senderRole,
+      message: opinionTicketMessages.message,
+      parentMessageId: opinionTicketMessages.parentMessageId,
+      createdAt: opinionTicketMessages.createdAt,
+      senderFirstName: users.firstName,
+      senderLastName: users.lastName,
+    }).from(opinionTicketMessages).leftJoin(users, eq(opinionTicketMessages.senderId, users.id))
+      .where(eq(opinionTicketMessages.ticketId, ticket.id)).orderBy(asc(opinionTicketMessages.createdAt));
+    await db.update(opinionTickets).set({ lastReadByAdminAt: new Date() }).where(eq(opinionTickets.id, ticket.id));
+
+    res.set("Cache-Control", "private, no-store");
+    res.json({
+      success: true,
+      ticket: {
+        id: ticket.id,
+        writerId: ticket.writerId,
+        writerName: displayName(ticket.writerFirstName, ticket.writerLastName),
+        writerEmail: ticket.writerEmail,
+        title: ticket.title,
+        status: ticket.status,
+        lastMessageAt: ticket.lastMessageAt,
+        createdAt: ticket.createdAt,
+        updatedAt: ticket.updatedAt,
+      },
+      messages: messages.map((message) => ({
+        ...message,
+        senderName: displayName(message.senderFirstName, message.senderLastName),
+      })),
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /admin/opinion-tickets/:id error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحميل الاستفسار" });
+  }
+});
+
+// POST /api/v1/admin/opinion-tickets/:id/messages — editorial reply.
+router.post("/admin/opinion-tickets/:id/messages", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const text = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    if (!text || text.length > 10_000) {
+      return res.status(400).json({ success: false, message: "نص الرد مطلوب ولا يتجاوز 10000 حرف" });
+    }
+    const [ticket] = await db.select().from(opinionTickets).where(eq(opinionTickets.id, req.params.id)).limit(1);
+    if (!ticket) return res.status(404).json({ success: false, message: "الاستفسار غير موجود" });
+    if (ticket.status === "closed") return res.status(400).json({ success: false, message: "تم إغلاق هذا الاستفسار" });
+
+    const parentMessageId = typeof req.body?.parentMessageId === "string" ? req.body.parentMessageId : null;
+    if (parentMessageId) {
+      const [parent] = await db.select({ ticketId: opinionTicketMessages.ticketId }).from(opinionTicketMessages)
+        .where(eq(opinionTicketMessages.id, parentMessageId)).limit(1);
+      if (!parent || parent.ticketId !== ticket.id) {
+        return res.status(400).json({ success: false, message: "مرجع الرد غير صالح" });
+      }
+    }
+
+    const now = new Date();
+    const [message] = await db.insert(opinionTicketMessages).values({
+      ticketId: ticket.id,
+      senderId: admin.userId,
+      senderRole: "admin",
+      message: text,
+      parentMessageId,
+    }).returning();
+    await db.update(opinionTickets).set({
+      lastMessageAt: now,
+      lastReadByAdminAt: now,
+      updatedAt: now,
+      ...(ticket.status === "open" ? { status: "answered" } : {}),
+    }).where(eq(opinionTickets.id, ticket.id));
+    res.status(201).json({ success: true, message: "تم إرسال الرد بنجاح", data: message });
+  } catch (error) {
+    console.error("[Mobile API] POST /admin/opinion-tickets/:id/messages error:", error);
+    res.status(500).json({ success: false, message: "تعذّر إرسال الرد" });
+  }
+});
+
+// PATCH /api/v1/admin/opinion-tickets/:id/status — open / answered / closed.
+router.patch("/admin/opinion-tickets/:id/status", async (req: Request, res: Response) => {
+  try {
+    const admin = await verifyAdminSession(req);
+    if (!admin) return res.status(403).json({ success: false, message: "صلاحيات غير كافية" });
+    const status = String(req.body?.status ?? "");
+    if (!(ADMIN_TICKET_STATUSES as readonly string[]).includes(status)) {
+      return res.status(400).json({ success: false, message: "حالة الاستفسار غير صالحة" });
+    }
+    const [ticket] = await db.update(opinionTickets).set({ status, updatedAt: new Date() })
+      .where(eq(opinionTickets.id, req.params.id)).returning();
+    if (!ticket) return res.status(404).json({ success: false, message: "الاستفسار غير موجود" });
+    res.json({ success: true, ticket });
+  } catch (error) {
+    console.error("[Mobile API] PATCH /admin/opinion-tickets/:id/status error:", error);
+    res.status(500).json({ success: false, message: "تعذّر تحديث حالة الاستفسار" });
   }
 });
 

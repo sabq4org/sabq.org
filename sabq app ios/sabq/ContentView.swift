@@ -132,6 +132,18 @@ struct ContentView: View {
                 .navigationDestination(for: AdminDashboardRoute.self) { _ in
                     AdminDashboardView()
                 }
+                .navigationDestination(for: AdminContactMessagesRoute.self) { _ in
+                    AdminContactMessagesView()
+                }
+                .navigationDestination(for: AdminOpinionTicketsRoute.self) { _ in
+                    AdminOpinionTicketsView()
+                }
+                .navigationDestination(for: AdminContactMessageRoute.self) { route in
+                    AdminContactMessageDetailView(id: route.id)
+                }
+                .navigationDestination(for: AdminOpinionTicketRoute.self) { route in
+                    AdminOpinionTicketDetailView(id: route.id)
+                }
                 .navigationDestination(for: LoyaltyAccountRoute.self) { _ in
                     LoyaltyAccountView()
                 }
