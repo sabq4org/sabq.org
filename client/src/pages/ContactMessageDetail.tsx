@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useParams, useLocation } from "wouter";
+import { useRoute, useLocation } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,13 +27,11 @@ import {
 } from "@/components/ui/dialog";
 import {
   ArrowRight,
-  ArrowLeft,
   ChevronRight,
   ChevronLeft,
   MessageSquare,
   Mail,
   Phone,
-  Calendar,
   User,
   FileText,
   Clock,
@@ -69,10 +68,67 @@ interface MessageWithReplies extends ContactMessage {
 }
 
 const statusColors: Record<ContactMessageStatus, string> = {
-  pending: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
-  read: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
-  replied: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
+  pending:
+    "bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-500/20 dark:text-amber-100 dark:border-amber-400/40",
+  read:
+    "bg-sky-100 text-sky-900 border-sky-300 dark:bg-sky-500/20 dark:text-sky-100 dark:border-sky-400/40",
+  replied:
+    "bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-100 dark:border-emerald-400/40",
 };
+
+type AttachmentItem = { url: string; name: string; type?: string };
+
+/** Normalize attachments — schema is string[], form saves {url,name,type}[] */
+function parseAttachments(attachments: unknown): AttachmentItem[] {
+  if (!attachments) return [];
+
+  let raw: unknown = attachments;
+  if (typeof attachments === "string") {
+    try {
+      raw = JSON.parse(attachments);
+    } catch {
+      return attachments.trim()
+        ? [{ url: attachments, name: attachments.split("/").pop() || "مرفق" }]
+        : [];
+    }
+  }
+
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item): AttachmentItem | null => {
+      if (typeof item === "string") {
+        const url = item.trim();
+        if (!url) return null;
+        return { url, name: url.split("/").pop() || "مرفق" };
+      }
+      if (item && typeof item === "object") {
+        const obj = item as Record<string, unknown>;
+        const url = typeof obj.url === "string" ? obj.url : "";
+        if (!url) return null;
+        const name =
+          typeof obj.name === "string" && obj.name.trim()
+            ? obj.name
+            : url.split("/").pop() || "مرفق";
+        const type = typeof obj.type === "string" ? obj.type : undefined;
+        return { url, name, type };
+      }
+      return null;
+    })
+    .filter((item): item is AttachmentItem => item !== null);
+}
+
+function isImageAttachment(attachment: AttachmentItem) {
+  const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"];
+  const url = (attachment.url || "").toLowerCase();
+  const name = (attachment.name || "").toLowerCase();
+  const type = (attachment.type || "").toLowerCase();
+
+  return (
+    type.startsWith("image/") ||
+    imageExtensions.some((ext) => url.endsWith(ext) || name.endsWith(ext) || url.includes(ext + "?"))
+  );
+}
 
 const statusLabels: Record<ContactMessageStatus, string> = {
   pending: "قيد الانتظار",
@@ -89,11 +145,6 @@ const statusIcons: Record<ContactMessageStatus, typeof Clock> = {
 function formatDate(date: string | Date | null | undefined): string {
   if (!date) return "-";
   return format(new Date(date), "d MMMM yyyy - HH:mm", { locale: ar });
-}
-
-function formatDateShort(date: string | Date | null | undefined): string {
-  if (!date) return "-";
-  return format(new Date(date), "d MMMM yyyy", { locale: ar });
 }
 
 function LoadingSkeleton() {
@@ -131,10 +182,11 @@ function LoadingSkeleton() {
 }
 
 export default function ContactMessageDetail() {
-  const { id } = useParams<{ id: string }>();
+  const [, routeParams] = useRoute("/dashboard/contact-messages/:id");
+  const id = routeParams?.id;
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  
+
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteReplyDialogOpen, setDeleteReplyDialogOpen] = useState(false);
   const [replyToDelete, setReplyToDelete] = useState<string | null>(null);
@@ -148,18 +200,20 @@ export default function ContactMessageDetail() {
   }, []);
 
   // Fetch message with replies
-  const { data: message, isLoading, error } = useQuery<MessageWithReplies>({
+  const { data: message, isLoading, error, isError } = useQuery<MessageWithReplies>({
     queryKey: ["/api/contact-messages", id, "full"],
     queryFn: async () => {
       const response = await fetch(apiUrl(`/api/contact-messages/${id}/full`), {
         credentials: "include",
       });
       if (!response.ok) {
-        throw new Error("فشل في جلب تفاصيل الرسالة");
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || "فشل في جلب تفاصيل الرسالة");
       }
       return response.json();
     },
     enabled: !!id,
+    retry: false,
   });
 
   // Fetch all messages for navigation
@@ -362,54 +416,30 @@ export default function ContactMessageDetail() {
     return first + last || "م";
   };
 
-  // Parse attachments - could be JSON string or array
-  const parseAttachments = (attachments: any): Array<{ url: string; name: string; type?: string }> => {
-    if (!attachments) return [];
-    if (typeof attachments === "string") {
-      try {
-        return JSON.parse(attachments);
-      } catch {
-        return [];
-      }
-    }
-    if (Array.isArray(attachments)) return attachments;
-    return [];
-  };
-
-  const isImageAttachment = (attachment: { url: string; name: string; type?: string }) => {
-    const imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];
-    const url = attachment.url.toLowerCase();
-    const name = attachment.name.toLowerCase();
-    const type = attachment.type?.toLowerCase() || "";
-    
-    return (
-      type.startsWith("image/") ||
-      imageExtensions.some((ext) => url.endsWith(ext) || name.endsWith(ext))
-    );
-  };
-
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="container mx-auto p-6" dir="rtl">
+        <div className="container mx-auto p-4 md:p-6" dir="rtl">
           <LoadingSkeleton />
         </div>
       </DashboardLayout>
     );
   }
 
-  if (error || !message) {
+  if (!id || isError || error || !message) {
     return (
       <DashboardLayout>
-        <div className="container mx-auto p-6" dir="rtl" data-testid="message-not-found">
-          <Card>
+        <div className="container mx-auto p-4 md:p-6" dir="rtl" data-testid="message-not-found">
+          <Card className="border-destructive/30">
             <CardContent className="flex flex-col items-center justify-center py-16">
-              <div className="rounded-full bg-destructive/10 p-6 mb-4">
+              <div className="rounded-full bg-destructive/15 p-6 mb-4">
                 <MessageSquare className="h-12 w-12 text-destructive" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">الرسالة غير موجودة</h3>
+              <h3 className="text-xl font-semibold mb-2 text-foreground">
+                {!id ? "معرّف الرسالة غير صالح" : "تعذر تحميل الرسالة"}
+              </h3>
               <p className="text-muted-foreground text-center max-w-md mb-4">
-                لم يتم العثور على الرسالة المطلوبة
+                {(error as Error)?.message || "لم يتم العثور على الرسالة المطلوبة أو لا تملك صلاحية عرضها"}
               </p>
               <Button onClick={() => setLocation("/dashboard/contact-messages")} data-testid="button-back-to-list">
                 <ArrowRight className="h-4 w-4 ml-2" />
@@ -423,22 +453,23 @@ export default function ContactMessageDetail() {
   }
 
   const StatusIcon = statusIcons[message.status as ContactMessageStatus] || Clock;
-  const attachments = parseAttachments((message as any).attachments);
+  const attachments = parseAttachments((message as { attachments?: unknown }).attachments);
+  const replies = Array.isArray(message.replies) ? message.replies : [];
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6" dir="rtl" data-testid="contact-message-detail-page">
+      <div className="container mx-auto p-4 md:p-6 space-y-5" dir="rtl" data-testid="contact-message-detail-page">
         {/* Header with navigation */}
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.25 }}
         >
           <div className="flex items-center justify-between flex-wrap gap-4">
             <Button
               variant="ghost"
               onClick={() => setLocation("/dashboard/contact-messages")}
-              className="gap-2"
+              className="gap-2 text-foreground"
               data-testid="button-back"
             >
               <ArrowRight className="h-4 w-4" />
@@ -455,8 +486,8 @@ export default function ContactMessageDetail() {
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
-              <span className="text-sm text-muted-foreground">
-                {currentIndex + 1} من {allMessages.length}
+              <span className="text-sm font-medium text-foreground/80">
+                {currentIndex >= 0 ? currentIndex + 1 : "—"} من {allMessages.length || "—"}
               </span>
               <Button
                 variant="outline"
@@ -473,68 +504,73 @@ export default function ContactMessageDetail() {
 
         {/* Message Header Section */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.1 }}
+          transition={{ duration: 0.25, delay: 0.05 }}
         >
-          <Card data-testid="message-header-card">
-            <CardHeader className="flex flex-row items-start justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600">
-                  <MessageSquare className="h-6 w-6 text-white" />
+          <Card className="border-border/80 shadow-sm overflow-hidden" data-testid="message-header-card">
+            <div className="h-1.5 bg-gradient-to-l from-emerald-600 via-teal-500 to-cyan-500" />
+            <CardHeader className="flex flex-row items-start justify-between gap-4 pb-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2.5 rounded-xl bg-emerald-600 shrink-0">
+                  <MessageSquare className="h-5 w-5 text-white" />
                 </div>
-                <div>
-                  <CardTitle className="text-xl">{message.subject}</CardTitle>
+                <div className="min-w-0">
+                  <CardTitle className="text-xl text-foreground leading-snug">{message.subject}</CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
                     {formatDate(message.createdAt)}
                   </p>
                 </div>
               </div>
-              <Badge className={statusColors[message.status as ContactMessageStatus]} data-testid="badge-status">
+              <Badge
+                variant="outline"
+                className={cn("shrink-0 font-medium", statusColors[message.status as ContactMessageStatus])}
+                data-testid="badge-status"
+              >
                 <StatusIcon className="h-3 w-3 ml-1" />
-                {statusLabels[message.status as ContactMessageStatus]}
+                {statusLabels[message.status as ContactMessageStatus] || message.status}
               </Badge>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <User className="h-4 w-4" />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 rounded-xl bg-muted/60 dark:bg-muted/30 p-4 border border-border/60">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <User className="h-3.5 w-3.5" />
                     <span>الاسم</span>
                   </div>
-                  <p className="font-medium" data-testid="text-sender-name">{message.name}</p>
+                  <p className="font-semibold text-foreground" data-testid="text-sender-name">{message.name}</p>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Mail className="h-4 w-4" />
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <Mail className="h-3.5 w-3.5" />
                     <span>البريد الإلكتروني</span>
                   </div>
-                  <p className="font-medium" dir="ltr" data-testid="text-sender-email">
-                    <a href={`mailto:${message.email}`} className="text-primary hover:underline">
+                  <p className="font-semibold" dir="ltr" data-testid="text-sender-email">
+                    <a href={`mailto:${message.email}`} className="text-sky-700 dark:text-sky-300 hover:underline">
                       {message.email}
                     </a>
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Phone className="h-4 w-4" />
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <Phone className="h-3.5 w-3.5" />
                     <span>رقم الهاتف</span>
                   </div>
-                  <p className="font-medium" dir="ltr" data-testid="text-sender-phone">
-                    <a href={`tel:${message.phone}`} className="text-primary hover:underline">
+                  <p className="font-semibold" dir="ltr" data-testid="text-sender-phone">
+                    <a href={`tel:${message.phone}`} className="text-sky-700 dark:text-sky-300 hover:underline">
                       {message.phone}
                     </a>
                   </p>
                 </div>
               </div>
 
-              {/* Action buttons */}
-              <div className="flex items-center gap-2 mt-6 pt-4 border-t flex-wrap">
+              <div className="flex items-center gap-2 mt-5 pt-4 border-t border-border/70 flex-wrap">
                 {message.status === "pending" && (
                   <Button
                     variant="outline"
                     onClick={handleMarkAsRead}
                     disabled={updateStatusMutation.isPending}
+                    className="border-sky-300 text-sky-800 hover:bg-sky-50 dark:border-sky-500/40 dark:text-sky-200 dark:hover:bg-sky-500/10"
                     data-testid="button-mark-read"
                   >
                     {updateStatusMutation.isPending ? (
@@ -560,36 +596,35 @@ export default function ContactMessageDetail() {
 
         {/* Original Message Section */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.2 }}
+          transition={{ duration: 0.25, delay: 0.1 }}
         >
-          <Card data-testid="original-message-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
+          <Card className="border-border/80 shadow-sm" data-testid="original-message-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base text-foreground">
+                <FileText className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />
                 نص الرسالة الأصلية
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="whitespace-pre-wrap leading-relaxed" data-testid="text-original-message">
+              <div className="p-4 rounded-xl bg-background border border-border leading-relaxed">
+                <p className="whitespace-pre-wrap text-foreground text-[15px]" data-testid="text-original-message">
                   {message.message}
                 </p>
               </div>
 
-              {/* Attachments gallery */}
               {attachments.length > 0 && (
                 <div className="mt-6">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-foreground mb-3">
                     <Paperclip className="h-4 w-4" />
                     <span>المرفقات ({attachments.length})</span>
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {attachments.map((attachment, index) => (
                       <div
-                        key={index}
-                        className="relative group rounded-lg overflow-hidden border cursor-pointer hover-elevate"
+                        key={`${attachment.url}-${index}`}
+                        className="relative group rounded-xl overflow-hidden border border-border bg-muted/40 cursor-pointer hover:border-emerald-500/50 transition-colors"
                         onClick={() => isImageAttachment(attachment) && setFullImageUrl(attachment.url)}
                         data-testid={`attachment-${index}`}
                       >
@@ -600,7 +635,7 @@ export default function ContactMessageDetail() {
                               alt={attachment.name}
                               className="w-full h-full object-cover"
                             />
-                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <div className="absolute inset-0 bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <ImageIcon className="h-6 w-6 text-white" />
                             </div>
                           </div>
@@ -610,10 +645,10 @@ export default function ContactMessageDetail() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="aspect-square flex flex-col items-center justify-center p-3 bg-muted/50"
+                            className="aspect-square flex flex-col items-center justify-center p-3"
                           >
-                            <Paperclip className="h-8 w-8 text-muted-foreground mb-2" />
-                            <span className="text-xs text-center line-clamp-2">
+                            <Paperclip className="h-8 w-8 text-foreground/70 mb-2" />
+                            <span className="text-xs text-center line-clamp-2 text-foreground">
                               {attachment.name}
                             </span>
                           </a>
@@ -629,31 +664,30 @@ export default function ContactMessageDetail() {
 
         {/* Threaded Replies Section */}
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, delay: 0.3 }}
+          transition={{ duration: 0.25, delay: 0.15 }}
         >
-          <Card data-testid="replies-section-card">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                الردود ({(message.replies?.length || 0) + (message.replyText ? 1 : 0)})
+          <Card className="border-border/80 shadow-sm" data-testid="replies-section-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base text-foreground">
+                <MessageSquare className="h-5 w-5 text-sky-700 dark:text-sky-300" />
+                الردود ({replies.length + (message.replyText ? 1 : 0)})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Legacy reply from replyText field */}
               {message.replyText && (
                 <div
-                  className="p-4 bg-green-50 dark:bg-muted/40 rounded-lg border border-green-200 dark:border-border"
+                  className="p-4 rounded-xl border border-emerald-300/70 bg-emerald-50 dark:bg-emerald-500/10 dark:border-emerald-400/30"
                   data-testid="legacy-reply"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center flex-shrink-0">
                       <CheckCheck className="h-5 w-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-green-700 dark:text-green-400">الرد الرسمي</span>
+                        <span className="font-semibold text-emerald-900 dark:text-emerald-100">الرد الرسمي</span>
                         {message.repliedAt && (
                           <span className="text-sm text-muted-foreground">
                             {formatDate(message.repliedAt)}
@@ -661,7 +695,7 @@ export default function ContactMessageDetail() {
                         )}
                       </div>
                       <p
-                        className="mt-2 text-foreground whitespace-pre-wrap"
+                        className="mt-2 text-foreground whitespace-pre-wrap leading-relaxed"
                         data-testid="text-legacy-reply"
                       >
                         {message.replyText}
@@ -671,27 +705,29 @@ export default function ContactMessageDetail() {
                 </div>
               )}
 
-              {(!message.replies || message.replies.length === 0) && !message.replyText ? (
+              {replies.length === 0 && !message.replyText ? (
                 <p className="text-muted-foreground text-center py-8" data-testid="text-no-replies">
                   لا توجد ردود حتى الآن
                 </p>
-              ) : message.replies && message.replies.length > 0 ? (
-                <div className="space-y-4">
-                  {message.replies.map((reply) => (
+              ) : replies.length > 0 ? (
+                <div className="space-y-3">
+                  {replies.map((reply) => (
                     <div
                       key={reply.id}
-                      className="p-4 bg-muted/50 rounded-lg border"
+                      className="p-4 rounded-xl border border-border bg-card"
                       data-testid={`reply-${reply.id}`}
                     >
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 flex-1">
-                          <Avatar className="h-10 w-10">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <Avatar className="h-10 w-10 border border-border">
                             <AvatarImage src={reply.user?.profileImageUrl || undefined} />
-                            <AvatarFallback>{getUserInitials(reply.user)}</AvatarFallback>
+                            <AvatarFallback className="bg-sky-100 text-sky-900 dark:bg-sky-500/20 dark:text-sky-100">
+                              {getUserInitials(reply.user)}
+                            </AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium" data-testid={`text-reply-author-${reply.id}`}>
+                              <span className="font-semibold text-foreground" data-testid={`text-reply-author-${reply.id}`}>
                                 {getUserDisplayName(reply.user)}
                               </span>
                               <span className="text-sm text-muted-foreground">
@@ -736,7 +772,7 @@ export default function ContactMessageDetail() {
                               </div>
                             ) : (
                               <p
-                                className="mt-2 text-foreground whitespace-pre-wrap"
+                                className="mt-2 text-foreground whitespace-pre-wrap leading-relaxed"
                                 data-testid={`text-reply-content-${reply.id}`}
                               >
                                 {reply.replyText}
@@ -771,19 +807,19 @@ export default function ContactMessageDetail() {
                 </div>
               ) : null}
 
-              {/* New Reply Form */}
-              <div className="mt-6 pt-4 border-t" data-testid="new-reply-form">
-                <h4 className="font-medium mb-3">إضافة رد جديد</h4>
+              <div className="mt-2 pt-4 border-t border-border/70" data-testid="new-reply-form">
+                <h4 className="font-semibold text-foreground mb-3">إضافة رد جديد</h4>
                 <Textarea
                   placeholder="اكتب ردك هنا..."
                   value={newReplyText}
                   onChange={(e) => setNewReplyText(e.target.value)}
-                  className="min-h-[120px] mb-3"
+                  className="min-h-[120px] mb-3 bg-background"
                   data-testid="textarea-new-reply"
                 />
                 <Button
                   onClick={handleSendReply}
                   disabled={sendReplyMutation.isPending || !newReplyText.trim()}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white"
                   data-testid="button-send-reply"
                 >
                   {sendReplyMutation.isPending ? (

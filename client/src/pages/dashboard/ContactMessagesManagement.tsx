@@ -61,17 +61,21 @@ import {
   Inbox,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import type { ContactMessage } from "@shared/schema";
+import { cn } from "@/lib/utils";
 
 type ContactMessageStatus = "pending" | "read" | "replied";
 
 const statusColors: Record<ContactMessageStatus, string> = {
-  pending: "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20",
-  read: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
-  replied: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
+  pending:
+    "bg-amber-100 text-amber-950 border-amber-300 dark:bg-amber-500/20 dark:text-amber-100 dark:border-amber-400/40",
+  read:
+    "bg-sky-100 text-sky-950 border-sky-300 dark:bg-sky-500/20 dark:text-sky-100 dark:border-sky-400/40",
+  replied:
+    "bg-emerald-100 text-emerald-950 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-100 dark:border-emerald-400/40",
 };
 
 const statusLabels: Record<ContactMessageStatus, string> = {
@@ -162,7 +166,7 @@ export default function ContactMessagesManagement() {
       if (searchTerm) {
         params.append("search", searchTerm);
       }
-      const response = await fetch(`/api/admin/contact-messages?${params}`, {
+      const response = await fetch(apiUrl(`/api/admin/contact-messages?${params}`), {
         credentials: "include",
       });
       if (!response.ok) {
@@ -348,11 +352,11 @@ export default function ContactMessagesManagement() {
       <div className="space-y-6 p-4 md:p-6" dir="rtl" data-testid="contact-messages-page">
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-lg bg-emerald-500/10">
-            <MessageSquare className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+          <div className="p-2.5 rounded-xl bg-emerald-600">
+            <MessageSquare className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">رسائل التواصل</h1>
+            <h1 className="text-2xl font-bold text-foreground">رسائل التواصل</h1>
             <p className="text-muted-foreground text-sm mt-0.5">
               إدارة رسائل الزوار والرد عليها
             </p>
@@ -389,12 +393,12 @@ export default function ContactMessagesManagement() {
             <Card data-testid="card-pending-messages">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-yellow-500/10">
-                    <Clock className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+                  <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-500/20">
+                    <Clock className="h-5 w-5 text-amber-800 dark:text-amber-200" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">قيد الانتظار</p>
-                    <p className="text-2xl font-bold">{counts.pending.toLocaleString("en-US")}</p>
+                    <p className="text-2xl font-bold text-foreground">{counts.pending.toLocaleString("en-US")}</p>
                   </div>
                 </div>
               </CardContent>
@@ -402,12 +406,12 @@ export default function ContactMessagesManagement() {
             <Card data-testid="card-read-messages">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-blue-500/10">
-                    <Eye className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  <div className="p-2 rounded-lg bg-sky-100 dark:bg-sky-500/20">
+                    <Eye className="h-5 w-5 text-sky-800 dark:text-sky-200" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">تمت القراءة</p>
-                    <p className="text-2xl font-bold">{counts.read.toLocaleString("en-US")}</p>
+                    <p className="text-2xl font-bold text-foreground">{counts.read.toLocaleString("en-US")}</p>
                   </div>
                 </div>
               </CardContent>
@@ -415,12 +419,12 @@ export default function ContactMessagesManagement() {
             <Card data-testid="card-replied-messages">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-500/10">
-                    <CheckCheck className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-500/20">
+                    <CheckCheck className="h-5 w-5 text-emerald-800 dark:text-emerald-200" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">تم الرد</p>
-                    <p className="text-2xl font-bold">{counts.replied.toLocaleString("en-US")}</p>
+                    <p className="text-2xl font-bold text-foreground">{counts.replied.toLocaleString("en-US")}</p>
                   </div>
                 </div>
               </CardContent>
@@ -520,7 +524,7 @@ export default function ContactMessagesManagement() {
                 <EmptyState />
               ) : (
                 <>
-                  <div className="rounded-md border" dir="rtl">
+                  <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm" dir="rtl">
                     <Table data-testid="messages-table">
                       <TableHeader>
                         <TableRow>
@@ -584,7 +588,11 @@ export default function ContactMessagesManagement() {
                               <TableCell>{message.subject}</TableCell>
                               <TableCell>
                                 <Badge
-                                  className={statusColors[message.status as ContactMessageStatus]}
+                                  variant="outline"
+                                  className={cn(
+                                    "font-medium",
+                                    statusColors[message.status as ContactMessageStatus],
+                                  )}
                                   data-testid={`badge-status-${message.id}`}
                                 >
                                   <StatusIcon className="h-3 w-3 ms-1" />

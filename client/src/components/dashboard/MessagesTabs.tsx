@@ -45,18 +45,18 @@ const TONE_STYLES: Record<TabCardProps["tone"], {
   badge: string;
 }> = {
   cyan: {
-    bg: "bg-cyan-50 hover:bg-cyan-100/70 border-cyan-200 dark:bg-card dark:hover:bg-accent/50 dark:border-border",
-    iconBg: "bg-cyan-500/15",
-    iconColor: "text-cyan-700 dark:text-cyan-300",
-    dot: "bg-cyan-500",
-    badge: "bg-cyan-600 hover:bg-cyan-600 text-white",
+    bg: "bg-cyan-50 hover:bg-cyan-100/80 border-cyan-300 dark:bg-card dark:hover:bg-accent/50 dark:border-border",
+    iconBg: "bg-cyan-600",
+    iconColor: "text-white",
+    dot: "bg-cyan-600",
+    badge: "bg-cyan-700 hover:bg-cyan-700 text-white",
   },
   amber: {
-    bg: "bg-amber-50 hover:bg-amber-100/70 border-amber-200 dark:bg-card dark:hover:bg-accent/50 dark:border-border",
-    iconBg: "bg-amber-500/15",
-    iconColor: "text-amber-700 dark:text-amber-300",
-    dot: "bg-amber-500",
-    badge: "bg-amber-600 hover:bg-amber-600 text-white",
+    bg: "bg-amber-50 hover:bg-amber-100/80 border-amber-300 dark:bg-card dark:hover:bg-accent/50 dark:border-border",
+    iconBg: "bg-amber-600",
+    iconColor: "text-white",
+    dot: "bg-amber-600",
+    badge: "bg-amber-700 hover:bg-amber-700 text-white",
   },
 };
 

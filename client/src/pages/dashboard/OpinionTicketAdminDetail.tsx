@@ -11,18 +11,24 @@ export default function OpinionTicketAdminDetail() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 p-4 md:p-6" dir="rtl">
+      <div className="space-y-4 p-4 md:p-6 max-w-4xl mx-auto" dir="rtl">
         <Button
           variant="ghost"
           size="sm"
           onClick={() => navigate("/dashboard/opinion-tickets")}
-          className="gap-2"
+          className="gap-2 text-foreground"
           data-testid="button-back-admin"
         >
           <ArrowRight className="h-4 w-4" />
           العودة إلى الاستفسارات
         </Button>
-        {id && <TicketThread ticketId={id} viewerRole="admin" />}
+        {id ? (
+          <TicketThread ticketId={id} viewerRole="admin" />
+        ) : (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center text-sm text-muted-foreground">
+            معرّف الاستفسار غير صالح
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );
