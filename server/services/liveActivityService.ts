@@ -61,6 +61,9 @@ const LIVE_STATE_AR: Record<string, string> = {
 const TWO_HOURS_SEC = 2 * 3600;
 const STALE_LIVE_SEC = 180; // إذا توقّف الدفع، تُعتَّم البطاقة بعد 3 دقائق
 const PUSH_CONCURRENCY = 10;
+// لا نجعل مباراة بطيئة تحجز كل الدورة؛ نعالج عدة مباريات بالتوازي مع حد يحمي
+// المزوّد وقاعدة البيانات. داخل كل مباراة يبقى دفع التوكنات محدودًا أعلاه.
+const FIXTURE_CONCURRENCY = 4;
 
 const CLOCK_PAUSED_STATES = new Set([
   "HT",
@@ -270,9 +273,11 @@ function buildContentState(
   if (ts && (ts.live || ts.finished)) {
     const tsLabel = TS_STATUS_AR[ts.statusId] ?? base.statusLabel;
     const baseMin = minuteFromText(base.minute);
+    const tsMin = (ts.elapsed ?? 0) + (ts.extra ?? 0);
     const tsRunning = ts.live && TS_CLOCK_RUNNING_STATUS.has(ts.statusId);
     const displayMinute = Math.max(
       baseMin,
+      tsMin,
       minuteFromClockStartEpoch(base.clockStartEpoch, tsRunning),
     );
     return {
@@ -281,11 +286,18 @@ function buildContentState(
       awayScore: ts.away,
       homePenaltyScore: ts.penHome ?? base.homePenaltyScore ?? null,
       awayPenaltyScore: ts.penAway ?? base.awayPenaltyScore ?? null,
-      minute: minuteLabel(displayMinute),
+      minute: ts.extra && ts.extra > 0 && ts.elapsed
+        ? `${ts.elapsed}+${ts.extra}'`
+        : minuteLabel(displayMinute),
       statusLabel: tsLabel || base.statusLabel,
       isLive: ts.live,
       isFinished: ts.finished || base.isFinished,
-      clockStartEpoch: base.clockStartEpoch ?? clockStartEpochFromMinute(displayMinute, tsRunning),
+      // مرساة TheSports مشتقة من طابع بداية الشوط نفسه؛ تلتقط الانطلاق خلال
+      // ثوانٍ ولا تنتظر API-Football الأبطأ، وتبقى مطابقة لساعة التطبيق.
+      clockStartEpoch:
+        ts.clockStartEpoch ??
+        base.clockStartEpoch ??
+        clockStartEpochFromMinute(displayMinute, tsRunning),
     };
   }
 
@@ -400,14 +412,16 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
   // تشخيص: تجميع أسباب فشل الدفع (statusCode:reason → عدد) لطباعتها مُوجزة.
   const failReasons = new Map<string, number>();
 
-  for (const [fixtureId, tokens] of byFixture) {
+  const fixtureEntries = [...byFixture.entries()];
+  for (let offset = 0; offset < fixtureEntries.length; offset += FIXTURE_CONCURRENCY) {
+    await Promise.all(fixtureEntries.slice(offset, offset + FIXTURE_CONCURRENCY).map(async ([fixtureId, tokens]) => {
     let detail: SplMatchDetail | null = null;
     try {
       detail = await resolveMatchDetailForLiveActivity(fixtureId);
     } catch (err) {
       console.warn(`[LiveActivity] match detail failed for ${fixtureId}:`, err);
     }
-    if (!detail) continue;
+    if (!detail) return;
 
     // نتيجة لحظية من TheSports للبطولات المربوطة — نفس المصدر السريع الذي يسرّع
     // الموقع والتطبيق، فيمنع اختلاف شاشة القفل عن الواجهة.
@@ -524,6 +538,7 @@ export async function runLiveActivityCycle(): Promise<LiveActivityCycleSummary> 
     for (let i = 0; i < tokens.length; i += PUSH_CONCURRENCY) {
       await Promise.all(tokens.slice(i, i + PUSH_CONCURRENCY).map(pushOne));
     }
+    }));
   }
 
   if (failReasons.size > 0) {

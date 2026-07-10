@@ -573,7 +573,7 @@ async function persistState(): Promise<void> {
 
 // مباريات يتكفّل TheSports بأحداثها (هدف باسم اللاعب/بطاقة/فار) — فنتجاوزها في
 // كاشف الهدف العام وكاشف أحداث API-Football تفاديًا للازدواج.
-function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): DetectedAlert[] {
+function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<number>): DetectedAlert[] {
   const alerts: DetectedAlert[] = [];
   const seenIds = new Set<number>();
 
@@ -610,9 +610,10 @@ function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): D
 
     // هدف (تغيّر النتيجة) — أثناء اللعب فقط. حارس تصاعدي: لا نُرسل إلا بزيادة
     // مجموع الأهداف (يمنع إشعارًا زائفًا عند تراجع المصدر أو إلغاء هدف بالفار).
-    // نتجاوز مباريات TheSports — أحداثها تُرسِل الهدف باسم اللاعب (أدقّ وأغنى).
+    // إن وصلت حادثة TheSports المفصّلة في الدورة نفسها نتجاوز التنبيه العام.
+    // أمّا إن تغيّرت النتيجة ولم تصل الحادثة بعد، فنرسل فورًا ولا ننتظر اسم اللاعب.
     if (
-      !tsHandledIds.has(m.id) &&
+      !detailedGoalFixtureIds.has(m.id) &&
       cur.live &&
       cur.homeGoals + cur.awayGoals > prev.homeGoals + prev.awayGoals
     ) {
@@ -626,6 +627,7 @@ function detectAlerts(matches: SplLiveBoardItem[], tsHandledIds: Set<number>): D
         title: `⚽️ ${m.home.name} ${fmtScore(m)} ${m.away.name}`,
         body: `هدف ${scorer}${minute}${why ? ` — ${why}` : ""}`,
         teamRefIds,
+        dedupeKey: `goal:${m.id}:${cur.homeGoals}-${cur.awayGoals}`,
       });
     }
 
@@ -987,6 +989,8 @@ function applyTsOverlay(
       goals: { home: ts.home, away: ts.away },
       status: {
         ...m.status,
+        elapsed: ts.elapsed ?? m.status.elapsed,
+        extra: ts.extra ?? m.status.extra,
         live: ts.live,
         finished: ts.finished || m.status.finished,
       },
@@ -1096,6 +1100,7 @@ async function detectTsEventAlerts(
           title: `⚽️ ${score}`,
           body,
           teamRefIds,
+          dedupeKey: `goal:${m.id}:${e.homeScore ?? m.goals.home ?? 0}-${e.awayScore ?? m.goals.away ?? 0}`,
         });
         continue;
       }
@@ -1241,9 +1246,12 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
   // أحداث النتيجة/الحالة (انطلاق/نهاية للكل، وهدف لغير مباريات TheSports) + بطاقات/فار
   // API-Football (لغير مباريات TheSports) + أحداث TheSports اللحظية للبطولات المُدرَجة
   // (هدف باسم الهدّاف + بطاقة + فار).
-  const alerts = detectAlerts(matches, tsHandledIds);
-  const eventAlerts = await detectEventAlerts(matches, tsHandledIds);
   const tsEventAlerts = await detectTsEventAlerts(matches, tsLive);
+  const detailedGoalFixtureIds = new Set(
+    tsEventAlerts.filter((alert) => alert.kind === "goal").map((alert) => alert.fixtureId),
+  );
+  const alerts = detectAlerts(matches, detailedGoalFixtureIds);
+  const eventAlerts = await detectEventAlerts(matches, tsHandledIds);
   const hardAlertFixtureIds = new Set(
     [...alerts, ...eventAlerts, ...tsEventAlerts]
       .filter((alert) => alert.kind !== "kickoff" && alert.kind !== "fulltime")

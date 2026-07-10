@@ -87,7 +87,7 @@ async function buildDigest(): Promise<LiveDigestItem[]> {
           ex: f.status?.extra ?? null,
           liv: Boolean(f.status?.live),
           fin: Boolean(f.status?.finished),
-          cs: f.status ? clockStartEpochFor(f.id, f.status) : null,
+          cs: f.status ? (f.status.clockStartEpoch ?? clockStartEpochFor(f.id, f.status)) : null,
         });
       }
     } catch {
