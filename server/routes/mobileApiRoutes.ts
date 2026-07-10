@@ -635,9 +635,7 @@ router.post("/devices/register", async (req: Request, res: Response) => {
 
     if (existing) {
       // Update existing device
-      await db
-        .update(pushDevices)
-        .set({
+      const updatePayload: Record<string, unknown> = {
           userId: userId || existing.userId,
           tokenProvider,
           platform,
@@ -647,12 +645,27 @@ router.post("/devices/register", async (req: Request, res: Response) => {
           locale: deviceLocale,
           timezone,
           ...(safeBundleId ? { bundleId: safeBundleId } : {}),
-          ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
           isActive: true,
           lastActiveAt: new Date(),
           updatedAt: new Date(),
-        })
-        .where(eq(pushDevices.deviceToken, finalToken));
+      };
+      try {
+        await db
+          .update(pushDevices)
+          .set({
+            ...updatePayload,
+            ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
+          } as any)
+          .where(eq(pushDevices.deviceToken, finalToken));
+      } catch (err: any) {
+        // عمود installation_id قد لا يكون مطبّقاً بعد — لا نكسر تسجيل التوكن.
+        if (!/installation_id/i.test(String(err?.message ?? err))) throw err;
+        console.warn("[Mobile API] devices/register: installation_id missing — updating without it");
+        await db
+          .update(pushDevices)
+          .set(updatePayload as any)
+          .where(eq(pushDevices.deviceToken, finalToken));
+      }
 
       console.log(`[Mobile API] Device updated: ${platform} (${tokenProvider}) ${existing.id}`);
       return res.json({ 
@@ -663,9 +676,7 @@ router.post("/devices/register", async (req: Request, res: Response) => {
     }
 
     // Create new device
-    const [newDevice] = await db
-      .insert(pushDevices)
-      .values({
+    const insertPayload = {
         deviceToken: finalToken,
         tokenProvider,
         userId,
@@ -676,9 +687,26 @@ router.post("/devices/register", async (req: Request, res: Response) => {
         locale: deviceLocale,
         timezone,
         ...(safeBundleId ? { bundleId: safeBundleId } : {}),
-        ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
-      })
-      .returning({ id: pushDevices.id });
+    };
+    let newDevice: { id: string };
+    try {
+      const [row] = await db
+        .insert(pushDevices)
+        .values({
+          ...insertPayload,
+          ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
+        } as any)
+        .returning({ id: pushDevices.id });
+      newDevice = row;
+    } catch (err: any) {
+      if (!/installation_id/i.test(String(err?.message ?? err))) throw err;
+      console.warn("[Mobile API] devices/register: installation_id missing — inserting without it");
+      const [row] = await db
+        .insert(pushDevices)
+        .values(insertPayload as any)
+        .returning({ id: pushDevices.id });
+      newDevice = row;
+    }
 
     console.log(`[Mobile API] New device registered: ${platform} (${tokenProvider}) ${newDevice.id}`);
 
@@ -5584,7 +5612,6 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       tokenProvider: data.provider,
       platform: data.platform,
       ...(safeBundleId ? { bundleId: safeBundleId } : {}),
-      ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
       deviceName: data.deviceName,
       osVersion: data.osVersion,
       appVersion: data.appVersion,
@@ -5593,6 +5620,10 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       isActive: true,
       lastActiveAt: new Date(),
       updatedAt: new Date(),
+    };
+    const baseWithInstall = {
+      ...baseValues,
+      ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
     };
 
     const deactivated = await db
@@ -5611,15 +5642,25 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       console.log(`[Mobile API] /push-token deactivated ${deactivated.length} old tokens for user=${session.userId}`);
     }
 
-    if (existing.length > 0) {
-      await db.update(pushDevices)
-        .set(baseValues)
-        .where(eq(pushDevices.id, existing[0].id));
-    } else {
-      await db.insert(pushDevices).values({
-        ...baseValues,
-        deviceToken: data.token,
-      });
+    const persist = async (values: Record<string, unknown>) => {
+      if (existing.length > 0) {
+        await db.update(pushDevices)
+          .set(values as any)
+          .where(eq(pushDevices.id, existing[0].id));
+      } else {
+        await db.insert(pushDevices).values({
+          ...values,
+          deviceToken: data.token,
+        } as any);
+      }
+    };
+
+    try {
+      await persist(baseWithInstall);
+    } catch (err: any) {
+      if (!/installation_id/i.test(String(err?.message ?? err))) throw err;
+      console.warn("[Mobile API] /push-token: installation_id missing — saving without it");
+      await persist(baseValues);
     }
 
     console.log(`[Mobile API] /push-token registered (user=${session.userId} provider=${data.provider})`);
