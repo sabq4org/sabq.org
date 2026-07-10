@@ -108,7 +108,7 @@ struct DailyBriefView: View {
                 .monospacedDigit()
             Text(label)
                 .font(SabqFonts.app(size: 10, weight: .regular))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .foregroundStyle(SabqTheme.ink.opacity(0.72))
                 .lineLimit(1)
         }
         .padding(12)
@@ -119,7 +119,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.16), lineWidth: 0.5)
+                .stroke(tint.opacity(0.28), lineWidth: 0.7)
         )
     }
 
@@ -182,7 +182,7 @@ struct DailyBriefView: View {
             }
             Text(article.category.title)
                 .font(SabqFonts.app(size: 10, weight: .regular))
-                .foregroundStyle(article.category.tint)
+                .foregroundStyle(SabqTheme.secondaryInk)
             Text(article.title)
                 .font(SabqFonts.app(size: 13.5, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
@@ -212,7 +212,7 @@ struct DailyBriefView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("مزاجك القرائي اليوم")
                     .font(SabqFonts.app(size: 11, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.secondaryInk)
                 Text(label)
                     .font(SabqFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(SabqTheme.ink)
@@ -228,11 +228,11 @@ struct DailyBriefView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(tint.opacity(0.06))
+                .fill(tint.opacity(0.09))
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.20), lineWidth: 0.5)
+                .stroke(tint.opacity(0.32), lineWidth: 0.7)
         )
     }
 
@@ -272,13 +272,13 @@ struct DailyBriefView: View {
                         .foregroundStyle(SabqTheme.primaryEnd)
                     Text(user.localizedRole)
                         .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .foregroundStyle(SabqTheme.ink.opacity(0.72))
                         .lineLimit(1)
                 }
                 if let email = user.email, !email.isEmpty {
                     Text(email)
                         .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.tertiaryInk)
+                        .foregroundStyle(SabqTheme.secondaryInk)
                         .lineLimit(1)
                 }
             }
@@ -292,7 +292,7 @@ struct DailyBriefView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                         .fill(LinearGradient(
-                            colors: [SabqTheme.primaryEnd.opacity(0.08), SabqTheme.sky.opacity(0.04)],
+                            colors: [SabqTheme.primaryEnd.opacity(0.11), SabqTheme.sky.opacity(0.06)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ))
@@ -300,7 +300,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+                .stroke(SabqTheme.primaryEnd.opacity(0.28), lineWidth: 0.7)
         )
     }
 
@@ -316,7 +316,7 @@ struct DailyBriefView: View {
                 avatarPlaceholder(user: user)
             }
         }
-        .overlay(Circle().stroke(SabqTheme.primaryEnd.opacity(0.3), lineWidth: 1.5))
+        .overlay(Circle().stroke(SabqTheme.primaryEnd.opacity(0.45), lineWidth: 1.5))
     }
 
     private func avatarPlaceholder(user: APIUser) -> some View {
@@ -382,18 +382,21 @@ struct DailyBriefView: View {
                     ForEach(interests) { interest in
                         Text(interest.name ?? interest.slug ?? "—")
                             .font(SabqFonts.app(size: 11, weight: .regular))
-                            .foregroundStyle(SabqTheme.primaryEnd)
+                            .foregroundStyle(SabqTheme.ink.opacity(0.76))
                             .padding(.horizontal, 11)
                             .padding(.vertical, 7)
                             .background(
                                 Capsule().fill(SabqTheme.primaryEnd.opacity(0.12))
+                            )
+                            .overlay(
+                                Capsule().stroke(SabqTheme.primaryEnd.opacity(0.20), lineWidth: 0.5)
                             )
                     }
                 }
 
                 Text("\(interests.count) تصنيف نختار لك منه أخباراً يومية")
                     .font(SabqFonts.app(size: 10, weight: .regular))
-                    .foregroundStyle(SabqTheme.tertiaryInk)
+                    .foregroundStyle(SabqTheme.secondaryInk)
             }
         }
         .padding(16)
@@ -404,7 +407,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
+                .stroke(SabqTheme.outline.opacity(0.65), lineWidth: 0.7)
         )
     }
 
@@ -421,7 +424,7 @@ struct DailyBriefView: View {
     private func featureTile(title: String, subtitle: String, icon: String, tint: Color) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             ZStack {
-                Circle().fill(tint.opacity(0.13)).frame(width: 34, height: 34)
+                Circle().fill(tint.opacity(0.18)).frame(width: 34, height: 34)
                 Image(systemName: icon)
                     .font(SabqFonts.app(size: 14, weight: .semibold))
                     .foregroundStyle(tint)
@@ -431,7 +434,7 @@ struct DailyBriefView: View {
                 .foregroundStyle(SabqTheme.ink)
             Text(subtitle)
                 .font(SabqFonts.app(size: 11))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .foregroundStyle(SabqTheme.ink.opacity(0.70))
                 .lineLimit(2)
         }
         .padding(14)
@@ -442,7 +445,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(tint.opacity(0.16), lineWidth: 0.5)
+                .stroke(tint.opacity(0.28), lineWidth: 0.7)
         )
     }
 
@@ -462,7 +465,7 @@ struct DailyBriefView: View {
         VStack(alignment: .leading, spacing: 14) {
             ZStack {
                 Circle()
-                    .fill(SabqTheme.primaryEnd.opacity(0.12))
+                    .fill(SabqTheme.primaryEnd.opacity(0.18))
                     .frame(width: 74, height: 74)
                 Image(systemName: "sparkles.rectangle.stack.fill")
                     .font(SabqFonts.app(size: 32, weight: .light))
@@ -476,7 +479,7 @@ struct DailyBriefView: View {
                     .foregroundStyle(SabqTheme.ink)
                 Text("صفحة شخصية تبدأ من اهتماماتك: تختار ما يهمك، وسبق ترتّب لك موجزاً يومياً، توصيات، وإحصاءات قراءة واضحة.")
                     .font(SabqFonts.app(size: 14))
-                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .foregroundStyle(SabqTheme.ink.opacity(0.72))
                     .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -489,7 +492,7 @@ struct DailyBriefView: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
                         .fill(LinearGradient(
-                            colors: [SabqTheme.primaryEnd.opacity(0.08), SabqTheme.sky.opacity(0.04)],
+                            colors: [SabqTheme.primaryEnd.opacity(0.11), SabqTheme.sky.opacity(0.06)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ))
@@ -497,7 +500,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous)
-                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
+                .stroke(SabqTheme.primaryEnd.opacity(0.28), lineWidth: 0.7)
         )
     }
 
@@ -516,13 +519,17 @@ struct DailyBriefView: View {
                 ForEach(["محليات", "اقتصاد", "رياضة", "تقنية", "رأي", "لحظة بلحظة", "العالم", "صحة"], id: \.self) { item in
                     Text(item)
                         .font(SabqFonts.app(size: 11, weight: .regular))
-                        .foregroundStyle(SabqTheme.primaryEnd)
+                        .foregroundStyle(SabqTheme.ink.opacity(0.74))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
                         .frame(maxWidth: .infinity)
                         .background(
                             Capsule(style: .continuous)
-                                .fill(SabqTheme.primaryEnd.opacity(0.08))
+                                .fill(SabqTheme.primaryEnd.opacity(0.11))
+                        )
+                        .overlay(
+                            Capsule(style: .continuous)
+                                .stroke(SabqTheme.primaryEnd.opacity(0.18), lineWidth: 0.5)
                         )
                 }
             }
@@ -535,7 +542,7 @@ struct DailyBriefView: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .stroke(SabqTheme.outline.opacity(0.35), lineWidth: 0.5)
+                .stroke(SabqTheme.outline.opacity(0.65), lineWidth: 0.7)
         )
     }
 
@@ -553,7 +560,7 @@ struct DailyBriefView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: SabqTheme.tileRadius, style: .continuous)
-                .fill(SabqTheme.primaryEnd.opacity(0.05))
+                .fill(SabqTheme.primaryEnd.opacity(0.075))
         )
     }
 
@@ -565,7 +572,7 @@ struct DailyBriefView: View {
                 .frame(width: 18)
             Text(text)
                 .font(SabqFonts.app(size: 13, weight: .medium))
-                .foregroundStyle(SabqTheme.secondaryInk)
+                .foregroundStyle(SabqTheme.ink.opacity(0.72))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
