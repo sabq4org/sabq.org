@@ -179,6 +179,7 @@ struct AdminDashboardView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 22) {
                 metricsSection
+                inboxSection
                 AdminSegmentedControl(selected: vm.selectedStatus) { status in
                     Task { await vm.select(status) }
                 }
@@ -229,6 +230,69 @@ struct AdminDashboardView: View {
         .task { await vm.load() }
         .refreshable { await vm.load() }
         .sabqScreen("AdminDashboard")
+    }
+
+    // MARK: Admin inbox shortcuts
+
+    /// Operational queues deliberately sit above the article workflow: they
+    /// are time-sensitive communications, while drafts can wait for the next
+    /// editorial session. Both destinations remain protected server-side by
+    /// the mobile platform-admin Bearer check.
+    private var inboxSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("صندوق الإدارة")
+                .font(SabqFonts.app(size: 18, weight: .heavy))
+                .foregroundStyle(SabqTheme.ink)
+
+            NavigationLink(value: AdminContactMessagesRoute()) {
+                adminShortcut(
+                    title: "رسائل التواصل",
+                    subtitle: "عرض الرسائل الواردة والرد عليها",
+                    icon: "envelope.badge.fill",
+                    tint: SabqTheme.teal
+                )
+            }
+            .buttonStyle(.plain)
+
+            NavigationLink(value: AdminOpinionTicketsRoute()) {
+                adminShortcut(
+                    title: "استفسارات كتّاب الرأي",
+                    subtitle: "متابعة المحادثات مع الكتّاب",
+                    icon: "text.bubble.fill",
+                    tint: SabqTheme.gold
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func adminShortcut(title: String, subtitle: String, icon: String, tint: Color) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(tint.opacity(0.13))
+                    .frame(width: 42, height: 42)
+                Image(systemName: icon)
+                    .font(SabqFonts.app(size: 18, weight: .semibold))
+                    .foregroundStyle(tint)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(SabqFonts.app(size: 15, weight: .heavy))
+                    .foregroundStyle(SabqTheme.ink)
+                Text(subtitle)
+                    .font(SabqFonts.app(size: 12, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.forward")
+                .font(SabqFonts.app(size: 12, weight: .semibold))
+                .foregroundStyle(SabqTheme.tertiaryInk)
+        }
+        .padding(13)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).fill(SabqTheme.surface))
+        .overlay(RoundedRectangle(cornerRadius: SabqTheme.cardRadius, style: .continuous).stroke(SabqTheme.outline.opacity(0.5), lineWidth: 0.5))
     }
 
     // MARK: Metrics strip
