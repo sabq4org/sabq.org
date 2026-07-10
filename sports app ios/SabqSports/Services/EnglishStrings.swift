@@ -780,7 +780,6 @@ nonisolated enum SpEnglishStrings {
         "مباريات %@ القادمة": "%@’s Upcoming Matches",
         "صفحة الفريق": "Team page",
         "اختر فريقك المفضّل": "Choose your favorite team",
-        "اختيار": "Pick",
         "تابع مبارياته عبر كل البطولات من هنا — النجمة في صفحة النادي": "Follow its matches across every competition here — the star on the club page",
         "انطلق الموسم — تابع المباريات الآن": "Season underway — follow the matches now",
         "يوم": "day",
