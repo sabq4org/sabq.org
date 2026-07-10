@@ -802,9 +802,67 @@ async function detectEventAlerts(
 /** معرّف حزمة تطبيق VARA الرياضي على iOS — مرجع توجيه الإشعارات الرياضية. */
 export const SPORTS_APP_BUNDLE_ID = "com.sabq.sports";
 
-/** هل الجهاز ينتمي لتطبيق فارا الرياضي (وليس سبق الأخبار)؟ */
-function isSportsAppDevice(bundleId: string | null | undefined): boolean {
-  return bundleId === SPORTS_APP_BUNDLE_ID;
+/** حزم تطبيق سبق (الأخبار) — لا تُرسل لها إشعارات مباريات. */
+const NEWS_APP_BUNDLE_IDS = new Set([
+  "com.sabq.sabqorg",
+  "com.sabq.smart",
+]);
+
+type PushDeviceRow = {
+  token: string;
+  provider: string;
+  platform: string;
+  bundleId: string | null;
+  installationId: string | null;
+};
+
+/**
+ * جهاز صالح لإشعار رياضي؟
+ * - فارا صراحةً (`com.sabq.sports`)
+ * - توكن APNs قديم بلا bundleId: نجرّب topic الرياضة؛ توكن سبق يُرفض من Apple
+ *   بـ DeviceTokenNotForTopic دون أن يصل كإشعار في تطبيق الأخبار
+ * - نستبعد حزم سبق المعروفة دائماً
+ */
+function isSportsAppDevice(d: Pick<PushDeviceRow, "bundleId" | "provider">): boolean {
+  if (d.bundleId && NEWS_APP_BUNDLE_IDS.has(d.bundleId)) return false;
+  if (d.bundleId === SPORTS_APP_BUNDLE_ID) return true;
+  // توكنات قديمة بلا bundleId — APNs فقط (FCM بلا تمييز حزمة قد يضرب أندرويد سبق)
+  if (!d.bundleId && d.provider === "apns") return true;
+  return false;
+}
+
+async function loadUserPushDevices(userId: string): Promise<PushDeviceRow[]> {
+  try {
+    return await db
+      .select({
+        token: pushDevices.deviceToken,
+        provider: pushDevices.tokenProvider,
+        platform: pushDevices.platform,
+        bundleId: pushDevices.bundleId,
+        installationId: pushDevices.installationId,
+      })
+      .from(pushDevices)
+      .where(and(eq(pushDevices.userId, userId), eq(pushDevices.isActive, true)))
+      .orderBy(desc(pushDevices.updatedAt));
+  } catch (err: any) {
+    // إن لم يُنفَّذ db:push بعد إضافة installation_id، لا نُسقط كل الإشعارات.
+    const msg = String(err?.message ?? err);
+    if (!/installation_id/i.test(msg) && !/does not exist/i.test(msg)) throw err;
+    console.warn(
+      `[SportsAlerts] installation_id unavailable — push without device dedupe. Run db:push. user=${userId}`,
+    );
+    const rows = await db
+      .select({
+        token: pushDevices.deviceToken,
+        provider: pushDevices.tokenProvider,
+        platform: pushDevices.platform,
+        bundleId: pushDevices.bundleId,
+      })
+      .from(pushDevices)
+      .where(and(eq(pushDevices.userId, userId), eq(pushDevices.isActive, true)))
+      .orderBy(desc(pushDevices.updatedAt));
+    return rows.map((r) => ({ ...r, installationId: null }));
+  }
 }
 
 export type PushToUserDevicesOptions = {
@@ -817,7 +875,7 @@ export type PushToUserDevicesOptions = {
   claimedInstallations?: Set<string>;
 };
 
-/** دفع إشعار لأجهزة مستخدم واحد — حصرية لفارا فقط، أفضل جهد، لا يرمي. */
+/** دفع إشعار لأجهزة مستخدم واحد — حصرية لفارا (مع تسامح للتوكنات القديمة)، أفضل جهد. */
 export async function pushToUserDevices(
   userId: string,
   title: string,
@@ -826,26 +884,14 @@ export async function pushToUserDevices(
   options: PushToUserDevicesOptions = {},
 ): Promise<void> {
   try {
-    const devices = await db
-      .select({
-        token: pushDevices.deviceToken,
-        provider: pushDevices.tokenProvider,
-        platform: pushDevices.platform,
-        bundleId: pushDevices.bundleId,
-        installationId: pushDevices.installationId,
-      })
-      .from(pushDevices)
-      .where(and(eq(pushDevices.userId, userId), eq(pushDevices.isActive, true)))
-      .orderBy(desc(pushDevices.updatedAt));
+    const devices = await loadUserPushDevices(userId);
     if (devices.length === 0) return;
 
-    // قرار المنتج 2026-07-10: إشعارات المباريات/الرياضة حصرية لتطبيق فارا.
-    // تطبيق سبق (com.sabq.sabqorg) لا يستلم أي إشعار مباراة — حتى لو كان
-    // المستخدم يتابع فريقاً من سبق أو لا يملك توكن فارا نشطاً.
-    const sportsDevices = devices.filter((d) => isSportsAppDevice(d.bundleId));
+    // قرار المنتج 2026-07-10: لا إشعارات مباريات لتطبيق سبق (الأخبار).
+    const sportsDevices = devices.filter((d) => isSportsAppDevice(d));
     if (sportsDevices.length === 0) return;
 
-    const uniqueDevices = [];
+    const uniqueDevices: PushDeviceRow[] = [];
     const seenRoutes = new Set<string>();
     for (const device of sportsDevices) {
       const route = `${device.platform}:${device.provider}:${device.bundleId ?? "default"}`;
@@ -859,8 +905,7 @@ export async function pushToUserDevices(
       );
     }
 
-    // منع التكرار على مستوى الجهاز: إن وُجد installationId سبق أن استلم هذا
-    // التنبيه (حساب آخر على نفس الهاتف)، نتخطى التوكن.
+    // منع التكرار على مستوى الجهاز عند توفر installationId فقط.
     const claimed = options.claimedInstallations;
     const targetDevices = uniqueDevices.filter((d) => {
       const installKey = d.installationId?.trim();
@@ -877,12 +922,16 @@ export async function pushToUserDevices(
     if (targetDevices.length === 0) return;
 
     const apnsDevices = targetDevices.filter((d) => d.provider === "apns");
-    const fcmTokens = targetDevices.filter((d) => d.provider === "fcm").map((d) => d.token);
+    const fcmTokens = targetDevices
+      .filter((d) => d.provider === "fcm" && d.bundleId === SPORTS_APP_BUNDLE_ID)
+      .map((d) => d.token);
 
     if (apnsDevices.length > 0 && isApnsConfigured()) {
       await Promise.all(
         apnsDevices.map(async (d) => {
           try {
+            // دائماً topic فارا للتنبيهات الرياضية — حتى للتوكنات القديمة بلا bundleId.
+            const topic = SPORTS_APP_BUNDLE_ID;
             const resp = await sendPushNotification(
               d.token,
               createCustomNotificationPayload(title, body, {
@@ -892,16 +941,16 @@ export async function pushToUserDevices(
               {
                 priority: options.apnsPriority ?? "10",
                 pushType: "alert",
-                topic: d.bundleId ?? SPORTS_APP_BUNDLE_ID,
+                topic,
               },
             );
             if (!resp.success) {
               console.warn(
-                `[SportsAlerts] push fail user=${userId} topic=${d.bundleId ?? "default"} status=${resp.statusCode ?? "-"} reason=${resp.reason ?? "-"}`,
+                `[SportsAlerts] push fail user=${userId} topic=${topic} storedBundle=${d.bundleId ?? "null"} status=${resp.statusCode ?? "-"} reason=${resp.reason ?? "-"}`,
               );
             }
           } catch (err) {
-            console.warn(`[SportsAlerts] push threw user=${userId} topic=${d.bundleId ?? "default"}:`, err);
+            console.warn(`[SportsAlerts] push threw user=${userId}:`, err);
           }
         }),
       );
