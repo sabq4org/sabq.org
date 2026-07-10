@@ -313,6 +313,7 @@ async function getBehavioralCandidates(): Promise<PushCandidate[]> {
 async function dispatchSnap(candidate: PushCandidate): Promise<number> {
   const prefAllowed = await filterUsersByEventPref(unique(candidate.candidates), "smartSnaps");
   let recipients = 0;
+  const claimedInstallations = new Set<string>();
 
   for (const userId of prefAllowed) {
     try {
@@ -353,7 +354,9 @@ async function dispatchSnap(candidate: PushCandidate): Promise<number> {
         body: candidate.body,
         deeplink,
       });
-      await pushToUserDevices(userId, candidate.title, candidate.body, pushData);
+      await pushToUserDevices(userId, candidate.title, candidate.body, pushData, {
+        claimedInstallations,
+      });
       recipients += 1;
     } catch (err) {
       console.error(`[SportsSnaps Push] dispatch failed for user ${userId}:`, err);

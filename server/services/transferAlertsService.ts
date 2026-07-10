@@ -228,9 +228,13 @@ async function dispatchTransfer(
       } catch (err) {
         console.error(`[TransferAlerts] inbox/emit for user ${userId} failed:`, err);
       }
-      await pushToUserDevices(userId, alert.title, alert.body, pushData);
     }),
   );
+
+  const claimedInstallations = new Set<string>();
+  for (const userId of userIds) {
+    await pushToUserDevices(userId, alert.title, alert.body, pushData, { claimedInstallations });
+  }
   return userIds.length;
 }
 

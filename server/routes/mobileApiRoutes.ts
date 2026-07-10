@@ -567,12 +567,17 @@ router.post("/devices/register", async (req: Request, res: Response) => {
       timezone,
       userId,
       bundleId, // معرّف الحزمة (apns-topic) لتوجيه التطبيقات المتعددة
+      installationId, // IDFV — يوحّد سبق وفارا على نفس الجهاز
     } = req.body;
 
     // تجاهل القيم غير الصالحة وحدّ الطول دفاعيًا (نخزّن الـbundle كنص اختياري)
     const safeBundleId =
       typeof bundleId === "string" && bundleId.length > 0 && bundleId.length <= 255
         ? bundleId
+        : undefined;
+    const safeInstallationId =
+      typeof installationId === "string" && installationId.length > 0 && installationId.length <= 128
+        ? installationId
         : undefined;
 
     // Support both 'token' and 'deviceToken' field names
@@ -643,6 +648,7 @@ router.post("/devices/register", async (req: Request, res: Response) => {
           locale: deviceLocale,
           timezone,
           ...(safeBundleId ? { bundleId: safeBundleId } : {}),
+          ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
           isActive: true,
           lastActiveAt: new Date(),
           updatedAt: new Date(),
@@ -671,6 +677,7 @@ router.post("/devices/register", async (req: Request, res: Response) => {
         locale: deviceLocale,
         timezone,
         ...(safeBundleId ? { bundleId: safeBundleId } : {}),
+        ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
       })
       .returning({ id: pushDevices.id });
 
@@ -5583,9 +5590,12 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       locale: z.string().optional(),
       timezone: z.string().optional(),
       bundleId: z.string().max(255).optional(),
+      installationId: z.string().max(128).optional(),
     });
     const data = schema.parse(req.body);
     const safeBundleId = data.bundleId && data.bundleId.length > 0 ? data.bundleId : undefined;
+    const safeInstallationId =
+      data.installationId && data.installationId.length > 0 ? data.installationId : undefined;
 
     const existing = await db
       .select({ id: pushDevices.id })
@@ -5607,6 +5617,7 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       tokenProvider: data.provider,
       platform: data.platform,
       ...(safeBundleId ? { bundleId: safeBundleId } : {}),
+      ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
       deviceName: data.deviceName,
       osVersion: data.osVersion,
       appVersion: data.appVersion,
