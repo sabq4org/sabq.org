@@ -22,7 +22,7 @@ enum SpSharedContainer {
             ?? "ar"
     }
 
-    static func logosDir() -> URL? {
+    nonisolated static func logosDir() -> URL? {
         guard let base = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: appGroup) else { return nil }
         let dir = base.appendingPathComponent("LiveActivityLogos", isDirectory: true)
@@ -39,11 +39,11 @@ enum SpSharedContainer {
         return "logo_\(hex).png"
     }
 
-    private static let logosCleanupKey = "sp.logos.cleanup.at"
+    private nonisolated static let logosCleanupKey = "sp.logos.cleanup.at"
 
     /// كنس الشعارات غير المستخدمة (>30 يومًا منذ آخر لمسة) — مرة كل أسبوع كحد
     /// أقصى. يزيل أيضًا مخلّفات الأسماء العشوائية المتراكمة قبل البصمة الثابتة.
-    static func cleanupStaleLogos() {
+    nonisolated static func cleanupStaleLogos() {
         guard let dir = logosDir(), let defaults = UserDefaults(suiteName: appGroup) else { return }
         let now = Date().timeIntervalSince1970
         guard now - defaults.double(forKey: logosCleanupKey) >= 7 * 86_400 else { return }
@@ -109,7 +109,7 @@ private extension UIImage {
 // الفريقان + البطولة + موعد الانطلاق (عدّ تنازلي ذاتي). النتائج الحيّة مسؤولية
 // Live Activity — هذا الودجت للترقّب قبل المباراة.
 
-nonisolated struct SpWidgetSnapshot: Codable {
+nonisolated struct SpWidgetSnapshot: Codable, Equatable {
     let fixtureId: Int
     let homeName: String
     let awayName: String

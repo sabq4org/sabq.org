@@ -100,6 +100,9 @@ private struct SpAppEnvironmentRoot: View {
                     break
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: .spSessionUnauthorized)) { _ in
+                auth.handleUnauthorizedSession()
+            }
         // مظهر فاتح نظيف مفروض — تصميم كأس آسيا الأبيض (أبيض + أخضر مقتصد، لا غوامق).
     }
 }

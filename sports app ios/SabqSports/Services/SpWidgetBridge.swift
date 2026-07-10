@@ -9,15 +9,17 @@ nonisolated enum SpWidgetBridge {
     static let widgetKind = "SpNextMatchWidget"
 
     static func sync(follows: [SpFixture], favoriteId: Int?) async {
-        guard let f = pickFollow(follows, favoriteId: favoriteId) else { return }
+        guard let f = pickFollow(follows, favoriteId: favoriteId) else {
+            clearSnapshotIfNeeded()
+            return
+        }
         await write(f, favoriteId: favoriteId)
     }
 
     static func sync(matches m: SpMatchesResponse?, follows: [SpFixture] = [], favoriteId: Int?) async {
         guard let m else { return }
         guard let f = pick(m, follows: follows, favoriteId: favoriteId) else {
-            SpWidgetSnapshot.clear()
-            WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
+            clearSnapshotIfNeeded()
             return
         }
         await write(f, favoriteId: favoriteId)
@@ -46,14 +48,14 @@ nonisolated enum SpWidgetBridge {
             isLive: f.status.live,
             isFinished: f.status.finished
         )
-        guard current == nil || current!.fixtureId != snap.fixtureId
-            || current!.homeLogoFile != snap.homeLogoFile || current!.awayLogoFile != snap.awayLogoFile
-            || current!.isFavoriteTeam != snap.isFavoriteTeam
-            || current!.homeScore != snap.homeScore || current!.awayScore != snap.awayScore
-            || current!.homePenaltyScore != snap.homePenaltyScore || current!.awayPenaltyScore != snap.awayPenaltyScore
-            || current!.statusLabel != snap.statusLabel || current!.isLive != snap.isLive
-            || current!.isFinished != snap.isFinished else { return }
+        guard current != snap else { return }
         snap.save()
+        WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
+    }
+
+    private static func clearSnapshotIfNeeded() {
+        guard SpWidgetSnapshot.load() != nil else { return }
+        SpWidgetSnapshot.clear()
         WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
     }
 
