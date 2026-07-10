@@ -75,7 +75,10 @@ test.describe("smoke: public critical paths", () => {
 
   test("login page renders the form", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.getByTestId("input-email")).toBeVisible({ timeout: 20_000 });
+    // Default tab is phone OTP; switch to email to assert the classic form.
+    await expect(page.getByTestId("tab-email")).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("tab-email").click();
+    await expect(page.getByTestId("input-email")).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId("input-password")).toBeVisible();
     await expect(page.getByTestId("button-login")).toBeVisible();
   });
