@@ -40,10 +40,16 @@ function getDatabaseUrl(): string | undefined {
 }
 
 function initPool(databaseUrl: string): void {
+  // Sizing note (incident 2026-07-11): a breaking-news push (الأوامر الملكية)
+  // saturated max=15 within seconds — every request then queued 10s on
+  // pool.connect() and died with "timeout exceeded when trying to connect",
+  // returning 5xx HTML to clients (the "JSON Parse: Unrecognized token '<'"
+  // reports). max=50 stays well under Neon's limits (direct ≥112, -pooler 10k).
+  // min=2 keeps warm sockets so a post-idle burst doesn't pay full cold-start.
   const poolConfig = {
     connectionString: databaseUrl,
-    max: 15,
-    min: 0,
+    max: 50,
+    min: 2,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
     allowExitOnIdle: true,
@@ -236,7 +242,7 @@ try {
   initPool(databaseUrl);
   
   console.log("[DB] Pool initialized");
-  console.log(`[DB] Pool config: max=15, min=0, idleTimeout=30s, connTimeout=10s, allowExitOnIdle=true (driver=${DB_DRIVER})`);
+  console.log(`[DB] Pool config: max=50, min=2, idleTimeout=30s, connTimeout=10s, allowExitOnIdle=true (driver=${DB_DRIVER})`);
   
   const monitorInterval = process.env.NODE_ENV === 'production' ? 300000 : 60000;
   const monitorTimer = setInterval(() => {
