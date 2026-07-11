@@ -13,6 +13,7 @@ import {
   getGcMatchDetail,
   getGcScorers,
   getGcHistory,
+  getGcStars,
   isGulfCupConfigured,
 } from "../services/gulfCupService";
 import {
@@ -120,6 +121,20 @@ export function registerGulfCupRoutes(app: Express) {
     } catch (error) {
       console.error("[GulfCup] history failed:", error);
       res.status(502).json({ message: "تعذر جلب سجلّ البطولة حاليًا" });
+    }
+  });
+
+  // «نجم البطولة» — أغلى اللاعبين بالقيمة السوقية (TheSports). [] قبل توفر
+  // بيانات الموسم؛ الواجهة تخفي القسم عندها.
+  app.get("/api/gulf-cup/stars", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      const stars = await getGcStars();
+      res.set("Cache-Control", "public, max-age=1800, s-maxage=3600, stale-while-revalidate=7200");
+      res.json({ stars });
+    } catch (error) {
+      console.error("[GulfCup] stars failed:", error);
+      res.status(502).json({ message: "تعذر جلب نجوم البطولة حاليًا" });
     }
   });
 

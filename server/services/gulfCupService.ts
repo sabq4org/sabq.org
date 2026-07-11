@@ -46,6 +46,7 @@ import {
   getTheSportsFastScore,
   getTheSportsMatchLiveByUuid,
   getTsCompetitionExtra,
+  getTsCompetitionPlayerMarket,
   getTsCompetitionId,
   getTsCompetitionMatchPairs,
   getTsFifaRanking,
@@ -1514,6 +1515,69 @@ async function getGcFifaRank(teamId: number): Promise<GcFifaRank | null> {
   const ranks = await getTsFifaRanking().catch(() => new Map());
   const r = ranks.get(uuid);
   return r ? { rank: r.rank, points: r.points, change: r.change } : null;
+}
+
+// ---------- «نجم البطولة» — القيم السوقية (TheSports player market) ----------
+
+export interface GcStarPlayer {
+  rank: number;
+  name: string;
+  photo: string | null;
+  team: GcTeam | null;
+  shirtNumber: number | null;
+  position: string | null;
+  marketValue: number;
+  currency: string;
+}
+
+const STARS_TTL = 6 * 60 * 60 * 1000;
+
+/**
+ * أغلى نجوم البطولة بالقيمة السوقية — نقاطع خريطة سوق البطولة (uuid لاعب →
+ * قيمة) مع قوائم المنتخبات الثمانية (أسماء/صور/أرقام) عبر جسر الفريق.
+ * [] قبل توفر بيانات الموسم لدى المزوّد.
+ */
+export async function getGcStars(limit = 20): Promise<GcStarPlayer[]> {
+  if (!GC_TS_COMPETITION_ID) return [];
+  return withSWR(`gc:stars:${limit}`, STARS_TTL, STARS_TTL * 2, async () => {
+    const [market, bridge] = await Promise.all([
+      getTsCompetitionPlayerMarket(GC_TS_COMPETITION_ID),
+      getGcTeamBridge(),
+    ]);
+    if (market.size === 0 || bridge.size === 0) return [];
+
+    const squads = await Promise.all(
+      GC_TEAM_IDS.map(async (teamId) => {
+        const uuid = bridge.get(teamId);
+        if (!uuid) return { teamId, players: [] as Awaited<ReturnType<typeof getTsTeamSquad>> };
+        return { teamId, players: await getTsTeamSquad(uuid).catch(() => []) };
+      }),
+    );
+
+    const rows: Omit<GcStarPlayer, "rank">[] = [];
+    for (const squad of squads) {
+      for (const p of squad.players) {
+        const mv = market.get(p.id);
+        if (!mv?.marketValue) continue;
+        rows.push({
+          name: p.name,
+          photo: null,
+          team: seedTeam(squad.teamId),
+          shirtNumber: p.shirtNumber,
+          position: p.position,
+          marketValue: mv.marketValue,
+          currency: mv.currency,
+        });
+      }
+    }
+    if (rows.length === 0) return [];
+
+    const top = rows.sort((a, b) => b.marketValue - a.marketValue).slice(0, limit);
+    const tr = await resolveNames(top.map((r) => r.name)).catch(
+      () => (n: string | null | undefined) => n ?? "",
+    );
+    return top.map((r, i): GcStarPlayer => ({ ...r, name: tr(r.name), rank: i + 1 }));
+  }).catch(() => []);
 }
 
 export { TIMEZONE as GC_TIMEZONE, LEAGUE_ID as GC_LEAGUE_ID, SEASON as GC_SEASON };
