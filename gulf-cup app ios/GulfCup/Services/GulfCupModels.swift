@@ -528,6 +528,113 @@ struct GcMatchDetail: Decodable, Hashable {
     let commentary: [GcCommentaryItem]?
 }
 
+// ---------- المجالس (دوريات خاصة برمز دعوة) ----------
+
+struct GcMajlisSummary: Decodable, Hashable, Identifiable {
+    let id: String
+    let name: String
+    let code: String
+    let isOwner: Bool
+    let membersCount: Int
+}
+
+struct GcMajlisLeaderRow: Decodable, Hashable, Identifiable {
+    let rank: Int
+    let userId: String
+    let name: String
+    let avatar: String?
+    let isOwner: Bool
+    let totalPoints: Int
+    let correctCount: Int
+    let exactCount: Int
+    let playedCount: Int
+    var id: String { userId }
+}
+
+struct GcMajlisBoard: Decodable, Hashable {
+    let majlis: GcMajlisSummary
+    let rows: [GcMajlisLeaderRow]
+}
+
+// ---------- الفانتازي المصغّر ----------
+
+struct GcFantasyPoolPlayer: Decodable, Hashable, Identifiable {
+    let id: String
+    let name: String
+    let team: GcTeam?
+    let position: String?
+    let price: Int
+}
+
+struct GcFantasyPoolResponse: Decodable, Hashable {
+    let budget: Int
+    let squadSize: Int
+    let players: [GcFantasyPoolPlayer]
+}
+
+struct GcFantasySquadPlayer: Decodable, Hashable, Identifiable {
+    let id: String
+    let name: String
+    let team: GcTeam?
+    let position: String?
+    let price: Int
+    let isCaptain: Bool
+    let points: Int
+}
+
+struct GcFantasySquad: Decodable, Hashable {
+    let players: [GcFantasySquadPlayer]
+    let captainId: String
+    let spent: Int
+    let budget: Int
+    let totalPoints: Int
+}
+
+struct GcFantasyLeader: Decodable, Hashable, Identifiable {
+    let rank: Int
+    let userId: String
+    let name: String
+    let avatar: String?
+    let totalPoints: Int
+    var id: String { userId }
+}
+
+// ---------- رجل المباراة (الجمهور ضد الأرقام) ----------
+
+struct GcMotmPick: Decodable, Hashable {
+    let playerId: String
+    let playerName: String
+}
+
+struct GcMotmResult: Decodable, Hashable, Identifiable {
+    let playerId: String
+    let playerName: String
+    let votes: Int
+    let percent: Int
+    var id: String { playerId }
+}
+
+struct GcMotmBoard: Decodable, Hashable {
+    let total: Int
+    let myPick: GcMotmPick?
+    let open: Bool
+    let results: [GcMotmResult]
+}
+
+// ---------- نجوم البطولة (القيم السوقية) ----------
+
+struct GcStarPlayer: Decodable, Hashable, Identifiable {
+    let rank: Int
+    let name: String
+    let photo: String?
+    let team: GcTeam?
+    let shirtNumber: Int?
+    let position: String?
+    let marketValue: Double
+    let currency: String
+    var id: String { "\(rank)-\(name)" }
+}
+
 struct GcDayGroup: Identifiable {
     let key: String
     let label: String
@@ -723,6 +830,73 @@ extension APIClient {
             ignoreCache: ignoreCache,
             apiRoot: URLConstants.mobileAPI
         )
+    }
+
+    // ---------- المجالس (Bearer عبر مرايا الموبايل) ----------
+
+    func fetchGcMyMajalis() async throws -> [GcMajlisSummary] {
+        struct R: Decodable { let majalis: [GcMajlisSummary] }
+        return try await get(R.self, path: "/gulf-cup/majlis/mine", ignoreCache: true, apiRoot: URLConstants.mobileAPI).majalis
+    }
+
+    func createGcMajlis(name: String) async throws -> GcMajlisSummary {
+        struct B: Encodable { let name: String }
+        return try await post(GcMajlisSummary.self, path: "/gulf-cup/majlis", body: B(name: name), apiRoot: URLConstants.mobileAPI)
+    }
+
+    func joinGcMajlis(code: String) async throws -> GcMajlisSummary {
+        struct B: Encodable { let code: String }
+        return try await post(GcMajlisSummary.self, path: "/gulf-cup/majlis/join", body: B(code: code), apiRoot: URLConstants.mobileAPI)
+    }
+
+    func fetchGcMajlisBoard(_ majlisId: String) async throws -> GcMajlisBoard {
+        try await get(GcMajlisBoard.self, path: "/gulf-cup/majlis/\(majlisId)/leaderboard", ignoreCache: true, apiRoot: URLConstants.mobileAPI)
+    }
+
+    func leaveGcMajlis(_ majlisId: String) async throws -> Bool {
+        struct R: Decodable { let deleted: Bool }
+        return try await delete(R.self, path: "/gulf-cup/majlis/\(majlisId)", apiRoot: URLConstants.mobileAPI).deleted
+    }
+
+    // ---------- الفانتازي ----------
+
+    func fetchGcFantasyPool(ignoreCache: Bool = false) async throws -> GcFantasyPoolResponse {
+        try await get(GcFantasyPoolResponse.self, path: "/gulf-cup/fantasy/pool", ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI)
+    }
+
+    func fetchGcMyFantasy() async throws -> GcFantasySquad? {
+        struct R: Decodable { let squad: GcFantasySquad? }
+        return try await get(R.self, path: "/gulf-cup/fantasy/mine", ignoreCache: true, apiRoot: URLConstants.mobileAPI).squad
+    }
+
+    func saveGcFantasy(playerIds: [String], captainId: String) async throws {
+        struct B: Encodable { let playerIds: [String]; let captainId: String }
+        struct R: Decodable { let saved: Bool }
+        _ = try await post(R.self, path: "/gulf-cup/fantasy", body: B(playerIds: playerIds, captainId: captainId), apiRoot: URLConstants.mobileAPI)
+    }
+
+    func fetchGcFantasyLeaderboard(ignoreCache: Bool = false) async throws -> [GcFantasyLeader] {
+        struct R: Decodable { let leaders: [GcFantasyLeader] }
+        return try await get(R.self, path: "/gulf-cup/fantasy/leaderboard", ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).leaders
+    }
+
+    // ---------- رجل المباراة ----------
+
+    func fetchGcMotmBoard(_ fixtureId: Int, ignoreCache: Bool = false) async throws -> GcMotmBoard {
+        try await get(GcMotmBoard.self, path: "/gulf-cup/motm/\(fixtureId)", ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI)
+    }
+
+    func voteGcMotm(fixtureId: Int, playerId: String, playerName: String) async throws {
+        struct B: Encodable { let playerId: String; let playerName: String }
+        struct R: Decodable { let saved: Bool }
+        _ = try await post(R.self, path: "/gulf-cup/motm/\(fixtureId)", body: B(playerId: playerId, playerName: playerName), apiRoot: URLConstants.mobileAPI)
+    }
+
+    // ---------- نجوم البطولة (عامة) ----------
+
+    func fetchGcStars(ignoreCache: Bool = false) async throws -> [GcStarPlayer] {
+        struct R: Decodable { let stars: [GcStarPlayer] }
+        return try await get(R.self, path: "/gulf-cup/stars", ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).stars
     }
 
     func fetchGcTeamProfile(_ teamId: Int, ignoreCache: Bool = false) async throws -> GcTeamProfile {

@@ -211,6 +211,9 @@ private struct GcHomeScreen: View {
                         .gcReveal()
                 }
 
+                GcStarsPreview()
+                    .gcReveal()
+
                 if let history = store.history {
                     GcHistoryTeaser(history: history) { onSelectTab(.tournament) }
                         .gcReveal()
@@ -884,6 +887,71 @@ private struct GcScorersPreview: View {
     }
 }
 
+/// «نجوم البطولة» — أغلى اللاعبين بالقيمة السوقية (TheSports)؛ يخفي نفسه
+/// كليًّا قبل توفر بيانات الموسم لدى المزوّد.
+private struct GcStarsPreview: View {
+    @State private var stars: [GcStarPlayer] = []
+
+    var body: some View {
+        Group {
+            if stars.isEmpty {
+                EmptyView()
+            } else {
+                VStack(spacing: 12) {
+                    GcSectionHeader(icon: "diamond.fill", title: "نجوم البطولة", subtitle: "الأغلى قيمة سوقية", tint: GcTheme.goldDeep)
+                    VStack(spacing: 0) {
+                        ForEach(Array(stars.prefix(5).enumerated()), id: \.element.id) { idx, star in
+                            if idx > 0 { Rectangle().fill(GcTheme.outline).frame(height: 1).padding(.leading, 14) }
+                            HStack(spacing: 11) {
+                                Text("\(star.rank)")
+                                    .font(GulfCupFonts.app(size: 12, weight: .bold))
+                                    .foregroundStyle(star.rank == 1 ? GcTheme.goldDeep : GcTheme.inkFaint)
+                                    .frame(width: 18)
+                                GcPlayerPhoto(url: star.photo, size: 36)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(star.name)
+                                        .font(GulfCupFonts.app(size: 13, weight: .bold))
+                                        .foregroundStyle(GcTheme.ink)
+                                        .lineLimit(1)
+                                    HStack(spacing: 5) {
+                                        if let team = star.team {
+                                            GcTeamLogo(logo: team.logo, size: 14)
+                                            Text(team.name).font(GulfCupFonts.app(size: 10)).foregroundStyle(GcTheme.inkDim)
+                                        }
+                                    }
+                                }
+                                Spacer()
+                                Text(marketLabel(star))
+                                    .font(GulfCupFonts.app(size: 12, weight: .bold))
+                                    .foregroundStyle(GcTheme.goldDeep)
+                                    .monospacedDigit()
+                                    .padding(.horizontal, 9).padding(.vertical, 4)
+                                    .background(Capsule().fill(GcTheme.gold.opacity(0.10)))
+                            }
+                            .padding(.horizontal, 14).padding(.vertical, 9)
+                        }
+                    }
+                    .gcCard()
+                }
+            }
+        }
+        .task {
+            stars = (try? await APIClient.shared.fetchGcStars()) ?? []
+        }
+    }
+
+    private func marketLabel(_ star: GcStarPlayer) -> String {
+        let symbol = star.currency == "EUR" ? "€" : star.currency == "USD" ? "$" : ""
+        if star.marketValue >= 1_000_000 {
+            return String(format: "%@%.1f م", symbol, star.marketValue / 1_000_000)
+        }
+        if star.marketValue >= 1_000 {
+            return "\(symbol)\(Int(star.marketValue / 1_000)) ألف"
+        }
+        return "\(symbol)\(Int(star.marketValue))"
+    }
+}
+
 /// حامل اللقب + الأكثر تتويجًا — بوّابة سجلّ البطولة.
 private struct GcHistoryTeaser: View {
     let history: GcHistory
@@ -1110,21 +1178,17 @@ private struct GcMoreScreen: View {
                 }
 
                 if let ov = store.overview, !ov.venues.isEmpty {
-                    GcSectionHeader(icon: "building.2.fill", title: L("venues.section.title"), count: ov.venues.count, tint: GcTheme.teal)
-                    VStack(spacing: 0) {
-                        ForEach(Array(ov.venues.enumerated()), id: \.offset) { idx, v in
-                            if idx > 0 { Rectangle().fill(GcTheme.outline).frame(height: 1).padding(.leading, 14) }
-                            HStack(spacing: 10) {
-                                Image(systemName: "sportscourt.fill").foregroundStyle(GcTheme.emerald)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(v.name).font(GulfCupFonts.app(size: 13, weight: .semibold)).foregroundStyle(GcTheme.ink)
-                                    Text(v.city).font(GulfCupFonts.app(size: 11)).foregroundStyle(GcTheme.inkDim)
-                                }
-                                Spacer()
-                            }
-                            .padding(.horizontal, 14).padding(.vertical, 11)
-                        }
+                    GcSectionHeader(icon: "building.2.fill", title: "دليل الحضور — جدة", count: ov.venues.count, tint: GcTheme.teal)
+                    ForEach(Array(ov.venues.enumerated()), id: \.offset) { _, v in
+                        GcVenueGuideCard(venue: v)
                     }
+                    // نصائح حضور عامة
+                    VStack(alignment: .leading, spacing: 8) {
+                        tipRow(icon: "ticket.fill", text: "احجز تذاكرك مبكرًا عبر المنصات الرسمية — مباريات الأخضر تنفد أولًا")
+                        tipRow(icon: "clock.fill", text: "اوصل قبل الانطلاق بساعة ونصف — البوابات تزدحم قرب الصافرة")
+                        tipRow(icon: "car.fill", text: "استخدم المواقف المخصصة أو التوصيل — لا تعتمد على مواقف الشارع")
+                    }
+                    .padding(13)
                     .gcCard()
                 }
 
@@ -1142,6 +1206,114 @@ private struct GcMoreScreen: View {
         }
         .refreshable { await store.loadAll(force: true) }
         .navigationBarHidden(true)
+    }
+
+    private func tipRow(icon: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(GcTheme.goldDeep)
+                .frame(width: 18)
+            Text(text)
+                .font(GulfCupFonts.app(size: 11.5))
+                .foregroundStyle(GcTheme.inkDim)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+/// بطاقة ملعب غنية — بيانات ثابتة (سعة/افتتاح/وصف/خرائط) مطابَقة بالاسم فوق
+/// ملاعب الـ API؛ أي ملعب جديد يظهر ببطاقة أساسية.
+private struct GcVenueGuideCard: View {
+    let venue: GcVenue
+
+    private struct Guide {
+        let match: String
+        let nickname: String?
+        let capacity: String
+        let opened: String
+        let blurb: String
+        let mapsQuery: String
+    }
+
+    private static let guides: [Guide] = [
+        Guide(
+            match: "الملك عبدالله",
+            nickname: "«الجوهرة المشعّة»",
+            capacity: "62,345 مقعدًا",
+            opened: "افتُتح 2014",
+            blurb: "درّة الملاعب السعودية ومسرح الافتتاح والنهائي — تجربة حضور عالمية.",
+            mapsQuery: "King Abdullah Sports City Jeddah"
+        ),
+        Guide(
+            match: "الأمير عبدالله الفيصل",
+            nickname: nil,
+            capacity: "27,000 مقعد تقريبًا",
+            opened: "أُعيد افتتاحه 2023 بعد تطوير شامل",
+            blurb: "معقل الكرة الجداوية العريق في قلب المدينة — أجواء قريبة من المدرجات.",
+            mapsQuery: "Prince Abdullah Al Faisal Stadium Jeddah"
+        ),
+    ]
+
+    private var guide: Guide? {
+        Self.guides.first { venue.name.contains($0.match) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // ترويسة زمردية باسم الملعب
+            HStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(venue.name + (guide?.nickname.map { " \($0)" } ?? ""))
+                        .font(GulfCupFonts.app(size: 13.5, weight: .bold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text(venue.city)
+                        .font(GulfCupFonts.app(size: 10))
+                        .foregroundStyle(GcTheme.onHeroDim)
+                }
+                Spacer()
+                Image(systemName: "sportscourt.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(GcTheme.goldLite.opacity(0.8))
+            }
+            .padding(.horizontal, 14).padding(.vertical, 11)
+            .background(GcTheme.emeraldGradient)
+
+            VStack(alignment: .leading, spacing: 9) {
+                if let guide {
+                    Text(guide.blurb)
+                        .font(GulfCupFonts.app(size: 11.5))
+                        .foregroundStyle(GcTheme.inkDim)
+                        .lineSpacing(3)
+                    HStack(spacing: 7) {
+                        GcChip(text: guide.capacity, icon: "person.3.fill", tint: GcTheme.emerald)
+                        GcChip(text: guide.opened, icon: "clock.fill", tint: GcTheme.teal)
+                    }
+                }
+                Button {
+                    let query = (guide?.mapsQuery ?? "\(venue.name) \(venue.city)")
+                        .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                    if let url = URL(string: "https://maps.apple.com/?q=\(query)") {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("الاتجاهات على الخرائط")
+                            .font(GulfCupFonts.app(size: 11.5, weight: .bold))
+                    }
+                    .foregroundStyle(GcTheme.emeraldDeep)
+                }
+                .buttonStyle(GcPressStyle())
+            }
+            .padding(14)
+        }
+        .background(RoundedRectangle(cornerRadius: GcTheme.cardRadius, style: .continuous).fill(GcTheme.cardBg))
+        .overlay(RoundedRectangle(cornerRadius: GcTheme.cardRadius, style: .continuous).stroke(GcTheme.line, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: GcTheme.cardRadius, style: .continuous))
     }
 }
 

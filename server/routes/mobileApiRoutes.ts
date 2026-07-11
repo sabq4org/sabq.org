@@ -94,6 +94,22 @@ import {
   submitLongPrediction as submitGcLongPrediction,
   type GcLongKind,
 } from "../services/gcPredictionsService";
+import {
+  createMajlis as gcCreateMajlis,
+  joinMajlis as gcJoinMajlis,
+  leaveMajlis as gcLeaveMajlis,
+  getMyMajalis as gcGetMyMajalis,
+  getMajlisLeaderboard as gcGetMajlisLeaderboard,
+} from "../services/gcMajlisService";
+import {
+  getFantasyPool as gcGetFantasyPool,
+  getMyFantasy as gcGetMyFantasy,
+  saveFantasySquad as gcSaveFantasySquad,
+  getFantasyLeaderboard as gcGetFantasyLeaderboard,
+  FANTASY_BUDGET as GC_FANTASY_BUDGET,
+  FANTASY_SQUAD_SIZE as GC_FANTASY_SQUAD_SIZE,
+} from "../services/gcFantasyService";
+import { getMotmBoard as gcGetMotmBoard, voteMotm as gcVoteMotm } from "../services/gcMotmService";
 
 const router = Router();
 
@@ -9464,6 +9480,225 @@ router.post("/gulf-cup/predictions/long", async (req: Request, res: Response) =>
   } catch (error) {
     console.error("[Mobile GC Predictions] long submit error:", error);
     res.status(500).json({ message: "تعذر حفظ التوقّع" });
+  }
+});
+
+// ==========================================
+// خليجي 27 — مرايا الموبايل: المجالس · الفانتازي · رجل المباراة (Bearer)
+// ==========================================
+// نظيرة مسارات الويب نفسها لكن بـ verifyMemberSession — الخدمات مشتركة.
+
+const GC_MAJLIS_REASONS: Record<string, { code: number; message: string }> = {
+  INVALID_NAME: { code: 400, message: "اسم المجلس بين حرفين و60 حرفًا" },
+  INVALID_CODE: { code: 400, message: "رمز الدعوة غير صالح" },
+  NOT_FOUND: { code: 404, message: "المجلس غير موجود — تأكد من الرمز" },
+  NOT_MEMBER: { code: 403, message: "هذا المجلس لأعضائه فقط" },
+  FULL: { code: 409, message: "اكتمل المجلس (50 عضوًا)" },
+  LIMIT_OWNED: { code: 409, message: "بلغت حدّ 5 مجالس" },
+  CODE_COLLISION: { code: 500, message: "تعذّر توليد رمز — حاول مجددًا" },
+};
+
+router.post("/gulf-cup/majlis", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcCreateMajlis(session.userId, String(req.body?.name ?? ""));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر إنشاء المجلس" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.status(201).json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] create error:", error);
+    res.status(502).json({ message: "تعذّر إنشاء المجلس حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/majlis/join", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcJoinMajlis(session.userId, String(req.body?.code ?? ""));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر الانضمام" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] join error:", error);
+    res.status(502).json({ message: "تعذّر الانضمام حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/mine", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json({ majalis: await gcGetMyMajalis(session.userId) });
+  } catch (error) {
+    console.error("[Mobile GC Majlis] mine error:", error);
+    res.status(502).json({ message: "تعذّر جلب مجالسك حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/leaderboard", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcGetMajlisLeaderboard(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب الترتيب" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] leaderboard error:", error);
+    res.status(502).json({ message: "تعذّر جلب ترتيب المجلس حاليًا" });
+  }
+});
+
+router.delete("/gulf-cup/majlis/:id", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcLeaveMajlis(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر تنفيذ الطلب" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] leave error:", error);
+    res.status(502).json({ message: "تعذّر تنفيذ الطلب حاليًا" });
+  }
+});
+
+const GC_FANTASY_REASONS: Record<string, string> = {
+  SIZE: `اختر ${GC_FANTASY_SQUAD_SIZE} لاعبين بالضبط`,
+  DUPLICATE: "لا تكرّر اللاعب نفسه",
+  CAPTAIN: "اختر قائدًا من ضمن تشكيلتك",
+  POOL_EMPTY: "قائمة اللاعبين غير متاحة بعد",
+  UNKNOWN_PLAYER: "أحد اللاعبين خارج قائمة البطولة",
+  OVER_BUDGET: `تجاوزت الميزانية (${GC_FANTASY_BUDGET} نقطة)`,
+};
+
+router.get("/gulf-cup/fantasy/pool", async (_req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  try {
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=1200");
+    res.json({
+      budget: GC_FANTASY_BUDGET,
+      squadSize: GC_FANTASY_SQUAD_SIZE,
+      players: await gcGetFantasyPool(),
+    });
+  } catch (error) {
+    console.error("[Mobile GC Fantasy] pool error:", error);
+    res.status(502).json({ message: "تعذّر جلب قائمة اللاعبين حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/fantasy/mine", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json({ squad: await gcGetMyFantasy(session.userId) });
+  } catch (error) {
+    console.error("[Mobile GC Fantasy] mine error:", error);
+    res.status(502).json({ message: "تعذّر جلب تشكيلتك حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/fantasy", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcSaveFantasySquad(session.userId, req.body?.playerIds, req.body?.captainId);
+    if (!result.ok) {
+      return res
+        .status(400)
+        .json({ message: GC_FANTASY_REASONS[result.reason] ?? "تعذّر حفظ التشكيلة" });
+    }
+    res.json({ saved: true, spent: result.data.spent });
+  } catch (error) {
+    console.error("[Mobile GC Fantasy] save error:", error);
+    res.status(502).json({ message: "تعذّر حفظ التشكيلة حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/fantasy/leaderboard", async (_req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  try {
+    res.set("Cache-Control", "public, max-age=300, s-maxage=600, stale-while-revalidate=1200");
+    res.json({ leaders: await gcGetFantasyLeaderboard() });
+  } catch (error) {
+    console.error("[Mobile GC Fantasy] leaderboard error:", error);
+    res.status(502).json({ message: "تعذّر جلب ترتيب الفانتازي حاليًا" });
+  }
+});
+
+const GC_MOTM_REASONS: Record<string, { code: number; message: string }> = {
+  INVALID_PLAYER: { code: 400, message: "اختر لاعبًا صالحًا" },
+  NOT_FOUND: { code: 404, message: "المباراة غير موجودة" },
+  TOO_EARLY: { code: 409, message: "التصويت يُفتح من الشوط الثاني" },
+  NOT_STARTED: { code: 409, message: "التصويت يُفتح بعد انطلاق المباراة" },
+  CLOSED: { code: 409, message: "أُغلق التصويت لهذه المباراة" },
+};
+
+router.get("/gulf-cup/motm/:fixtureId", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+    return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+  }
+  try {
+    const session = await verifyMemberSession(req);
+    if (session) res.set("Cache-Control", "private, no-store");
+    else res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+    res.json(await gcGetMotmBoard(fixtureId, session?.userId));
+  } catch (error) {
+    console.error("[Mobile GC MOTM] board error:", error);
+    res.status(502).json({ message: "تعذّر جلب التصويت حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/motm/:fixtureId", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+    return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+  }
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcVoteMotm(
+      session.userId,
+      fixtureId,
+      String(req.body?.playerId ?? ""),
+      String(req.body?.playerName ?? ""),
+    );
+    if (!result.ok) {
+      const m = GC_MOTM_REASONS[result.reason] ?? { code: 500, message: "تعذّر حفظ الصوت" };
+      return res.status(m.code).json({ message: m.message });
+    }
+    res.json({ saved: true });
+  } catch (error) {
+    console.error("[Mobile GC MOTM] vote error:", error);
+    res.status(502).json({ message: "تعذّر حفظ الصوت حاليًا" });
   }
 });
 

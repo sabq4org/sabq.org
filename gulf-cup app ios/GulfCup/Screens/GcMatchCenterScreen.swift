@@ -276,6 +276,9 @@ struct GcMatchCenterScreen: View {
         if let ps = detail?.playerStats, ps.contains(where: { $0.rating != nil }) {
             GcRatingsCard(stats: ps, fixture: displayFixture)
         }
+        if started, let d = detail {
+            GcMotmCard(detail: d, fixture: displayFixture)
+        }
     }
 
     // MARK: المواجهات
@@ -551,6 +554,130 @@ struct GcH2HRecordCard: View {
             Text(L("match.wins")).font(GulfCupFonts.app(size: 10)).foregroundStyle(GcTheme.inkFaint)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - رجل المباراة — الجمهور ضد الأرقام
+
+/// تصويت جماهيري حي (من الشوط الثاني حتى 24 ساعة بعد الصافرة) تُقارن غلبته
+/// بأعلى تقييم بيانات. المرشّحون من التقييمات أو التشكيلة الغنية.
+struct GcMotmCard: View {
+    let detail: GcMatchDetail
+    let fixture: GcFixture
+
+    @Environment(GcAuthStore.self) private var auth
+    @State private var board: GcMotmBoard?
+    @State private var submitting = false
+    private let refreshTimer = Timer.publish(every: 20, on: .main, in: .common).autoconnect()
+
+    private var candidates: [(id: String, name: String)] {
+        let rated = (detail.playerStats ?? []).filter { $0.rating != nil }
+        if !rated.isEmpty { return rated.prefix(12).map { ($0.playerId, $0.name) } }
+        guard let rich = detail.lineupsRich else { return [] }
+        return (rich.home + rich.away).filter(\.starter).map { ($0.id, $0.name) }
+    }
+
+    private var dataStar: GcPlayerMatchStat? {
+        (detail.playerStats ?? []).first { $0.rating != nil }
+    }
+
+    var body: some View {
+        if candidates.isEmpty && (board?.total ?? 0) == 0 && board?.open != true {
+            EmptyView()
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            GcSectionHeader(icon: "person.fill.questionmark", title: "رجل المباراة", subtitle: "الجمهور ضد الأرقام", tint: GcTheme.goldDeep)
+
+            if board != nil || dataStar != nil {
+                HStack(spacing: 8) {
+                    comparisonTile(
+                        title: "اختيار الجمهور",
+                        name: board?.results.first?.playerName ?? "—",
+                        caption: board?.results.first.map { "\($0.percent)% من \(board?.total ?? 0) صوت" },
+                        tint: GcTheme.emerald
+                    )
+                    comparisonTile(
+                        title: "بطل الأرقام",
+                        name: dataStar?.name ?? "—",
+                        caption: dataStar?.rating.map { String(format: "تقييم %.1f", $0) },
+                        tint: GcTheme.goldDeep
+                    )
+                }
+            }
+
+            if board?.open == true {
+                if auth.isLoggedIn {
+                    voteChips
+                } else {
+                    Text("سجّل دخولك للتصويت لرجل المباراة")
+                        .font(GulfCupFonts.app(size: 11))
+                        .foregroundStyle(GcTheme.inkDim)
+                }
+            } else if (board?.total ?? 0) == 0 {
+                Text("يُفتح التصويت من الشوط الثاني")
+                    .font(GulfCupFonts.app(size: 11))
+                    .foregroundStyle(GcTheme.inkFaint)
+            }
+        }
+        .padding(14)
+        .gcCard()
+        .task { await load() }
+        .onReceive(refreshTimer) { _ in
+            if board?.open == true { Task { await load() } }
+        }
+    }
+
+    private var voteChips: some View {
+        // شبكة رقاقات مرنة — صفوف من عمودين تكفي أسماء اللاعبين العربية.
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 7) {
+            ForEach(candidates, id: \.id) { candidate in
+                let picked = board?.myPick?.playerId == candidate.id
+                Button {
+                    Task { await vote(candidate) }
+                } label: {
+                    Text(candidate.name)
+                        .font(GulfCupFonts.app(size: 11.5, weight: picked ? .bold : .semibold))
+                        .foregroundStyle(picked ? .white : GcTheme.ink)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule().fill(picked ? GcTheme.emerald : GcTheme.chipFill)
+                        )
+                }
+                .buttonStyle(GcPressStyle())
+                .disabled(submitting)
+            }
+        }
+    }
+
+    private func comparisonTile(title: String, name: String, caption: String?, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(GulfCupFonts.app(size: 9.5, weight: .bold)).foregroundStyle(tint)
+            Text(name).font(GulfCupFonts.app(size: 13, weight: .bold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+            if let caption {
+                Text(caption).font(GulfCupFonts.app(size: 9.5)).foregroundStyle(GcTheme.inkDim)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: GcTheme.chipRadius, style: .continuous).fill(tint.opacity(0.08)))
+    }
+
+    private func load() async {
+        board = (try? await APIClient.shared.fetchGcMotmBoard(fixture.id, ignoreCache: true)) ?? board
+    }
+
+    private func vote(_ candidate: (id: String, name: String)) async {
+        submitting = true
+        try? await APIClient.shared.voteGcMotm(fixtureId: fixture.id, playerId: candidate.id, playerName: candidate.name)
+        await load()
+        submitting = false
     }
 }
 
