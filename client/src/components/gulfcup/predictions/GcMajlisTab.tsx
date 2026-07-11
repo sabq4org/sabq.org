@@ -26,6 +26,7 @@ interface MajlisLeaderboardRow {
   name: string;
   avatar: string | null;
   isOwner: boolean;
+  isDayChampion?: boolean;
   totalPoints: number;
   correctCount: number;
   exactCount: number;
@@ -101,7 +102,7 @@ export function GcMajlisTab({
         </p>
         <button
           onClick={onRequireLogin}
-          className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#0F8054] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#0A6B47]"
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-sky-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-sky-800"
         >
           تسجيل الدخول
         </button>
@@ -111,12 +112,12 @@ export function GcMajlisTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 rounded-2xl border border-emerald-600/20 bg-gradient-to-l from-emerald-600/[0.08] to-card p-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 rounded-2xl border border-sky-600/20 bg-gradient-to-l from-sky-600/[0.08] to-card p-4 sm:flex-row sm:items-center">
         <div className="min-w-0 flex-1">
           <p className="font-black text-foreground">تجربة المجلس الكاملة</p>
           <p className="mt-1 text-xs leading-6 text-muted-foreground">مباريات اليوم، توقعات الأعضاء بعد الإقفال، التحديات وبطل الجولة في صفحة مستقلة.</p>
         </div>
-        <Link href="/gulf-cup/majlis" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-[#0F8054] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#0A6B47]">
+        <Link href="/gulf-cup/majlis" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-800">
           افتح المجالس <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </Link>
       </div>
@@ -130,7 +131,7 @@ export function GcMajlisTab({
           }}
         >
           <p className="mb-2 flex items-center gap-1.5 text-sm font-black text-foreground">
-            <Plus className="h-4 w-4 text-[#0F8054]" />
+            <Plus className="h-4 w-4 text-sky-600" />
             أنشئ مجلسك
           </p>
           <div className="flex gap-2">
@@ -139,12 +140,12 @@ export function GcMajlisTab({
               onChange={(e) => setName(e.target.value)}
               maxLength={60}
               placeholder="اسم المجلس — مثل: ديوانية الجمعة"
-              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400/40"
+              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-sky-400/40"
             />
             <button
               type="submit"
               disabled={name.trim().length < 2 || createMutation.isPending}
-              className="shrink-0 rounded-xl bg-[#0F8054] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#0A6B47] disabled:opacity-50"
+              className="shrink-0 rounded-xl bg-sky-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-800 disabled:opacity-50"
             >
               إنشاء
             </button>
@@ -159,7 +160,7 @@ export function GcMajlisTab({
           }}
         >
           <p className="mb-2 flex items-center gap-1.5 text-sm font-black text-foreground">
-            <Users className="h-4 w-4 text-amber-500" />
+            <Users className="h-4 w-4 text-sky-500" />
             انضم برمز دعوة
           </p>
           <div className="flex gap-2">
@@ -169,12 +170,12 @@ export function GcMajlisTab({
               maxLength={8}
               placeholder="مثل: 7KQ2MD"
               dir="ltr"
-              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-center text-sm font-black tracking-widest outline-none focus:ring-2 focus:ring-amber-400/40"
+              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-center text-sm font-black tracking-widest outline-none focus:ring-2 focus:ring-sky-400/40"
             />
             <button
               type="submit"
               disabled={code.trim().length < 4 || joinMutation.isPending}
-              className="shrink-0 rounded-xl bg-gradient-to-b from-[#F5D46B] to-[#E7A93C] px-4 py-2 text-sm font-black text-emerald-950 transition disabled:opacity-50"
+              className="shrink-0 rounded-xl bg-gradient-to-b from-sky-300 to-sky-400 px-4 py-2 text-sm font-black text-sky-950 transition disabled:opacity-50"
             >
               انضمام
             </button>
@@ -251,7 +252,7 @@ function MajlisCard({
     <li className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="flex items-center gap-3 px-4 py-3">
         <button type="button" onClick={onToggle} className="flex min-w-0 flex-1 items-center gap-3 text-start">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#0F8054]/10 text-lg">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-sky-600/10 text-lg">
             {majlis.isOwner ? "👑" : "🪑"}
           </span>
           <span className="min-w-0">
@@ -297,7 +298,7 @@ function MajlisCard({
                 <li
                   key={r.userId}
                   className={`flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm ${
-                    r.userId === currentUserId ? "bg-[#0F8054]/8 ring-1 ring-[#0F8054]/20" : "bg-muted/40"
+                    r.userId === currentUserId ? "bg-sky-600/8 ring-1 ring-sky-600/20" : "bg-muted/40"
                   }`}
                 >
                   <span className="w-6 text-center font-black tabular-nums text-muted-foreground">
@@ -308,12 +309,12 @@ function MajlisCard({
                   </span>
                   <span className="min-w-0 flex-1 truncate font-bold text-foreground">
                     {r.name}
-                    {r.isOwner ? " 👑" : ""}
+                    {r.isOwner ? " 👑" : ""}{r.isDayChampion ? " 🏆" : ""}
                   </span>
                   <span className="text-[10px] text-muted-foreground">
                     {formatNumber(r.correctCount)} إصابة
                   </span>
-                  <span className="font-black tabular-nums text-[#0A6B47] dark:text-emerald-300">
+                  <span className="font-black tabular-nums text-sky-800 dark:text-sky-300">
                     {formatNumber(r.totalPoints)}
                   </span>
                 </li>

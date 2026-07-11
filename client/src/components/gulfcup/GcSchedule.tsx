@@ -27,7 +27,7 @@ export function GcSchedule({
   return (
     <section id="gc-schedule" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="mb-6 flex items-center gap-2">
-        <CalendarDays className="h-6 w-6 text-emerald-500" />
+        <CalendarDays className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">جدول المباريات</h2>
       </div>
 
@@ -38,7 +38,7 @@ export function GcSchedule({
             onClick={() => setActiveRound(null)}
             className={`rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
               activeRound === null
-                ? "bg-emerald-500 text-white"
+                ? "bg-sky-500 text-white"
                 : "bg-muted text-muted-foreground hover:bg-muted/70"
             }`}
           >
@@ -51,7 +51,7 @@ export function GcSchedule({
               onClick={() => setActiveRound(r)}
               className={`rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
                 activeRound === r
-                  ? "bg-emerald-500 text-white"
+                  ? "bg-sky-500 text-white"
                   : "bg-muted text-muted-foreground hover:bg-muted/70"
               }`}
             >

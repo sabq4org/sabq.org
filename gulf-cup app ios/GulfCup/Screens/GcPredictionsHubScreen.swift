@@ -66,7 +66,7 @@ struct GcPredictionsHubScreen: View {
                             .frame(minHeight: 44)
                             .background(
                                 RoundedRectangle(cornerRadius: GcTheme.chipRadius, style: .continuous)
-                                    .fill(router.predictionSegment == seg ? GcTheme.emerald : Color.clear)
+                                    .fill(router.predictionSegment == seg ? GcTheme.sky : Color.clear)
                             )
                     }
                     .buttonStyle(GcPressStyle())

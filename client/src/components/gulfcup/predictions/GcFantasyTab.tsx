@@ -114,7 +114,7 @@ export function GcFantasyTab({
         </p>
         <button
           onClick={onRequireLogin}
-          className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#0F8054] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#0A6B47]"
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-sky-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-sky-800"
         >
           تسجيل الدخول
         </button>
@@ -141,7 +141,7 @@ export function GcFantasyTab({
       {/* شريط الميزانية + نقاطي */}
       <div className="sticky top-16 z-10 flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card/95 p-3.5 backdrop-blur">
         <div className="flex items-center gap-1.5">
-          <Coins className="h-4 w-4 text-amber-500" />
+          <Coins className="h-4 w-4 text-sky-500" />
           <span className="text-sm font-black text-foreground tabular-nums">
             {remaining} / {budget}
           </span>
@@ -153,7 +153,7 @@ export function GcFantasyTab({
         {existing && (
           <div className="flex items-center gap-1.5 text-sm">
             <span className="text-muted-foreground">نقاطي:</span>
-            <span className="font-black text-[#0A6B47] dark:text-emerald-300 tabular-nums">
+            <span className="font-black text-sky-800 dark:text-sky-300 tabular-nums">
               {formatNumber(existing.totalPoints)}
             </span>
           </div>
@@ -161,14 +161,14 @@ export function GcFantasyTab({
         <button
           onClick={() => save.mutate()}
           disabled={!canSave || save.isPending}
-          className="mr-auto rounded-full bg-[#0F8054] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#0A6B47] disabled:opacity-50"
+          className="mr-auto rounded-full bg-sky-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-sky-800 disabled:opacity-50"
         >
           {existing ? "تحديث التشكيلة" : "حفظ التشكيلة"}
         </button>
       </div>
 
       {captainId === "" && selection.size > 0 && (
-        <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+        <p className="rounded-xl bg-sky-500/10 px-3 py-2 text-[11px] font-bold text-sky-700 dark:text-sky-300">
           👑 اختر قائدًا من تشكيلتك بالضغط على أيقونة التاج — نقاطه تُضاعَف
         </p>
       )}
@@ -183,7 +183,7 @@ export function GcFantasyTab({
             <li
               key={p.id}
               className={`flex items-center gap-2.5 rounded-xl border px-3 py-2 transition ${
-                isPicked ? "border-[#0F8054]/40 bg-[#0F8054]/5" : "border-border bg-card"
+                isPicked ? "border-sky-600/40 bg-sky-600/5" : "border-border bg-card"
               } ${disabled ? "opacity-50" : ""}`}
             >
               <button
@@ -193,7 +193,7 @@ export function GcFantasyTab({
               >
                 <span
                   className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border ${
-                    isPicked ? "border-[#0F8054] bg-[#0F8054] text-white" : "border-border text-transparent"
+                    isPicked ? "border-sky-600 bg-sky-600 text-white" : "border-border text-transparent"
                   }`}
                 >
                   <Check className="h-3.5 w-3.5" />
@@ -210,7 +210,7 @@ export function GcFantasyTab({
                 <button
                   onClick={() => setCaptain(isCaptain ? "" : p.id)}
                   className={`shrink-0 rounded-full p-1.5 transition ${
-                    isCaptain ? "bg-amber-400 text-emerald-950" : "text-muted-foreground hover:text-amber-500"
+                    isCaptain ? "bg-sky-400 text-sky-950" : "text-muted-foreground hover:text-sky-500"
                   }`}
                   title="اجعله القائد (نقاط مضاعفة)"
                 >

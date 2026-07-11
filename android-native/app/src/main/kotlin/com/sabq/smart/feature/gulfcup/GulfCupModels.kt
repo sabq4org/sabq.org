@@ -221,6 +221,7 @@ object GcConstants {
     val name: String = "",
     val avatar: String? = null,
     val isOwner: Boolean = false,
+    val isDayChampion: Boolean = false,
     val totalPoints: Int = 0,
     val correctCount: Int = 0,
     val exactCount: Int = 0,

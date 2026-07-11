@@ -51,9 +51,9 @@ export function GcHostShowcase({ overview }: { overview: GcOverview | undefined 
   return (
     <section id="gc-venues" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="mb-6 flex items-center gap-2">
-        <Building2 className="h-6 w-6 text-emerald-500" />
+        <Building2 className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">دليل الحضور — جدة</h2>
-        <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+        <span className="rounded-full bg-sky-500/10 px-2.5 py-0.5 text-sm font-bold text-sky-700 dark:text-sky-300">
           {venues.length} ملاعب
         </span>
       </div>
@@ -70,12 +70,12 @@ export function GcHostShowcase({ overview }: { overview: GcOverview | undefined 
               transition={{ duration: 0.3, delay: Math.min(idx * 0.04, 0.3) }}
               className="overflow-hidden rounded-2xl border border-border bg-card"
             >
-              <div className="bg-gradient-to-l from-[#0F8054] to-[#0A6B47] px-4 py-3">
+              <div className="bg-gradient-to-l from-sky-700 to-sky-950 px-4 py-3">
                 <p className="truncate font-black text-white">
                   {v.name}
-                  {guide?.nickname ? <span className="font-bold text-amber-200"> {guide.nickname}</span> : null}
+                  {guide?.nickname ? <span className="font-bold text-sky-200"> {guide.nickname}</span> : null}
                 </p>
-                {v.city && <p className="text-xs text-emerald-100/80">{v.city}</p>}
+                {v.city && <p className="text-xs text-sky-100/80">{v.city}</p>}
               </div>
               <div className="space-y-2.5 p-4">
                 {guide ? (
@@ -83,11 +83,11 @@ export function GcHostShowcase({ overview }: { overview: GcOverview | undefined 
                     <p className="text-sm leading-relaxed text-muted-foreground">{guide.blurb}</p>
                     <div className="flex flex-wrap gap-2">
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold text-foreground">
-                        <Users className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                        <Users className="h-3 w-3 text-sky-600 dark:text-sky-400" />
                         {guide.capacity}
                       </span>
                       <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[11px] font-bold text-foreground">
-                        <Clock3 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                        <Clock3 className="h-3 w-3 text-sky-600 dark:text-sky-400" />
                         {guide.opened}
                       </span>
                     </div>
@@ -104,7 +104,7 @@ export function GcHostShowcase({ overview }: { overview: GcOverview | undefined 
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0A6B47] transition hover:underline dark:text-emerald-300"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-sky-700 transition hover:underline dark:text-sky-300"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
                   الاتجاهات على الخرائط
@@ -121,7 +121,7 @@ export function GcHostShowcase({ overview }: { overview: GcOverview | undefined 
             key={tip.text}
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-[11px] font-semibold text-muted-foreground"
           >
-            <tip.icon className="h-3.5 w-3.5 text-amber-500" />
+            <tip.icon className="h-3.5 w-3.5 text-sky-500" />
             {tip.text}
           </span>
         ))}

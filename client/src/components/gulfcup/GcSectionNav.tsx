@@ -4,7 +4,7 @@ import gulfCupLogoHorizontal from "@assets/gulf-cup-27-logo-horizontal.svg";
 
 /**
  * شريط تنقّل لاصق: أقسام الصفحة + مدخل ثابت للتوقعات
- * (يبقى ظاهرًا بعد اختفاء بلوك العدّاد وأثناء التمرير).
+ * (هوية ليليّة باردة مطابقة للتطبيق).
  */
 
 const SECTIONS: { id: string; label: string }[] = [
@@ -27,7 +27,7 @@ export function GcSectionNav() {
     <nav
       dir="rtl"
       aria-label="أقسام صفحة خليجي 27"
-      className="sticky top-0 z-30 border-b border-white/10 bg-[#04261b]/95 backdrop-blur-md supports-[backdrop-filter]:bg-[#04261b]/90"
+      className="sticky top-0 z-30 border-b border-white/10 bg-[#041C22]/95 backdrop-blur-md supports-[backdrop-filter]:bg-[#041C22]/90"
     >
       <div className="container mx-auto flex max-w-6xl items-center gap-0.5 overflow-x-auto px-4 py-2.5 sm:px-6 lg:px-8">
         <span className="ml-1.5 hidden shrink-0 rounded-lg bg-white px-1.5 py-1 shadow-sm sm:block">
@@ -43,7 +43,7 @@ export function GcSectionNav() {
             key={s.id}
             type="button"
             onClick={() => jump(s.id)}
-            className="shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-bold text-emerald-100/80 transition-colors hover:bg-white/10 hover:text-white"
+            className="shrink-0 rounded-full px-3.5 py-1.5 text-[13px] font-bold text-sky-100/80 transition-colors hover:bg-white/10 hover:text-white"
           >
             {s.label}
           </button>

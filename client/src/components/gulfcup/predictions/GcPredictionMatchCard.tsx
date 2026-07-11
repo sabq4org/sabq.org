@@ -80,7 +80,7 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
 
   return (
     <Card className="overflow-hidden border-0 dark:border dark:border-card-border" data-testid={`gc-pred-card-${fixture.id}`}>
-      <div className="flex items-center justify-between border-b border-amber-500/15 bg-gradient-to-l from-amber-500/10 to-green-600/5 px-4 py-2">
+      <div className="flex items-center justify-between border-b border-sky-500/15 bg-gradient-to-l from-sky-500/10 to-sky-600/5 px-4 py-2">
         <span className="text-[11px] font-semibold text-muted-foreground">{fixture.round}</span>
         {fixture.status.live ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
@@ -106,13 +106,13 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
 
       <CardContent className="p-4">
         {/* البركة المتاحة */}
-        {!voided && <div className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-amber-500/15 to-amber-400/5 px-3 py-1.5 ring-1 ring-amber-500/25">
-          <Coins className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          <span className="text-xs font-bold text-amber-700 dark:text-amber-300">
+        {!voided && <div className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-sky-500/15 to-sky-400/5 px-3 py-1.5 ring-1 ring-sky-500/25">
+          <Coins className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+          <span className="text-xs font-bold text-sky-700 dark:text-sky-300">
             بركة هذه المباراة: <span className="tabular-nums">{formatNumber(poolAvailable)}</span> نقطة
           </span>
           {jackpot > 0 && (
-            <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-[9px] font-black text-white">
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-sky-500 px-1.5 py-0.5 text-[9px] font-black text-white">
               +{formatNumber(jackpot)} متراكمة
             </span>
           )}
@@ -172,11 +172,11 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
         {editable && (
           <div className="mt-3 grid grid-cols-3 gap-1.5">
             {(["exact", "margin", "outcome"] as const).map((t) => (
-              <div key={t} className="rounded-lg bg-amber-500/[0.06] px-2 py-1.5 text-center ring-1 ring-amber-500/15">
+              <div key={t} className="rounded-lg bg-sky-500/[0.06] px-2 py-1.5 text-center ring-1 ring-sky-500/15">
                 <p className="text-[10px] font-bold text-muted-foreground">
                   {TIER_EMOJI[t]} {TIER_AR[t]}
                 </p>
-                <p className="text-xs font-black tabular-nums text-amber-700 dark:text-amber-300">
+                <p className="text-xs font-black tabular-nums text-sky-700 dark:text-sky-300">
                   {formatNumber(tierPool(poolAvailable, t))}
                 </p>
               </div>
@@ -275,7 +275,7 @@ function SettledFooter({ match, isWin }: { match: GcPredictableMatch; isWin: boo
   const shared = tier !== "none" ? tierWinnersCount(settlement, tier) : 0;
 
   return (
-    <div className={`rounded-xl px-3 py-2.5 ${isWin ? "bg-amber-500/10 ring-1 ring-amber-500/30" : "bg-muted/60"}`}>
+    <div className={`rounded-xl px-3 py-2.5 ${isWin ? "bg-sky-500/10 ring-1 ring-sky-500/30" : "bg-muted/60"}`}>
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 text-sm font-bold">
           {isWin ? (
@@ -289,7 +289,7 @@ function SettledFooter({ match, isWin }: { match: GcPredictableMatch; isWin: boo
           </span>
         </span>
         {isWin ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-xs font-black text-white">
+          <span className="inline-flex items-center gap-1 rounded-full bg-sky-500 px-2.5 py-1 text-xs font-black text-white">
             <Coins className="h-3 w-3" /> +{formatNumber(myPrediction.pointsAwarded)} نقطة
           </span>
         ) : (

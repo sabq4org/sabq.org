@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "wouter";
 import {
@@ -221,11 +221,11 @@ export default function GulfCupMajlis() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-gradient-to-b from-emerald-50/70 via-background to-background dark:from-emerald-950/20 dark:via-background dark:to-background" dir="rtl">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-[#EEF1F2] dark:bg-[#090E0F]" dir="rtl">
       <Header user={user || undefined} />
       <NavigationBar />
       <main className="flex-1">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8">
           <div className="mb-5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Link href="/gulf-cup" className="transition hover:text-foreground">خليجي 27</Link>
             <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
@@ -242,7 +242,7 @@ export default function GulfCupMajlis() {
               setLocation("/login");
             }} onCode={(code) => setLocation(`/gulf-cup/majlis?code=${encodeURIComponent(code)}`)} />
           ) : mineQuery.isError ? (
-            <div className="rounded-3xl border border-border bg-card px-6 py-16 text-center">
+            <div className="rounded-2xl border border-border bg-card px-6 py-14 text-center">
               <CircleAlert className="mx-auto h-10 w-10 text-destructive/70" />
               <h1 className="mt-3 text-xl font-black">تعذّر جلب مجالسك</h1>
               <p className="mt-1 text-sm text-muted-foreground">لم نفقد أي بيانات. حاول تحديث القائمة.</p>
@@ -251,39 +251,37 @@ export default function GulfCupMajlis() {
               </Button>
             </div>
           ) : (
-            <div className="grid items-start gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-              <aside className="hidden lg:sticky lg:top-20 lg:block">
-                <MajlisRail majalis={majalis} selectedId={selected?.id} onSelect={(id) => setLocation(`/gulf-cup/majlis/${id}`)} />
-              </aside>
-
-              <div className="min-w-0">
-                <MobileMajlisSelector majalis={majalis} selectedId={selected?.id} onSelect={(id) => setLocation(`/gulf-cup/majlis/${id}`)} />
-                {selected ? (
-                  <>
-                    <MajlisHero majlis={selected} />
-                    <MajlisViewTabs active={view} onChange={openView} />
-                    <section id="majlis-view-panel" role="tabpanel" aria-label={VIEWS.find((item) => item.key === view)?.label} className="mt-4">
-                      {view === "today" && <GcMajlisTodayView majlisId={selected.id} focusFixtureId={focusFixtureId} />}
-                      {view === "leaderboard" && <GcMajlisLeaderboardView majlisId={selected.id} currentUserId={user?.id} />}
-                      {view === "fantasy" && <GcMajlisFantasyView majlisId={selected.id} currentUserId={user?.id} />}
-                      {view === "champion" && <GcMajlisChampionPicksView majlisId={selected.id} />}
-                      {view === "duels" && <GcMajlisDuelsView majlisId={selected.id} currentUserId={user?.id} />}
-                      {view === "harvest" && <GcMajlisHarvestView majlisId={selected.id} />}
-                    </section>
-                    {user?.id ? (
-                      <GcMajlisOnboarding
-                        userId={user.id}
-                        majlisId={selected.id}
-                        majlisName={selected.name}
-                        onSkip={() => openView("today")}
-                        onPredictNow={() => setLocation("/gulf-cup/predictions")}
-                      />
-                    ) : null}
-                  </>
-                ) : (
-                  <EmptyMajlis onCreated={(majlis) => setLocation(`/gulf-cup/majlis/${majlis.id}`)} onInvite={(code) => setLocation(`/gulf-cup/majlis?code=${encodeURIComponent(code)}`)} />
-                )}
-              </div>
+            <div className="space-y-4">
+              <MajlisQuickActions
+                majalis={majalis}
+                selectedId={selected?.id}
+                onSelect={(id) => setLocation(`/gulf-cup/majlis/${id}`)}
+              />
+              {selected ? (
+                <>
+                  <MajlisHero majlis={selected} />
+                  <MajlisViewTabs active={view} onChange={openView} />
+                  <section id="majlis-view-panel" role="tabpanel" aria-label={VIEWS.find((item) => item.key === view)?.label}>
+                    {view === "today" && <GcMajlisTodayView majlisId={selected.id} focusFixtureId={focusFixtureId} />}
+                    {view === "leaderboard" && <GcMajlisLeaderboardView majlisId={selected.id} currentUserId={user?.id} />}
+                    {view === "fantasy" && <GcMajlisFantasyView majlisId={selected.id} currentUserId={user?.id} />}
+                    {view === "champion" && <GcMajlisChampionPicksView majlisId={selected.id} />}
+                    {view === "duels" && <GcMajlisDuelsView majlisId={selected.id} currentUserId={user?.id} />}
+                    {view === "harvest" && <GcMajlisHarvestView majlisId={selected.id} />}
+                  </section>
+                  {user?.id ? (
+                    <GcMajlisOnboarding
+                      userId={user.id}
+                      majlisId={selected.id}
+                      majlisName={selected.name}
+                      onSkip={() => openView("today")}
+                      onPredictNow={() => setLocation("/gulf-cup/predictions")}
+                    />
+                  ) : null}
+                </>
+              ) : (
+                <EmptyMajlis onCreated={(majlis) => setLocation(`/gulf-cup/majlis/${majlis.id}`)} onInvite={(code) => setLocation(`/gulf-cup/majlis?code=${encodeURIComponent(code)}`)} />
+              )}
             </div>
           )}
         </div>
@@ -320,17 +318,17 @@ function InviteLanding({
   const preview = code ? unwrapInvite(previewQuery.data, code) : null;
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-gradient-to-b from-emerald-950 via-[#0F8054] to-background" dir="rtl">
+    <div className="flex min-h-screen flex-col overflow-x-hidden bg-gradient-to-b from-sky-950 via-sky-600 to-background" dir="rtl">
       <Header user={user || undefined} />
       <main className="grid flex-1 place-items-center px-4 py-10">
         <section className="w-full max-w-xl overflow-hidden rounded-3xl border border-white/15 bg-card shadow-2xl shadow-emerald-950/30">
-          <div className="relative overflow-hidden bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#075339] px-6 py-9 text-white">
+          <div className="relative overflow-hidden bg-gradient-to-bl from-sky-500 via-sky-600 to-[#041C22] px-6 py-9 text-white">
             <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(circle_at_20%_30%,white_1px,transparent_1px)] [background-size:24px_24px]" />
             <div className="relative">
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15 ring-1 ring-white/20">
                 <Users className="h-7 w-7" aria-hidden="true" />
               </span>
-              <p className="mt-5 text-sm font-bold text-emerald-100">وصلتك دعوة خاصة</p>
+              <p className="mt-5 text-sm font-bold text-sky-100">وصلتك دعوة خاصة</p>
               <h1 className="mt-1 text-3xl font-black">مجلس توقعات خليجي 27</h1>
               <p className="mt-2 text-sm leading-7 text-emerald-50/85">نافس أهلك وأصدقاءك، واكتشف توقعاتهم بعد إقفال كل مباراة.</p>
             </div>
@@ -361,7 +359,7 @@ function InviteConsent({ preview, joining, onJoin, onBack }: { preview: GcMajlis
   const full = preview.full === true || (preview.maxMembers != null && preview.membersCount >= preview.maxMembers);
   return (
     <>
-      <div className="rounded-2xl border border-emerald-600/20 bg-emerald-600/[0.06] p-4">
+      <div className="rounded-2xl border border-sky-600/20 bg-sky-600/[0.06] p-4">
         <p className="text-xs font-bold text-muted-foreground">المجلس</p>
         <h2 className="mt-1 text-2xl font-black">{preview.name}</h2>
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -369,13 +367,13 @@ function InviteConsent({ preview, joining, onJoin, onBack }: { preview: GcMajlis
           <span className="rounded-full bg-background px-2.5 py-1 font-black tracking-widest ring-1 ring-border" dir="ltr">{preview.code}</span>
         </div>
       </div>
-      <div className={`mt-5 rounded-xl px-3 py-3 text-xs leading-6 ${full ? "bg-amber-500/10 text-amber-800 dark:text-amber-200" : "bg-muted/50 text-muted-foreground"}`}>
+      <div className={`mt-5 rounded-xl px-3 py-3 text-xs leading-6 ${full ? "bg-sky-500/10 text-sky-800 dark:text-sky-200" : "bg-muted/50 text-muted-foreground"}`}>
         {full
           ? "اكتمل هذا المجلس ووصل إلى الحد الأعلى. إن كنت عضوًا فيه فاضغط «فتح المجلس» للعودة إليه؛ أما العضو الجديد فلن يُضاف حتى يتوفر مقعد."
           : "لن تنضم تلقائيًا بمجرد فتح الرابط. بالضغط على «انضم إلى المجلس» توافق على ظهور اسمك وترتيبك وتوقعاتك بعد إقفال المباريات لأعضاء هذا المجلس."}
       </div>
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-        <Button onClick={onJoin} disabled={joining} className="flex-1 gap-2 bg-[#0F8054] text-white hover:bg-[#0A6B47]">
+        <Button onClick={onJoin} disabled={joining} className="flex-1 gap-2 bg-sky-600 text-white hover:bg-sky-800">
           {joining ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <UserPlus className="h-4 w-4" />}
           {joining ? "جارٍ الفتح…" : full ? "فتح المجلس" : "انضم إلى المجلس"}
         </Button>
@@ -401,9 +399,11 @@ function InviteError({ title, description, onBack, retry }: { title: string; des
 
 function HubSkeleton() {
   return (
-    <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)]" role="status" aria-label="جارٍ تحميل المجالس">
-      <Skeleton className="hidden h-[520px] rounded-3xl lg:block" />
-      <div className="space-y-4"><Skeleton className="h-52 rounded-3xl" /><Skeleton className="h-12 rounded-full" /><Skeleton className="h-40 rounded-2xl" /></div>
+    <div className="space-y-4" role="status" aria-label="جارٍ تحميل المجالس">
+      <Skeleton className="h-28 rounded-2xl" />
+      <Skeleton className="h-24 rounded-2xl" />
+      <Skeleton className="h-12 rounded-full" />
+      <Skeleton className="h-40 rounded-2xl" />
     </div>
   );
 }
@@ -411,74 +411,59 @@ function HubSkeleton() {
 function GuestHub({ onLogin, onCode }: { onLogin: () => void; onCode: (code: string) => void }) {
   const [code, setCode] = useState("");
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-emerald-800/20 bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#075339] px-6 py-12 text-white shadow-xl sm:px-10">
-      <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(circle_at_20%_30%,white_1px,transparent_1px)] [background-size:24px_24px]" />
-      <div className="relative max-w-2xl">
-        <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-bold ring-1 ring-white/20"><Users className="h-4 w-4" /> توقعاتك بين ناسك</span>
-        <h1 className="mt-5 text-4xl font-black sm:text-5xl">المجلس يحوّل كل مباراة إلى مسامرة</h1>
-        <p className="mt-4 max-w-xl text-base leading-8 text-emerald-50/90">أنشئ مجلسك، ادعُ من تحب، وشاهد توقعات الجميع لحظة إقفال المباراة. المنافسة هنا أقرب وأمتع من ترتيب آلاف الغرباء.</p>
-        <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-          <Button onClick={onLogin} className="gap-2 bg-white text-[#0A6B47] hover:bg-emerald-50"><LogIn className="h-4 w-4" /> سجّل دخولك وأنشئ مجلسًا</Button>
-          <form onSubmit={(event) => { event.preventDefault(); const normalized = normalizeMajlisInviteCode(code); if (normalized) onCode(normalized); }} className="flex gap-2">
-            <label className="sr-only" htmlFor="guest-majlis-code">رمز دعوة المجلس</label>
-            <input id="guest-majlis-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} dir="ltr" maxLength={8} placeholder="رمز الدعوة" className="min-w-0 flex-1 rounded-xl border border-white/25 bg-white/10 px-3 text-center text-sm font-black tracking-widest text-white placeholder:text-emerald-100/65 outline-none focus:ring-2 focus:ring-white/60" />
-            <Button type="submit" disabled={!normalizeMajlisInviteCode(code)} variant="outline" className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">فتح الدعوة</Button>
-          </form>
-        </div>
+    <section className="space-y-4">
+      <div className="rounded-2xl border border-border bg-card p-6 text-center sm:p-8">
+        <span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-sky-500/10 text-sky-700 dark:text-sky-300">
+          <Users className="h-7 w-7" />
+        </span>
+        <h1 className="mt-4 text-2xl font-black text-foreground sm:text-3xl">المجالس</h1>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-7 text-muted-foreground">
+          حوّل التوقعات إلى مسامرة يومية مع ناسك — مجلس خاص، كشف بعد الإقفال، حتى 50 عضوًا.
+        </p>
+        <Button onClick={onLogin} className="mt-6 gap-2 rounded-full bg-sky-500 px-6 text-white hover:bg-sky-400">
+          <LogIn className="h-4 w-4" /> سجّل دخولك وابدأ
+        </Button>
       </div>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const normalized = normalizeMajlisInviteCode(code);
+          if (normalized) onCode(normalized);
+        }}
+        className="rounded-2xl border border-border bg-card p-4"
+      >
+        <label htmlFor="guest-majlis-code" className="text-xs font-bold text-muted-foreground">عندك رمز دعوة؟</label>
+        <div className="mt-2 flex gap-2">
+          <input
+            id="guest-majlis-code"
+            value={code}
+            onChange={(event) => setCode(event.target.value.toUpperCase())}
+            dir="ltr"
+            maxLength={8}
+            placeholder="رمز الدعوة"
+            className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-center text-sm font-black tracking-widest outline-none focus:ring-2 focus:ring-sky-500/30"
+          />
+          <Button type="submit" disabled={!normalizeMajlisInviteCode(code)} variant="outline" className="shrink-0">
+            فتح
+          </Button>
+        </div>
+      </form>
     </section>
   );
 }
 
-function MajlisRail({ majalis, selectedId, onSelect }: { majalis: GcMajlisSummary[]; selectedId?: string; onSelect: (id: string) => void }) {
-  const { toast } = useToast();
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [, setLocation] = useLocation();
-  const create = useMutation({
-    mutationFn: () => apiRequest("/api/gulf-cup/majlis", { method: "POST", body: JSON.stringify({ name: name.trim() }) }),
-    onSuccess: async (raw) => {
-      const majlis = unwrapMajlis(raw);
-      setName("");
-      await queryClient.invalidateQueries({ queryKey: gcMajlisKeys.mine });
-      toast({ title: "أُنشئ مجلسك 🎉", description: majlis?.code ? `رمز الدعوة ${majlis.code}` : undefined });
-      if (majlis) onSelect(majlis.id);
-    },
-    onError: (error: Error) => toast({ title: "تعذّر إنشاء المجلس", description: error.message, variant: "destructive" }),
-  });
-
-  return (
-    <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
-      <div className="border-b border-border px-4 py-4">
-        <div className="flex items-center gap-2"><Users className="h-5 w-5 text-[#0F8054]" /><h2 className="font-black">مجالسي</h2><span className="mr-auto rounded-full bg-muted px-2 py-0.5 text-[10px] font-black">{formatNumber(majalis.length)}</span></div>
-      </div>
-      <nav aria-label="قائمة المجالس" className="max-h-64 space-y-1 overflow-y-auto p-2">
-        {majalis.length ? majalis.map((majlis) => (
-          <button key={majlis.id} onClick={() => onSelect(majlis.id)} aria-current={majlis.id === selectedId ? "page" : undefined} className={`flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-right transition ${majlis.id === selectedId ? "bg-[#0F8054] text-white shadow-sm" : "hover:bg-muted"}`}>
-            <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${majlis.id === selectedId ? "bg-white/15" : "bg-emerald-600/10"}`}>{majlis.isOwner ? "👑" : "🪑"}</span>
-            <span className="min-w-0 flex-1"><span className="block truncate text-sm font-black">{majlis.name}</span><span className={`text-[10px] ${majlis.id === selectedId ? "text-emerald-100" : "text-muted-foreground"}`}>{formatNumber(majlis.membersCount)} عضو</span></span>
-          </button>
-        )) : <p className="px-3 py-6 text-center text-xs text-muted-foreground">أنشئ مجلسك الأول من الأسفل.</p>}
-      </nav>
-
-      <div className="space-y-3 border-t border-border p-3">
-        <form onSubmit={(event) => { event.preventDefault(); if (name.trim().length >= 2) create.mutate(); }} className="space-y-2">
-          <label htmlFor="majlis-name" className="text-xs font-black">أنشئ مجلسًا</label>
-          <div className="flex gap-2"><input id="majlis-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={60} placeholder="ديوانية الجمعة" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-emerald-500/30" /><Button type="submit" size="icon" disabled={name.trim().length < 2 || create.isPending} aria-label="إنشاء المجلس" className="shrink-0 bg-[#0F8054] text-white hover:bg-[#0A6B47]">{create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}</Button></div>
-        </form>
-        <form onSubmit={(event) => { event.preventDefault(); const normalized = normalizeMajlisInviteCode(code); if (normalized) setLocation(`/gulf-cup/majlis?code=${encodeURIComponent(normalized)}`); }} className="space-y-2">
-          <label htmlFor="majlis-invite-code" className="text-xs font-black">انضم برمز</label>
-          <div className="flex gap-2"><input id="majlis-invite-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} dir="ltr" maxLength={8} placeholder="7KQ2MD" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-center text-xs font-black tracking-widest outline-none focus:ring-2 focus:ring-amber-500/30" /><Button type="submit" size="icon" disabled={!normalizeMajlisInviteCode(code)} aria-label="فتح دعوة المجلس" variant="outline"><UserPlus className="h-4 w-4" /></Button></div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function MobileMajlisSelector({ majalis, selectedId, onSelect }: { majalis: GcMajlisSummary[]; selectedId?: string; onSelect: (id: string) => void }) {
+/** شريط مجالسي + إنشاء/انضمام — عمود واحد بأسلوب التطبيق */
+function MajlisQuickActions({
+  majalis,
+  selectedId,
+  onSelect,
+}: {
+  majalis: GcMajlisSummary[];
+  selectedId?: string;
+  onSelect: (id: string) => void;
+}) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const create = useMutation({
@@ -486,33 +471,114 @@ function MobileMajlisSelector({ majalis, selectedId, onSelect }: { majalis: GcMa
     onSuccess: async (raw) => {
       const majlis = unwrapMajlis(raw);
       setName("");
-      setOpen(false);
       await queryClient.invalidateQueries({ queryKey: gcMajlisKeys.mine });
+      toast({ title: "أُنشئ مجلسك", description: majlis?.code ? `رمز الدعوة ${majlis.code}` : undefined });
       if (majlis) onSelect(majlis.id);
     },
     onError: (error: Error) => toast({ title: "تعذّر إنشاء المجلس", description: error.message, variant: "destructive" }),
   });
+
   return (
-    <div className="mb-3 lg:hidden">
-      <div className="mb-1 flex items-center gap-2"><label htmlFor="mobile-majlis-selector" className="block text-xs font-black">المجلس الحالي</label><button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} aria-controls="mobile-majlis-manager" className="mr-auto inline-flex items-center gap-1 text-xs font-bold text-[#0F8054] dark:text-emerald-300"><Plus className="h-3.5 w-3.5" /> مجلس أو دعوة</button></div>
-      <select id="mobile-majlis-selector" value={selectedId ?? ""} onChange={(event) => onSelect(event.target.value)} disabled={!majalis.length} className="h-11 w-full rounded-xl border border-border bg-card px-3 text-sm font-bold shadow-sm">
-        {!majalis.length ? <option value="">لا مجالس بعد</option> : null}
-        {majalis.map((majlis) => <option key={majlis.id} value={majlis.id}>{majlis.name} · {formatNumber(majlis.membersCount)} عضو</option>)}
-      </select>
-      {open ? (
-        <div id="mobile-majlis-manager" className="mt-2 grid gap-2 rounded-2xl border border-border bg-card p-3 shadow-sm sm:grid-cols-2">
-          <form onSubmit={(event) => { event.preventDefault(); if (name.trim().length >= 2) create.mutate(); }} className="flex gap-2">
-            <label htmlFor="mobile-majlis-name" className="sr-only">اسم المجلس الجديد</label>
-            <input id="mobile-majlis-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={60} placeholder="اسم مجلس جديد" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-xs" />
-            <Button type="submit" size="sm" disabled={name.trim().length < 2 || create.isPending} className="bg-[#0F8054] text-white hover:bg-[#0A6B47]">إنشاء</Button>
-          </form>
-          <form onSubmit={(event) => { event.preventDefault(); const normalized = normalizeMajlisInviteCode(code); if (normalized) setLocation(`/gulf-cup/majlis?code=${encodeURIComponent(normalized)}`); }} className="flex gap-2">
-            <label htmlFor="mobile-majlis-code" className="sr-only">رمز دعوة مجلس</label>
-            <input id="mobile-majlis-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} dir="ltr" maxLength={8} placeholder="رمز الدعوة" className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-center text-xs font-black tracking-widest" />
-            <Button type="submit" size="sm" variant="outline" disabled={!normalizeMajlisInviteCode(code)}>فتح</Button>
-          </form>
+    <div className="space-y-3">
+      {majalis.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-3">
+          <div className="mb-2 flex items-center gap-2 px-1">
+            <Users className="h-4 w-4 text-sky-600" />
+            <h2 className="text-sm font-black">مجالسي</h2>
+            <span className="mr-auto grid h-6 min-w-6 place-items-center rounded-full bg-sky-500/10 px-1.5 text-[11px] font-bold text-sky-800 dark:text-sky-300">
+              {formatNumber(majalis.length)}
+            </span>
+          </div>
+          <nav aria-label="قائمة المجالس" className="flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none]">
+            {majalis.map((majlis) => {
+              const active = majlis.id === selectedId;
+              return (
+                <button
+                  key={majlis.id}
+                  type="button"
+                  onClick={() => onSelect(majlis.id)}
+                  aria-current={active ? "page" : undefined}
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm font-bold transition ${
+                    active
+                      ? "bg-sky-500 text-white shadow-sm"
+                      : "bg-muted/70 text-foreground hover:bg-muted"
+                  }`}
+                >
+                  <span className="text-xs" aria-hidden="true">{majlis.isOwner ? "👑" : "·"}</span>
+                  <span className="max-w-[9rem] truncate">{majlis.name}</span>
+                  <span className={`text-[10px] ${active ? "text-sky-100" : "text-muted-foreground"}`}>
+                    {formatNumber(majlis.membersCount)}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
         </div>
-      ) : null}
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (name.trim().length >= 2) create.mutate();
+          }}
+          className="rounded-2xl border border-border bg-card p-3.5"
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-sky-500/10 text-sky-700">
+              <Plus className="h-4 w-4" />
+            </span>
+            <label htmlFor="majlis-name" className="text-sm font-black">أنشئ مجلسًا</label>
+          </div>
+          <div className="flex gap-2">
+            <input
+              id="majlis-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={60}
+              placeholder="ديوانية الجمعة"
+              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-sky-500/30"
+            />
+            <Button
+              type="submit"
+              disabled={name.trim().length < 2 || create.isPending}
+              className="shrink-0 rounded-xl bg-sky-500 px-4 text-white hover:bg-sky-400"
+            >
+              {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "إنشاء"}
+            </Button>
+          </div>
+        </form>
+
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const normalized = normalizeMajlisInviteCode(code);
+            if (normalized) setLocation(`/gulf-cup/majlis?code=${encodeURIComponent(normalized)}`);
+          }}
+          className="rounded-2xl border border-border bg-card p-3.5"
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <span className="grid h-8 w-8 place-items-center rounded-full bg-sky-500/10 text-sky-700">
+              <UserPlus className="h-4 w-4" />
+            </span>
+            <label htmlFor="majlis-invite-code" className="text-sm font-black">انضم برمز</label>
+          </div>
+          <div className="flex gap-2">
+            <input
+              id="majlis-invite-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value.toUpperCase())}
+              dir="ltr"
+              maxLength={8}
+              placeholder="7KQ2MD"
+              className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2.5 text-center text-sm font-black tracking-widest outline-none focus:ring-2 focus:ring-sky-500/30"
+            />
+            <Button type="submit" disabled={!normalizeMajlisInviteCode(code)} variant="outline" className="shrink-0 rounded-xl">
+              انضم
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -545,25 +611,36 @@ function MajlisHero({ majlis }: { majlis: GcMajlisSummary }) {
   });
 
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#075339] p-5 text-white shadow-lg sm:p-7">
-      <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(circle_at_20%_30%,white_1px,transparent_1px)] [background-size:24px_24px]" />
-      <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end">
+    <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-xs font-bold text-emerald-100"><span>{majlis.isOwner ? "عميد المجلس" : "عضو في المجلس"}</span><span>·</span><span>{formatNumber(majlis.membersCount)} عضو</span></div>
-          <h1 className="mt-2 truncate text-3xl font-black sm:text-4xl">{majlis.name}</h1>
-          <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 ring-1 ring-white/20"><span className="text-[10px] font-bold text-emerald-100">رمز الدعوة</span><span className="font-black tracking-widest text-amber-200" dir="ltr">{majlis.code}</span></div>
+          {majlis.isOwner ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-sky-700 dark:text-sky-300">
+              <Crown className="h-3 w-3" /> صاحب المجلس
+            </span>
+          ) : (
+            <span className="text-[11px] font-bold text-muted-foreground">عضو في المجلس</span>
+          )}
+          <h1 className="mt-1 truncate text-xl font-black text-foreground sm:text-2xl">{majlis.name}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {formatNumber(majlis.membersCount)} عضو · التوقعات تُكشف بعد إقفال كل مباراة
+          </p>
+          <div className="mt-3 inline-flex items-center gap-2 rounded-xl bg-sky-500/10 px-3 py-2 ring-1 ring-sky-500/15">
+            <span className="text-[10px] font-bold text-muted-foreground">رمز الدعوة</span>
+            <span className="font-black tracking-widest text-sky-800 dark:text-sky-300" dir="ltr">{majlis.code}</span>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
-            variant="ghost"
+            variant="outline"
             size="icon"
             disabled={notificationQuery.isLoading || preferenceMutation.isPending}
             onClick={() => preferenceMutation.mutate(!enabled)}
-            className="text-white hover:bg-white/10 hover:text-white"
+            className="rounded-full"
             aria-label={enabled ? "إيقاف إشعارات المجالس" : "تفعيل إشعارات المجالس"}
             title={enabled ? "إيقاف إشعارات المجالس" : "تفعيل إشعارات المجالس"}
           >
-            {enabled ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
+            {enabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
           </Button>
           <GcMajlisShareDialog majlis={majlis} />
           <LeaveMajlisButton majlis={majlis} />
@@ -587,10 +664,31 @@ function LeaveMajlisButton({ majlis }: { majlis: GcMajlisSummary }) {
   });
   return (
     <AlertDialog>
-      <AlertDialogTrigger asChild><Button size="icon" variant="ghost" className="text-white hover:bg-white/10 hover:text-white" aria-label={majlis.isOwner ? "حذف المجلس" : "مغادرة المجلس"}>{majlis.isOwner ? <Trash2 className="h-5 w-5" /> : <DoorOpen className="h-5 w-5" />}</Button></AlertDialogTrigger>
+      <AlertDialogTrigger asChild>
+        <Button
+          size="icon"
+          variant="outline"
+          className="rounded-full text-destructive hover:bg-destructive/10 hover:text-destructive"
+          aria-label={majlis.isOwner ? "حذف المجلس" : "مغادرة المجلس"}
+        >
+          {majlis.isOwner ? <Trash2 className="h-4 w-4" /> : <DoorOpen className="h-4 w-4" />}
+        </Button>
+      </AlertDialogTrigger>
       <AlertDialogContent dir="rtl">
-        <AlertDialogHeader className="text-right"><AlertDialogTitle>{majlis.isOwner ? `حذف «${majlis.name}»؟` : `مغادرة «${majlis.name}»؟`}</AlertDialogTitle><AlertDialogDescription>{majlis.isOwner ? "سيُحذف المجلس من جميع الأعضاء نهائيًا. لا يمكن التراجع عن هذه الخطوة." : "ستختفي منافسة المجلس من حسابك، ويمكنك العودة لاحقًا برمز دعوة صالح."}</AlertDialogDescription></AlertDialogHeader>
-        <AlertDialogFooter className="gap-2 sm:flex-row-reverse"><AlertDialogAction onClick={() => mutation.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{mutation.isPending ? "جارٍ التنفيذ…" : majlis.isOwner ? "حذف نهائي" : "مغادرة"}</AlertDialogAction><AlertDialogCancel>إلغاء</AlertDialogCancel></AlertDialogFooter>
+        <AlertDialogHeader className="text-right">
+          <AlertDialogTitle>{majlis.isOwner ? `حذف «${majlis.name}»؟` : `مغادرة «${majlis.name}»؟`}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {majlis.isOwner
+              ? "سيُحذف المجلس من جميع الأعضاء نهائيًا. لا يمكن التراجع عن هذه الخطوة."
+              : "ستختفي منافسة المجلس من حسابك، ويمكنك العودة لاحقًا برمز دعوة صالح."}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="gap-2 sm:flex-row-reverse">
+          <AlertDialogAction onClick={() => mutation.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            {mutation.isPending ? "جارٍ التنفيذ…" : majlis.isOwner ? "حذف نهائي" : "مغادرة"}
+          </AlertDialogAction>
+          <AlertDialogCancel>إلغاء</AlertDialogCancel>
+        </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
@@ -611,11 +709,32 @@ function MajlisViewTabs({ active, onChange }: { active: MajlisView; onChange: (v
   };
 
   return (
-    <div role="tablist" aria-label="أقسام المجلس" className="mt-4 flex gap-1 overflow-x-auto rounded-full bg-muted p-1 [scrollbar-width:none]">
+    <div
+      role="tablist"
+      aria-label="أقسام المجلس"
+      className="flex gap-1 overflow-x-auto rounded-2xl border border-border bg-card p-1.5 [scrollbar-width:none]"
+    >
       {VIEWS.map((item, index) => {
         const Icon = item.icon;
         const selected = active === item.key;
-        return <button key={item.key} id={`majlis-tab-${item.key}`} role="tab" aria-selected={selected} aria-controls="majlis-view-panel" tabIndex={selected ? 0 : -1} onClick={() => onChange(item.key)} onKeyDown={(event) => moveFocus(event, index)} className={`inline-flex min-w-max flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-black transition motion-reduce:transition-none ${selected ? "bg-[#0F8054] text-white shadow-sm" : "text-muted-foreground hover:text-foreground"}`}><Icon className="h-3.5 w-3.5" aria-hidden="true" />{item.label}</button>;
+        return (
+          <button
+            key={item.key}
+            id={`majlis-tab-${item.key}`}
+            role="tab"
+            aria-selected={selected}
+            aria-controls="majlis-view-panel"
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onChange(item.key)}
+            onKeyDown={(event) => moveFocus(event, index)}
+            className={`inline-flex min-w-max flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-black transition motion-reduce:transition-none ${
+              selected ? "bg-sky-500 text-white shadow-sm" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+            {item.label}
+          </button>
+        );
       })}
     </div>
   );
@@ -636,10 +755,10 @@ function EmptyMajlis({ onCreated, onInvite }: { onCreated: (majlis: GcMajlisSumm
   });
   return (
     <section className="rounded-3xl border border-border bg-card p-6 shadow-sm sm:p-8">
-      <div className="mx-auto max-w-2xl text-center"><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-emerald-600/10 text-[#0F8054]"><Users className="h-8 w-8" /></span><h1 className="mt-4 text-2xl font-black">ابدأ مجلسك الأول</h1><p className="mt-2 text-sm leading-7 text-muted-foreground">سمّه باسم ديوانيتكم أو فريق العمل، ثم شارك الدعوة. أو افتح رمزًا وصلك من صديق.</p></div>
-      <div className="mx-auto mt-7 grid max-w-2xl gap-4 sm:grid-cols-2">
-        <form onSubmit={(event) => { event.preventDefault(); if (name.trim().length >= 2) create.mutate(); }} className="rounded-2xl border border-border p-4"><label htmlFor="empty-majlis-name" className="text-sm font-black">أنشئ مجلسك</label><input id="empty-majlis-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={60} placeholder="مثل: ديوانية الجمعة" className="mt-3 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-500/30" /><Button type="submit" disabled={name.trim().length < 2 || create.isPending} className="mt-2 w-full gap-2 bg-[#0F8054] text-white hover:bg-[#0A6B47]"><Plus className="h-4 w-4" />{create.isPending ? "جارٍ الإنشاء…" : "إنشاء المجلس"}</Button></form>
-        <form onSubmit={(event) => { event.preventDefault(); const normalized = normalizeMajlisInviteCode(code); if (normalized) onInvite(normalized); }} className="rounded-2xl border border-border p-4"><label htmlFor="empty-majlis-code" className="text-sm font-black">انضم بدعوة</label><input id="empty-majlis-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} dir="ltr" maxLength={8} placeholder="7KQ2MD" className="mt-3 h-11 w-full rounded-xl border border-border bg-background px-3 text-center text-sm font-black tracking-widest outline-none focus:ring-2 focus:ring-amber-500/30" /><Button type="submit" disabled={!normalizeMajlisInviteCode(code)} variant="outline" className="mt-2 w-full gap-2"><UserPlus className="h-4 w-4" />فتح الدعوة</Button></form>
+      <div className="mx-auto max-w-3xl text-center"><span className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-sky-600/10 text-sky-600"><Users className="h-8 w-8" /></span><h1 className="mt-4 text-2xl font-black">ابدأ مجلسك الأول</h1><p className="mt-2 text-sm leading-7 text-muted-foreground">سمّه باسم ديوانيتكم أو فريق العمل، ثم شارك الدعوة. أو افتح رمزًا وصلك من صديق.</p></div>
+      <div className="mx-auto mt-7 grid max-w-3xl gap-4 sm:grid-cols-2">
+        <form onSubmit={(event) => { event.preventDefault(); if (name.trim().length >= 2) create.mutate(); }} className="rounded-2xl border border-border p-4"><label htmlFor="empty-majlis-name" className="text-sm font-black">أنشئ مجلسك</label><input id="empty-majlis-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={60} placeholder="مثل: ديوانية الجمعة" className="mt-3 h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-sky-500/30" /><Button type="submit" disabled={name.trim().length < 2 || create.isPending} className="mt-2 w-full gap-2 bg-sky-600 text-white hover:bg-sky-800"><Plus className="h-4 w-4" />{create.isPending ? "جارٍ الإنشاء…" : "إنشاء المجلس"}</Button></form>
+        <form onSubmit={(event) => { event.preventDefault(); const normalized = normalizeMajlisInviteCode(code); if (normalized) onInvite(normalized); }} className="rounded-2xl border border-border p-4"><label htmlFor="empty-majlis-code" className="text-sm font-black">انضم بدعوة</label><input id="empty-majlis-code" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} dir="ltr" maxLength={8} placeholder="7KQ2MD" className="mt-3 h-11 w-full rounded-xl border border-border bg-background px-3 text-center text-sm font-black tracking-widest outline-none focus:ring-2 focus:ring-sky-500/30" /><Button type="submit" disabled={!normalizeMajlisInviteCode(code)} variant="outline" className="mt-2 w-full gap-2"><UserPlus className="h-4 w-4" />فتح الدعوة</Button></form>
       </div>
     </section>
   );

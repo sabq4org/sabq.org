@@ -21,15 +21,14 @@ interface GcOverviewLite {
   blockHidden?: boolean;
 }
 
-// ليل الخليج الزمردي — درجة أعمق من أخضر المونديال الساطع: الشريطان يتجاوران
-// في الرئيسية فيبقى التمييز بالعمق اللوني مع وحدة هوية خليجي 27 (زمردي + ذهبي).
+// ليلي تركوازي بارد + سكاي — مطابقة تطبيق خليجي 27 (بلا ذهب).
 const GULF_THEME: CupStripTheme = {
-  band: "bg-emerald-50 dark:bg-emerald-950/25 border-emerald-600/10 dark:border-emerald-400/10",
-  card: "bg-gradient-to-bl from-[#0A6B47] via-[#08573B] to-[#04241A]",
-  ring: "ring-emerald-900/40",
-  soft: "text-emerald-200/80",
-  accent: "text-amber-300",
-  cta: "bg-amber-300 text-emerald-950 hover:bg-amber-200",
+  band: "bg-sky-50 dark:bg-sky-950/25 border-sky-600/10 dark:border-sky-400/10",
+  card: "bg-gradient-to-bl from-[#041C22] via-[#052830] to-[#0A3D45]",
+  ring: "ring-sky-950/40",
+  soft: "text-sky-200/80",
+  accent: "text-sky-300",
+  cta: "bg-sky-300 text-sky-950 hover:bg-sky-200",
 };
 
 export default function GulfCupHomeSection() {

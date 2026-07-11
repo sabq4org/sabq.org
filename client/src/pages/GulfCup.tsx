@@ -79,7 +79,7 @@ export default function GulfCup() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="flex min-h-screen flex-col bg-[#EEF1F2] dark:bg-[#090E0F]" dir="rtl">
       <Header user={user || undefined} />
       <NavigationBar />
 

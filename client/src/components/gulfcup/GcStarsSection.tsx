@@ -26,9 +26,9 @@ export function GcStarsSection() {
   return (
     <section id="gc-stars" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="mb-6 flex items-center gap-2">
-        <Gem className="h-6 w-6 text-emerald-500" />
+        <Gem className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">نجوم البطولة</h2>
-        <span className="rounded-full bg-amber-500/10 px-2.5 py-0.5 text-sm font-bold text-amber-600 dark:text-amber-400">
+        <span className="rounded-full bg-sky-500/10 px-2.5 py-0.5 text-sm font-bold text-sky-700 dark:text-sky-300">
           الأغلى قيمة
         </span>
       </div>
@@ -56,7 +56,7 @@ export function GcStarsSection() {
                 <span className="truncate">{s.team?.name ?? ""}</span>
               </p>
             </div>
-            <span className="shrink-0 rounded-lg bg-gradient-to-b from-[#F5D46B]/25 to-[#E7A93C]/15 px-2.5 py-1 text-xs font-black text-[#96700F] dark:text-amber-300 tabular-nums">
+            <span className="shrink-0 rounded-lg bg-sky-500/10 px-2.5 py-1 text-xs font-black tabular-nums text-sky-700 dark:text-sky-300">
               {formatValue(s.marketValue, s.currency)}
             </span>
           </motion.div>

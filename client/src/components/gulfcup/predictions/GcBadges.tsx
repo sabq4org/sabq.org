@@ -24,20 +24,20 @@ export function GcBadges({ earned }: { earned: string[] }) {
               key={b.code}
               className={`flex items-center gap-3 rounded-2xl border p-3.5 transition ${
                 unlocked
-                  ? "border-amber-400/50 bg-gradient-to-l from-amber-500/10 to-amber-400/[0.03] dark:border-amber-500/30"
+                  ? "border-sky-400/50 bg-gradient-to-l from-sky-500/10 to-sky-400/[0.03] dark:border-sky-500/30"
                   : "border-dashed border-border bg-muted/30 opacity-70"
               }`}
               data-testid={`gc-badge-${b.code}`}
             >
               <div
                 className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl text-2xl ${
-                  unlocked ? "bg-amber-500/15 grayscale-0" : "bg-muted grayscale"
+                  unlocked ? "bg-sky-500/15 grayscale-0" : "bg-muted grayscale"
                 }`}
               >
                 {b.emoji}
               </div>
               <div className="min-w-0 flex-1">
-                <p className={`text-sm font-black ${unlocked ? "text-amber-700 dark:text-amber-300" : ""}`}>
+                <p className={`text-sm font-black ${unlocked ? "text-sky-700 dark:text-sky-300" : ""}`}>
                   {b.name}
                   {unlocked && <span className="mr-1 text-[10px] font-bold text-green-600 dark:text-green-400">✓ مفتوح</span>}
                 </p>

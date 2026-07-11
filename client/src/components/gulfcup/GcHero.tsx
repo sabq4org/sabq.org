@@ -41,7 +41,7 @@ function CountdownChips({ startsAt }: { startsAt: string }) {
           <span className="text-2xl font-black tabular-nums text-white sm:text-3xl">
             {String(chip.value).padStart(2, "0")}
           </span>
-          <span className="mt-0.5 text-[10px] text-emerald-100/75">{chip.label}</span>
+          <span className="mt-0.5 text-[10px] text-sky-100/70">{chip.label}</span>
         </div>
       ))}
     </div>
@@ -69,8 +69,8 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
 
   return (
     <section dir="rtl" className="relative overflow-hidden">
-      {/* أرضية الملعب الليلي — روشن / المونديال */}
-      <div className="absolute inset-0 bg-gradient-to-bl from-emerald-950 via-[#04261b] to-[#063828]" />
+      {/* أرضية الملعب الليلي البارد — مطابقة تطبيق خليجي 27 */}
+      <div className="absolute inset-0 bg-gradient-to-bl from-[#041C22] via-[#052830] to-[#0A3D45]" />
       <div
         className="absolute inset-0 opacity-[0.05]"
         style={{
@@ -80,7 +80,7 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
       />
       <div className="absolute -bottom-56 left-1/2 h-[480px] w-[480px] -translate-x-1/2 rounded-full border-2 border-white/[0.07]" />
       <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-sky-400/15 blur-3xl" />
-      <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-emerald-400/10 blur-3xl" />
+      <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-teal-400/10 blur-3xl" />
 
       <div className="relative container mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <motion.div
@@ -113,13 +113,13 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
                 البطولة جارية
               </Badge>
             ) : (
-              <Badge className="gap-1.5 border border-white/15 bg-white/5 px-3 py-1 text-emerald-100/85">
+              <Badge className="gap-1.5 border border-white/15 bg-white/5 px-3 py-1 text-sky-100/85">
                 <MapPin className="h-3.5 w-3.5" />
                 جدة — السعودية
               </Badge>
             )}
             {titleHolder && (
-              <Badge className="gap-1.5 border border-white/15 bg-white/5 px-3 py-1 text-emerald-100/85">
+              <Badge className="gap-1.5 border border-white/15 bg-white/5 px-3 py-1 text-sky-100/85">
                 <Crown className="h-3.5 w-3.5 text-sky-300" />
                 حامل اللقب: {titleHolder.name}
               </Badge>
@@ -129,12 +129,12 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
           <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl">
             خليجي <span className="text-sky-300">27</span>
           </h1>
-          <p className="max-w-xl text-sm text-emerald-100/70 sm:text-base">
+          <p className="max-w-xl text-sm text-sky-100/70 sm:text-base">
             كأس الخليج العربي السابع والعشرون — تغطية حية لحظة بلحظة بتوقيت الرياض
           </p>
 
           {(!!overview?.teamsCount || !!overview?.venues?.length || !!dateRange) && (
-            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-emerald-100/65 sm:text-sm">
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-sky-100/60 sm:text-sm">
               {!!overview?.teamsCount && (
                 <span className="inline-flex items-center gap-1.5">
                   <Users className="h-3.5 w-3.5 text-sky-300/80" />
@@ -194,7 +194,7 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
             جدول المباريات
           </Button>
           <Link href="/gulf-cup/predictions">
-            <Button className="rounded-full bg-white px-6 font-bold text-emerald-950 hover:bg-emerald-50">
+            <Button className="rounded-full bg-white px-6 font-bold text-sky-950 hover:bg-sky-50">
               <Sparkles className="h-4 w-4 text-sky-500" />
               توقّع واربح
             </Button>
@@ -202,14 +202,14 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
           <Button
             onClick={() => onJump("teams")}
             variant="outline"
-            className="rounded-full border-white/20 bg-white/5 px-6 font-bold text-emerald-100 hover:bg-white/10"
+            className="rounded-full border-white/20 bg-white/5 px-6 font-bold text-sky-100 hover:bg-white/10"
           >
             المنتخبات
           </Button>
         </motion.div>
 
         {!overview?.startsAt && (
-          <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-emerald-100/50">
+          <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-sky-100/50">
             <Sparkles className="h-3.5 w-3.5 text-sky-300" />
             يجري تجهيز التغطية — الجدول والمنتخبات ستظهر هنا أولًا بأول
           </p>

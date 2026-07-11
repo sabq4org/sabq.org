@@ -52,7 +52,7 @@ export function GcMyPredictionsList({
           <div
             key={p.fixtureId}
             className={`rounded-xl border px-3 py-2.5 ${
-              isWin ? "border-amber-400/50 bg-amber-50/60 dark:border-amber-500/30 dark:bg-amber-950/20" : "border-border bg-card"
+              isWin ? "border-sky-400/50 bg-sky-50/60 dark:border-sky-500/30 dark:bg-sky-950/20" : "border-border bg-card"
             }`}
             data-testid={`gc-my-pred-${p.fixtureId}`}
           >
@@ -64,7 +64,7 @@ export function GcMyPredictionsList({
                 </span>
               ) : settled ? (
                 isWin ? (
-                  <span className="inline-flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400">
+                  <span className="inline-flex items-center gap-1 font-bold text-sky-600 dark:text-sky-400">
                     <Coins className="h-3 w-3" /> +{formatNumber(p.pointsAwarded)} نقطة
                   </span>
                 ) : (
