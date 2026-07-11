@@ -139,6 +139,8 @@ const NOINDEX_PREFIXES = [
   // misc legacy private prefixes
   "/settings", "/notifications",
   "/advertiser/", "/publisher/", "/staff/",
+  // روابط دعوات المجالس وواجهاتها شخصية: قابلة للفتح والمشاركة، لا للفهرسة.
+  "/gulf-cup/majlis",
 ];
 
 // Boundary-aware prefix match (mirrors isNoindexPath in
@@ -170,6 +172,7 @@ function isProxyPath(p) {
 }
 
 function isStaticAsset(p) {
+  if (p.startsWith("/.well-known/")) return true;
   if (p.startsWith("/assets/")) return true;
   for (const ext of STATIC_EXTENSIONS) if (p.endsWith(ext)) return true;
   return false;

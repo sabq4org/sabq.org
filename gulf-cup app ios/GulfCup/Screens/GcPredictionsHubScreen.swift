@@ -5,13 +5,13 @@ import SwiftUI
 // البطل والهدّاف (طويلة المدى) · سجلّي (كل توقّعاتي ونتائجها).
 struct GcPredictionsHubScreen: View {
     @Environment(GcAuthStore.self) private var auth
+    @Environment(GcAppRouter.self) private var router
     @State private var today: GcPredictionsTodayResponse?
     @State private var leaders: [GcPredictionLeader] = []
     @State private var longData: GcLongData?
     @State private var mine: [GcMyPredictionRow] = []
     @State private var loading = true
     @State private var errorMessage: String?
-    @State private var segment: GcPredSegment = .matches
 
     var body: some View {
         GcScreenScaffold {
@@ -20,16 +20,20 @@ struct GcPredictionsHubScreen: View {
 
                 segmentBar
 
-                if let errorMessage {
+                if router.predictionSegment == .majlis {
+                    GcMajlisListScreen()
+                } else if router.predictionSegment == .fantasy {
+                    GcFantasySection()
+                } else if let errorMessage {
                     GcPredUnavailable(message: errorMessage)
                 } else if loading && today == nil {
                     GcLoadingPanel(title: L("loading.predictions"))
                 } else {
-                    switch segment {
+                    switch router.predictionSegment {
                     case .matches: matchesSection
                     case .leaderboard: GcPredLeaderboard(leaders: leaders, myUserId: auth.member?.id)
-                    case .majlis: GcMajlisSection()
-                    case .fantasy: GcFantasySection()
+                    case .majlis: EmptyView()
+                    case .fantasy: EmptyView()
                     case .long: GcLongPredictionsView(data: longData, reload: { await load(force: true) })
                     case .mine: mineSection
                     }
@@ -40,20 +44,6 @@ struct GcPredictionsHubScreen: View {
         .task { await load() }
         .refreshable { await load(force: true) }
         .navigationBarHidden(true)
-        .onAppear { consumeDeepLink() }
-        .onReceive(NotificationCenter.default.publisher(for: GcPredRouter.openSegmentNotification)) { note in
-            if let raw = note.userInfo?["segment"] as? String,
-               let seg = GcPredSegment(rawValue: raw) {
-                segment = seg
-                GcPredRouter.shared.pendingSegment = nil
-            }
-        }
-    }
-
-    private func consumeDeepLink() {
-        guard let pending = GcPredRouter.shared.pendingSegment else { return }
-        segment = pending
-        GcPredRouter.shared.pendingSegment = nil
     }
 
     private var myRank: Int? {
@@ -62,27 +52,29 @@ struct GcPredictionsHubScreen: View {
     }
 
     private var segmentBar: some View {
-        HStack(spacing: 6) {
-            ForEach(GcPredSegment.allCases) { seg in
-                Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { segment = seg }
-                } label: {
-                    Text(seg.title)
-                        .font(GulfCupFonts.app(size: 11.5, weight: .bold))
-                        .foregroundStyle(segment == seg ? .white : GcTheme.inkDim)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 9)
-                        .background(
-                            RoundedRectangle(cornerRadius: GcTheme.chipRadius, style: .continuous)
-                                .fill(segment == seg ? GcTheme.emerald : Color.clear)
-                        )
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(GcPredSegment.allCases) { seg in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.22)) { router.predictionSegment = seg }
+                    } label: {
+                        Text(seg.title)
+                            .font(GulfCupFonts.app(size: 12, weight: .bold))
+                            .foregroundStyle(router.predictionSegment == seg ? .white : GcTheme.inkDim)
+                            .lineLimit(1)
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 44)
+                            .background(
+                                RoundedRectangle(cornerRadius: GcTheme.chipRadius, style: .continuous)
+                                    .fill(router.predictionSegment == seg ? GcTheme.emerald : Color.clear)
+                            )
+                    }
+                    .buttonStyle(GcPressStyle())
+                    .accessibilityAddTraits(router.predictionSegment == seg ? .isSelected : [])
                 }
-                .buttonStyle(GcPressStyle())
             }
+            .padding(4)
         }
-        .padding(4)
         .gcCard(radius: GcTheme.tileRadius)
     }
 
@@ -139,40 +131,6 @@ struct GcPredictionsHubScreen: View {
             else { errorMessage = LError(err) }
         } catch { errorMessage = LError(error) }
         loading = false
-    }
-}
-
-enum GcPredSegment: String, CaseIterable, Identifiable {
-    case matches, leaderboard, majlis, fantasy, long, mine
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .matches: return L("predictions.seg.matches")
-        case .leaderboard: return L("predictions.seg.leaders")
-        case .majlis: return "المجالس"
-        case .fantasy: return "الفانتازي"
-        case .long: return L("predictions.seg.long")
-        case .mine: return L("predictions.seg.mine")
-        }
-    }
-}
-
-/// توجيه عميق من حسابي → تبويب التوقعات بقسم محدد (فانتازي / مجالس / …).
-@MainActor
-@Observable
-final class GcPredRouter {
-    static let shared = GcPredRouter()
-    static let openSegmentNotification = Notification.Name("gc.pred.openSegment")
-
-    var pendingSegment: GcPredSegment?
-
-    func open(_ segment: GcPredSegment) {
-        pendingSegment = segment
-        NotificationCenter.default.post(
-            name: Self.openSegmentNotification,
-            object: nil,
-            userInfo: ["segment": segment.rawValue]
-        )
     }
 }
 
@@ -530,41 +488,48 @@ private struct GcMineRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    if let logo = row.homeTeamLogo { GcTeamLogo(logo: logo, size: 18) }
-                    Text(row.homeTeamName ?? "؟").font(GulfCupFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(GcTheme.ink).lineLimit(1)
-                    Text("×").font(GulfCupFonts.app(size: 10)).foregroundStyle(GcTheme.inkFaint)
-                    Text(row.awayTeamName ?? "؟").font(GulfCupFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(GcTheme.ink).lineLimit(1)
-                    if let logo = row.awayTeamLogo { GcTeamLogo(logo: logo, size: 18) }
-                }
-                HStack(spacing: 6) {
-                    Text("توقّعي \(row.predAway)-\(row.predHome)")
-                        .monospacedDigit()
-                        .environment(\.layoutDirection, .leftToRight)
-                    if let fh = row.finalHome, let fa = row.finalAway {
-                        Text("· النتيجة \(fa)-\(fh)")
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        if let logo = row.homeTeamLogo { GcTeamLogo(logo: logo, size: 18) }
+                        Text(row.homeTeamName ?? "؟").font(GulfCupFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                        Text("×").font(GulfCupFonts.app(size: 10)).foregroundStyle(GcTheme.inkFaint)
+                        Text(row.awayTeamName ?? "؟").font(GulfCupFonts.app(size: 11.5, weight: .semibold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                        if let logo = row.awayTeamLogo { GcTeamLogo(logo: logo, size: 18) }
+                    }
+                    HStack(spacing: 6) {
+                        Text("توقّعي \(row.predAway)-\(row.predHome)")
                             .monospacedDigit()
                             .environment(\.layoutDirection, .leftToRight)
+                        if !row.isVoid, let fh = row.finalHome, let fa = row.finalAway {
+                            Text("· النتيجة \(fa)-\(fh)")
+                                .monospacedDigit()
+                                .environment(\.layoutDirection, .leftToRight)
+                        }
+                    }
+                    .font(GulfCupFonts.app(size: 10.5))
+                    .foregroundStyle(GcTheme.inkDim)
+                }
+                Spacer()
+                if !row.isVoid {
+                    VStack(alignment: .trailing, spacing: 3) {
+                        if row.status == "pending" {
+                            GcChip(text: L("mine.pending"), tint: GcTheme.amber)
+                        } else if let pts = row.pointsAwarded, pts > 0 {
+                            Text("+\(pts)")
+                                .font(GulfCupFonts.app(size: 15, weight: .bold))
+                                .foregroundStyle(GcTheme.goldDeep)
+                                .monospacedDigit()
+                        }
+                        if let tierText, row.status != "pending" {
+                            Text(tierText).font(GulfCupFonts.app(size: 9.5)).foregroundStyle(GcTheme.inkDim)
+                        }
                     }
                 }
-                .font(GulfCupFonts.app(size: 10.5))
-                .foregroundStyle(GcTheme.inkDim)
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                if row.status == "pending" {
-                    GcChip(text: L("mine.pending"), tint: GcTheme.amber)
-                } else if let pts = row.pointsAwarded, pts > 0 {
-                    Text("+\(pts)")
-                        .font(GulfCupFonts.app(size: 15, weight: .bold))
-                        .foregroundStyle(GcTheme.goldDeep)
-                        .monospacedDigit()
-                }
-                if let tierText, row.status != "pending" {
-                    Text(tierText).font(GulfCupFonts.app(size: 9.5)).foregroundStyle(GcTheme.inkDim)
-                }
+            if row.isVoid {
+                GcVoidMatchNotice(compact: true)
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
@@ -581,225 +546,6 @@ private struct GcPredUnavailable: View {
         }
         .padding(20).frame(maxWidth: .infinity)
         .gcCard()
-    }
-}
-
-// MARK: - «مجالس التوقعات» — دوريات خاصة برمز دعوة
-
-/// أنشئ مجلسك، شارك رمزه، ونافس أهلك وزملاءك في ترتيب خاص يقرأ نقاط
-/// المسابقة العامة. نظير تبويب الويب نفسه عبر مرايا /api/v1.
-struct GcMajlisSection: View {
-    @Environment(GcAuthStore.self) private var auth
-    @State private var majalis: [GcMajlisSummary] = []
-    @State private var boards: [String: GcMajlisBoard] = [:]
-    @State private var expandedId: String?
-    @State private var newName = ""
-    @State private var joinCode = ""
-    @State private var busy = false
-    @State private var message: String?
-    @State private var loaded = false
-
-    var body: some View {
-        if !auth.isLoggedIn {
-            VStack(spacing: 12) {
-                Text("المجالس لأعضاء سبق — سجّل دخولك لتنشئ مجلسك وتنافس برمز دعوة")
-                    .font(GulfCupFonts.app(size: 12.5))
-                    .foregroundStyle(GcTheme.inkDim)
-                    .multilineTextAlignment(.center)
-                GcSignInPromptButton()
-            }
-            .padding(16)
-            .gcCard()
-        } else {
-            content
-        }
-    }
-
-    private var content: some View {
-        VStack(spacing: 12) {
-            // إنشاء مجلس
-            VStack(alignment: .leading, spacing: 8) {
-                Text("أنشئ مجلسك")
-                    .font(GulfCupFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(GcTheme.ink)
-                HStack(spacing: 8) {
-                    TextField("اسم المجلس — مثل: ديوانية الجمعة", text: $newName)
-                        .font(GulfCupFonts.app(size: 12.5))
-                        .padding(.horizontal, 12).padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: GcTheme.chipRadius, style: .continuous).fill(GcTheme.chipFill))
-                    Button("إنشاء") { Task { await create() } }
-                        .font(GulfCupFonts.app(size: 12.5, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 16).padding(.vertical, 10)
-                        .background(Capsule().fill(GcTheme.emerald))
-                        .buttonStyle(GcPressStyle())
-                        .disabled(busy || newName.trimmingCharacters(in: .whitespaces).count < 2)
-                }
-            }
-            .padding(13)
-            .gcCard()
-
-            // انضمام برمز
-            VStack(alignment: .leading, spacing: 8) {
-                Text("انضم برمز دعوة")
-                    .font(GulfCupFonts.app(size: 13, weight: .bold))
-                    .foregroundStyle(GcTheme.ink)
-                HStack(spacing: 8) {
-                    TextField("مثل: 7KQ2MD", text: $joinCode)
-                        .font(GulfCupFonts.app(size: 13, weight: .bold))
-                        .multilineTextAlignment(.center)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.characters)
-                        .environment(\.layoutDirection, .leftToRight)
-                        .padding(.horizontal, 12).padding(.vertical, 10)
-                        .background(RoundedRectangle(cornerRadius: GcTheme.chipRadius, style: .continuous).fill(GcTheme.chipFill))
-                    Button("انضمام") { Task { await join() } }
-                        .font(GulfCupFonts.app(size: 12.5, weight: .bold))
-                        .foregroundStyle(GcTheme.forest)
-                        .padding(.horizontal, 16).padding(.vertical, 10)
-                        .background(Capsule().fill(GcTheme.goldFill))
-                        .buttonStyle(GcPressStyle())
-                        .disabled(busy || joinCode.trimmingCharacters(in: .whitespaces).count < 4)
-                }
-            }
-            .padding(13)
-            .gcCard()
-
-            if let message {
-                Text(message)
-                    .font(GulfCupFonts.app(size: 11.5, weight: .semibold))
-                    .foregroundStyle(GcTheme.emeraldDeep)
-            }
-
-            if majalis.isEmpty && loaded {
-                GcEmptyState(icon: "person.3", title: "لا مجالس بعد", subtitle: "أنشئ مجلسك الأول أو انضم برمز وصلك من صديق")
-            }
-
-            ForEach(majalis) { majlis in
-                majlisCard(majlis)
-            }
-        }
-        .task { await reload() }
-    }
-
-    private func majlisCard(_ majlis: GcMajlisSummary) -> some View {
-        VStack(spacing: 0) {
-            Button {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    expandedId = expandedId == majlis.id ? nil : majlis.id
-                }
-                if boards[majlis.id] == nil {
-                    Task { boards[majlis.id] = try? await APIClient.shared.fetchGcMajlisBoard(majlis.id) }
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Text(majlis.isOwner ? "👑" : "🪑").font(.system(size: 20))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(majlis.name).font(GulfCupFonts.app(size: 13.5, weight: .bold)).foregroundStyle(GcTheme.ink).lineLimit(1)
-                        Text("\(majlis.membersCount) عضو\(majlis.isOwner ? " · أنت صاحب المجلس" : "")")
-                            .font(GulfCupFonts.app(size: 10)).foregroundStyle(GcTheme.inkDim)
-                    }
-                    Spacer()
-                    Button {
-                        UIPasteboard.general.string = majlis.code
-                        message = "نُسخ الرمز \(majlis.code) — شاركه مع من تحب"
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "doc.on.doc").font(.system(size: 10, weight: .semibold))
-                            Text(majlis.code).font(GulfCupFonts.app(size: 11, weight: .bold)).monospacedDigit()
-                        }
-                        .foregroundStyle(GcTheme.emeraldDeep)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                        .background(Capsule().fill(GcTheme.emerald.opacity(0.10)))
-                        .environment(\.layoutDirection, .leftToRight)
-                    }
-                    .buttonStyle(GcPressStyle())
-                }
-                .padding(13)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if expandedId == majlis.id {
-                Rectangle().fill(GcTheme.outline).frame(height: 1)
-                if let board = boards[majlis.id] {
-                    VStack(spacing: 0) {
-                        ForEach(Array(board.rows.enumerated()), id: \.element.id) { idx, row in
-                            if idx > 0 { Rectangle().fill(GcTheme.outline).frame(height: 1).padding(.leading, 14) }
-                            HStack(spacing: 9) {
-                                Text(row.rank == 1 ? "🥇" : row.rank == 2 ? "🥈" : row.rank == 3 ? "🥉" : "\(row.rank)")
-                                    .font(GulfCupFonts.app(size: 12, weight: .bold))
-                                    .foregroundStyle(GcTheme.inkDim)
-                                    .frame(width: 26)
-                                GcPlayerPhoto(url: row.avatar, size: 26)
-                                Text(row.name + (row.isOwner ? " 👑" : ""))
-                                    .font(GulfCupFonts.app(size: 12, weight: row.userId == auth.member?.id ? .bold : .semibold))
-                                    .foregroundStyle(GcTheme.ink)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text("\(row.correctCount) إصابة")
-                                    .font(GulfCupFonts.app(size: 9.5)).foregroundStyle(GcTheme.inkFaint)
-                                Text("\(row.totalPoints)")
-                                    .font(GulfCupFonts.app(size: 13.5, weight: .bold))
-                                    .foregroundStyle(GcTheme.emeraldDeep)
-                                    .monospacedDigit()
-                            }
-                            .padding(.horizontal, 13).padding(.vertical, 8)
-                            .background(row.userId == auth.member?.id ? GcTheme.emerald.opacity(0.06) : Color.clear)
-                        }
-                    }
-                } else {
-                    GcLoadingPanel(title: "جاري جلب الترتيب", rows: 2).padding(13)
-                }
-                Button {
-                    Task { await leave(majlis) }
-                } label: {
-                    Text(majlis.isOwner ? "حذف المجلس نهائيًا" : "مغادرة المجلس")
-                        .font(GulfCupFonts.app(size: 11.5, weight: .bold))
-                        .foregroundStyle(GcTheme.crimson)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                }
-                .buttonStyle(GcPressStyle())
-            }
-        }
-        .gcCard()
-    }
-
-    private func reload() async {
-        majalis = (try? await APIClient.shared.fetchGcMyMajalis()) ?? majalis
-        loaded = true
-    }
-
-    private func create() async {
-        busy = true
-        do {
-            let created = try await APIClient.shared.createGcMajlis(name: newName)
-            message = "أُنشئ «\(created.name)» — رمز الدعوة: \(created.code)"
-            newName = ""
-            await reload()
-        } catch let e as APIError { message = e.errorDescription } catch { message = "تعذّر الإنشاء — حاول مجددًا" }
-        busy = false
-    }
-
-    private func join() async {
-        busy = true
-        do {
-            let joined = try await APIClient.shared.joinGcMajlis(code: joinCode)
-            message = "انضممت إلى «\(joined.name)» 🎉"
-            joinCode = ""
-            await reload()
-        } catch let e as APIError { message = e.errorDescription } catch { message = "تعذّر الانضمام — تأكد من الرمز" }
-        busy = false
-    }
-
-    private func leave(_ majlis: GcMajlisSummary) async {
-        busy = true
-        _ = try? await APIClient.shared.leaveGcMajlis(majlis.id)
-        boards[majlis.id] = nil
-        if expandedId == majlis.id { expandedId = nil }
-        await reload()
-        busy = false
     }
 }
 

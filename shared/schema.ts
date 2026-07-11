@@ -1731,6 +1731,8 @@ export const userNotificationPrefs = pgTable("user_notification_prefs", {
   mostRead: boolean("most_read").default(true).notNull(),
   webPush: boolean("web_push").default(false).notNull(),
   dailyDigest: boolean("daily_digest").default(false).notNull(),
+  // إشعارات مجالس توقّعات خليجي (تذكير الإقفال/تغيّر الترتيب/انضمام عضو).
+  gulfCupMajlis: boolean("gulf_cup_majlis").default(true).notNull(),
   // «وضع المباريات فقط» — عند التفعيل يكتم الملخص اليومي وإشعارات المقالات الجديدة
   // (ArticlePublished + متابعة الكلمات) ويُبقي إشعارات المباريات (sports.*) والعاجل.
   matchesOnly: boolean("matches_only").default(false).notNull(),
@@ -2178,7 +2180,8 @@ export const gcPredictions = pgTable("gc_predictions", {
   userId: varchar("user_id").references(() => users.id).notNull(),
   predHome: integer("pred_home").notNull(),
   predAway: integer("pred_away").notNull(),
-  // 'pending' until settled, then 'correct' (any tier hit) | 'incorrect'.
+  // 'pending' until terminal, then 'correct' | 'incorrect' | 'void'. A void
+  // administrative/cancelled fixture never counts as played or affects accuracy.
   status: text("status").notNull().default("pending"),
   // Highest tier reached at settlement: 'exact' | 'margin' | 'outcome' | 'none'.
   tier: text("tier").notNull().default("none"),
@@ -2224,7 +2227,7 @@ export const gcPredictionMatches = pgTable("gc_prediction_matches", {
   carryOut: integer("carry_out").notNull().default(0),
   finalHome: integer("final_home"),
   finalAway: integer("final_away"),
-  // 'open' (accepting) | 'locked' (kicked off) | 'settled'.
+  // 'open' (accepting) | 'locked' (kicked off) | 'settled' | 'void'.
   status: text("status").notNull().default("open"),
   predictionsCount: integer("predictions_count").notNull().default(0),
   outcomeWinners: integer("outcome_winners").notNull().default(0),
@@ -2261,7 +2264,7 @@ export const gcLongPredictions = pgTable("gc_long_predictions", {
 export const gcBadges = pgTable("gc_badges", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
-  badge: text("badge").notNull(), // 'nostradamus' | 'lionheart' | 'hot_streak' | 'ever_present'
+  badge: text("badge").notNull(), // static codes + 'majlis_champion:<id>' | 'majlis_dean:<id>'
   metadata: jsonb("metadata").$type<Record<string, any>>(),
   awardedAt: timestamp("awarded_at").defaultNow().notNull(),
 }, (table) => [
@@ -2298,6 +2301,75 @@ export const gcMajlisMembers = pgTable("gc_majlis_members", {
 
 export type GcMajlis = typeof gcMajalis.$inferSelect;
 export type GcMajlisMember = typeof gcMajlisMembers.$inferSelect;
+
+// تحديات مباراة 1×1 داخل المجلس. الرهان يُحجز من رصيد الولاء عند إنشاء
+// التحدي/قبوله، ثم يُحوَّل أو يُسترد داخل معاملة التسوية نفسها. pairKey هو
+// الزوج المرتّب من معرّفي العضوين، ويمنع تحديين متعاكسين للمباراة نفسها.
+export const gcDuels = pgTable("gc_duels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  majlisId: varchar("majlis_id").references(() => gcMajalis.id, { onDelete: "cascade" }).notNull(),
+  fixtureId: varchar("fixture_id").notNull(),
+  challengerId: varchar("challenger_id").references(() => users.id).notNull(),
+  challengedId: varchar("challenged_id").references(() => users.id).notNull(),
+  pairKey: text("pair_key").notNull(),
+  stake: integer("stake").notNull(),
+  // pending | accepted | declined | cancelled | expired | settled | refunded
+  status: text("status").notNull().default("pending"),
+  winnerId: varchar("winner_id").references(() => users.id, { onDelete: "set null" }),
+  challengerTier: text("challenger_tier"),
+  challengedTier: text("challenged_tier"),
+  challengerHeldAt: timestamp("challenger_held_at"),
+  challengedHeldAt: timestamp("challenged_held_at"),
+  acceptedAt: timestamp("accepted_at"),
+  expiresAt: timestamp("expires_at").notNull(),
+  settledAt: timestamp("settled_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_duel_pair_fixture").on(table.majlisId, table.fixtureId, table.pairKey),
+  index("idx_gc_duel_fixture_status").on(table.fixtureId, table.status),
+  index("idx_gc_duel_status_expires").on(table.status, table.expiresAt),
+  index("idx_gc_duel_majlis_created").on(table.majlisId, table.createdAt),
+  index("idx_gc_duel_challenger_status").on(table.challengerId, table.status),
+  index("idx_gc_duel_challenged_status").on(table.challengedId, table.status),
+  sql`CONSTRAINT gc_duel_distinct_members CHECK (challenger_id <> challenged_id)`,
+  sql`CONSTRAINT gc_duel_stake_check CHECK (stake BETWEEN 10 AND 100 AND stake % 10 = 0)`,
+  sql`CONSTRAINT gc_duel_status_check CHECK (status IN ('pending', 'accepted', 'declined', 'cancelled', 'expired', 'settled', 'refunded'))`,
+]);
+
+export type GcDuel = typeof gcDuels.$inferSelect;
+
+// صندوق صادر دائم لإشعارات المجلس. خدمة الإنتاج تنشئ صفًا واحدًا بمفتاح dedupe
+// حتمي، وتستطيع إعادة محاولة push دون إنشاء إشعار inbox ثانٍ بعد نجاحه.
+export const gcMajlisNotificationDeliveries = pgTable("gc_majlis_notification_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  majlisId: varchar("majlis_id").references(() => gcMajalis.id, { onDelete: "set null" }),
+  fixtureId: varchar("fixture_id"),
+  type: text("type").notNull(),
+  dedupeKey: text("dedupe_key").notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  deeplink: text("deeplink"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+  status: text("status").notNull().default("pending"), // pending | sent | failed
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  inboxNotificationId: varchar("inbox_notification_id").references(() => notificationsInbox.id, { onDelete: "set null" }),
+  pushStatus: text("push_status").notNull().default("pending"),
+  scheduledAt: timestamp("scheduled_at").defaultNow().notNull(),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_majlis_delivery_dedupe").on(table.dedupeKey),
+  index("idx_gc_majlis_delivery_status_scheduled").on(table.status, table.scheduledAt),
+  index("idx_gc_majlis_delivery_user_type").on(table.userId, table.type),
+  index("idx_gc_majlis_delivery_majlis").on(table.majlisId),
+  sql`CONSTRAINT gc_majlis_delivery_status_check CHECK (status IN ('pending', 'sent', 'failed'))`,
+]);
+
+export type GcMajlisNotificationDelivery = typeof gcMajlisNotificationDeliveries.$inferSelect;
 
 // «رجل المباراة — الجمهور ضد الأرقام»: صوت واحد لكل مستخدم لكل مباراة، يُفتح
 // من الشوط الثاني وحتى 24 ساعة بعد الصافرة، ثم تُقارن غلبة الجمهور بأعلى
@@ -3698,6 +3770,7 @@ export const updateUserNotificationPrefsSchema = z.object({
   mostRead: z.boolean().optional(),
   webPush: z.boolean().optional(),
   dailyDigest: z.boolean().optional(),
+  gulfCupMajlis: z.boolean().optional(),
   matchesOnly: z.boolean().optional(),
   editorialDrafts: z.boolean().optional(),
   quietHoursStart: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, "صيغة الوقت غير صحيحة").optional(),

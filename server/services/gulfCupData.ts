@@ -4,7 +4,8 @@
  * لماذا ثابتة: حتى تاريخه لم يُنشئ API-Football موسم 2026 للبطولة (league=25)،
  * فنعتمد الجدول الرسمي المعتمد من اتحاد كأس الخليج (AGCFF) — القرعة سُحبت في جدة
  * (مايو 2026) واعتُمد الجدول الكامل. متى أضاف المزوّد الموسم، يدمج `gulfCupService`
- * النتائج/الحالات الحيّة فوق هذا الأساس تلقائيًّا (مطابقة بالمعرّف/التاريخ).
+ * النتائج/الحالات الحيّة فوق هذا الأساس تلقائيًّا مع إبقاء معرّف سبق الداخلي
+ * ثابتًا؛ معرّف المزوّد يبقى حقل إثراء منفصلًا.
  *
  * المصدر: الجدول الرسمي لقرعة خليجي 27 (AGCFF). كل التوقيتات بتوقيت الرياض (+03:00).
  * معرّفات المنتخبات هي معرّفات API-Football الوطنية (مؤكَّدة من نسخة 2024).
@@ -31,7 +32,7 @@ export const GC_GROUPS: { name: string; teamIds: number[] }[] = [
 export const GC_TEAM_IDS: number[] = GC_GROUPS.flatMap((g) => g.teamIds);
 
 export interface GcSeedFixture {
-  /** معرّف مبدئي (يُستبدل بمعرّف API-Football عند توفّر الموسم). */
+  /** معرّف سبق الداخلي الدائم؛ لا يُستبدل بمعرّف أي مزوّد. */
   id: number;
   /** رقم المباراة الرسمي في الجدول (1..15). */
   matchNo: number;
@@ -46,6 +47,9 @@ export interface GcSeedFixture {
   /** وصف بديل للطرفين في الأدوار الإقصائية (قبل التحديد). */
   homePlaceholder?: string;
   awayPlaceholder?: string;
+  /** مجموعات المرشحين لكل فتحة knockout؛ تثبّت الهوية عند التأجيل. */
+  homeCandidateIds?: readonly number[];
+  awayCandidateIds?: readonly number[];
 }
 
 // دور المجموعات (12 مباراة) ثم نصفا النهائي والنهائي (3 مباريات). التوقيتات +03:00.
@@ -66,8 +70,8 @@ export const GC_FIXTURES: GcSeedFixture[] = [
   { id: 27000011, matchNo: 11, kickoff: "2026-09-30T20:30:00+03:00", venue: "KASC", roundEn: "Group Stage - 3", homeId: 1569, awayId: 1563 },
   { id: 27000012, matchNo: 12, kickoff: "2026-09-30T20:30:00+03:00", venue: "PAF", roundEn: "Group Stage - 3", homeId: 1550, awayId: 1547 },
   // ── نصف النهائي ──
-  { id: 27000013, matchNo: 13, kickoff: "2026-10-03T18:00:00+03:00", venue: "KASC", roundEn: "Semi-finals", homeId: null, awayId: null, homePlaceholder: "أول المجموعة الأولى", awayPlaceholder: "ثاني المجموعة الثانية" },
-  { id: 27000014, matchNo: 14, kickoff: "2026-10-03T20:30:00+03:00", venue: "PAF", roundEn: "Semi-finals", homeId: null, awayId: null, homePlaceholder: "أول المجموعة الثانية", awayPlaceholder: "ثاني المجموعة الأولى" },
+  { id: 27000013, matchNo: 13, kickoff: "2026-10-03T18:00:00+03:00", venue: "KASC", roundEn: "Semi-finals", homeId: null, awayId: null, homePlaceholder: "أول المجموعة الأولى", awayPlaceholder: "ثاني المجموعة الثانية", homeCandidateIds: GC_GROUPS[0].teamIds, awayCandidateIds: GC_GROUPS[1].teamIds },
+  { id: 27000014, matchNo: 14, kickoff: "2026-10-03T20:30:00+03:00", venue: "PAF", roundEn: "Semi-finals", homeId: null, awayId: null, homePlaceholder: "أول المجموعة الثانية", awayPlaceholder: "ثاني المجموعة الأولى", homeCandidateIds: GC_GROUPS[1].teamIds, awayCandidateIds: GC_GROUPS[0].teamIds },
   // ── النهائي ──
   { id: 27000015, matchNo: 15, kickoff: "2026-10-06T20:30:00+03:00", venue: "KASC", roundEn: "Final", homeId: null, awayId: null, homePlaceholder: "الفائز من نصف النهائي الأول", awayPlaceholder: "الفائز من نصف النهائي الثاني" },
 ];

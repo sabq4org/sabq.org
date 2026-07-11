@@ -54,7 +54,33 @@
                 <data android:scheme="sabq" android:host="push" />
             </intent-filter>
 
+            <!-- Gulf Cup Majlis universal links and the iOS-parity fallback schemes. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="sabq.org" android:pathPrefix="/gulf-cup/majlis" />
+                <data android:scheme="https" android:host="www.sabq.org" android:pathPrefix="/gulf-cup/majlis" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sabqgulfcup" android:host="majlis" />
+                <data android:scheme="gulfcup" android:host="majlis" />
+            </intent-filter>
+
         </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/gc_share_paths" />
+        </provider>
 
         <!-- FCM entry point. Receives editorial push messages + token
              rotations. Routes incoming pushes to the system notification

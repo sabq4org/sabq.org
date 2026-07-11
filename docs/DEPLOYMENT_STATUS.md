@@ -11,7 +11,7 @@
 |--------|--------|--------|---------|
 | **الواجهة (SPA)** | Cloudflare Pages | `sabq.org` · `www.sabq.org` | `npm run build:client` → `dist/public/` · `functions/_middleware.js` |
 | **الـ API** | Railway (Dockerfile) | `api.sabq.org` | `SERVE_SPA=false` · `DB_DRIVER=pg` |
-| **قاعدة البيانات** | Neon / Postgres | عبر `DATABASE_URL` على Railway | لا تشغّل `db:push` على prod بدون `./push-to-production.sh` |
+| **قاعدة البيانات** | Neon / Postgres | `NEON_DATABASE_URL` إن وُجد، وإلا `DATABASE_URL` على Railway | لا تشغّل `db:push` على prod بدون `./push-to-production.sh` |
 | **Redis** | Upstash (أو Redis مُدار) على Railway | `REDIS_URL` | **مُستخدم في الإنتاج** لتخفيف جلسات Neon — انظر § Redis |
 | **الوسائط** | Cloudflare Images + R2/S3 | — | كما في `CLAUDE.md` |
 
@@ -88,6 +88,6 @@ npm run build    # بناء كامل
 npm run check    # TypeScript
 ```
 
-- **لا** `db:push` مباشرة على `DATABASE_URL` الإنتاجي — استخدم `./push-to-production.sh`
+- **لا** `db:push` مباشرة على رابط الإنتاج — استخدم `./push-to-production.sh` مع رابط الاتصال الفعلي الذي يختاره Railway (`NEON_DATABASE_URL` أولًا). السكربت يمرره كـ`SCHEMA_DATABASE_URL` حتى لا تستبدله `.env.local`.
 - **لا** تفترض أن الوثائق القديمة التي تذكر «Replit = production» ما زالت صحيحة — راجع هذا الملف أولاً
 - عند تعديل الـ proxy أو SEO على الحافة: **`functions/_middleware.js`** على Pages، وليس `server/seoInjector.ts` وحده (الـ injector يخدم وضع single-process فقط)

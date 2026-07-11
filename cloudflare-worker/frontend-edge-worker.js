@@ -112,6 +112,7 @@ function isStaticAsset(pathname) {
     if (pathname.endsWith(ext)) return true;
   }
   if (pathname.startsWith("/assets/")) return true;
+  if (pathname.startsWith("/.well-known/")) return true;
   return false;
 }
 
@@ -131,6 +132,7 @@ const NOINDEX_PREFIXES = [
   "/notifications", "/bookmarks", "/my-keywords", "/my-follows",
   "/preferences-center", "/select-interests", "/edit-interests",
   "/complete-profile",
+  "/gulf-cup/majlis",
   "/payment-callback", "/advertiser-payment-callback",
   "/advertiser/", "/publisher/", "/staff/",
 ];

@@ -18,7 +18,8 @@ struct GcPredictionMatchCard: View {
     @State private var justSaved = false
 
     private var settled: Bool { match.settlement?.status == "settled" }
-    private var editable: Bool { !match.locked && !settled && auth.isLoggedIn }
+    private var voided: Bool { match.isVoid }
+    private var editable: Bool { !match.locked && !settled && !voided && auth.isLoggedIn }
 
     var body: some View {
         VStack(spacing: 13) {
@@ -30,7 +31,9 @@ struct GcPredictionMatchCard: View {
                 staticTeamsRow
             }
 
-            if settled {
+            if voided {
+                GcVoidMatchNotice()
+            } else if settled {
                 settledStrip
             } else if match.locked {
                 lockedStrip
@@ -40,14 +43,16 @@ struct GcPredictionMatchCard: View {
                 signInBlock
             }
 
-            if !settled {
+            if !settled && !voided {
                 GcProbBar(probs: match.probs, home: match.fixture.home, away: match.fixture.away)
                 if match.crowd.total > 0 {
                     GcCrowdBar(crowd: match.crowd)
                 }
             }
 
-            poolRow
+            if !voided {
+                poolRow
+            }
 
             if let error {
                 Text(error).font(GulfCupFonts.app(size: 11)).foregroundStyle(GcTheme.crimson)
@@ -67,9 +72,13 @@ struct GcPredictionMatchCard: View {
         HStack {
             GcChip(text: match.fixture.round, tint: GcTheme.inkDim)
             Spacer()
-            Text(match.locked ? L("predictions.locked") : GcFormat.relativeKickoff(match.fixture.date))
+            Text(
+                voided
+                    ? L("state.void.short")
+                    : (match.locked ? L("predictions.locked") : GcFormat.relativeKickoff(match.fixture.date))
+            )
                 .font(GulfCupFonts.app(size: 11, weight: .bold))
-                .foregroundStyle(match.locked ? GcTheme.crimson : GcTheme.emerald)
+                .foregroundStyle(voided ? GcTheme.inkFaint : (match.locked ? GcTheme.crimson : GcTheme.emerald))
         }
     }
 

@@ -29,6 +29,10 @@ import {
   GC_VENUES,
   type GcSeedFixture,
 } from "./gulfCupData";
+import {
+  resolveGcFixtureIdentities,
+  type GcProviderFixtureIdentity,
+} from "./gulfCupFixtureIdentity";
 import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistory";
 import { resolveNames } from "./worldCupNameTranslator";
 import { apiFootballGet } from "./apiFootballClient";
@@ -89,7 +93,10 @@ export interface GcTeam {
 }
 
 export interface GcFixture {
+  /** Stable Sabq id used by API routes, predictions, duels, and notifications. */
   id: number;
+  /** Provider id is enrichment only and must never be persisted as fixtureId. */
+  providerId: number | null;
   matchNo: number;
   date: string;
   timestamp: number;
@@ -106,6 +113,8 @@ export interface GcFixture {
   home: GcTeam;
   away: GcTeam;
   goals: { home: number | null; away: number | null };
+  /** ركلات الترجيح عند وجودها؛ لا تدخل في نتيجة توقّع المباراة نفسها. */
+  penalties: { home: number | null; away: number | null };
 }
 
 export interface GcStandingRow {
@@ -172,6 +181,7 @@ function seedToFixture(seed: GcSeedFixture): GcFixture {
   const venue = GC_VENUES[seed.venue];
   return {
     id: seed.id,
+    providerId: null,
     matchNo: seed.matchNo,
     date: seed.kickoff,
     timestamp: Math.floor(new Date(seed.kickoff).getTime() / 1000),
@@ -182,75 +192,105 @@ function seedToFixture(seed: GcSeedFixture): GcFixture {
     home: seed.homeId != null ? seedTeam(seed.homeId) : placeholderTeam(seed.homePlaceholder),
     away: seed.awayId != null ? seedTeam(seed.awayId) : placeholderTeam(seed.awayPlaceholder),
     goals: { home: null, away: null },
+    penalties: { home: null, away: null },
   };
 }
 
 // ---------- دمج بيانات API-Football (متى توفّر الموسم) ----------
 
-function dayKey(iso: string): string {
-  // مفتاح اليوم بتوقيت الرياض (لمطابقة مباراة الأساس بمباراة المزوّد).
-  const d = new Date(iso);
-  const r = new Date(d.getTime() + 3 * 3600 * 1000); // +03:00
-  return r.toISOString().slice(0, 10);
-}
-
-interface ProviderFixture {
-  id: number;
+interface ProviderFixture extends GcProviderFixtureIdentity {
   date: string;
   timestamp: number;
+  roundEn: string;
+  matchNo: number | null;
   code: string;
   elapsed: number | null;
   homeId: number;
   awayId: number;
   goalsHome: number | null;
   goalsAway: number | null;
+  penaltyHome: number | null;
+  penaltyAway: number | null;
   venueName: string | null;
   venueCity: string | null;
 }
 
-/** جدول المزوّد (إن وُجد الموسم) — مفهرس بزوج المنتخبين + اليوم. فارغ = لا إثراء. */
-async function getProviderFixtures(): Promise<Map<string, ProviderFixture>> {
-  if (!apiFootballEnabled()) return new Map();
-  return withSWR("gc:provider:fixtures", OVERLAY_TTL, OVERLAY_TTL * 3, async () => {
-    const rows = await apiGet("fixtures", { league: LEAGUE_ID, season: SEASON, timezone: TIMEZONE }).catch(
-      () => [] as any[],
-    );
-    const map = new Map<string, ProviderFixture>();
-    for (const raw of rows) {
-      const homeId = raw?.teams?.home?.id ?? 0;
-      const awayId = raw?.teams?.away?.id ?? 0;
-      const date = raw?.fixture?.date ?? "";
-      if (!homeId || !awayId || !date) continue;
-      const pf: ProviderFixture = {
-        id: raw?.fixture?.id ?? 0,
-        date,
-        timestamp: raw?.fixture?.timestamp ?? 0,
-        code: raw?.fixture?.status?.short ?? "NS",
-        elapsed: raw?.fixture?.status?.elapsed ?? null,
-        homeId,
-        awayId,
-        goalsHome: raw?.goals?.home ?? null,
-        goalsAway: raw?.goals?.away ?? null,
-        venueName: raw?.fixture?.venue?.name ?? null,
-        venueCity: raw?.fixture?.venue?.city ?? null,
-      };
-      const pair = [homeId, awayId].sort((a, b) => a - b).join("-");
-      map.set(`${pair}|${dayKey(date)}`, pf);
-    }
-    return map;
-  }).catch(() => new Map<string, ProviderFixture>());
+function explicitProviderMatchNo(raw: any): number | null {
+  const candidates = [
+    raw?.fixture?.matchNo,
+    raw?.fixture?.match_no,
+    raw?.fixture?.number,
+    raw?.matchNo,
+    raw?.match_number,
+    raw?.league?.matchNo,
+  ];
+  for (const candidate of candidates) {
+    const value = Number(candidate);
+    if (Number.isInteger(value) && value >= 1 && value <= GC_FIXTURES.length) return value;
+  }
+  for (const text of [raw?.fixture?.name, raw?.league?.round]) {
+    const match = String(text ?? "").match(/\b(?:match|game)\s*(?:no\.?\s*)?#?\s*(\d{1,2})\b/i);
+    const value = Number(match?.[1]);
+    if (Number.isInteger(value) && value >= 1 && value <= GC_FIXTURES.length) return value;
+  }
+  return null;
+}
+
+function providerFixtureFromRaw(raw: any): ProviderFixture | null {
+  const providerId = Number(raw?.fixture?.id ?? 0);
+  const homeId = Number(raw?.teams?.home?.id ?? 0);
+  const awayId = Number(raw?.teams?.away?.id ?? 0);
+  const date = String(raw?.fixture?.date ?? "");
+  if (!Number.isInteger(providerId) || providerId <= 0 || !homeId || !awayId || !date) return null;
+  const rawTimestamp = Number(raw?.fixture?.timestamp ?? 0);
+  const parsedTimestamp = Math.floor(Date.parse(date) / 1000);
+  return {
+    providerId,
+    matchNo: explicitProviderMatchNo(raw),
+    date,
+    timestamp: Number.isFinite(rawTimestamp) && rawTimestamp > 0 ? rawTimestamp : parsedTimestamp,
+    roundEn: String(raw?.league?.round ?? ""),
+    code: raw?.fixture?.status?.short ?? "NS",
+    elapsed: raw?.fixture?.status?.elapsed ?? null,
+    homeId,
+    awayId,
+    goalsHome: raw?.goals?.home ?? null,
+    goalsAway: raw?.goals?.away ?? null,
+    penaltyHome: raw?.score?.penalty?.home ?? null,
+    penaltyAway: raw?.score?.penalty?.away ?? null,
+    venueName: raw?.fixture?.venue?.name ?? null,
+    venueCity: raw?.fixture?.venue?.city ?? null,
+  };
+}
+
+/** Provider fixtures, still carrying provider ids only as secondary metadata. */
+async function getProviderFixtures(forceFresh = false): Promise<ProviderFixture[]> {
+  if (!apiFootballEnabled()) return [];
+  try {
+    return await withSWR("gc:provider:fixtures", OVERLAY_TTL, OVERLAY_TTL * 3, async () => {
+      // A force-fresh write gate must fail closed on provider errors; turning
+      // an error into [] would overwrite a verified live fixture with static NS.
+      const request = apiGet("fixtures", { league: LEAGUE_ID, season: SEASON, timezone: TIMEZONE });
+      const rows = forceFresh ? await request : await request.catch(() => [] as any[]);
+      return rows
+        .map(providerFixtureFromRaw)
+        .filter((fixture): fixture is ProviderFixture => fixture !== null);
+    }, forceFresh);
+  } catch (error) {
+    if (forceFresh) throw error;
+    return [];
+  }
 }
 
 /** يدمج نتيجة/حالة المزوّد فوق مباراة الأساس الثابت (إن وُجدت مطابقة). */
-function overlayFixture(base: GcFixture, provider: Map<string, ProviderFixture>): GcFixture {
-  if (provider.size === 0 || !base.home.id || !base.away.id) return base;
-  const pair = [base.home.id, base.away.id].sort((a, b) => a - b).join("-");
-  const pf = provider.get(`${pair}|${dayKey(base.date)}`);
+function overlayFixture(base: GcFixture, pf: ProviderFixture | null): GcFixture {
   if (!pf) return base;
   const venue = localizeGcVenue(pf.venueName, pf.venueCity);
   return {
     ...base,
-    id: pf.id || base.id,
+    // Never replace the internal id: persisted predictions/duels refer to it.
+    id: base.id,
+    providerId: pf.providerId,
     date: pf.date || base.date,
     timestamp: pf.timestamp || base.timestamp,
     status: {
@@ -261,7 +301,10 @@ function overlayFixture(base: GcFixture, provider: Map<string, ProviderFixture>)
       finished: WC_FINISHED_STATUSES.has(pf.code),
     },
     venue: venue.name ? venue : base.venue,
+    home: pf.homeId > 0 ? seedTeam(pf.homeId) : base.home,
+    away: pf.awayId > 0 ? seedTeam(pf.awayId) : base.away,
     goals: { home: pf.goalsHome, away: pf.goalsAway },
+    penalties: { home: pf.penaltyHome, away: pf.penaltyAway },
   };
 }
 
@@ -277,14 +320,17 @@ export async function getGcTeams(): Promise<GcTeam[]> {
   });
 }
 
-/** جدول المباريات كاملًا (مُرتَّب زمنيًّا) مع دمج بيانات المزوّد متى توفّرت. */
-export async function getGcFixtures(): Promise<GcFixture[]> {
+/**
+ * جدول المباريات كاملًا مع دمج بيانات المزوّد. `forceFresh` مخصص لحدود كتابة
+ * حساسة مثل قبول رهان؛ القراءات العادية تبقى على SWR لتفادي ضغط المزوّد.
+ */
+export async function getGcFixtures(forceFresh = false): Promise<GcFixture[]> {
   const base = await withSWR("gc:fixtures", FIXTURES_TTL, FIXTURES_TTL * 3, async () => {
-    const provider = await getProviderFixtures();
-    return GC_FIXTURES.map(seedToFixture)
-      .map((fx) => overlayFixture(fx, provider))
+    const provider = await getProviderFixtures(forceFresh);
+    return resolveGcFixtureIdentities(GC_FIXTURES, provider)
+      .map(({ seed, provider: matched }) => overlayFixture(seedToFixture(seed), matched))
       .sort((a, b) => a.timestamp - b.timestamp);
-  });
+  }, forceFresh);
   // فوق الكاش: نتيجة TheSports اللحظية (MQTT/بولينغ 2ث) للمباريات الجارية فقط —
   // تصل الأهداف بثوانٍ بدل انتظار دورة كاش المزوّد الأساسي.
   return overlayGcLiveScores(base);
@@ -957,31 +1003,18 @@ export async function getGcMatchDetail(fixtureId: number): Promise<GcMatchDetail
   let statistics: GcStatistic[] = [];
   let fixture = known;
 
-  if (apiFootballEnabled()) {
+  if (apiFootballEnabled() && known.providerId) {
     const ttl = known.status.live ? MATCH_DETAIL_LIVE_TTL : MATCH_DETAIL_TTL;
     const item = await withSWR(`gc:match:${fixtureId}`, ttl, ttl * 2, async () => {
-      const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE }).catch(() => [] as any[]);
+      const rows = await apiGet("fixtures", { id: known.providerId!, timezone: TIMEZONE }).catch(
+        () => [] as any[],
+      );
       return rows[0] ?? null;
     }).catch(() => null);
 
     if (item) {
-      const code = item?.fixture?.status?.short ?? known.status.code;
-      fixture = {
-        ...known,
-        date: item.fixture?.date ?? known.date,
-        timestamp: item.fixture?.timestamp ?? known.timestamp,
-        status: {
-          code,
-          label: WC_STATUS_AR[code] ?? code,
-          elapsed: item.fixture?.status?.elapsed ?? known.status.elapsed,
-          live: WC_LIVE_STATUSES.has(code),
-          finished: WC_FINISHED_STATUSES.has(code),
-        },
-        goals: {
-          home: item.goals?.home ?? known.goals.home,
-          away: item.goals?.away ?? known.goals.away,
-        },
-      };
+      const providerFixture = providerFixtureFromRaw(item);
+      if (providerFixture) fixture = overlayFixture(known, providerFixture);
       events = (item.events ?? []).map((ev: any) => ({
         minute: ev?.time?.elapsed ?? 0,
         extraMinute: ev?.time?.extra ?? null,

@@ -23,7 +23,7 @@ export interface GcCrowd {
 export interface GcMyPrediction {
   predHome: number;
   predAway: number;
-  status: string; // pending | correct | incorrect
+  status: string; // pending | correct | incorrect | void
   tier: GcTier;
   outcomeHit: boolean;
   marginHit: boolean;
@@ -32,7 +32,7 @@ export interface GcMyPrediction {
 }
 
 export interface GcMatchSettlement {
-  status: string; // open | locked | settled
+  status: string; // open | locked | settled | void
   finalHome: number | null;
   finalAway: number | null;
   predictionsCount: number;
@@ -167,6 +167,8 @@ export interface GcBadgeDef {
 }
 
 export const GC_BADGES: GcBadgeDef[] = [
+  { code: "majlis_champion", emoji: "🏆", name: "بطل المجلس", desc: "أنهيت البطولة في صدارة أحد مجالسك" },
+  { code: "majlis_dean", emoji: "🪶", name: "عميد المجلس", desc: "أوصلت أحد مجالسك إلى 10 أعضاء" },
   { code: "nostradamus", emoji: "🔮", name: "نوسترداموس", desc: "أصبت النتيجة الدقيقة في 5 مباريات" },
   { code: "lionheart", emoji: "🦁", name: "قلب الأسد", desc: "أصبت نتيجة توقّعها أقل من 10% من الجمهور" },
   { code: "hot_streak", emoji: "🔥", name: "سلسلة ملتهبة", desc: "3 إصابات متتالية أو أكثر" },

@@ -15,6 +15,11 @@ import { useVoiceCommands } from "@/hooks/useVoiceCommands";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { resetAdsTriggerFlag } from "@/components/DmsAdSlot";
 import { needsDisplayName, useAuth } from "@/hooks/useAuth";
+import {
+  consumePostAuthReturn,
+  peekPostAuthReturn,
+  rememberPostAuthReturnIfAbsent,
+} from "@/lib/postAuthRedirect";
 import { setReadingHistoryAuth } from "@/lib/readingHistory";
 import { useWebMCP } from "@/hooks/useWebMCP";
 import { syncGuestFocusSessionsToUser } from "@/hooks/useFocusSession";
@@ -45,6 +50,35 @@ function FocusSessionSync() {
   return null;
 }
 
+/**
+ * OAuth يعود من الخادم إلى /dashboard أو onboarding، لذلك لا تمر الرحلة بمكوّن
+ * Login الذي يستأنف الوجهة عادةً. هذا الحارس يلتقط الوجهة المحفوظة بعد اكتمال
+ * الحساب فقط؛ الحارس الأمني داخل helper يمنع أي نطاق خارجي.
+ */
+function PostAuthResumeGuard() {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated || !user) return;
+    if (needsDisplayName(user) || user.isProfileComplete === false) return;
+    const pending = peekPostAuthReturn();
+    if (!pending) return;
+
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (current === pending) {
+      consumePostAuthReturn();
+      return;
+    }
+
+    const path = location.split("?")[0] || "/";
+    const oauthLanding = path === "/" || path === "/dashboard" || path === "/onboarding/personalize";
+    if (oauthLanding) setLocation(consumePostAuthReturn("/"));
+  }, [user, isAuthenticated, isLoading, location, setLocation]);
+
+  return null;
+}
+
 /** حسابات الجوال بلا اسم — توجيه إلزامي لشاشة إكمال الاسم (جلسات قديمة وجديدة). */
 function NameCompletionGuard() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -68,6 +102,9 @@ function NameCompletionGuard() {
       path === "/admin-login";
     if (exempt) return;
 
+    rememberPostAuthReturnIfAbsent(
+      `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    );
     setLocation("/complete-name");
   }, [user, isAuthenticated, isLoading, location, setLocation]);
 
@@ -396,6 +433,7 @@ const AsianCup = lazy(() => retryImport(() => import("@/pages/AsianCup")));
 const AsianCupPredictions = lazy(() => retryImport(() => import("@/pages/AsianCupPredictions")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
 const GulfCupPredictions = lazy(() => retryImport(() => import("@/pages/GulfCupPredictions")));
+const GulfCupMajlis = lazy(() => retryImport(() => import("@/pages/GulfCupMajlis")));
 const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
 const KingsCupTeam = lazy(() => retryImport(() => import("@/pages/KingsCupTeam")));
 const KingsCupPlayer = lazy(() => retryImport(() => import("@/pages/KingsCupPlayer")));
@@ -930,6 +968,8 @@ function Router() {
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
         <Route path="/asian-cup/predictions">{() => <LazyRoute component={AsianCupPredictions} />}</Route>
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
+        <Route path="/gulf-cup/majlis/:id">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
+        <Route path="/gulf-cup/majlis">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
         <Route path="/gulf-cup/predictions">{() => <LazyRoute component={GulfCupPredictions} />}</Route>
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
 
@@ -1145,6 +1185,7 @@ function App() {
                   <VoiceCommandsManager />
                   <ReadingHistorySync />
                   <FocusSessionSync />
+                  <PostAuthResumeGuard />
                   <NameCompletionGuard />
                   <WebMCPProvider />
                   <ErrorBoundary>

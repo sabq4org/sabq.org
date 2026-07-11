@@ -179,8 +179,17 @@ interface SabqApi {
     suspend fun registerDevice(@Body body: DeviceRegisterRequest): DeviceRegisterResponse
 
     /** Drop the device row when the user signs out or revokes pushes. */
-    @POST("api/v1/devices/unregister")
+    @HTTP(method = "DELETE", path = "api/v1/devices/unregister", hasBody = true)
     suspend fun unregisterDevice(@Body body: DeviceUnregisterRequest): retrofit2.Response<Unit>
+
+    /** App-scoped FCM registration for Gulf Cup Majlis notifications. */
+    @POST("api/v1/members/push-token")
+    suspend fun registerMemberPushToken(@Body body: MemberPushTokenRequest): MemberPushTokenResponse
+
+    @HTTP(method = "DELETE", path = "api/v1/members/push-token", hasBody = true)
+    suspend fun unregisterMemberPushToken(
+        @Body body: MemberPushTokenDeleteRequest,
+    ): MemberPushTokenResponse
 
     /**
      * Authenticated user profile. iOS uses `/v1/members/profile`
@@ -630,6 +639,108 @@ interface SabqApi {
 
     @GET("https://api.sabq.org/api/gulf-cup/match/{id}")
     suspend fun getGulfCupMatch(@Path("id") fixtureId: Int): com.sabq.smart.feature.gulfcup.GcMatchDetail
+
+    // -- خليجي 27: التوقعات والمجالس (Bearer /api/v1 فقط) -----------------
+
+    @GET("api/v1/gulf-cup/predictions/today")
+    suspend fun getGcPredictionsToday(): com.sabq.smart.feature.gulfcup.GcPredictionsTodayResponse
+
+    @POST("api/v1/gulf-cup/predictions")
+    suspend fun submitGcPrediction(
+        @Body body: com.sabq.smart.feature.gulfcup.GcPredictionSubmitBody,
+    ): com.sabq.smart.feature.gulfcup.GcPredictionSubmitResponse
+
+    @GET("api/v1/gulf-cup/predictions/leaderboard")
+    suspend fun getGcPredictionsLeaderboard(): com.sabq.smart.feature.gulfcup.GcPredictionLeaderboardResponse
+
+    @GET("api/v1/gulf-cup/predictions/mine")
+    suspend fun getGcMyPredictions(): com.sabq.smart.feature.gulfcup.GcMyPredictionsResponse
+
+    @GET("api/v1/gulf-cup/predictions/long")
+    suspend fun getGcLongPredictions(): com.sabq.smart.feature.gulfcup.GcLongData
+
+    @POST("api/v1/gulf-cup/predictions/long")
+    suspend fun submitGcLongPrediction(
+        @Body body: com.sabq.smart.feature.gulfcup.GcLongSubmitBody,
+    ): com.sabq.smart.feature.gulfcup.GcOkResponse
+
+    @GET("api/v1/gulf-cup/majlis/mine")
+    suspend fun getGcMajalis(): com.sabq.smart.feature.gulfcup.GcMajalisResponse
+
+    @POST("api/v1/gulf-cup/majlis")
+    suspend fun createGcMajlis(
+        @Body body: com.sabq.smart.feature.gulfcup.GcMajlisNameBody,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisSummary
+
+    @POST("api/v1/gulf-cup/majlis/join")
+    suspend fun joinGcMajlis(
+        @Body body: com.sabq.smart.feature.gulfcup.GcMajlisCodeBody,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisSummary
+
+    @GET("api/v1/gulf-cup/majlis/invite/{code}")
+    suspend fun getGcMajlisInvite(
+        @Path("code") code: String,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisInvitePreview
+
+    @GET("api/v1/gulf-cup/majlis/{id}/leaderboard")
+    suspend fun getGcMajlisBoard(
+        @Path("id") majlisId: String,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisBoard
+
+    @DELETE("api/v1/gulf-cup/majlis/{id}")
+    suspend fun leaveGcMajlis(
+        @Path("id") majlisId: String,
+    ): com.sabq.smart.feature.gulfcup.GcLeaveResponse
+
+    @GET("api/v1/gulf-cup/majlis/{id}/matchday")
+    suspend fun getGcMajlisMatchday(
+        @Path("id") majlisId: String,
+        @Query("date") date: String? = null,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisMatchdayResponse
+
+    @GET("api/v1/gulf-cup/majlis/{id}/fantasy")
+    suspend fun getGcMajlisFantasy(
+        @Path("id") majlisId: String,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisFantasyResponse
+
+    @GET("api/v1/gulf-cup/majlis/{id}/champion-picks")
+    suspend fun getGcMajlisChampionPicks(
+        @Path("id") majlisId: String,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisChampionPicksResponse
+
+    @GET("api/v1/gulf-cup/majlis/{id}/harvest")
+    suspend fun getGcMajlisHarvest(
+        @Path("id") majlisId: String,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisHarvestResponse
+
+    @GET("api/v1/gulf-cup/majlis/{id}/duels")
+    suspend fun getGcMajlisDuels(
+        @Path("id") majlisId: String,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisDuelsResponse
+
+    @POST("api/v1/gulf-cup/majlis/{id}/duels")
+    suspend fun createGcMajlisDuel(
+        @Path("id") majlisId: String,
+        @Body body: com.sabq.smart.feature.gulfcup.GcMajlisDuelCreateBody,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisDuelMutationResponse
+
+    @POST("api/v1/gulf-cup/majlis/duels/{id}/{action}")
+    suspend fun mutateGcMajlisDuel(
+        @Path("id") duelId: String,
+        @Path("action") action: String,
+        @Body body: Map<String, String> = emptyMap(),
+    ): com.sabq.smart.feature.gulfcup.GcMajlisDuelMutationResponse
+
+    @GET("api/v1/gulf-cup/majlis/notification-preference")
+    suspend fun getGcMajlisNotificationPreference(): com.sabq.smart.feature.gulfcup.GcMajlisNotificationPreference
+
+    @PUT("api/v1/gulf-cup/majlis/notification-preference")
+    suspend fun updateGcMajlisNotificationPreference(
+        @Body body: com.sabq.smart.feature.gulfcup.GcMajlisNotificationPreferenceBody,
+    ): com.sabq.smart.feature.gulfcup.GcMajlisNotificationPreference
+
+    @GET("api/v1/gulf-cup/fantasy/leaderboard")
+    suspend fun getGcFantasyLeaderboard(): com.sabq.smart.feature.gulfcup.GcFantasyLeaderboardResponse
 
     // -- المتابعة الرياضية + تنبيهات المباريات (Bearer، عبر sabq.org) --------
     @GET("api/v1/sports/follows")

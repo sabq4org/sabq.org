@@ -57,14 +57,16 @@ final class GcAccountStore {
     // MARK: مشتقات — تفضّل أرقام الخادم وتسقط إلى الحساب المحلي من السجل
 
     private var resolved: [GcMyPredictionRow] {
-        mine.filter { ($0.matchStatus ?? "") == "finished" || $0.pointsAwarded != nil }
+        mine.filter {
+            !$0.isVoid && (($0.matchStatus ?? "") == "finished" || $0.pointsAwarded != nil)
+        }
     }
 
     var totalPoints: Int {
         me?.points ?? resolved.compactMap(\.pointsAwarded).reduce(0, +)
     }
 
-    var playedCount: Int { me?.played ?? mine.count }
+    var playedCount: Int { me?.played ?? resolved.count }
 
     var correctCount: Int {
         me?.correct ?? resolved.filter { ($0.pointsAwarded ?? 0) > 0 }.count
@@ -97,14 +99,23 @@ final class GcAccountStore {
     }
 }
 
+private struct GcAccountBadge: Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let icon: String
+    let tint: Color
+    let count: Int
+}
+
 // MARK: - الشاشة
 
 @MainActor
 struct GcAccountScreen: View {
     let store: GcHubStore
-    let onSelectTab: (GcTab) -> Void
 
     @Environment(GcAuthStore.self) private var auth
+    @Environment(GcAppRouter.self) private var router
     @Bindable private var prefs = GcUserPreferences.shared
     @State private var account = GcAccountStore()
     @State private var showAbout = false
@@ -128,6 +139,7 @@ struct GcAccountScreen: View {
                 }
 
                 if auth.isLoggedIn {
+                    if !earnedBadges.isEmpty { badgesSection.gcReveal(delay: 0.03) }
                     if account.streak >= 2 { streakBanner.gcReveal(delay: 0.04) }
                     activityCards.gcReveal(delay: 0.06)
                     predictionsLog.gcReveal(delay: 0.08)
@@ -233,6 +245,128 @@ struct GcAccountScreen: View {
         }
     }
 
+    // MARK: الأوسمة الدائمة
+
+    private var earnedBadges: [GcAccountBadge] {
+        var grouped: [String: Int] = [:]
+        for rawCode in account.me?.badges ?? [] {
+            let code: String
+            if rawCode.hasPrefix("majlis_champion:") {
+                code = "majlis_champion"
+            } else if rawCode.hasPrefix("majlis_dean:") {
+                code = "majlis_dean"
+            } else {
+                code = rawCode
+            }
+            grouped[code, default: 0] += 1
+        }
+
+        let preferredOrder = [
+            "majlis_champion", "majlis_dean", "nostradamus",
+            "lionheart", "hot_streak", "ever_present",
+        ]
+        let orderedCodes = preferredOrder.filter { grouped[$0] != nil }
+            + grouped.keys.filter { !preferredOrder.contains($0) }.sorted()
+        return orderedCodes.map { badge(for: $0, count: grouped[$0] ?? 1) }
+    }
+
+    private func badge(for code: String, count: Int) -> GcAccountBadge {
+        switch code {
+        case "majlis_champion":
+            return GcAccountBadge(
+                id: code,
+                title: L("account.badge.majlisChampion"),
+                detail: L("account.badge.majlisChampion.desc"),
+                icon: "trophy.fill",
+                tint: GcTheme.sky,
+                count: count
+            )
+        case "majlis_dean":
+            return GcAccountBadge(
+                id: code,
+                title: L("account.badge.majlisDean"),
+                detail: L("account.badge.majlisDean.desc"),
+                icon: "person.3.fill",
+                tint: GcTheme.emerald,
+                count: count
+            )
+        case "nostradamus":
+            return GcAccountBadge(id: code, title: L("account.badge.nostradamus"), detail: L("account.badge.nostradamus.desc"), icon: "scope", tint: GcTheme.teal, count: count)
+        case "lionheart":
+            return GcAccountBadge(id: code, title: L("account.badge.lionheart"), detail: L("account.badge.lionheart.desc"), icon: "heart.fill", tint: GcTheme.crimson, count: count)
+        case "hot_streak":
+            return GcAccountBadge(id: code, title: L("account.badge.hotStreak"), detail: L("account.badge.hotStreak.desc"), icon: "flame.fill", tint: GcTheme.sky, count: count)
+        case "ever_present":
+            return GcAccountBadge(id: code, title: L("account.badge.everPresent"), detail: L("account.badge.everPresent.desc"), icon: "medal.fill", tint: GcTheme.emeraldSoft, count: count)
+        default:
+            return GcAccountBadge(id: code, title: L("account.badge.earned"), detail: code, icon: "checkmark.seal.fill", tint: GcTheme.inkDim, count: count)
+        }
+    }
+
+    private var badgesSection: some View {
+        VStack(spacing: 10) {
+            GcSectionHeader(
+                icon: "seal.fill",
+                title: L("account.badges.title"),
+                subtitle: L("account.badges.subtitle"),
+                count: earnedBadges.count,
+                tint: GcTheme.sky
+            )
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], spacing: 8) {
+                ForEach(earnedBadges) { badge in
+                    badgeTile(badge)
+                }
+            }
+        }
+    }
+
+    private func badgeTile(_ badge: GcAccountBadge) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            Image(systemName: badge.icon)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(badge.tint)
+                .frame(width: 38, height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(badge.tint.opacity(0.13))
+                )
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    Text(badge.title)
+                        .font(GulfCupFonts.app(size: 12, weight: .bold))
+                        .foregroundStyle(GcTheme.ink)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                    if badge.count > 1 {
+                        Text("×\(badge.count)")
+                            .font(GulfCupFonts.app(size: 9.5, weight: .bold))
+                            .foregroundStyle(badge.tint)
+                            .monospacedDigit()
+                    }
+                }
+                Text(badge.detail)
+                    .font(GulfCupFonts.app(size: 9.5))
+                    .foregroundStyle(GcTheme.inkDim)
+                    .lineLimit(2)
+                Label(L("account.badges.unlocked"), systemImage: "checkmark.circle.fill")
+                    .font(GulfCupFonts.app(size: 9, weight: .semibold))
+                    .foregroundStyle(badge.tint)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 94, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: GcTheme.tileRadius, style: .continuous)
+                .fill(GcTheme.cardBg)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: GcTheme.tileRadius, style: .continuous)
+                .stroke(badge.tint.opacity(0.22), lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+    }
+
     private var profileAvatar: some View {
         Group {
             if let url = auth.member?.avatar, !url.isEmpty {
@@ -302,8 +436,7 @@ struct GcAccountScreen: View {
     private var activityCards: some View {
         HStack(spacing: 8) {
             Button {
-                GcPredRouter.shared.open(.fantasy)
-                onSelectTab(.predictions)
+                router.openPredictions(.fantasy)
             } label: {
                 miniCard(
                     icon: "person.3.sequence.fill",
@@ -315,8 +448,7 @@ struct GcAccountScreen: View {
             .buttonStyle(GcPressStyle())
 
             Button {
-                GcPredRouter.shared.open(.majlis)
-                onSelectTab(.predictions)
+                router.openPredictions(.majlis)
             } label: {
                 miniCard(
                     icon: "bubble.left.and.bubble.right.fill",
@@ -382,8 +514,7 @@ struct GcAccountScreen: View {
             VStack(spacing: 0) {
                 if account.mine.isEmpty && account.longMine.isEmpty {
                     Button {
-                        GcPredRouter.shared.open(.mine)
-                        onSelectTab(.predictions)
+                        router.openPredictions(.mine)
                     } label: {
                         HStack(spacing: 10) {
                             Image(systemName: "sparkles")
@@ -412,8 +543,7 @@ struct GcAccountScreen: View {
                     }
                     Divider().padding(.leading, 14)
                     Button {
-                        GcPredRouter.shared.open(.mine)
-                        onSelectTab(.predictions)
+                        router.openPredictions(.mine)
                     } label: {
                         Text(L("account.log.all"))
                             .font(GulfCupFonts.app(size: 12.5, weight: .bold))
@@ -436,18 +566,25 @@ struct GcAccountScreen: View {
     }
 
     private func predictionRow(_ row: GcMyPredictionRow) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(row.homeTeamName ?? "؟") × \(row.awayTeamName ?? "؟")")
-                    .font(GulfCupFonts.app(size: 12.5, weight: .semibold))
-                    .foregroundStyle(GcTheme.ink)
-                    .lineLimit(1)
-                Text(L("account.log.myPick", ["score": "\(row.predHome) - \(row.predAway)"]))
-                    .font(GulfCupFonts.app(size: 10.5))
-                    .foregroundStyle(GcTheme.inkDim)
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(row.homeTeamName ?? "؟") × \(row.awayTeamName ?? "؟")")
+                        .font(GulfCupFonts.app(size: 12.5, weight: .semibold))
+                        .foregroundStyle(GcTheme.ink)
+                        .lineLimit(1)
+                    Text(L("account.log.myPick", ["score": "\(row.predHome) - \(row.predAway)"]))
+                        .font(GulfCupFonts.app(size: 10.5))
+                        .foregroundStyle(GcTheme.inkDim)
+                }
+                Spacer(minLength: 0)
+                if !row.isVoid {
+                    predictionChip(row)
+                }
             }
-            Spacer(minLength: 0)
-            predictionChip(row)
+            if row.isVoid {
+                GcVoidMatchNotice(compact: true)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -560,7 +697,13 @@ struct GcAccountScreen: View {
                 toggleRow(icon: "bell.badge",
                           title: L("more.settings.reminders"),
                           subtitle: L("more.settings.reminders.sub"),
-                          isOn: $prefs.predictionReminders)
+                          isOn: Binding(
+                            get: { prefs.predictionReminders },
+                            set: { enabled in
+                                prefs.predictionReminders = enabled
+                                if enabled { Task { _ = await GcPushManager.shared.requestAuthorization() } }
+                            }
+                          ))
                 Divider().padding(.leading, 54)
                 toggleRow(icon: "hand.tap",
                           title: L("more.settings.haptics"),

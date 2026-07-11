@@ -12,13 +12,15 @@
  *
  * ADR-001: هذه الخدمة تملك كل استعلامات Drizzle؛ مسار gcPredictions لا يستورد db.
  */
-import { and, desc, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, notInArray, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   gcPredictions,
   gcPredictionMatches,
   gcLongPredictions,
   gcBadges,
+  gcDuels,
+  gcMotmVotes,
   notificationsInbox,
   users,
 } from "@shared/schema";
@@ -39,8 +41,20 @@ import {
   shareForTier,
   type GcTier,
 } from "./gulfCupPredictionScoring";
-import { awardPoints } from "./loyalty";
+import { awardPoints, awardPointsInTransaction, finalizeAwardPoints } from "./loyalty";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
+import { planGcChampionSettlement } from "./gcChampionSettlementLogic";
+import { enqueueGcMajlisOvertakesInTransaction } from "./gcMajlisNotificationsService";
+import { GC_FIXTURES } from "./gulfCupData";
+import {
+  gcImmutableTournamentLockAt,
+  isGcTournamentLocked,
+} from "./gulfCupFixtureIdentity";
+import {
+  compareGcSettlementOrder,
+  gcFixtureSettlementDisposition,
+  planGcVoidSettlement,
+} from "./gcPredictionSettlementLogic";
 
 /** التفعيل صريح بعلم البيئة (لا نكشف المسابقة قبل قرار النشر). */
 export function isGcPredictionsEnabled(): boolean {
@@ -48,6 +62,51 @@ export function isGcPredictionsEnabled(): boolean {
 }
 
 const LONG_POOL = { champion: 5000, top_scorer: 5000 } as const;
+const GC_CHAMPION_PAYOUT_BATCH_SIZE = 100;
+const GC_STABLE_FIXTURE_IDS = GC_FIXTURES.map((fixture) => String(fixture.id));
+
+let fixtureIdentityAuditPassed = false;
+
+/**
+ * Fail closed if an older deployment persisted provider ids. Silently ignoring
+ * those rows would orphan predictions/escrow; deployment must reconcile them
+ * explicitly before this process can settle the stable 15-fixture chain.
+ */
+async function assertStableFixtureIdentityData(): Promise<void> {
+  if (fixtureIdentityAuditPassed) return;
+  const [matches, predictions, duels, motmVotes] = await Promise.all([
+    db
+      .selectDistinct({ fixtureId: gcPredictionMatches.fixtureId })
+      .from(gcPredictionMatches)
+      .where(notInArray(gcPredictionMatches.fixtureId, GC_STABLE_FIXTURE_IDS))
+      .limit(20),
+    db
+      .selectDistinct({ fixtureId: gcPredictions.fixtureId })
+      .from(gcPredictions)
+      .where(notInArray(gcPredictions.fixtureId, GC_STABLE_FIXTURE_IDS))
+      .limit(20),
+    db
+      .selectDistinct({ fixtureId: gcDuels.fixtureId })
+      .from(gcDuels)
+      .where(notInArray(gcDuels.fixtureId, GC_STABLE_FIXTURE_IDS))
+      .limit(20),
+    db
+      .selectDistinct({ fixtureId: gcMotmVotes.fixtureId })
+      .from(gcMotmVotes)
+      .where(notInArray(gcMotmVotes.fixtureId, GC_STABLE_FIXTURE_IDS))
+      .limit(20),
+  ]);
+  const legacy = [
+    ...matches.map((row) => `match:${row.fixtureId}`),
+    ...predictions.map((row) => `prediction:${row.fixtureId}`),
+    ...duels.map((row) => `duel:${row.fixtureId}`),
+    ...motmVotes.map((row) => `motm:${row.fixtureId}`),
+  ];
+  if (legacy.length > 0) {
+    throw new Error(`GC_LEGACY_FIXTURE_IDS_DETECTED:${legacy.join(",")}`);
+  }
+  fixtureIdentityAuditPassed = true;
+}
 
 const fid = (fixtureId: number | string): string => String(fixtureId);
 
@@ -130,11 +189,13 @@ const probOfPick = (predHome: number, predAway: number, p: { home: number; draw:
 
 export type GcModelProbs = { home: number; draw: number; away: number };
 export type GcCrowd = { home: number; draw: number; away: number; total: number };
+export type GcPredictionStatus = "pending" | "correct" | "incorrect" | "void";
+export type GcPredictionMatchStatus = "open" | "locked" | "settled" | "void";
 
 export type GcMyPrediction = {
   predHome: number;
   predAway: number;
-  status: string;
+  status: GcPredictionStatus;
   tier: GcTier;
   outcomeHit: boolean;
   marginHit: boolean;
@@ -143,7 +204,7 @@ export type GcMyPrediction = {
 };
 
 export type GcMatchSettlement = {
-  status: string;
+  status: GcPredictionMatchStatus;
   finalHome: number | null;
   finalAway: number | null;
   predictionsCount: number;
@@ -188,8 +249,14 @@ async function currentJackpot(): Promise<number> {
   const [row] = await db
     .select({ carryOut: gcPredictionMatches.carryOut })
     .from(gcPredictionMatches)
-    .where(eq(gcPredictionMatches.status, "settled"))
-    .orderBy(desc(gcPredictionMatches.kickoffAt))
+    .where(and(
+      inArray(gcPredictionMatches.fixtureId, GC_STABLE_FIXTURE_IDS),
+      inArray(gcPredictionMatches.status, ["settled", "void"]),
+    ))
+    .orderBy(
+      desc(gcPredictionMatches.kickoffAt),
+      desc(sql`${gcPredictionMatches.fixtureId}::bigint`),
+    )
     .limit(1);
   return Number(row?.carryOut ?? 0);
 }
@@ -275,7 +342,11 @@ async function computeCurrentStreak(userId: string): Promise<number> {
     .select({ outcomeHit: gcPredictions.outcomeHit })
     .from(gcPredictions)
     .innerJoin(gcPredictionMatches, eq(gcPredictions.fixtureId, gcPredictionMatches.fixtureId))
-    .where(and(eq(gcPredictions.userId, userId), isNotNull(gcPredictions.settledAt)))
+    .where(and(
+      eq(gcPredictions.userId, userId),
+      isNotNull(gcPredictions.settledAt),
+      inArray(gcPredictions.status, ["correct", "incorrect"]),
+    ))
     .orderBy(desc(gcPredictionMatches.kickoffAt));
   let n = 0;
   for (const r of rows) {
@@ -299,7 +370,7 @@ async function getMeStats(userId: string): Promise<GcMeStats> {
       points: sql<number>`coalesce(sum(${gcPredictions.pointsAwarded}), 0)::int`,
       correct: sql<number>`count(*) filter (where ${gcPredictions.outcomeHit})::int`,
       exact: sql<number>`count(*) filter (where ${gcPredictions.exactHit})::int`,
-      played: sql<number>`count(*) filter (where ${gcPredictions.status} <> 'pending')::int`,
+      played: sql<number>`count(*) filter (where ${gcPredictions.status} in ('correct', 'incorrect'))::int`,
     })
     .from(gcPredictions)
     .where(eq(gcPredictions.userId, userId));
@@ -358,7 +429,7 @@ export async function getUpcomingPredictableMatches(
       myByFixture.set(m.fixtureId, {
         predHome: m.predHome,
         predAway: m.predAway,
-        status: m.status,
+        status: m.status as GcPredictionStatus,
         tier: m.tier as GcTier,
         outcomeHit: m.outcomeHit,
         marginHit: m.marginHit,
@@ -403,7 +474,7 @@ export async function getUpcomingPredictableMatches(
       myPrediction: myByFixture.get(key) ?? null,
       settlement: snap
         ? {
-            status: snap.status,
+            status: snap.status as GcPredictionMatchStatus,
             finalHome: snap.finalHome,
             finalAway: snap.finalAway,
             predictionsCount: snap.predictionsCount,
@@ -467,7 +538,7 @@ export async function getMatchPredictionsSummary(
   const cAway = Number(c?.away ?? 0);
   const total = cHome + cDraw + cAway;
   return {
-    status: snap?.status ?? "open",
+    status: (snap?.status ?? "open") as GcPredictionMatchStatus,
     finalHome: snap?.finalHome ?? null,
     finalAway: snap?.finalAway ?? null,
     predictionsCount: total,
@@ -499,12 +570,12 @@ export async function getLeaderboard(limit = 100) {
       totalPoints: sql<number>`coalesce(sum(${gcPredictions.pointsAwarded}), 0)::int`,
       correctCount: sql<number>`count(*) filter (where ${gcPredictions.outcomeHit})::int`,
       exactCount: sql<number>`count(*) filter (where ${gcPredictions.exactHit})::int`,
-      playedCount: sql<number>`count(*) filter (where ${gcPredictions.status} <> 'pending')::int`,
+      playedCount: sql<number>`count(*) filter (where ${gcPredictions.status} in ('correct', 'incorrect'))::int`,
     })
     .from(gcPredictions)
     .innerJoin(users, eq(gcPredictions.userId, users.id))
     .groupBy(gcPredictions.userId, users.firstName, users.lastName, users.profileImageUrl)
-    .having(sql`count(*) filter (where ${gcPredictions.status} <> 'pending') > 0`)
+    .having(sql`count(*) filter (where ${gcPredictions.status} in ('correct', 'incorrect')) > 0`)
     .orderBy(
       desc(sql`coalesce(sum(${gcPredictions.pointsAwarded}), 0)`),
       desc(sql`count(*) filter (where ${gcPredictions.exactHit})`),
@@ -545,7 +616,7 @@ export async function getLeaderboardMeta(viewerUserId?: string) {
     .from(gcPredictions)
     .innerJoin(users, eq(gcPredictions.userId, users.id))
     .groupBy(gcPredictions.userId)
-    .having(sql`count(*) filter (where ${gcPredictions.status} <> 'pending') > 0`)
+    .having(sql`count(*) filter (where ${gcPredictions.status} in ('correct', 'incorrect')) > 0`)
     .as("board");
 
   const [totals] = await db.select({ total: sql<number>`count(*)::int` }).from(board);
@@ -557,12 +628,12 @@ export async function getLeaderboardMeta(viewerUserId?: string) {
       pts: sql<number>`coalesce(sum(${gcPredictions.pointsAwarded}), 0)::int`,
       exact: sql<number>`count(*) filter (where ${gcPredictions.exactHit})::int`,
       correct: sql<number>`count(*) filter (where ${gcPredictions.outcomeHit})::int`,
-      played: sql<number>`count(*) filter (where ${gcPredictions.status} <> 'pending')::int`,
+      played: sql<number>`count(*) filter (where ${gcPredictions.status} in ('correct', 'incorrect'))::int`,
     })
     .from(gcPredictions)
     .where(eq(gcPredictions.userId, viewerUserId))
     .groupBy(gcPredictions.userId)
-    .having(sql`count(*) filter (where ${gcPredictions.status} <> 'pending') > 0`);
+    .having(sql`count(*) filter (where ${gcPredictions.status} in ('correct', 'incorrect')) > 0`);
   if (!mine) return { total, viewer: null };
 
   const [ahead] = await db
@@ -599,7 +670,7 @@ async function awardBadges(userId: string): Promise<void> {
   const [agg] = await db
     .select({
       exact: sql<number>`count(*) filter (where ${gcPredictions.exactHit})::int`,
-      groupPlayed: sql<number>`count(*) filter (where ${gcPredictions.status} <> 'pending')::int`,
+      groupPlayed: sql<number>`count(*) filter (where ${gcPredictions.status} in ('correct', 'incorrect'))::int`,
       lionheart: sql<number>`count(*) filter (where ${gcPredictions.outcomeHit} and ${gcPredictions.pickProb} > 0 and ${gcPredictions.pickProb} < 10)::int`,
     })
     .from(gcPredictions)
@@ -638,7 +709,15 @@ async function notifyWin(userId: string, points: number, fx: GcFixture, tier: Gc
 // محرّك التسوية — كل دقيقة عبر الكرون
 // ---------------------------------------------------------------------------
 
-export type GcSettlementSummary = { settled: number; awarded: number; errors: number };
+export type GcSettlementSummary = {
+  settled: number;
+  awarded: number;
+  errors: number;
+  /** Newly or previously settled fixtures seen this cycle (duel retry input). */
+  settledFixtureIds: string[];
+  /** Overtake outbox rows committed atomically with newly settled fixtures. */
+  overtakeQueued: number;
+};
 
 /**
  * يُسوّي المباريات المنتهية: يحسب طبقة كل توقّع، يوزّع البركة (الأساس + الجائزة
@@ -646,26 +725,65 @@ export type GcSettlementSummary = { settled: number; awarded: number; errors: nu
  * للمباراة التالية. درع idempotency: settledAt مرساة + قيد pending + dedup الولاء.
  */
 export async function settleFinishedMatches(): Promise<GcSettlementSummary> {
+  await assertStableFixtureIdentityData();
   const fixtures = await getGcFixtures();
-  // نُسوّي بترتيب الانطلاق ليتسلسل تراكم الجائزة بشكل حتمي.
-  const finished = fixtures.filter(hasRealFinalScore).sort((a, b) => a.timestamp - b.timestamp);
+
+  // Provider postponements must update the ordering anchor before any jackpot
+  // decision. Only unsettled snapshots move; a completed chain is immutable.
+  // `IS DISTINCT FROM` avoids touching every open row on every minute tick.
+  for (const fixture of fixtures) {
+    const kickoffAt = new Date(fixture.timestamp * 1000);
+    await db
+      .update(gcPredictionMatches)
+      .set({ kickoffAt, updatedAt: new Date() })
+      .where(and(
+        eq(gcPredictionMatches.fixtureId, fid(fixture.id)),
+        isNull(gcPredictionMatches.settledAt),
+        sql`${gcPredictionMatches.kickoffAt} is distinct from ${kickoffAt}`,
+      ));
+  }
+
+  // `PST` remains pending. Administrative/cancelled terminal states close as
+  // void without awarding points or injecting this fixture's base pool.
+  const terminal = fixtures
+    .filter((fixture) => gcFixtureSettlementDisposition({
+      statusCode: fixture.status.code,
+      goalsHome: fixture.goals.home,
+      goalsAway: fixture.goals.away,
+    }) !== "wait")
+    .sort((a, b) => compareGcSettlementOrder({ timestamp: a.timestamp, fixtureId: a.id }, {
+      timestamp: b.timestamp,
+      fixtureId: b.id,
+    }));
   let settled = 0;
   let awarded = 0;
   let errors = 0;
+  let overtakeQueued = 0;
+  const settledFixtureIds = new Set<string>();
 
-  for (const fx of finished) {
+  for (const fx of terminal) {
     try {
       const key = fid(fx.id);
+      const disposition = gcFixtureSettlementDisposition({
+        statusCode: fx.status.code,
+        goalsHome: fx.goals.home,
+        goalsAway: fx.goals.away,
+      });
       const [existing] = await db
         .select({ settledAt: gcPredictionMatches.settledAt })
         .from(gcPredictionMatches)
         .where(eq(gcPredictionMatches.fixtureId, key));
       if (!existing) continue; // لا توقّعات على هذه المباراة
+      if (existing.settledAt != null) settledFixtureIds.add(key);
 
       let payouts: { userId: string; points: number; tier: GcTier }[] = [];
 
       if (existing.settledAt == null) {
         const result = await db.transaction(async (tx) => {
+          // Serialize the tournament-wide carry chain, not only one fixture.
+          // Otherwise two pods can settle adjacent matches from the same
+          // predecessor and spend the same carry twice.
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtext('gc-prediction-settlement-chain'))`);
           const [locked] = await tx
             .select({ settledAt: gcPredictionMatches.settledAt, kickoffAt: gcPredictionMatches.kickoffAt })
             .from(gcPredictionMatches)
@@ -673,17 +791,50 @@ export async function settleFinishedMatches(): Promise<GcSettlementSummary> {
             .for("update");
           if (locked?.settledAt != null) return null; // خسرنا السباق
 
-          // الجائزة المتراكمة = carryOut لآخر مباراة مُسوّاة قبل هذه.
+          // Fail closed when an earlier snapshot is still unresolved. The
+          // outer cycle will retry after that match settles (or after a
+          // postponement refresh moves its kickoff into the future).
+          const [earlierUnsettled] = await tx
+            .select({ fixtureId: gcPredictionMatches.fixtureId })
+            .from(gcPredictionMatches)
+            .where(and(
+              inArray(gcPredictionMatches.fixtureId, GC_STABLE_FIXTURE_IDS),
+              isNull(gcPredictionMatches.settledAt),
+              or(
+                lt(gcPredictionMatches.kickoffAt, locked.kickoffAt),
+                and(
+                  eq(gcPredictionMatches.kickoffAt, locked.kickoffAt),
+                  sql`${gcPredictionMatches.fixtureId}::bigint < ${fx.id}`,
+                ),
+              ),
+            ))
+            .limit(1);
+          if (earlierUnsettled) return "blocked-by-earlier" as const;
+
+          // الجائزة المتراكمة = carryOut للسابق الحتمي. مع انطلاق مباراتين
+          // في اللحظة نفسها يصبح معرّف سبق الداخلي (المساوي لترتيب matchNo)
+          // فاصلًا ثابتًا، فلا تستهلك المباراتان الرصيد السابق نفسه.
           const [prev] = await tx
             .select({ carryOut: gcPredictionMatches.carryOut })
             .from(gcPredictionMatches)
-            .where(and(eq(gcPredictionMatches.status, "settled"), lt(gcPredictionMatches.kickoffAt, locked.kickoffAt)))
-            .orderBy(desc(gcPredictionMatches.kickoffAt))
+            .where(and(
+              inArray(gcPredictionMatches.fixtureId, GC_STABLE_FIXTURE_IDS),
+              inArray(gcPredictionMatches.status, ["settled", "void"]),
+              or(
+                lt(gcPredictionMatches.kickoffAt, locked.kickoffAt),
+                and(
+                  eq(gcPredictionMatches.kickoffAt, locked.kickoffAt),
+                  sql`${gcPredictionMatches.fixtureId}::bigint < ${fx.id}`,
+                ),
+              ),
+            ))
+            .orderBy(
+              desc(gcPredictionMatches.kickoffAt),
+              desc(sql`${gcPredictionMatches.fixtureId}::bigint`),
+            )
             .limit(1);
           const carryIn = Number(prev?.carryOut ?? 0);
 
-          const finalHome = fx.goals.home as number;
-          const finalAway = fx.goals.away as number;
           const now = new Date();
 
           const preds = await tx
@@ -694,6 +845,40 @@ export async function settleFinishedMatches(): Promise<GcSettlementSummary> {
             })
             .from(gcPredictions)
             .where(and(eq(gcPredictions.fixtureId, key), eq(gcPredictions.status, "pending")));
+
+          if (disposition === "void") {
+            const plan = planGcVoidSettlement(carryIn, preds.length);
+            await tx
+              .update(gcPredictions)
+              .set({
+                status: "void",
+                tier: "none",
+                outcomeHit: false,
+                marginHit: false,
+                exactHit: false,
+                pointsAwarded: 0,
+                settledAt: now,
+                updatedAt: now,
+              })
+              .where(and(
+                eq(gcPredictions.fixtureId, key),
+                eq(gcPredictions.status, "pending"),
+              ));
+            await tx
+              .update(gcPredictionMatches)
+              .set({
+                ...plan,
+                finalHome: null,
+                finalAway: null,
+                settledAt: now,
+                updatedAt: now,
+              })
+              .where(eq(gcPredictionMatches.fixtureId, key));
+            return { wins: [] as { userId: string; points: number; tier: GcTier }[], queued: 0 };
+          }
+
+          const finalHome = fx.goals.home as number;
+          const finalAway = fx.goals.away as number;
 
           // أولًا: احسب الطبقات وعُدّ الفائزين لكل طبقة.
           const scored = preds.map((p) => ({ ...p, ...scoreTier(p.predHome, p.predAway, finalHome, finalAway) }));
@@ -755,12 +940,23 @@ export async function settleFinishedMatches(): Promise<GcSettlementSummary> {
             })
             .where(eq(gcPredictionMatches.fixtureId, key));
 
-          return wins;
+          // Crash safety: the ranking change and its durable notification are
+          // one commit. Push/inbox delivery remains asynchronous after commit.
+          const queued = await enqueueGcMajlisOvertakesInTransaction(
+            tx,
+            key,
+            `${fx.home.name} و${fx.away.name}`,
+          );
+
+          return { wins, queued };
         });
 
+        if (result === "blocked-by-earlier") break;
         if (result == null) continue;
-        payouts = result;
+        payouts = result.wins;
+        overtakeQueued += result.queued;
         settled++;
+        settledFixtureIds.add(key);
 
         // إشعار فوري للفائزين (مرّة واحدة عند أول تسوية).
         for (const w of payouts) await notifyWin(w.userId, w.points, fx, w.tier);
@@ -798,10 +994,19 @@ export async function settleFinishedMatches(): Promise<GcSettlementSummary> {
     } catch (err) {
       errors++;
       console.error(`[GC Predictions] settle failed for fixture ${fx.id}:`, err);
+      // Carry is a chronological chain. Advancing after an older failure would
+      // permanently give a newer match the wrong carryIn.
+      break;
     }
   }
 
-  return { settled, awarded, errors };
+  return {
+    settled,
+    awarded,
+    errors,
+    settledFixtureIds: [...settledFixtureIds],
+    overtakeQueued,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -812,6 +1017,7 @@ export type GcLongKind = "champion" | "top_scorer";
 
 export async function getLongPredictions(userId?: string) {
   const teams = await getGcTeams();
+  const lockedAt = gcImmutableTournamentLockAt(GC_FIXTURES);
   const counts = await db
     .select({
       kind: gcLongPredictions.kind,
@@ -839,6 +1045,8 @@ export async function getLongPredictions(userId?: string) {
   return {
     teams,
     pools: LONG_POOL,
+    locked: isGcTournamentLocked(GC_FIXTURES),
+    lockedAt: lockedAt == null ? null : new Date(lockedAt).toISOString(),
     championVotes: counts.filter((c) => c.kind === "champion"),
     mine,
   };
@@ -848,12 +1056,9 @@ export type GcLongSubmit =
   | { ok: true }
   | { ok: false; reason: "LOCKED" | "INVALID" };
 
-/** قفل التوقّعات طويلة المدى عند انطلاق أول مباراة بالبطولة. */
+/** Monotonic lock: provider postponements can never reopen or reseal picks. */
 async function longPredictionsLocked(): Promise<boolean> {
-  const fixtures = await getGcFixtures();
-  const first = [...fixtures].sort((a, b) => a.timestamp - b.timestamp)[0];
-  if (!first) return false;
-  return Date.now() >= first.timestamp * 1000;
+  return isGcTournamentLocked(GC_FIXTURES);
 }
 
 export async function submitLongPrediction(
@@ -901,38 +1106,84 @@ export async function settleChampionIfFinished(): Promise<{ settled: boolean; wi
   if (!final || !hasRealFinalScore(final)) return { settled: false, winners: 0 };
   const fh = final.goals.home as number;
   const fa = final.goals.away as number;
-  const championId = fh > fa ? final.home.id : fa > fh ? final.away.id : null;
+  const championId = fh > fa
+    ? final.home.id
+    : fa > fh
+      ? final.away.id
+      : final.penalties.home != null && final.penalties.away != null
+        ? final.penalties.home > final.penalties.away
+          ? final.home.id
+          : final.penalties.away > final.penalties.home
+            ? final.away.id
+            : null
+        : null;
   if (!championId) return { settled: false, winners: 0 }; // تعادل بلا حسم (نادر) — يدويًّا
 
-  // idempotency: لو سُوّيت بالفعل (أي صف champion settledAt) لا نكرّر.
-  const correctVoters = await db
-    .select({ id: gcLongPredictions.id, userId: gcLongPredictions.userId, settledAt: gcLongPredictions.settledAt })
-    .from(gcLongPredictions)
-    .where(and(eq(gcLongPredictions.kind, "champion"), eq(gcLongPredictions.teamId, championId)));
-  const pending = correctVoters.filter((v) => v.settledAt == null);
-  if (pending.length === 0) return { settled: false, winners: 0 };
+  const settlement = await db.transaction(async (tx) => {
+    // Serialize overlapping cron/instance runs before reading the retry plan.
+    // Winners are finalized in bounded, deterministic batches so a large vote
+    // pool never holds thousands of rows/user-balance locks in one transaction.
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('gc-long:champion-settlement'))`);
+    const rows = await tx
+      .select({
+        id: gcLongPredictions.id,
+        userId: gcLongPredictions.userId,
+        teamId: gcLongPredictions.teamId,
+        settledAt: gcLongPredictions.settledAt,
+      })
+      .from(gcLongPredictions)
+      .where(eq(gcLongPredictions.kind, "champion"));
+    const plan = planGcChampionSettlement(rows, championId, LONG_POOL.champion);
+    if (rows.length === 0) return { settled: false, winners: 0, awardedUserIds: [] as string[] };
 
-  const share = Math.floor(LONG_POOL.champion / pending.length);
-  const now = new Date();
+    const now = new Date();
+    const awardedUserIds: string[] = [];
+    const winnerBatch = [...plan.pendingWinners]
+      .sort((a, b) => a.userId.localeCompare(b.userId))
+      .slice(0, GC_CHAMPION_PAYOUT_BATCH_SIZE);
 
-  // علّم كل توقّعات البطل (الصحيحة والخاطئة) مُسوّاة.
-  await db
-    .update(gcLongPredictions)
-    .set({ status: "incorrect", settledAt: now, updatedAt: now })
-    .where(and(eq(gcLongPredictions.kind, "champion"), isNotNull(gcLongPredictions.teamId)));
-  await db
-    .update(gcLongPredictions)
-    .set({ status: "correct", pointsAwarded: share, settledAt: now, updatedAt: now })
-    .where(and(eq(gcLongPredictions.kind, "champion"), eq(gcLongPredictions.teamId, championId)));
+    // Each pending row is paid and finalized atomically. DEDUP reconciles a
+    // historical partial award without changing the denominator/share.
+    for (const winner of winnerBatch) {
+      if (plan.share > 0) {
+        const outcome = await awardPointsInTransaction(tx, {
+          userId: winner.userId,
+          action: LOYALTY_ACTIONS.GC_LONG_PREDICTION_WIN,
+          source: "gc-long:champion",
+          points: plan.share,
+          metadata: { championId },
+        });
+        if (!outcome.awarded && outcome.reason !== "DEDUP") {
+          throw new Error(`GC_CHAMPION_AWARD_${outcome.reason}`);
+        }
+        if (outcome.awarded) awardedUserIds.push(winner.userId);
+      }
 
-  for (const v of pending) {
-    await awardPoints({
-      userId: v.userId,
-      action: LOYALTY_ACTIONS.GC_LONG_PREDICTION_WIN,
-      source: "gc-long:champion",
-      points: share,
-      metadata: { championId },
+      await tx
+        .update(gcLongPredictions)
+        .set({ status: "correct", pointsAwarded: plan.share, settledAt: now, updatedAt: now })
+        .where(and(eq(gcLongPredictions.id, winner.id), isNull(gcLongPredictions.settledAt)));
+    }
+
+    if (plan.pendingLosers.length > 0) {
+      await tx
+        .update(gcLongPredictions)
+        .set({ status: "incorrect", pointsAwarded: 0, settledAt: now, updatedAt: now })
+        .where(inArray(gcLongPredictions.id, plan.pendingLosers.map((loser) => loser.id)));
+    }
+
+    return {
+      settled: winnerBatch.length > 0 || plan.pendingLosers.length > 0,
+      winners: winnerBatch.length,
+      awardedUserIds,
+    };
+  });
+
+  // Pass/log side effects run only after the settlement transaction commits.
+  for (const userId of new Set(settlement.awardedUserIds)) {
+    await finalizeAwardPoints(userId, LOYALTY_ACTIONS.GC_LONG_PREDICTION_WIN).catch((error) => {
+      console.warn(`[GC Predictions] loyalty pass update failed for champion ${userId}:`, error);
     });
   }
-  return { settled: true, winners: pending.length };
+  return { settled: settlement.settled, winners: settlement.winners };
 }

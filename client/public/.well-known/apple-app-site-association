@@ -1,0 +1,30 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "CBU7MJEC5R.com.sabq.gulfcup",
+        "components": [
+          {
+            "/": "/gulf-cup/majlis",
+            "?": {
+              "code": "*"
+            },
+            "comment": "دعوات مجالس توقعات خليجي 27"
+          },
+          {
+            "/": "/gulf-cup/majlis",
+            "?": {
+              "id": "*"
+            },
+            "comment": "فتح مجلس من إشعار خليجي 27"
+          },
+          {
+            "/": "/gulf-cup/majlis/*",
+            "comment": "تفاصيل مجلس توقعات خليجي 27"
+          }
+        ]
+      }
+    ]
+  }
+}

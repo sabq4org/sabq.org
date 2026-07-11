@@ -8,6 +8,7 @@ import { Sparkles, Home, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Category } from "@shared/schema";
+import { consumePostAuthReturn, peekPostAuthReturn } from "@/lib/postAuthRedirect";
 
 const SMART_MESSAGES = [
   "الذكاء يعرف ذوقك، وسبق تفهمك.",
@@ -41,7 +42,7 @@ export default function Personalize() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      setLocation("/");
+      setLocation(consumePostAuthReturn("/"));
     },
   });
 
@@ -49,7 +50,7 @@ export default function Personalize() {
   useEffect(() => {
     if (!isUserLoading && user) {
       if (user.isProfileComplete) {
-        setLocation("/");
+        setLocation(peekPostAuthReturn() ? consumePostAuthReturn("/") : "/");
       } else if (userInterests.length === 0) {
         setLocation("/onboarding/interests");
       }

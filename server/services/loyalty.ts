@@ -15,7 +15,7 @@ export type AwardOutcome =
   | { awarded: true;  points: number; totalPoints: number; rankChanged: boolean; newRank?: string }
   | { awarded: false; reason: "DAILY_CAP" | "DEDUP" | "NEGATIVE_POINTS" };
 
-type AwardInput = {
+export type AwardInput = {
   userId: string;
   action: LoyaltyAction;
   source?: string;
@@ -32,16 +32,24 @@ type AwardInput = {
 // rank-level write. Existing 3 callsites (LIKE on react route,
 // COMMENT on comment route, READ/READ_DEEP on behavior-log) all funnel
 // through here in Phase 1.
-export async function awardPoints(input: AwardInput): Promise<AwardOutcome> {
+/** Same-transaction form for settlement engines that already own a tx. */
+export async function awardPointsInTransaction(tx: any, input: AwardInput): Promise<AwardOutcome> {
   const points = input.points ?? LOYALTY_ACTION_POINTS[input.action];
   if (points <= 0) {
     return { awarded: false, reason: "NEGATIVE_POINTS" };
   }
 
+  // One transaction and one per-user lock cover cap, dedup, event and balance.
+  // This avoids nested pool acquisition and also serializes different sources
+  // of the same capped action instead of letting each source race its own count.
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${`loyalty-balance:${input.userId}`}))`,
+  );
+
   const dailyCap = LOYALTY_DAILY_CAPS[input.action];
   if (dailyCap !== null && dailyCap !== undefined) {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [{ value }] = await db
+    const [{ value }] = await tx
       .select({ value: count() })
       .from(userLoyaltyEvents)
       .where(
@@ -59,7 +67,7 @@ export async function awardPoints(input: AwardInput): Promise<AwardOutcome> {
   const dedupHours = LOYALTY_DEDUP_HOURS[input.action];
   if (dedupHours !== null && dedupHours !== undefined && input.source) {
     const since = new Date(Date.now() - dedupHours * 60 * 60 * 1000);
-    const [existing] = await db
+    const [existing] = await tx
       .select({ id: userLoyaltyEvents.id })
       .from(userLoyaltyEvents)
       .where(
@@ -76,13 +84,17 @@ export async function awardPoints(input: AwardInput): Promise<AwardOutcome> {
     }
   }
 
-  const result = await storage.recordLoyaltyPoints({
-    userId: input.userId,
-    action: input.action,
-    points,
-    source: input.source,
-    metadata: input.metadata,
-  });
+  const result = await storage.recordLoyaltyPointsInTx(
+    tx,
+    {
+      userId: input.userId,
+      action: input.action,
+      points,
+      source: input.source,
+      metadata: input.metadata,
+    },
+    true,
+  );
 
   return {
     awarded: true,
@@ -91,6 +103,17 @@ export async function awardPoints(input: AwardInput): Promise<AwardOutcome> {
     rankChanged: result.rankChanged,
     newRank: result.newRank,
   };
+}
+
+/** Non-transactional side effect; call only after the owning transaction commits. */
+export async function finalizeAwardPoints(userId: string, action: LoyaltyAction): Promise<void> {
+  await storage.triggerLoyaltyPassUpdate(userId, action);
+}
+
+export async function awardPoints(input: AwardInput): Promise<AwardOutcome> {
+  const outcome = await db.transaction((tx) => awardPointsInTransaction(tx, input));
+  if (outcome.awarded) await finalizeAwardPoints(input.userId, input.action);
+  return outcome;
 }
 
 // ----------------------------------------------------------------------------

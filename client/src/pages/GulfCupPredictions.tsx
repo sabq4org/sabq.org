@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { formatNumber } from "@/lib/format";
+import { rememberPostAuthReturn } from "@/lib/postAuthRedirect";
 import { formatKickoffDay, riyadhDayKey, todayRiyadhKey } from "@/components/gulfcup/gcTypes";
 import { GcPredictionMatchCard } from "@/components/gulfcup/predictions/GcPredictionMatchCard";
 import { GcPredictionsLeaderboard } from "@/components/gulfcup/predictions/GcPredictionsLeaderboard";
@@ -36,6 +37,12 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "badges", label: "الإنجازات" },
 ];
 
+function tabFromUrl(): Tab {
+  if (typeof window === "undefined") return "today";
+  const value = new URLSearchParams(window.location.search).get("tab") as Tab | null;
+  return TABS.some((tab) => tab.key === value) ? value! : "today";
+}
+
 const SEEN_WINS_KEY = "gc-seen-wins";
 
 function loadSeenWins(): Set<string> {
@@ -49,12 +56,26 @@ function loadSeenWins(): Set<string> {
 export default function GulfCupPredictions() {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
-  const [tab, setTab] = useState<Tab>("today");
+  const [tab, setTab] = useState<Tab>(() => tabFromUrl());
   const [celebration, setCelebration] = useState<GcWin | null>(null);
 
   useEffect(() => {
     document.title = "توقّعات خليجي 27 — توقّع وتقاسم بركة الولاء | سبق";
   }, []);
+
+  useEffect(() => {
+    const sync = () => setTab(tabFromUrl());
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  const selectTab = (next: Tab) => {
+    setTab(next);
+    const url = new URL(window.location.href);
+    if (next === "today") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", next);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  };
 
   const { data: todayData, isLoading: todayLoading } = useQuery<{
     matches: GcPredictableMatch[];
@@ -64,7 +85,10 @@ export default function GulfCupPredictions() {
     queryKey: ["/api/gulf-cup/predictions/today"],
     refetchInterval: (query) => {
       const matches = query.state.data?.matches ?? [];
-      const hot = matches.some((m) => m.fixture.status.live || (m.locked && m.settlement?.status !== "settled"));
+      const hot = matches.some((m) =>
+        m.fixture.status.live ||
+        (m.locked && !["settled", "void"].includes(m.settlement?.status ?? "")),
+      );
       return hot ? 10_000 : 30_000;
     },
     refetchIntervalInBackground: false,
@@ -154,6 +178,7 @@ export default function GulfCupPredictions() {
   });
 
   const goLogin = () => {
+    rememberPostAuthReturn(`${window.location.pathname}${window.location.search}`);
     window.location.href = "/login";
   };
 
@@ -231,7 +256,7 @@ export default function GulfCupPredictions() {
             {TABS.map((t) => (
               <button
                 key={t.key}
-                onClick={() => setTab(t.key)}
+                onClick={() => selectTab(t.key)}
                 className={`flex-1 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition ${
                   tab === t.key ? "bg-[#0F8054] text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}

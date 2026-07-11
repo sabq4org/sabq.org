@@ -12,7 +12,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 @HiltViewModel
-class GulfCupViewModel @Inject constructor(private val repo: GulfCupRepository) : ViewModel() {
+class GulfCupViewModel @Inject constructor(
+    private val repo: GulfCupRepository,
+    private val majlisLocalStore: GcMajlisLocalStore,
+) : ViewModel() {
 
     enum class Tab { HOME, MATCHES, PREDICTIONS, GROUPS, MORE }
 
@@ -29,7 +32,14 @@ class GulfCupViewModel @Inject constructor(private val repo: GulfCupRepository) 
     private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
-    init { load() }
+    init {
+        load()
+        viewModelScope.launch {
+            majlisLocalStore.target.collect { target ->
+                if (target != null) _state.update { it.copy(tab = Tab.PREDICTIONS) }
+            }
+        }
+    }
 
     fun selectTab(tab: Tab) { _state.update { it.copy(tab = tab) } }
 

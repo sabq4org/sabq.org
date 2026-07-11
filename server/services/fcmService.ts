@@ -1,6 +1,10 @@
 import { db } from '../db';
 import { pushNotificationLogs, pushDevices } from '@shared/schema';
 import { eq } from 'drizzle-orm';
+import {
+  buildFcmDevicePayload,
+  type FcmDeliveryOptions,
+} from './fcmPayload';
 
 // ============================================================================
 // أنواع البيانات
@@ -286,7 +290,8 @@ async function createJWT(clientEmail: string, privateKey: string): Promise<strin
 async function sendToDevice(
   token: string,
   message: FCMMessage,
-  context?: Partial<LogContext>
+  context?: Partial<LogContext>,
+  deliveryOptions: FcmDeliveryOptions = {},
 ): Promise<FCMResponse> {
   const startTime = Date.now();
   
@@ -302,43 +307,7 @@ async function sendToDevice(
     const accessToken = await getAccessToken();
     const projectId = process.env.FCM_PROJECT_ID;
 
-    // Prepare data for both Android and iOS
-    const messageData = message.data || {};
-    
-    const fcmMessage: any = {
-      message: {
-        token,
-        notification: {
-          title: message.title,
-          body: message.body,
-        },
-        data: messageData,
-        android: {
-          priority: 'high',
-          notification: {
-            sound: 'default',
-            click_action: 'FLUTTER_NOTIFICATION_CLICK',
-          },
-        },
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
-              badge: 1,
-              'mutable-content': 1,
-            },
-            // Include data fields directly in APNs payload for iOS background handling
-            ...messageData,
-          },
-        },
-      },
-    };
-
-    if (message.imageUrl) {
-      fcmMessage.message.notification.image = message.imageUrl;
-      fcmMessage.message.android.notification.image = message.imageUrl;
-      fcmMessage.message.apns.fcm_options = { image: message.imageUrl };
-    }
+    const fcmMessage = buildFcmDevicePayload(token, message, deliveryOptions);
 
     const response = await fetch(
       `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -448,7 +417,8 @@ async function sendToDevice(
 async function sendToMultipleDevices(
   tokens: string[],
   message: FCMMessage,
-  context?: Partial<LogContext>
+  context?: Partial<LogContext>,
+  deliveryOptions: FcmDeliveryOptions = {},
 ): Promise<BatchFCMResult> {
   const startTime = Date.now();
   
@@ -483,7 +453,7 @@ async function sendToMultipleDevices(
     
     const batchResults = await Promise.all(
       batch.map(async (token) => {
-        const result = await sendToDevice(token, message, context);
+        const result = await sendToDevice(token, message, context, deliveryOptions);
         if (result.success) {
           successCount++;
         } else {
@@ -545,6 +515,16 @@ async function sendToMultipleDevices(
   }
 
   return { successCount, failureCount, results };
+}
+
+/** Majlis-only Android delivery: preserves the public editorial API unchanged. */
+async function sendDataOnlyToMultipleDevices(
+  tokens: string[],
+  message: FCMMessage,
+  context?: Partial<LogContext>,
+  options: Omit<FcmDeliveryOptions, 'androidDataOnly'> = {},
+): Promise<BatchFCMResult> {
+  return sendToMultipleDevices(tokens, message, context, { ...options, androidDataOnly: true });
 }
 
 // ============================================================================
@@ -890,6 +870,7 @@ export {
   isFcmConfigured,
   sendToDevice,
   sendToMultipleDevices,
+  sendDataOnlyToMultipleDevices,
   sendToTopic,
   getPushStats,
   categorizeError,

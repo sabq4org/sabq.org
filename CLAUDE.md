@@ -11,13 +11,13 @@ npm run build:client # Vite build only (frontend → dist/public/) — used by V
 npm run build:server # esbuild server bundle only (→ dist/index.js) — used by Railway
 npm start            # Production: NODE_ENV=production node dist/index.js
 npm run check        # TypeScript typecheck (tsc, noEmit)
-npm run db:push      # Apply Drizzle schema (shared/schema.ts) to DATABASE_URL
+npm run db:push      # Local: explicit shell URL wins; otherwise NEON_DATABASE_URL then DATABASE_URL
 ./push-to-production.sh <PROD_DATABASE_URL>   # Push schema to production (interactive confirm)
 ```
 
 `npm run lint` exists (ESLint "stop the bleeding" config — blocks NEW debt only, see `eslint.config.js`; CI lints changed files per PR). The only automated tests are Playwright e2e specs under `e2e/` (`npm run test:smoke`, `npm run test:e2e`); there is still no Jest/Vitest unit-test setup. CI workflows in `.github/workflows/`: typecheck + lint on PRs, read-only smoke against sabq.org every 6h and after pushes to main.
 
-Required env vars (full list in `replit.md`; dev template in `.env.example`): `DATABASE_URL`, `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, transactional email via `MAILERSEND_API_KEY` or `SENDGRID_API_KEY`, `TWILIO_*`, `GCS_*`, `CLOUDFLARE_IMAGES_*`, `FCM_SERVER_KEY`, `MAILERLITE_API_KEY`, `MAILERLITE_WEBHOOK_SECRET`. `REDIS_URL` is optional (falls back to in-memory). `.env.local` overrides `.env`. Since 2026-06-10 `APNS_KEY_ID`, `APNS_TEAM_ID`, and `INDEXNOW_KEY` are env-only (hardcoded fallbacks removed) — unset means APNs push / IndexNow pings are disabled with a startup warning.
+Required env vars (full list in `replit.md`; dev template in `.env.example`): `DATABASE_URL` (or `NEON_DATABASE_URL`, which runtime prefers when both exist), `OPENAI_API_KEY`, `ELEVENLABS_API_KEY`, transactional email via `MAILERSEND_API_KEY` or `SENDGRID_API_KEY`, `TWILIO_*`, `GCS_*`, `CLOUDFLARE_IMAGES_*`, `FCM_SERVER_KEY`, `MAILERLITE_API_KEY`, `MAILERLITE_WEBHOOK_SECRET`. `REDIS_URL` is optional (falls back to in-memory). Runtime keeps the existing `.env.local`-over-`.env` convention; the Drizzle schema tool separately preserves explicit shell values, and production pushes use `SCHEMA_DATABASE_URL`. Since 2026-06-10 `APNS_KEY_ID`, `APNS_TEAM_ID`, and `INDEXNOW_KEY` are env-only (hardcoded fallbacks removed) — unset means APNs push / IndexNow pings are disabled with a startup warning.
 
 ## Architecture
 
