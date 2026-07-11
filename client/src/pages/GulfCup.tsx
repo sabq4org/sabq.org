@@ -15,7 +15,6 @@ import { GcStarsSection } from "@/components/gulfcup/GcStarsSection";
 import { GcHistorySection } from "@/components/gulfcup/GcHistorySection";
 import { GcTeams } from "@/components/gulfcup/GcTeams";
 import { GcHostShowcase } from "@/components/gulfcup/GcHostShowcase";
-import { GcPredictionsCTA } from "@/components/gulfcup/GcPredictionsCTA";
 import { GcMatchCenterDialog } from "@/components/gulfcup/GcMatchCenterDialog";
 import type {
   GcFixture,
@@ -80,14 +79,13 @@ export default function GulfCup() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-50/70 via-background to-background dark:from-emerald-950/20 dark:via-background dark:to-background flex flex-col" dir="rtl">
+    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       <NavigationBar />
 
       <main className="flex-1">
         <GcHero overview={overview} onJump={handleJump} titleHolder={titleHolder} />
         <GcSectionNav />
-        <GcPredictionsCTA />
         <GcSaudiSpotlight saudi={overview?.saudi} onOpenMatch={setOpenFixtureId} />
         <GcSchedule
           fixtures={fixtures}

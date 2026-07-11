@@ -745,7 +745,14 @@ enum GcFormat {
 }
 
 enum GcFixtureMath {
-    static func groupByDay(_ fixtures: [GcFixture]) -> [GcDayGroup] {
+    /// `favoriteTeamId` يُمرَّر من الواجهات (MainActor) — الدالة نفسها غير معزولة.
+    static func groupByDay(_ fixtures: [GcFixture], favoriteTeamId: Int? = nil) -> [GcDayGroup] {
+        // أولوية العرض داخل اليوم: منتخب المستخدم المفضل ← الأخضر ← البقية بالتوقيت.
+        let favorite = favoriteTeamId
+        func priority(_ f: GcFixture) -> Int {
+            if let favorite, f.home.id == favorite || f.away.id == favorite { return 0 }
+            return f.involvesSaudi ? 1 : 2
+        }
         var map: [String: [GcFixture]] = [:]
         for f in fixtures {
             let key = String(f.date.prefix(10))
@@ -753,9 +760,9 @@ enum GcFixtureMath {
         }
         return map.keys.sorted().map { key in
             let items = (map[key] ?? []).sorted { a, b in
-                let sa = a.involvesSaudi ? 0 : 1
-                let sb = b.involvesSaudi ? 0 : 1
-                return sa != sb ? sa < sb : a.timestamp < b.timestamp
+                let pa = priority(a)
+                let pb = priority(b)
+                return pa != pb ? pa < pb : a.timestamp < b.timestamp
             }
             return GcDayGroup(key: key, label: GcFormat.kickoffDay(items.first?.date), items: items)
         }

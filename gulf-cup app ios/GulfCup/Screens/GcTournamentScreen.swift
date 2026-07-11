@@ -1,8 +1,7 @@
 import SwiftUI
+import UIKit
 
-// تبويب «البطولة» — أربعة أقسام: المجموعات · الأدوار الإقصائية · الهدّافون · السجلّ.
-// يجمع عمق البيانات الجديد: لوحة هدّافين وصنّاع أهداف من المزوّد، وسجلّ 26 نسخة
-// من 1970 بجدول ألقاب لكل منتخب.
+// تبويب «البطولة» — مجموعات · إقصائية · هدّافون · دليل · سجلّ.
 struct GcTournamentScreen: View {
     @Bindable var store: GcHubStore
     @State private var segment: GcTournamentSegment = .groups
@@ -17,7 +16,7 @@ struct GcTournamentScreen: View {
                             Text(L("tournament.subtitle")).font(GulfCupFonts.app(size: 11.5)).foregroundStyle(GcTheme.onHeroDim)
                         }
                         Spacer()
-                        Image(systemName: "trophy.fill").font(.system(size: 28)).foregroundStyle(GcTheme.goldTitleGradient)
+                        Image(systemName: "trophy.fill").font(.system(size: 28)).foregroundStyle(GcTheme.skyFill)
                     }
                     .padding(16)
                 }
@@ -29,6 +28,7 @@ struct GcTournamentScreen: View {
                 case .groups: groupsSection
                 case .bracket: bracketSection
                 case .scorers: scorersSection
+                case .guide: guideSection
                 case .history: historySection
                 }
 
@@ -40,21 +40,21 @@ struct GcTournamentScreen: View {
     }
 
     private var segmentBar: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             ForEach(GcTournamentSegment.allCases) { seg in
                 Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { segment = seg }
+                    withAnimation(.easeOut(duration: 0.2)) { segment = seg }
                 } label: {
-                    VStack(spacing: 5) {
-                        Image(systemName: seg.icon).font(.system(size: 14, weight: .semibold))
-                        Text(seg.title).font(GulfCupFonts.app(size: 10.5, weight: .bold))
+                    VStack(spacing: 4) {
+                        Image(systemName: seg.icon).font(.system(size: 13, weight: .semibold))
+                        Text(seg.title).font(GulfCupFonts.app(size: 9.5, weight: .bold)).lineLimit(1)
                     }
-                    .foregroundStyle(segment == seg ? .white : GcTheme.inkDim)
+                    .foregroundStyle(segment == seg ? GcTheme.skyDeep : GcTheme.inkDim)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 9)
                     .background(
                         RoundedRectangle(cornerRadius: GcTheme.chipRadius, style: .continuous)
-                            .fill(segment == seg ? GcTheme.emerald : Color.clear)
+                            .fill(segment == seg ? GcTheme.skyLite : Color.clear)
                     )
                 }
                 .buttonStyle(GcPressStyle())
@@ -88,23 +88,160 @@ struct GcTournamentScreen: View {
         if knockout.isEmpty {
             GcEmptyState(icon: "trophy", title: L("bracket.empty.title"), subtitle: L("bracket.empty.subtitle"))
         } else {
-            GcSectionHeader(icon: "flag.checkered", title: L("bracket.title"), subtitle: L("bracket.subtitle"), tint: GcTheme.gold)
+            GcSectionHeader(icon: "flag.checkered", title: L("bracket.title"), subtitle: L("bracket.subtitle"), tint: GcTheme.sky)
 
             if !semis.isEmpty {
                 VStack(spacing: 10) {
-                    bracketRoundLabel(L("bracket.semis"), icon: "arrow.triangle.branch")
-                    GcMatchListCard(fixtures: semis)
+                    Text(L("bracket.semis"))
+                        .font(GulfCupFonts.app(size: 12, weight: .bold))
+                        .foregroundStyle(GcTheme.inkDim)
+                        .frame(maxWidth: .infinity)
+
+                    // عمودي على الموبايل — جنبًا لجنب يقصّ الأسماء والملاعب
+                    ForEach(Array(semis.prefix(2).enumerated()), id: \.element.id) { idx, fx in
+                        NavigationLink {
+                            GcMatchCenterScreen(fixture: fx)
+                        } label: {
+                            bracketMatchCard(fx, featured: false, badge: idx == 0 ? "SF1" : "SF2")
+                        }
+                        .buttonStyle(GcPressStyle())
+                    }
                 }
             }
 
-            bracketConnector
+            if !semis.isEmpty && final != nil {
+                GcBracketDownArrow()
+                    .frame(height: 36)
+                    .padding(.vertical, 2)
+            }
 
             if let final {
                 VStack(spacing: 10) {
-                    bracketRoundLabel(L("bracket.final"), icon: "crown.fill", tint: GcTheme.goldDeep)
-                    finalCard(final)
+                    HStack(spacing: 6) {
+                        Image(systemName: "trophy.fill").font(.system(size: 12, weight: .bold))
+                        Text(L("bracket.final")).font(GulfCupFonts.app(size: 12, weight: .black))
+                    }
+                    .foregroundStyle(GcTheme.sky)
+                    .frame(maxWidth: .infinity)
+
+                    NavigationLink {
+                        GcMatchCenterScreen(fixture: final)
+                    } label: {
+                        bracketMatchCard(final, featured: true, badge: nil)
+                    }
+                    .buttonStyle(GcPressStyle())
                 }
             }
+        }
+    }
+
+    private func bracketMatchCard(_ fx: GcFixture, featured: Bool, badge: String?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                if let badge {
+                    Text(badge)
+                        .font(GulfCupFonts.app(size: 10, weight: .bold))
+                        .foregroundStyle(GcTheme.skyDeep)
+                        .padding(.horizontal, 7).padding(.vertical, 3)
+                        .background(Capsule().fill(GcTheme.sky.opacity(0.14)))
+                }
+                Text(fx.matchNo.map { "#\($0)" } ?? "#—")
+                    .font(GulfCupFonts.app(size: 11, weight: .bold))
+                    .foregroundStyle(GcTheme.sky)
+                Spacer(minLength: 0)
+                GcStatusPill(fixture: fx)
+            }
+
+            bracketTeams(fx)
+
+            if !fx.venue.name.isEmpty || !fx.date.isEmpty {
+                HStack(alignment: .top, spacing: 5) {
+                    Image(systemName: "mappin.and.ellipse")
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.top, 1)
+                    Text(venueLine(fx))
+                        .font(GulfCupFonts.app(size: 11))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(GcTheme.inkDim)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .gcCard(stroke: featured ? GcTheme.sky.opacity(0.40) : GcTheme.line)
+        .overlay(
+            RoundedRectangle(cornerRadius: GcTheme.cardRadius, style: .continuous)
+                .stroke(featured ? GcTheme.sky.opacity(0.22) : Color.clear, lineWidth: 1.5)
+        )
+    }
+
+    private func venueLine(_ fx: GcFixture) -> String {
+        let day = GcFormat.kickoffDay(fx.date)
+        if fx.venue.name.isEmpty { return day }
+        if day.isEmpty { return fx.venue.name }
+        return "\(fx.venue.name) · \(day)"
+    }
+
+    private func bracketTeams(_ fx: GcFixture) -> some View {
+        let started = fx.status.live || fx.status.finished
+        return VStack(spacing: 8) {
+            bracketTeamRow(fx.home, score: started ? fx.goals.home : nil)
+            HStack {
+                Rectangle().fill(GcTheme.line).frame(height: 1)
+                Group {
+                    if started {
+                        Text("\(fx.goals.away ?? 0) - \(fx.goals.home ?? 0)")
+                            .font(GulfCupFonts.app(size: 15, weight: .bold))
+                            .foregroundStyle(fx.status.live ? GcTheme.liveRed : GcTheme.ink)
+                            .monospacedDigit()
+                            .environment(\.layoutDirection, .leftToRight)
+                    } else {
+                        Text(GcFormat.kickoffTime(fx.date))
+                            .font(GulfCupFonts.app(size: 13, weight: .bold))
+                            .foregroundStyle(GcTheme.ink)
+                            .monospacedDigit()
+                            .environment(\.layoutDirection, .leftToRight)
+                    }
+                }
+                .padding(.horizontal, 8)
+                Rectangle().fill(GcTheme.line).frame(height: 1)
+            }
+            bracketTeamRow(fx.away, score: started ? fx.goals.away : nil)
+        }
+    }
+
+    private func bracketTeamRow(_ team: GcTeam, score: Int?) -> some View {
+        HStack(spacing: 10) {
+            GcTeamLogo(logo: team.logo, size: 36)
+            Text(team.name)
+                .font(GulfCupFonts.app(size: 14, weight: .semibold))
+                .foregroundStyle(GcTheme.ink)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            if let score {
+                Text("\(score)")
+                    .font(GulfCupFonts.app(size: 18, weight: .bold))
+                    .foregroundStyle(GcTheme.ink)
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    /// سهم سكاي بسيط من أنصاف النهائي إلى النهائي.
+    private struct GcBracketDownArrow: View {
+        var body: some View {
+            VStack(spacing: 0) {
+                Rectangle()
+                    .fill(GcTheme.sky)
+                    .frame(width: 3, height: 22)
+                Image(systemName: "arrowtriangle.down.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(GcTheme.sky)
+            }
+            .frame(maxWidth: .infinity)
+            .accessibilityHidden(true)
         }
     }
 
@@ -115,38 +252,6 @@ struct GcTournamentScreen: View {
             Spacer()
         }
         .foregroundStyle(tint)
-    }
-
-    private var bracketConnector: some View {
-        VStack(spacing: 2) {
-            Rectangle().fill(GcTheme.gold.opacity(0.45)).frame(width: 2, height: 18)
-            Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold)).foregroundStyle(GcTheme.gold)
-        }
-    }
-
-    /// بطاقة النهائي — إبراز ذهبي خاص.
-    private func finalCard(_ fx: GcFixture) -> some View {
-        NavigationLink {
-            GcMatchCenterScreen(fixture: fx)
-        } label: {
-            VStack(spacing: 10) {
-                HStack {
-                    GcChip(text: fx.round, icon: "crown.fill", tint: GcTheme.goldDeep)
-                    Spacer()
-                    GcStatusPill(fixture: fx)
-                }
-                GcScoreRow(fixture: fx)
-                HStack(spacing: 4) {
-                    Image(systemName: "mappin.and.ellipse").font(.system(size: 9))
-                    Text("\(fx.venue.name) · \(GcFormat.kickoffDay(fx.date))")
-                }
-                .font(GulfCupFonts.app(size: 10.5))
-                .foregroundStyle(GcTheme.inkFaint)
-            }
-            .padding(14)
-            .gcCard(stroke: GcTheme.gold.opacity(0.4))
-        }
-        .buttonStyle(GcPressStyle())
     }
 
     // MARK: الهدّافون
@@ -181,6 +286,73 @@ struct GcTournamentScreen: View {
         }
     }
 
+    // MARK: الدليل — منتخبات + ملاعب
+
+    @ViewBuilder private var guideSection: some View {
+        GcSectionHeader(icon: "person.3.fill", title: L("teams.section.title"), count: store.teams.count, tint: GcTheme.sky)
+        if store.teams.isEmpty && !store.loading {
+            GcEmptyState(icon: "person.3", title: L("teams.empty.title"), subtitle: L("teams.empty.subtitle"))
+        } else {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 10)], spacing: 10) {
+                ForEach(store.teams) { t in
+                    NavigationLink {
+                        GcTeamProfileScreen(teamId: t.id, fallback: t)
+                    } label: {
+                        VStack(spacing: 8) {
+                            GcTeamLogo(logo: t.logo, size: 46)
+                            Text(t.name)
+                                .font(GulfCupFonts.app(size: 11.5, weight: .bold))
+                                .foregroundStyle(GcTheme.ink)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.center)
+                                .frame(minHeight: 32, alignment: .top)
+                            if t.id == GulfCupConstants.saudiTeamId {
+                                Text(L("teams.host.badge"))
+                                    .font(GulfCupFonts.app(size: 10, weight: .bold))
+                                    .foregroundStyle(GcTheme.skyDeep)
+                                    .padding(.horizontal, 8).padding(.vertical, 3)
+                                    .background(Capsule().fill(GcTheme.sky.opacity(0.15)))
+                            } else {
+                                Color.clear.frame(height: 20)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(12)
+                        .gcCard(radius: GcTheme.tileRadius)
+                    }
+                    .buttonStyle(GcPressStyle())
+                }
+            }
+        }
+
+        if let ov = store.overview, !ov.venues.isEmpty {
+            GcSectionHeader(icon: "building.2.fill", title: L("venues.guide.title"), count: ov.venues.count, tint: GcTheme.sky)
+            ForEach(Array(ov.venues.enumerated()), id: \.offset) { _, v in
+                GcVenueGuideCard(venue: v)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                tipRow(icon: "ticket.fill", text: "احجز تذاكرك مبكرًا عبر المنصات الرسمية — مباريات الأخضر تنفد أولًا")
+                tipRow(icon: "clock.fill", text: "اوصل قبل الانطلاق بساعة ونصف — البوابات تزدحم قرب الصافرة")
+                tipRow(icon: "car.fill", text: "استخدم المواقف المخصصة أو التوصيل — لا تعتمد على مواقف الشارع")
+            }
+            .padding(14)
+            .gcCard()
+        }
+    }
+
+    private func tipRow(icon: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(GcTheme.sky)
+                .frame(width: 20)
+            Text(text)
+                .font(GulfCupFonts.app(size: 12))
+                .foregroundStyle(GcTheme.inkDim)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     // MARK: السجلّ
 
     @ViewBuilder private var historySection: some View {
@@ -198,13 +370,14 @@ struct GcTournamentScreen: View {
 }
 
 enum GcTournamentSegment: String, CaseIterable, Identifiable {
-    case groups, bracket, scorers, history
+    case groups, bracket, scorers, guide, history
     var id: String { rawValue }
     var title: String {
         switch self {
         case .groups: return L("tournament.seg.groups")
         case .bracket: return L("tournament.seg.bracket")
         case .scorers: return L("tournament.seg.scorers")
+        case .guide: return L("tournament.seg.guide")
         case .history: return L("tournament.seg.history")
         }
     }
@@ -213,6 +386,7 @@ enum GcTournamentSegment: String, CaseIterable, Identifiable {
         case .groups: return "rectangle.3.group"
         case .bracket: return "flag.checkered"
         case .scorers: return "soccerball"
+        case .guide: return "map.fill"
         case .history: return "crown.fill"
         }
     }
@@ -392,5 +566,99 @@ struct GcEditionsTimeline: View {
         }
         .font(GulfCupFonts.app(size: 10))
         .foregroundStyle(GcTheme.inkFaint)
+    }
+}
+
+/// بطاقة ملعب — سعة/افتتاح/وصف/خرائط مطابَقة بالاسم فوق بيانات الـ API.
+struct GcVenueGuideCard: View {
+    let venue: GcVenue
+
+    private struct Guide {
+        let match: String
+        let nickname: String?
+        let capacity: String
+        let opened: String
+        let blurb: String
+        let mapsQuery: String
+    }
+
+    private static let guides: [Guide] = [
+        Guide(
+            match: "الملك عبدالله",
+            nickname: "«الجوهرة المشعّة»",
+            capacity: "62,345 مقعدًا",
+            opened: "افتُتح 2014",
+            blurb: "درّة الملاعب السعودية ومسرح الافتتاح والنهائي — تجربة حضور عالمية.",
+            mapsQuery: "King Abdullah Sports City Jeddah"
+        ),
+        Guide(
+            match: "الأمير عبدالله الفيصل",
+            nickname: nil,
+            capacity: "27,000 مقعد تقريبًا",
+            opened: "أُعيد افتتاحه 2023 بعد تطوير شامل",
+            blurb: "معقل الكرة الجداوية العريق في قلب المدينة — أجواء قريبة من المدرجات.",
+            mapsQuery: "Prince Abdullah Al Faisal Stadium Jeddah"
+        ),
+    ]
+
+    private var guide: Guide? {
+        Self.guides.first { venue.name.contains($0.match) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(venue.name + (guide?.nickname.map { " \($0)" } ?? ""))
+                        .font(GulfCupFonts.app(size: 14, weight: .bold))
+                        .foregroundStyle(GcTheme.ink)
+                        .lineLimit(2)
+                    Text(venue.city)
+                        .font(GulfCupFonts.app(size: 11))
+                        .foregroundStyle(GcTheme.inkDim)
+                }
+                Spacer()
+                Image(systemName: "sportscourt.fill")
+                    .font(.system(size: 18))
+                    .foregroundStyle(GcTheme.sky)
+                    .frame(width: 40, height: 40)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(GcTheme.sky.opacity(0.12)))
+            }
+            .padding(14)
+
+            if let guide {
+                Text(guide.blurb)
+                    .font(GulfCupFonts.app(size: 12))
+                    .foregroundStyle(GcTheme.inkDim)
+                    .lineSpacing(3)
+                    .padding(.horizontal, 14)
+                HStack(spacing: 7) {
+                    GcChip(text: guide.capacity, icon: "person.3.fill", tint: GcTheme.sky)
+                    GcChip(text: guide.opened, icon: "clock.fill", tint: GcTheme.teal)
+                }
+                .padding(.horizontal, 14)
+                .padding(.top, 10)
+            }
+
+            Button {
+                let query = (guide?.mapsQuery ?? "\(venue.name) \(venue.city)")
+                    .addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                if let url = URL(string: "https://maps.apple.com/?q=\(query)") {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("الاتجاهات على الخرائط")
+                        .font(GulfCupFonts.app(size: 12.5, weight: .bold))
+                    Spacer()
+                }
+                .foregroundStyle(GcTheme.skyDeep)
+                .padding(14)
+            }
+            .buttonStyle(GcPressStyle())
+        }
+        .gcCard()
     }
 }

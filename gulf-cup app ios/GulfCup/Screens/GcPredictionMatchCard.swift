@@ -221,7 +221,7 @@ struct GcPredictionMatchCard: View {
                 .font(GulfCupFonts.app(size: 11.5))
                 .foregroundStyle(GcTheme.inkDim)
                 .multilineTextAlignment(.center)
-            GcAppleSignInButton()
+            GcSignInPromptButton()
         }
     }
 

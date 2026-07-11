@@ -6,14 +6,14 @@ import SwiftUI
 // (التطبيق هو المصدر) فيبقى خفيفًا ويحدّث كل 15 دقيقة أو عند فتح التطبيق.
 
 private enum GcW {
-    static let emerald = Color(red: 0.059, green: 0.502, blue: 0.329)
-    static let emeraldDeep = Color(red: 0.039, green: 0.420, blue: 0.278)
-    static let heroTop = Color(red: 0.078, green: 0.565, blue: 0.361)
-    static let heroBottom = Color(red: 0.031, green: 0.341, blue: 0.231)
-    static let gold = Color(red: 0.96, green: 0.75, blue: 0.26)
+    static let emerald = Color(red: 0.055, green: 0.455, blue: 0.420)
+    static let emeraldDeep = Color(red: 0.035, green: 0.340, blue: 0.320)
+    static let heroTop = Color(red: 0.016, green: 0.110, blue: 0.133)
+    static let heroBottom = Color(red: 0.030, green: 0.200, blue: 0.220)
+    static let sky = Color(red: 0.220, green: 0.741, blue: 0.973)
     static let live = Color(red: 0.87, green: 0.17, blue: 0.24)
-    static let ink = Color(red: 0.09, green: 0.16, blue: 0.12)
-    static let dim = Color(red: 0.42, green: 0.50, blue: 0.46)
+    static let ink = Color(red: 0.055, green: 0.110, blue: 0.125)
+    static let dim = Color(red: 0.340, green: 0.410, blue: 0.430)
 }
 
 struct GcWidgetEntry: TimelineEntry {
@@ -104,7 +104,7 @@ struct GcHomeWidgetView: View {
 
     private var header: some View {
         HStack(spacing: 5) {
-            Image(systemName: "trophy.fill").font(.system(size: 9)).foregroundStyle(GcW.gold)
+            Image(systemName: "trophy.fill").font(.system(size: 9)).foregroundStyle(GcW.sky)
             Text("خليجي 27").font(.system(size: 11, weight: .bold)).foregroundStyle(.white)
             Spacer(minLength: 0)
         }
@@ -137,7 +137,7 @@ struct GcHomeWidgetView: View {
             } else {
                 Text(kickoffTime(m.kickoff))
                     .font(.system(size: 16, weight: .heavy))
-                    .foregroundStyle(GcW.gold)
+                    .foregroundStyle(GcW.sky)
                     .monospacedDigit()
                     .environment(\.layoutDirection, .leftToRight)
             }
@@ -170,7 +170,7 @@ struct GcHomeWidgetView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(entry.snapshot?.groupName ?? "الترتيب")
                 .font(.system(size: 9.5, weight: .bold))
-                .foregroundStyle(GcW.gold)
+                .foregroundStyle(GcW.sky)
             ForEach(Array(rows.prefix(4).enumerated()), id: \.offset) { _, r in
                 HStack(spacing: 5) {
                     Text("\(r.rank)")
@@ -200,7 +200,7 @@ struct GcHomeWidgetView: View {
 
     private var placeholder: some View {
         VStack(spacing: 6) {
-            Image(systemName: "sparkles").font(.system(size: 18)).foregroundStyle(GcW.gold)
+            Image(systemName: "sparkles").font(.system(size: 18)).foregroundStyle(GcW.sky)
             Text("خليجي 27").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
             Text("افتح التطبيق لعرض المباراة القادمة")
                 .font(.system(size: 9.5))
