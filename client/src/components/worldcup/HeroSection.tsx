@@ -79,7 +79,7 @@ function CountdownChips({ timestamp }: { timestamp: number }) {
     { value: countdown.seconds, label: "ثانية" },
   ];
   return (
-    <div className="flex items-center justify-center gap-2" aria-label="العد التنازلي لانطلاق المباراة">
+    <div className="flex items-center justify-center gap-2" dir="ltr" aria-label="العد التنازلي لانطلاق المباراة">
       {chips.map((chip) => (
         <div key={chip.label} className="flex flex-col items-center rounded-xl bg-white/10 px-2.5 py-1.5 min-w-[3.25rem] backdrop-blur-sm">
           <span className="text-xl font-black text-white tabular-nums">{chip.value}</span>
