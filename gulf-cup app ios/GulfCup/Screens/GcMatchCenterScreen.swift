@@ -21,6 +21,10 @@ struct GcMatchCenterScreen: View {
             VStack(spacing: 14) {
                 scoreboardHero
 
+                if let tv = detail?.tv, !tv.isEmpty {
+                    GcTvChipsRow(channels: tv)
+                }
+
                 if GcLiveActivityManager.shared.isSupported && !displayFixture.status.finished {
                     liveActivityButton
                 }
@@ -183,26 +187,47 @@ struct GcMatchCenterScreen: View {
     // MARK: ملخّص (الأحداث)
 
     @ViewBuilder private var summarySection: some View {
+        if let forecast = detail?.forecast, !started {
+            GcForecastCard(forecast: forecast, fixture: displayFixture)
+        }
         if let d = detail, !d.events.isEmpty {
             GcEventsTimeline(events: d.events, fixture: displayFixture)
         } else if loading {
             GcLoadingPanel(title: L("match.loading"))
-        } else {
+        } else if (detail?.commentary?.isEmpty ?? true) && detail?.forecast == nil {
             GcEmptyState(icon: "list.bullet.rectangle", title: L("match.noEvents.title"), subtitle: L("match.noEvents.subtitle"))
+        }
+        if let commentary = detail?.commentary, !commentary.isEmpty {
+            GcCommentaryCard(items: commentary)
+        }
+        if let referee = detail?.referee {
+            GcRefereeCard(referee: referee)
         }
     }
 
     // MARK: التشكيلات
 
     @ViewBuilder private var lineupsSection: some View {
+        if let rich = detail?.lineupsRich, GcPitchCard.hasCoordinates(rich) {
+            GcPitchCard(rich: rich, fixture: displayFixture)
+        }
+        if let expected = detail?.expectedLineups,
+           detail?.lineups.isEmpty != false, detail?.lineupsRich == nil {
+            GcExpectedLineupsCard(expected: expected, fixture: displayFixture)
+        }
         if let d = detail, !d.lineups.isEmpty {
             ForEach(d.lineups) { lineup in
                 GcLineupCard(lineup: lineup)
             }
-        } else if loading {
-            GcLoadingPanel(title: L("match.loading"))
-        } else {
-            GcEmptyState(icon: "person.3.sequence", title: L("match.lineups.empty.title"), subtitle: L("match.lineups.empty.subtitle"))
+        } else if detail?.lineupsRich == nil && detail?.expectedLineups == nil {
+            if loading {
+                GcLoadingPanel(title: L("match.loading"))
+            } else {
+                GcEmptyState(icon: "person.3.sequence", title: L("match.lineups.empty.title"), subtitle: L("match.lineups.empty.subtitle"))
+            }
+        }
+        if let injuries = detail?.injuries, !(injuries.home.isEmpty && injuries.away.isEmpty) {
+            GcInjuriesCard(injuries: injuries, fixture: displayFixture)
         }
     }
 
@@ -230,8 +255,29 @@ struct GcMatchCenterScreen: View {
             .gcCard()
         } else if loading {
             GcLoadingPanel(title: L("match.loading"))
-        } else {
+        } else if detail?.trend == nil && (detail?.playerStats?.isEmpty ?? true) {
             GcEmptyState(icon: "chart.bar", title: L("match.stats.empty.title"), subtitle: L("match.stats.empty.subtitle"))
+        }
+        if let xg = detail?.xg, xg.home != nil || xg.away != nil {
+            VStack(alignment: .leading, spacing: 10) {
+                GcSectionHeader(icon: "target", title: "الأهداف المتوقعة xG", tint: GcTheme.teal)
+                GcDuoBar(
+                    label: "xG",
+                    home: String(format: "%.2f", xg.home ?? 0),
+                    away: String(format: "%.2f", xg.away ?? 0)
+                )
+            }
+            .padding(14)
+            .gcCard()
+        }
+        if let trend = detail?.trend, !trend.values.isEmpty {
+            GcTrendCard(trend: trend, fixture: displayFixture)
+        }
+        if let ps = detail?.playerStats, ps.contains(where: { $0.rating != nil }) {
+            GcRatingsCard(stats: ps, fixture: displayFixture)
+        }
+        if started, let d = detail {
+            GcMotmCard(detail: d, fixture: displayFixture)
         }
     }
 
@@ -508,6 +554,508 @@ struct GcH2HRecordCard: View {
             Text(L("match.wins")).font(GulfCupFonts.app(size: 10)).foregroundStyle(GcTheme.inkFaint)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - رجل المباراة — الجمهور ضد الأرقام
+
+/// تصويت جماهيري حي (من الشوط الثاني حتى 24 ساعة بعد الصافرة) تُقارن غلبته
+/// بأعلى تقييم بيانات. المرشّحون من التقييمات أو التشكيلة الغنية.
+struct GcMotmCard: View {
+    let detail: GcMatchDetail
+    let fixture: GcFixture
+
+    @Environment(GcAuthStore.self) private var auth
+    @State private var board: GcMotmBoard?
+    @State private var submitting = false
+    private let refreshTimer = Timer.publish(every: 20, on: .main, in: .common).autoconnect()
+
+    private var candidates: [(id: String, name: String)] {
+        let rated = (detail.playerStats ?? []).filter { $0.rating != nil }
+        if !rated.isEmpty { return rated.prefix(12).map { ($0.playerId, $0.name) } }
+        guard let rich = detail.lineupsRich else { return [] }
+        return (rich.home + rich.away).filter(\.starter).map { ($0.id, $0.name) }
+    }
+
+    private var dataStar: GcPlayerMatchStat? {
+        (detail.playerStats ?? []).first { $0.rating != nil }
+    }
+
+    var body: some View {
+        if candidates.isEmpty && (board?.total ?? 0) == 0 && board?.open != true {
+            EmptyView()
+        } else {
+            content
+        }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            GcSectionHeader(icon: "person.fill.questionmark", title: "رجل المباراة", subtitle: "الجمهور ضد الأرقام", tint: GcTheme.goldDeep)
+
+            if board != nil || dataStar != nil {
+                HStack(spacing: 8) {
+                    comparisonTile(
+                        title: "اختيار الجمهور",
+                        name: board?.results.first?.playerName ?? "—",
+                        caption: board?.results.first.map { "\($0.percent)% من \(board?.total ?? 0) صوت" },
+                        tint: GcTheme.emerald
+                    )
+                    comparisonTile(
+                        title: "بطل الأرقام",
+                        name: dataStar?.name ?? "—",
+                        caption: dataStar?.rating.map { String(format: "تقييم %.1f", $0) },
+                        tint: GcTheme.goldDeep
+                    )
+                }
+            }
+
+            if board?.open == true {
+                if auth.isLoggedIn {
+                    voteChips
+                } else {
+                    Text("سجّل دخولك للتصويت لرجل المباراة")
+                        .font(GulfCupFonts.app(size: 11))
+                        .foregroundStyle(GcTheme.inkDim)
+                }
+            } else if (board?.total ?? 0) == 0 {
+                Text("يُفتح التصويت من الشوط الثاني")
+                    .font(GulfCupFonts.app(size: 11))
+                    .foregroundStyle(GcTheme.inkFaint)
+            }
+        }
+        .padding(14)
+        .gcCard()
+        .task { await load() }
+        .onReceive(refreshTimer) { _ in
+            if board?.open == true { Task { await load() } }
+        }
+    }
+
+    private var voteChips: some View {
+        // شبكة رقاقات مرنة — صفوف من عمودين تكفي أسماء اللاعبين العربية.
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 7) {
+            ForEach(candidates, id: \.id) { candidate in
+                let picked = board?.myPick?.playerId == candidate.id
+                Button {
+                    Task { await vote(candidate) }
+                } label: {
+                    Text(candidate.name)
+                        .font(GulfCupFonts.app(size: 11.5, weight: picked ? .bold : .semibold))
+                        .foregroundStyle(picked ? .white : GcTheme.ink)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule().fill(picked ? GcTheme.emerald : GcTheme.chipFill)
+                        )
+                }
+                .buttonStyle(GcPressStyle())
+                .disabled(submitting)
+            }
+        }
+    }
+
+    private func comparisonTile(title: String, name: String, caption: String?, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(GulfCupFonts.app(size: 9.5, weight: .bold)).foregroundStyle(tint)
+            Text(name).font(GulfCupFonts.app(size: 13, weight: .bold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+            if let caption {
+                Text(caption).font(GulfCupFonts.app(size: 9.5)).foregroundStyle(GcTheme.inkDim)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: GcTheme.chipRadius, style: .continuous).fill(tint.opacity(0.08)))
+    }
+
+    private func load() async {
+        board = (try? await APIClient.shared.fetchGcMotmBoard(fixture.id, ignoreCache: true)) ?? board
+    }
+
+    private func vote(_ candidate: (id: String, name: String)) async {
+        submitting = true
+        try? await APIClient.shared.voteGcMotm(fixtureId: fixture.id, playerId: candidate.id, playerName: candidate.name)
+        await load()
+        submitting = false
+    }
+}
+
+// MARK: - إثراء Sportmonks: توقّع النموذج · التشكيلة المتوقعة · التعليق · الحكم
+
+/// توقّع النموذج (ELO + Sportmonks) — شريط ثلاثي فوز/تعادل/فوز.
+struct GcForecastCard: View {
+    let forecast: GcForecast
+    let fixture: GcFixture
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "chart.pie.fill", title: "توقّع النموذج", subtitle: "نموذج سبق + نموذج المزوّد", tint: GcTheme.emerald)
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    Capsule().fill(GcTheme.emerald)
+                        .frame(width: max(geo.size.width * CGFloat(forecast.home) / 100 - 2, 3))
+                    Capsule().fill(GcTheme.inkFaint.opacity(0.4))
+                        .frame(width: max(geo.size.width * CGFloat(forecast.draw) / 100 - 2, 3))
+                    Capsule().fill(GcTheme.teal)
+                        .frame(width: max(geo.size.width * CGFloat(forecast.away) / 100 - 2, 3))
+                }
+            }
+            .frame(height: 8)
+            HStack {
+                Text("\(fixture.home.name) \(forecast.home)%")
+                    .font(GulfCupFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(GcTheme.emerald)
+                Spacer()
+                Text("تعادل \(forecast.draw)%")
+                    .font(GulfCupFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(GcTheme.inkDim)
+                Spacer()
+                Text("\(fixture.away.name) \(forecast.away)%")
+                    .font(GulfCupFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(GcTheme.teal)
+            }
+        }
+        .padding(14)
+        .gcCard()
+    }
+}
+
+/// التشكيلة المتوقعة قبل المباراة — تُستبدل بالرسمية فور إعلانها.
+struct GcExpectedLineupsCard: View {
+    let expected: GcExpectedLineups
+    let fixture: GcFixture
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "person.crop.rectangle.stack", title: "التشكيلة المتوقعة", subtitle: "تُستبدل بالرسمية فور إعلانها", tint: GcTheme.goldDeep)
+            HStack(alignment: .top, spacing: 12) {
+                if let home = expected.home { sideColumn(name: fixture.home.name, side: home) }
+                if let away = expected.away { sideColumn(name: fixture.away.name, side: away) }
+            }
+        }
+        .padding(14)
+        .gcCard()
+    }
+
+    private func sideColumn(name: String, side: GcExpectedSide) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 5) {
+                Text(name).font(GulfCupFonts.app(size: 11.5, weight: .bold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                if let formation = side.formation {
+                    Text(formation).font(GulfCupFonts.app(size: 10, weight: .semibold)).foregroundStyle(GcTheme.inkDim)
+                }
+            }
+            ForEach(side.starters) { p in
+                HStack(spacing: 6) {
+                    Text(p.jersey.map(String.init) ?? "–")
+                        .font(GulfCupFonts.app(size: 9.5, weight: .bold))
+                        .foregroundStyle(GcTheme.emerald)
+                        .monospacedDigit()
+                        .frame(width: 20, height: 20)
+                        .background(Circle().fill(GcTheme.emerald.opacity(0.10)))
+                    Text(p.name)
+                        .font(GulfCupFonts.app(size: 11, weight: .semibold))
+                        .foregroundStyle(GcTheme.ink)
+                        .lineLimit(1)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// التعليق النصي الحي (معرّب من المزوّد).
+struct GcCommentaryCard: View {
+    let items: [GcCommentaryItem]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "text.bubble.fill", title: "التعليق المباشر", count: items.count, tint: GcTheme.teal)
+            VStack(spacing: 0) {
+                ForEach(Array(items.prefix(20).enumerated()), id: \.element.id) { idx, item in
+                    if idx > 0 { Rectangle().fill(GcTheme.outline).frame(height: 1).padding(.leading, 14) }
+                    HStack(alignment: .top, spacing: 8) {
+                        Text(item.minute.map { m in item.extraMinute.map { "\(m)+\($0)'" } ?? "\(m)'" } ?? "•")
+                            .font(GulfCupFonts.app(size: 10.5, weight: .bold))
+                            .foregroundStyle(item.goal ? GcTheme.emerald : GcTheme.inkFaint)
+                            .monospacedDigit()
+                            .frame(width: 38, alignment: .center)
+                            .environment(\.layoutDirection, .leftToRight)
+                        if item.goal { Text("⚽").font(.system(size: 11)) }
+                        Text(item.text)
+                            .font(GulfCupFonts.app(size: 11.5, weight: item.goal || item.important ? .semibold : .regular))
+                            .foregroundStyle(item.goal || item.important ? GcTheme.ink : GcTheme.inkDim)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(item.goal ? GcTheme.emerald.opacity(0.05) : Color.clear)
+                }
+            }
+            .gcCard(radius: GcTheme.tileRadius, fill: GcTheme.cardBgSubtle)
+        }
+        .padding(14)
+        .gcCard()
+    }
+}
+
+/// بطاقة الحكم وسجله.
+struct GcRefereeCard: View {
+    let referee: GcReferee
+
+    var body: some View {
+        HStack(spacing: 11) {
+            GcPlayerPhoto(url: referee.photo, size: 38)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("الحكم: \(referee.name)")
+                    .font(GulfCupFonts.app(size: 13, weight: .bold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                Text(refLine)
+                    .font(GulfCupFonts.app(size: 10.5)).foregroundStyle(GcTheme.inkDim).lineLimit(1)
+            }
+            Spacer()
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color(red: 0.95, green: 0.78, blue: 0.15))
+                .frame(width: 11, height: 15)
+        }
+        .padding(13)
+        .gcCard()
+    }
+
+    private var refLine: String {
+        var parts: [String] = []
+        if let country = referee.country, !country.isEmpty { parts.append(country) }
+        if let matches = referee.matches { parts.append("\(matches) مباراة") }
+        if let y = referee.yellowAvg { parts.append(String(format: "%.1f صفراء/مباراة", y)) }
+        return parts.joined(separator: " · ")
+    }
+}
+
+// MARK: - إثراء TheSports: القنوات · الملعب التفاعلي · الزخم · التقييمات · الغيابات
+
+/// القنوات الناقلة — رقاقات أفقية تحت لوحة النتيجة («وين أشوف المباراة؟»).
+struct GcTvChipsRow: View {
+    let channels: [GcTvChannel]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Image(systemName: "tv.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(GcTheme.goldDeep)
+                ForEach(channels.prefix(5)) { channel in
+                    Text(channel.name)
+                        .font(GulfCupFonts.app(size: 11, weight: .semibold))
+                        .foregroundStyle(GcTheme.ink)
+                        .padding(.horizontal, 11).padding(.vertical, 6)
+                        .background(Capsule().fill(GcTheme.chipFill))
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+}
+
+/// ملعبان متجاوران بإحداثيات المزوّد (0..100) — رقم القميص + التقييم الحي + الكابتن.
+struct GcPitchCard: View {
+    let rich: GcRichLineup
+    let fixture: GcFixture
+
+    static func hasCoordinates(_ rich: GcRichLineup) -> Bool {
+        rich.home.contains { $0.starter && $0.x != nil && $0.y != nil }
+            && rich.away.contains { $0.starter && $0.x != nil && $0.y != nil }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GcSectionHeader(icon: "sportscourt.fill", title: "التشكيلة على الملعب", subtitle: rich.confirmed ? "تشكيلة رسمية" : "تشكيلة متوقعة", tint: GcTheme.emerald)
+            HStack(alignment: .top, spacing: 10) {
+                pitchHalf(players: rich.home, formation: rich.homeFormation, name: fixture.home.name)
+                pitchHalf(players: rich.away, formation: rich.awayFormation, name: fixture.away.name)
+            }
+        }
+        .padding(14)
+        .gcCard()
+    }
+
+    private func pitchHalf(players: [GcRichLineupPlayer], formation: String?, name: String) -> some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 5) {
+                Text(name).font(GulfCupFonts.app(size: 11.5, weight: .bold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                if let formation {
+                    Text(formation).font(GulfCupFonts.app(size: 10, weight: .semibold)).foregroundStyle(GcTheme.inkDim)
+                }
+            }
+            GeometryReader { geo in
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(LinearGradient(colors: [Color(red: 0.06, green: 0.48, blue: 0.30), Color(red: 0.04, green: 0.42, blue: 0.28)], startPoint: .top, endPoint: .bottom))
+                    // خطوط استرشادية خفيفة
+                    Rectangle().fill(.white.opacity(0.18)).frame(height: 1)
+                        .position(x: geo.size.width / 2, y: 1)
+                    ForEach(players.filter { $0.starter && $0.x != nil && $0.y != nil }) { p in
+                        playerDot(p)
+                            .position(
+                                x: geo.size.width * CGFloat(p.x!) / 100,
+                                y: geo.size.height * CGFloat(p.y!) / 100
+                            )
+                    }
+                }
+            }
+            .aspectRatio(3.0 / 4.0, contentMode: .fit)
+            .environment(\.layoutDirection, .leftToRight)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func playerDot(_ p: GcRichLineupPlayer) -> some View {
+        VStack(spacing: 1) {
+            ZStack(alignment: .topTrailing) {
+                Text(p.number.map(String.init) ?? "•")
+                    .font(GulfCupFonts.app(size: 9, weight: .bold))
+                    .foregroundStyle(GcTheme.forest)
+                    .monospacedDigit()
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(.white))
+                if p.captain {
+                    Text("C")
+                        .font(.system(size: 6, weight: .black))
+                        .foregroundStyle(GcTheme.forest)
+                        .frame(width: 9, height: 9)
+                        .background(Circle().fill(GcTheme.goldLite))
+                        .offset(x: 3, y: -3)
+                }
+            }
+            if let rating = p.rating {
+                Text(String(format: "%.1f", rating))
+                    .font(GulfCupFonts.app(size: 7.5, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 3).padding(.vertical, 1)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(rating >= 7.5 ? GcTheme.emerald : rating >= 6 ? Color.orange : GcTheme.crimson))
+                    .monospacedDigit()
+            }
+            Text(p.name)
+                .font(GulfCupFonts.app(size: 7.5, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.92))
+                .lineLimit(1)
+                .frame(maxWidth: 52)
+        }
+    }
+}
+
+/// مؤشر الخطورة والزخم — أعمدة ±: موجب (زمردي) ضغط المضيف، سالب (كهرماني) ضغط الضيف.
+struct GcTrendCard: View {
+    let trend: GcTrend
+    let fixture: GcFixture
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "waveform.path.ecg", title: "الخطورة والزخم", subtitle: "\(fixture.home.name) أعلى · \(fixture.away.name) أسفل", tint: GcTheme.emerald)
+            GeometryReader { geo in
+                let count = max(trend.values.count, 1)
+                let w = geo.size.width / CGFloat(count)
+                ZStack {
+                    Rectangle().fill(GcTheme.outline).frame(height: 1)
+                    HStack(alignment: .center, spacing: 0) {
+                        ForEach(Array(trend.values.enumerated()), id: \.offset) { _, point in
+                            VStack(spacing: 0) {
+                                Spacer(minLength: 0)
+                                Rectangle()
+                                    .fill(point.value >= 0 ? GcTheme.emerald : Color.orange)
+                                    .frame(width: max(w - 1.5, 1.5), height: max(CGFloat(abs(point.value)) / 100 * geo.size.height / 2, point.value == 0 ? 0 : 2))
+                                    .offset(y: point.value >= 0 ? -geo.size.height / 4 + CGFloat(abs(point.value)) / 100 * geo.size.height / 4 : geo.size.height / 4 - CGFloat(abs(point.value)) / 100 * geo.size.height / 4)
+                                Spacer(minLength: 0)
+                            }
+                            .frame(width: w)
+                        }
+                    }
+                }
+            }
+            .frame(height: 72)
+            .environment(\.layoutDirection, .leftToRight)
+        }
+        .padding(14)
+        .gcCard()
+    }
+}
+
+/// تقييمات اللاعبين — رجل المباراة أولًا (مرتّبة من الخادم بالتقييم).
+struct GcRatingsCard: View {
+    let stats: [GcPlayerMatchStat]
+    let fixture: GcFixture
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "star.fill", title: "تقييمات اللاعبين", tint: GcTheme.goldDeep)
+            VStack(spacing: 0) {
+                ForEach(Array(stats.filter { $0.rating != nil }.prefix(10).enumerated()), id: \.element.id) { idx, p in
+                    if idx > 0 { Rectangle().fill(GcTheme.outline).frame(height: 1).padding(.leading, 14) }
+                    HStack(spacing: 10) {
+                        if idx == 0 {
+                            Image(systemName: "star.fill").font(.system(size: 11)).foregroundStyle(GcTheme.gold)
+                        } else {
+                            Text("\(idx + 1)").font(GulfCupFonts.app(size: 11, weight: .bold)).foregroundStyle(GcTheme.inkFaint).frame(width: 14)
+                        }
+                        GcPlayerPhoto(url: p.photo, size: 30)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(p.name).font(GulfCupFonts.app(size: 12.5, weight: .semibold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                            Text(p.side == "home" ? fixture.home.name : p.side == "away" ? fixture.away.name : "")
+                                .font(GulfCupFonts.app(size: 9.5)).foregroundStyle(GcTheme.inkDim)
+                        }
+                        Spacer()
+                        Text(String(format: "%.1f", p.rating ?? 0))
+                            .font(GulfCupFonts.app(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill((p.rating ?? 0) >= 7.5 ? GcTheme.emerald : (p.rating ?? 0) >= 6 ? Color.orange : GcTheme.crimson))
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                }
+            }
+            .gcCard(radius: GcTheme.tileRadius, fill: GcTheme.cardBgSubtle)
+        }
+        .padding(14)
+        .gcCard()
+    }
+}
+
+/// الغيابات والإصابات للطرفين — قبل المباراة وأثناءها.
+struct GcInjuriesCard: View {
+    let injuries: GcMatchInjuries
+    let fixture: GcFixture
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "cross.case.fill", title: "الغيابات والإصابات", tint: GcTheme.crimson)
+            HStack(alignment: .top, spacing: 12) {
+                sideList(name: fixture.home.name, list: injuries.home)
+                sideList(name: fixture.away.name, list: injuries.away)
+            }
+        }
+        .padding(14)
+        .gcCard()
+    }
+
+    @ViewBuilder private func sideList(name: String, list: [GcInjury]) -> some View {
+        if list.isEmpty {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(name).font(GulfCupFonts.app(size: 11.5, weight: .bold)).foregroundStyle(GcTheme.ink)
+                Text("لا غيابات").font(GulfCupFonts.app(size: 11)).foregroundStyle(GcTheme.inkFaint)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(name).font(GulfCupFonts.app(size: 11.5, weight: .bold)).foregroundStyle(GcTheme.ink)
+                ForEach(list.prefix(5)) { inj in
+                    HStack(spacing: 5) {
+                        Image(systemName: "stethoscope").font(.system(size: 9)).foregroundStyle(GcTheme.crimson)
+                        Text(inj.player).font(GulfCupFonts.app(size: 11, weight: .semibold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                    }
+                    if let reason = inj.reason, !reason.isEmpty {
+                        Text(reason).font(GulfCupFonts.app(size: 9)).foregroundStyle(GcTheme.inkDim).lineLimit(1).padding(.leading, 14)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

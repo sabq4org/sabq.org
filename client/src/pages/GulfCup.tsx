@@ -11,6 +11,7 @@ import { GcGroups } from "@/components/gulfcup/GcGroups";
 import { GcSchedule } from "@/components/gulfcup/GcSchedule";
 import { GcKnockoutSection } from "@/components/gulfcup/GcKnockoutSection";
 import { GcScorersSection } from "@/components/gulfcup/GcScorersSection";
+import { GcStarsSection } from "@/components/gulfcup/GcStarsSection";
 import { GcHistorySection } from "@/components/gulfcup/GcHistorySection";
 import { GcTeams } from "@/components/gulfcup/GcTeams";
 import { GcHostShowcase } from "@/components/gulfcup/GcHostShowcase";
@@ -96,6 +97,7 @@ export default function GulfCup() {
         <GcGroups groups={groups} />
         <GcKnockoutSection fixtures={fixtures} onOpenMatch={setOpenFixtureId} />
         <GcScorersSection />
+        <GcStarsSection />
         <GcHistorySection />
         <GcTeams teams={teams} isLoading={teamsLoading} />
         <GcHostShowcase overview={overview} />

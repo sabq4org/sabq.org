@@ -14,6 +14,8 @@ import { GcPredictionsLeaderboard } from "@/components/gulfcup/predictions/GcPre
 import { GcMyPredictionsList } from "@/components/gulfcup/predictions/GcMyPredictionsList";
 import { GcLongPredictions } from "@/components/gulfcup/predictions/GcLongPredictions";
 import { GcBadges } from "@/components/gulfcup/predictions/GcBadges";
+import { GcMajlisTab } from "@/components/gulfcup/predictions/GcMajlisTab";
+import { GcFantasyTab } from "@/components/gulfcup/predictions/GcFantasyTab";
 import { GcWinCelebration, type GcWin } from "@/components/gulfcup/predictions/GcWinCelebration";
 import type {
   GcLeaderboardResponse,
@@ -22,12 +24,14 @@ import type {
   GcPredictableMatch,
 } from "@/components/gulfcup/predictions/gcPredictionTypes";
 
-type Tab = "today" | "mine" | "leaders" | "long" | "badges";
+type Tab = "today" | "mine" | "leaders" | "majlis" | "fantasy" | "long" | "badges";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "today", label: "المباريات" },
   { key: "mine", label: "توقّعاتي" },
   { key: "leaders", label: "المتصدّرون" },
+  { key: "majlis", label: "المجالس" },
+  { key: "fantasy", label: "الفانتازي" },
   { key: "long", label: "البطل والهدّاف" },
   { key: "badges", label: "الإنجازات" },
 ];
@@ -268,6 +272,14 @@ export default function GulfCupPredictions() {
               onLoadMore={() => setLeaderLimit((l) => Math.min(l + 100, 500))}
               loadingMore={leaderFetching && !leaderLoading}
             />
+          )}
+
+          {tab === "majlis" && (
+            <GcMajlisTab isAuthenticated={isAuthenticated} currentUserId={user?.id} onRequireLogin={goLogin} />
+          )}
+
+          {tab === "fantasy" && (
+            <GcFantasyTab isAuthenticated={isAuthenticated} onRequireLogin={goLogin} />
           )}
 
           {tab === "long" && <GcLongPredictions isAuthenticated={isAuthenticated} onRequireLogin={goLogin} />}

@@ -13,6 +13,7 @@ import {
   getGcMatchDetail,
   getGcScorers,
   getGcHistory,
+  getGcStars,
   isGulfCupConfigured,
 } from "../services/gulfCupService";
 import {
@@ -20,6 +21,7 @@ import {
   isBlockHidden,
 } from "../services/tournamentBlockSettings";
 import { detectCupChampion, manualCupChampion } from "../services/cupChampion";
+import { getTeamOfTheWeek, isSportmonksConfigured } from "../services/sportmonksService";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -119,6 +121,42 @@ export function registerGulfCupRoutes(app: Express) {
     } catch (error) {
       console.error("[GulfCup] history failed:", error);
       res.status(502).json({ message: "تعذر جلب سجلّ البطولة حاليًا" });
+    }
+  });
+
+  // «نجم البطولة» — أغلى اللاعبين بالقيمة السوقية (TheSports). [] قبل توفر
+  // بيانات الموسم؛ الواجهة تخفي القسم عندها.
+  app.get("/api/gulf-cup/stars", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      const stars = await getGcStars();
+      res.set("Cache-Control", "public, max-age=1800, s-maxage=3600, stale-while-revalidate=7200");
+      res.json({ stars });
+    } catch (error) {
+      console.error("[GulfCup] stars failed:", error);
+      res.status(502).json({ message: "تعذر جلب نجوم البطولة حاليًا" });
+    }
+  });
+
+  // تشكيلة الجولة المثالية (Sportmonks) — تتفعّل بضبط SM_GULF_LEAGUE_ID متى
+  // أعلن المزوّد معرّف دوري كأس الخليج. 204 = غير متاحة (الواجهة تخفي القسم).
+  app.get("/api/gulf-cup/totw", async (_req, res) => {
+    const leagueId = Number(process.env.SM_GULF_LEAGUE_ID || 0);
+    if (!leagueId || !isSportmonksConfigured()) {
+      res.status(204).end();
+      return;
+    }
+    try {
+      const totw = await getTeamOfTheWeek(leagueId);
+      if (!totw?.available) {
+        res.status(204).end();
+        return;
+      }
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=7200, stale-while-revalidate=14400");
+      res.json(totw);
+    } catch (error) {
+      console.error("[GulfCup] totw failed:", error);
+      res.status(204).end();
     }
   });
 

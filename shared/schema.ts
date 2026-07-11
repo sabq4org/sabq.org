@@ -2269,6 +2269,69 @@ export const gcBadges = pgTable("gc_badges", {
   index("idx_gc_badge_user").on(table.userId),
 ]);
 
+// «مجالس التوقعات» — دوريات خاصة برمز دعوة فوق مسابقة توقّعات خليجي: أنشئ
+// مجلسك، شارك رمزه مع أهل ديوانيتك وزملائك، ونافسوا في ترتيب خاص يقرأ نقاط
+// المسابقة نفسها (لا نقاط منفصلة — تجميع gc_predictions مرشّحًا بالأعضاء).
+export const gcMajalis = pgTable("gc_majalis", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 60 }).notNull(),
+  // رمز الدعوة القصير (أحرف/أرقام غير ملتبسة) — فريد عالميًّا.
+  code: varchar("code", { length: 8 }).notNull(),
+  ownerId: varchar("owner_id").references(() => users.id).notNull(),
+  membersCount: integer("members_count").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_majlis_code").on(table.code),
+  index("idx_gc_majlis_owner").on(table.ownerId),
+]);
+
+export const gcMajlisMembers = pgTable("gc_majlis_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  majlisId: varchar("majlis_id").references(() => gcMajalis.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_majlis_member").on(table.majlisId, table.userId),
+  index("idx_gc_majlis_member_user").on(table.userId),
+  index("idx_gc_majlis_member_majlis").on(table.majlisId),
+]);
+
+export type GcMajlis = typeof gcMajalis.$inferSelect;
+export type GcMajlisMember = typeof gcMajlisMembers.$inferSelect;
+
+// «رجل المباراة — الجمهور ضد الأرقام»: صوت واحد لكل مستخدم لكل مباراة، يُفتح
+// من الشوط الثاني وحتى 24 ساعة بعد الصافرة، ثم تُقارن غلبة الجمهور بأعلى
+// تقييم بيانات (TheSports) في الواجهة.
+export const gcMotmVotes = pgTable("gc_motm_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  // معرّف اللاعب لدى TheSports إن توفّر، وإلا مفتاح الاسم — والاسم للعرض دائمًا.
+  playerId: varchar("player_id").notNull(),
+  playerName: text("player_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_motm_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_gc_motm_fixture").on(table.fixtureId),
+]);
+
+export type GcMotmVote = typeof gcMotmVotes.$inferSelect;
+
+// «فانتازي خليجي المصغّر»: تشكيلة من 7 لاعبين ضمن ميزانية، ونقاطها من
+// تقييمات TheSports الفعلية لكل مباراة (يُضاعَف القائد). صفّ واحد لكل مستخدم.
+export const gcFantasySquads = pgTable("gc_fantasy_squads", {
+  userId: varchar("user_id").references(() => users.id).primaryKey(),
+  // معرّفات اللاعبين لدى TheSports (نصية) — 7 عناصر.
+  playerIds: jsonb("player_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  captainId: varchar("captain_id").notNull().default(""),
+  // إجمالي القيمة المصروفة وقت الحفظ (لعرض «المتبقّي» دون إعادة حساب).
+  spent: integer("spent").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type GcFantasySquad = typeof gcFantasySquads.$inferSelect;
+
 export type GcPrediction = typeof gcPredictions.$inferSelect;
 export type GcPredictionMatch = typeof gcPredictionMatches.$inferSelect;
 export type GcLongPrediction = typeof gcLongPredictions.$inferSelect;

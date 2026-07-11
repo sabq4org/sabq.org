@@ -12,6 +12,7 @@ const SECTIONS: { id: string; label: string }[] = [
   { id: "gc-groups", label: "المجموعات" },
   { id: "gc-knockout", label: "الطريق إلى اللقب" },
   { id: "gc-scorers", label: "الهدّافون" },
+  { id: "gc-stars", label: "النجوم" },
   { id: "gc-history", label: "سجلّ البطولة" },
   { id: "gc-teams", label: "المنتخبات" },
 ];
