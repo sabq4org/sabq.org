@@ -653,6 +653,10 @@ export default function MomentByMoment() {
   // one the reader has acknowledged, so polling never silently reshuffles the
   // feed under them (a classic live-blog pattern).
   const [seenTopId, setSeenTopId] = useState<string | null>(null);
+  // Hide the sticky filter chrome while the reader scrolls down the feed;
+  // bring it back on scroll-up so filters stay one gesture away.
+  const [filtersCollapsed, setFiltersCollapsed] = useState(false);
+  const lastScrollY = useRef(0);
 
   // Reset the watermark whenever the breaking/all filter flips (new dataset).
   useEffect(() => {
@@ -665,6 +669,25 @@ export default function MomentByMoment() {
     }
   }, [allItems, seenTopId]);
 
+  useEffect(() => {
+    lastScrollY.current = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      const delta = y - lastScrollY.current;
+      if (Math.abs(delta) < 8) return;
+      if (y < 64) {
+        setFiltersCollapsed(false);
+      } else if (delta > 0) {
+        setFiltersCollapsed(true);
+      } else {
+        setFiltersCollapsed(false);
+      }
+      lastScrollY.current = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const newCount = useMemo(() => {
     if (!seenTopId) return 0;
     const idx = allItems.findIndex((i) => i.id === seenTopId);
@@ -673,6 +696,7 @@ export default function MomentByMoment() {
 
   const revealNewUpdates = () => {
     if (allItems.length > 0) setSeenTopId(allItems[0].id);
+    setFiltersCollapsed(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -783,8 +807,17 @@ export default function MomentByMoment() {
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6">
           {/* MAIN — live feed, occupies the right side of the page */}
           <main data-testid="main-content">
-            {/* Enhanced Sticky Filter Bar - Compact on mobile */}
-            <div className="sticky top-16 z-20 rounded-xl bg-card/95 backdrop-blur-sm border border-border/70 shadow-sm p-3 mb-4" data-testid="header-status-bar">
+            {/* Enhanced Sticky Filter Bar - Compact on mobile; collapses on scroll-down */}
+            <div
+              className={`sticky top-16 z-20 overflow-hidden transition-all duration-300 ease-out ${
+                filtersCollapsed
+                  ? "max-h-0 opacity-0 -translate-y-2 mb-0 pointer-events-none"
+                  : "max-h-48 opacity-100 translate-y-0 mb-4"
+              }`}
+              data-testid="header-status-bar"
+              aria-hidden={filtersCollapsed}
+            >
+              <div className="rounded-xl bg-card/95 backdrop-blur-sm border border-border/70 shadow-sm p-3">
               {/* Status Row - Ultra compact on mobile */}
               <div className="flex items-center justify-between gap-2 sm:gap-4 flex-wrap mb-2.5">
                 <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap">
@@ -887,11 +920,12 @@ export default function MomentByMoment() {
                   </SelectContent>
                 </Select>
               </div>
+              </div>
             </div>
 
             {/* "New updates" live pill */}
             {newCount > 0 && (
-              <div className="sticky top-36 z-30 flex justify-center pointer-events-none mb-3">
+              <div className={`sticky z-30 flex justify-center pointer-events-none mb-3 transition-[top] duration-300 ${filtersCollapsed ? "top-20" : "top-36"}`}>
                 <button
                   onClick={revealNewUpdates}
                   className="mbm-enter pointer-events-auto flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-4 py-2 text-xs sm:text-sm font-semibold shadow-lg hover:brightness-110 transition"

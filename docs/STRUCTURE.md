@@ -24,6 +24,7 @@
 - `SECRETS-UPDATE-GUIDE.md`
 - `WEBHOOK-SETUP-GUIDE.md`
 - `MIGRATION_RUNBOOK.md`
+- `GOOGLE_ANALYTICS.md` — كيف نضع gtag/GA4 ونرصد مشاهدات الصفحات (ويب + iOS + Android)
 
 ## docs/handoff/ — تسليمات
 - `HANDOFF-android-native-2026-05-19.md`
