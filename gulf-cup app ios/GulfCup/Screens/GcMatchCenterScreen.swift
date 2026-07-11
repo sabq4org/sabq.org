@@ -21,6 +21,10 @@ struct GcMatchCenterScreen: View {
             VStack(spacing: 14) {
                 scoreboardHero
 
+                if let tv = detail?.tv, !tv.isEmpty {
+                    GcTvChipsRow(channels: tv)
+                }
+
                 if GcLiveActivityManager.shared.isSupported && !displayFixture.status.finished {
                     liveActivityButton
                 }
@@ -195,14 +199,22 @@ struct GcMatchCenterScreen: View {
     // MARK: التشكيلات
 
     @ViewBuilder private var lineupsSection: some View {
+        if let rich = detail?.lineupsRich, GcPitchCard.hasCoordinates(rich) {
+            GcPitchCard(rich: rich, fixture: displayFixture)
+        }
         if let d = detail, !d.lineups.isEmpty {
             ForEach(d.lineups) { lineup in
                 GcLineupCard(lineup: lineup)
             }
-        } else if loading {
-            GcLoadingPanel(title: L("match.loading"))
-        } else {
-            GcEmptyState(icon: "person.3.sequence", title: L("match.lineups.empty.title"), subtitle: L("match.lineups.empty.subtitle"))
+        } else if detail?.lineupsRich == nil {
+            if loading {
+                GcLoadingPanel(title: L("match.loading"))
+            } else {
+                GcEmptyState(icon: "person.3.sequence", title: L("match.lineups.empty.title"), subtitle: L("match.lineups.empty.subtitle"))
+            }
+        }
+        if let injuries = detail?.injuries, !(injuries.home.isEmpty && injuries.away.isEmpty) {
+            GcInjuriesCard(injuries: injuries, fixture: displayFixture)
         }
     }
 
@@ -230,8 +242,14 @@ struct GcMatchCenterScreen: View {
             .gcCard()
         } else if loading {
             GcLoadingPanel(title: L("match.loading"))
-        } else {
+        } else if detail?.trend == nil && (detail?.playerStats?.isEmpty ?? true) {
             GcEmptyState(icon: "chart.bar", title: L("match.stats.empty.title"), subtitle: L("match.stats.empty.subtitle"))
+        }
+        if let trend = detail?.trend, !trend.values.isEmpty {
+            GcTrendCard(trend: trend, fixture: displayFixture)
+        }
+        if let ps = detail?.playerStats, ps.contains(where: { $0.rating != nil }) {
+            GcRatingsCard(stats: ps, fixture: displayFixture)
         }
     }
 
@@ -508,6 +526,238 @@ struct GcH2HRecordCard: View {
             Text(L("match.wins")).font(GulfCupFonts.app(size: 10)).foregroundStyle(GcTheme.inkFaint)
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - إثراء TheSports: القنوات · الملعب التفاعلي · الزخم · التقييمات · الغيابات
+
+/// القنوات الناقلة — رقاقات أفقية تحت لوحة النتيجة («وين أشوف المباراة؟»).
+struct GcTvChipsRow: View {
+    let channels: [GcTvChannel]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Image(systemName: "tv.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(GcTheme.goldDeep)
+                ForEach(channels.prefix(5)) { channel in
+                    Text(channel.name)
+                        .font(GulfCupFonts.app(size: 11, weight: .semibold))
+                        .foregroundStyle(GcTheme.ink)
+                        .padding(.horizontal, 11).padding(.vertical, 6)
+                        .background(Capsule().fill(GcTheme.chipFill))
+                }
+            }
+            .padding(.horizontal, 2)
+        }
+    }
+}
+
+/// ملعبان متجاوران بإحداثيات المزوّد (0..100) — رقم القميص + التقييم الحي + الكابتن.
+struct GcPitchCard: View {
+    let rich: GcRichLineup
+    let fixture: GcFixture
+
+    static func hasCoordinates(_ rich: GcRichLineup) -> Bool {
+        rich.home.contains { $0.starter && $0.x != nil && $0.y != nil }
+            && rich.away.contains { $0.starter && $0.x != nil && $0.y != nil }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            GcSectionHeader(icon: "sportscourt.fill", title: "التشكيلة على الملعب", subtitle: rich.confirmed ? "تشكيلة رسمية" : "تشكيلة متوقعة", tint: GcTheme.emerald)
+            HStack(alignment: .top, spacing: 10) {
+                pitchHalf(players: rich.home, formation: rich.homeFormation, name: fixture.home.name)
+                pitchHalf(players: rich.away, formation: rich.awayFormation, name: fixture.away.name)
+            }
+        }
+        .padding(14)
+        .gcCard()
+    }
+
+    private func pitchHalf(players: [GcRichLineupPlayer], formation: String?, name: String) -> some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 5) {
+                Text(name).font(GulfCupFonts.app(size: 11.5, weight: .bold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                if let formation {
+                    Text(formation).font(GulfCupFonts.app(size: 10, weight: .semibold)).foregroundStyle(GcTheme.inkDim)
+                }
+            }
+            GeometryReader { geo in
+                ZStack {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(LinearGradient(colors: [Color(red: 0.06, green: 0.48, blue: 0.30), Color(red: 0.04, green: 0.42, blue: 0.28)], startPoint: .top, endPoint: .bottom))
+                    // خطوط استرشادية خفيفة
+                    Rectangle().fill(.white.opacity(0.18)).frame(height: 1)
+                        .position(x: geo.size.width / 2, y: 1)
+                    ForEach(players.filter { $0.starter && $0.x != nil && $0.y != nil }) { p in
+                        playerDot(p)
+                            .position(
+                                x: geo.size.width * CGFloat(p.x!) / 100,
+                                y: geo.size.height * CGFloat(p.y!) / 100
+                            )
+                    }
+                }
+            }
+            .aspectRatio(3.0 / 4.0, contentMode: .fit)
+            .environment(\.layoutDirection, .leftToRight)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func playerDot(_ p: GcRichLineupPlayer) -> some View {
+        VStack(spacing: 1) {
+            ZStack(alignment: .topTrailing) {
+                Text(p.number.map(String.init) ?? "•")
+                    .font(GulfCupFonts.app(size: 9, weight: .bold))
+                    .foregroundStyle(GcTheme.forest)
+                    .monospacedDigit()
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(.white))
+                if p.captain {
+                    Text("C")
+                        .font(.system(size: 6, weight: .black))
+                        .foregroundStyle(GcTheme.forest)
+                        .frame(width: 9, height: 9)
+                        .background(Circle().fill(GcTheme.goldLite))
+                        .offset(x: 3, y: -3)
+                }
+            }
+            if let rating = p.rating {
+                Text(String(format: "%.1f", rating))
+                    .font(GulfCupFonts.app(size: 7.5, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 3).padding(.vertical, 1)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(rating >= 7.5 ? GcTheme.emerald : rating >= 6 ? Color.orange : GcTheme.crimson))
+                    .monospacedDigit()
+            }
+            Text(p.name)
+                .font(GulfCupFonts.app(size: 7.5, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.92))
+                .lineLimit(1)
+                .frame(maxWidth: 52)
+        }
+    }
+}
+
+/// مؤشر الخطورة والزخم — أعمدة ±: موجب (زمردي) ضغط المضيف، سالب (كهرماني) ضغط الضيف.
+struct GcTrendCard: View {
+    let trend: GcTrend
+    let fixture: GcFixture
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "waveform.path.ecg", title: "الخطورة والزخم", subtitle: "\(fixture.home.name) أعلى · \(fixture.away.name) أسفل", tint: GcTheme.emerald)
+            GeometryReader { geo in
+                let count = max(trend.values.count, 1)
+                let w = geo.size.width / CGFloat(count)
+                ZStack {
+                    Rectangle().fill(GcTheme.outline).frame(height: 1)
+                    HStack(alignment: .center, spacing: 0) {
+                        ForEach(Array(trend.values.enumerated()), id: \.offset) { _, point in
+                            VStack(spacing: 0) {
+                                Spacer(minLength: 0)
+                                Rectangle()
+                                    .fill(point.value >= 0 ? GcTheme.emerald : Color.orange)
+                                    .frame(width: max(w - 1.5, 1.5), height: max(CGFloat(abs(point.value)) / 100 * geo.size.height / 2, point.value == 0 ? 0 : 2))
+                                    .offset(y: point.value >= 0 ? -geo.size.height / 4 + CGFloat(abs(point.value)) / 100 * geo.size.height / 4 : geo.size.height / 4 - CGFloat(abs(point.value)) / 100 * geo.size.height / 4)
+                                Spacer(minLength: 0)
+                            }
+                            .frame(width: w)
+                        }
+                    }
+                }
+            }
+            .frame(height: 72)
+            .environment(\.layoutDirection, .leftToRight)
+        }
+        .padding(14)
+        .gcCard()
+    }
+}
+
+/// تقييمات اللاعبين — رجل المباراة أولًا (مرتّبة من الخادم بالتقييم).
+struct GcRatingsCard: View {
+    let stats: [GcPlayerMatchStat]
+    let fixture: GcFixture
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "star.fill", title: "تقييمات اللاعبين", tint: GcTheme.goldDeep)
+            VStack(spacing: 0) {
+                ForEach(Array(stats.filter { $0.rating != nil }.prefix(10).enumerated()), id: \.element.id) { idx, p in
+                    if idx > 0 { Rectangle().fill(GcTheme.outline).frame(height: 1).padding(.leading, 14) }
+                    HStack(spacing: 10) {
+                        if idx == 0 {
+                            Image(systemName: "star.fill").font(.system(size: 11)).foregroundStyle(GcTheme.gold)
+                        } else {
+                            Text("\(idx + 1)").font(GulfCupFonts.app(size: 11, weight: .bold)).foregroundStyle(GcTheme.inkFaint).frame(width: 14)
+                        }
+                        GcPlayerPhoto(url: p.photo, size: 30)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(p.name).font(GulfCupFonts.app(size: 12.5, weight: .semibold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                            Text(p.side == "home" ? fixture.home.name : p.side == "away" ? fixture.away.name : "")
+                                .font(GulfCupFonts.app(size: 9.5)).foregroundStyle(GcTheme.inkDim)
+                        }
+                        Spacer()
+                        Text(String(format: "%.1f", p.rating ?? 0))
+                            .font(GulfCupFonts.app(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                            .monospacedDigit()
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill((p.rating ?? 0) >= 7.5 ? GcTheme.emerald : (p.rating ?? 0) >= 6 ? Color.orange : GcTheme.crimson))
+                    }
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                }
+            }
+            .gcCard(radius: GcTheme.tileRadius, fill: GcTheme.cardBgSubtle)
+        }
+        .padding(14)
+        .gcCard()
+    }
+}
+
+/// الغيابات والإصابات للطرفين — قبل المباراة وأثناءها.
+struct GcInjuriesCard: View {
+    let injuries: GcMatchInjuries
+    let fixture: GcFixture
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            GcSectionHeader(icon: "cross.case.fill", title: "الغيابات والإصابات", tint: GcTheme.crimson)
+            HStack(alignment: .top, spacing: 12) {
+                sideList(name: fixture.home.name, list: injuries.home)
+                sideList(name: fixture.away.name, list: injuries.away)
+            }
+        }
+        .padding(14)
+        .gcCard()
+    }
+
+    @ViewBuilder private func sideList(name: String, list: [GcInjury]) -> some View {
+        if list.isEmpty {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(name).font(GulfCupFonts.app(size: 11.5, weight: .bold)).foregroundStyle(GcTheme.ink)
+                Text("لا غيابات").font(GulfCupFonts.app(size: 11)).foregroundStyle(GcTheme.inkFaint)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(name).font(GulfCupFonts.app(size: 11.5, weight: .bold)).foregroundStyle(GcTheme.ink)
+                ForEach(list.prefix(5)) { inj in
+                    HStack(spacing: 5) {
+                        Image(systemName: "stethoscope").font(.system(size: 9)).foregroundStyle(GcTheme.crimson)
+                        Text(inj.player).font(GulfCupFonts.app(size: 11, weight: .semibold)).foregroundStyle(GcTheme.ink).lineLimit(1)
+                    }
+                    if let reason = inj.reason, !reason.isEmpty {
+                        Text(reason).font(GulfCupFonts.app(size: 9)).foregroundStyle(GcTheme.inkDim).lineLimit(1).padding(.leading, 14)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

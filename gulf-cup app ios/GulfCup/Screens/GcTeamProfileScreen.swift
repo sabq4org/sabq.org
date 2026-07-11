@@ -24,6 +24,29 @@ struct GcTeamProfileScreen: View {
                 }
 
                 if let profile {
+                    if let fifa = profile.fifaRank {
+                        HStack(spacing: 8) {
+                            Image(systemName: "globe")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(GcTheme.emerald)
+                            Text("تصنيف الفيفا")
+                                .font(GulfCupFonts.app(size: 12, weight: .bold))
+                                .foregroundStyle(GcTheme.inkDim)
+                            Spacer()
+                            if let change = fifa.change, change != 0 {
+                                Image(systemName: change > 0 ? "arrow.up" : "arrow.down")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(change > 0 ? GcTheme.emerald : GcTheme.crimson)
+                            }
+                            Text("#\(fifa.rank)")
+                                .font(GulfCupFonts.app(size: 16, weight: .bold))
+                                .foregroundStyle(GcTheme.ink)
+                                .monospacedDigit()
+                        }
+                        .padding(13)
+                        .gcCard(radius: GcTheme.tileRadius)
+                    }
+
                     if !profile.stats.form.isEmpty {
                         HStack {
                             Text(L("team.form")).font(GulfCupFonts.app(size: 12, weight: .bold)).foregroundStyle(GcTheme.inkDim)
@@ -35,6 +58,31 @@ struct GcTeamProfileScreen: View {
                     }
 
                     GcTeamStatsCard(stats: profile.stats)
+
+                    if let injuries = profile.injuries, !injuries.isEmpty {
+                        VStack(alignment: .leading, spacing: 9) {
+                            GcSectionHeader(icon: "cross.case.fill", title: "الغيابات والإصابات", count: injuries.count, tint: GcTheme.crimson)
+                            ForEach(injuries.prefix(6)) { inj in
+                                HStack(spacing: 8) {
+                                    Image(systemName: "stethoscope")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(GcTheme.crimson)
+                                    Text(inj.player)
+                                        .font(GulfCupFonts.app(size: 12.5, weight: .semibold))
+                                        .foregroundStyle(GcTheme.ink)
+                                    if let reason = inj.reason, !reason.isEmpty {
+                                        Text("— \(reason)")
+                                            .font(GulfCupFonts.app(size: 11))
+                                            .foregroundStyle(GcTheme.inkDim)
+                                            .lineLimit(1)
+                                    }
+                                    Spacer(minLength: 0)
+                                }
+                            }
+                        }
+                        .padding(13)
+                        .gcCard()
+                    }
 
                     if let legacy = profile.legacy, legacy.titles > 0 || legacy.runnerUps > 0 {
                         GcTeamLegacyCard(legacy: legacy)

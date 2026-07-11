@@ -323,6 +323,10 @@ struct GcTeamProfile: Decodable, Hashable {
     let fixtures: [GcFixture]
     let squad: [GcSquadPlayer]
     let legacy: GcTeamLegacy?
+    /// تصنيف الفيفا (TheSports) — nil قبل توفّر الجسر.
+    let fifaRank: GcFifaRank?
+    /// الإصابات والغيابات الحالية — nil/فارغة قبل توفّر الجسر.
+    let injuries: [GcInjury]?
 }
 
 struct GcMatchEvent: Decodable, Hashable, Identifiable {
@@ -378,6 +382,84 @@ struct GcH2HSummary: Decodable, Hashable {
     let recent: [GcH2HMatch]
 }
 
+// ---------- إثراء TheSports (اختيارية كلها — تغيب قبل توفر بيانات المزوّد) ----------
+
+struct GcRichLineupPlayer: Decodable, Hashable, Identifiable {
+    let id: String
+    let name: String
+    let number: Int?
+    let position: String?
+    /// إحداثيات على الملعب (0..100) — nil إن غابت لدى المزوّد.
+    let x: Double?
+    let y: Double?
+    /// تقييم المباراة (يتجدّد أثناء اللعب).
+    let rating: Double?
+    let photo: String?
+    let captain: Bool
+    let starter: Bool
+}
+
+struct GcRichLineup: Decodable, Hashable {
+    let confirmed: Bool
+    let homeFormation: String?
+    let awayFormation: String?
+    let home: [GcRichLineupPlayer]
+    let away: [GcRichLineupPlayer]
+}
+
+struct GcTrendPoint: Decodable, Hashable {
+    let minute: Int
+    let value: Double
+}
+
+struct GcTrend: Decodable, Hashable {
+    let perMinutes: Int
+    /// القيمة −100..100: موجب = ضغط المضيف، سالب = ضغط الضيف.
+    let values: [GcTrendPoint]
+}
+
+struct GcTvChannel: Decodable, Hashable, Identifiable {
+    let name: String
+    let country: String?
+    let logo: String?
+    var id: String { name + (country ?? "") }
+}
+
+struct GcPlayerMatchStat: Decodable, Hashable, Identifiable {
+    let playerId: String
+    let name: String
+    let photo: String?
+    let side: String?
+    let starter: Bool
+    let minutes: Int
+    let rating: Double?
+    let values: [String: Double]
+    var id: String { playerId }
+}
+
+struct GcInjury: Decodable, Hashable, Identifiable {
+    let player: String
+    let reason: String?
+    let missedMatches: Int?
+    var id: String { player + (reason ?? "") }
+}
+
+struct GcMatchInjuries: Decodable, Hashable {
+    let home: [GcInjury]
+    let away: [GcInjury]
+}
+
+struct GcFifaRank: Decodable, Hashable {
+    let rank: Int
+    let points: Double?
+    let change: Int?
+}
+
+struct GcMatchFifa: Decodable, Hashable {
+    let home: GcFifaRank?
+    let away: GcFifaRank?
+}
+
 struct GcMatchDetail: Decodable, Hashable {
     let fixture: GcFixture
     let events: [GcMatchEvent]
@@ -385,6 +467,12 @@ struct GcMatchDetail: Decodable, Hashable {
     let statistics: [GcStatistic]
     let headToHead: [GcFixture]
     let history: GcH2HSummary?
+    let lineupsRich: GcRichLineup?
+    let trend: GcTrend?
+    let tv: [GcTvChannel]?
+    let playerStats: [GcPlayerMatchStat]?
+    let injuries: GcMatchInjuries?
+    let fifa: GcMatchFifa?
 }
 
 struct GcDayGroup: Identifiable {
