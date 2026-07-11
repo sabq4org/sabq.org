@@ -2,7 +2,15 @@ import { GC_BADGES } from "./gcPredictionTypes";
 
 /** شبكة الإنجازات: المكتسبة ملوّنة، والباقي باهت كهدف. */
 export function GcBadges({ earned }: { earned: string[] }) {
-  const have = new Set(earned);
+  // وسام بطل المجلس يحمل معرّف المجلس لضمان وسام دائم لكل بطولة، بينما
+  // واجهة الإنجازات تعرضه كفئة واحدة مفهومة للمستخدم.
+  const have = new Set(
+    earned.map((code) => {
+      if (code.startsWith("majlis_champion:")) return "majlis_champion";
+      if (code.startsWith("majlis_dean:")) return "majlis_dean";
+      return code;
+    }),
+  );
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">

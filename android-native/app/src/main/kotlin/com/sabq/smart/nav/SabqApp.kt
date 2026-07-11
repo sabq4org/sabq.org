@@ -176,10 +176,12 @@ fun SabqApp(
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     pushNavViewModel: com.sabq.smart.data.push.PushNavViewModel = hiltViewModel(),
     authViewModel: AuthViewModel = hiltViewModel(),
+    majlisLinkViewModel: com.sabq.smart.feature.gulfcup.GcMajlisLinkViewModel = hiltViewModel(),
 ) {
     val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val pendingPush by pushNavViewModel.target.collectAsStateWithLifecycle()
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
+    val pendingMajlisLink by majlisLinkViewModel.target.collectAsStateWithLifecycle()
     val isDarkTheme = if (settings.followsSystemDark)
         androidx.compose.foundation.isSystemInDarkTheme()
     else settings.isDarkMode
@@ -208,6 +210,15 @@ fun SabqApp(
                     navController.navigate(SabqRoutes.notificationDetail(target.notificationId!!))
             }
             pushNavViewModel.consume()
+        }
+
+        // Universal/custom links and Majlis push taps always land in the Gulf
+        // Cup predictions hub. The target remains persisted until the invite
+        // is accepted/cancelled or the addressed council is actually opened.
+        androidx.compose.runtime.LaunchedEffect(pendingMajlisLink) {
+            if (pendingMajlisLink != null && currentRoute != SabqRoutes.GulfCup) {
+                navController.navigate(SabqRoutes.GulfCup) { launchSingleTop = true }
+            }
         }
 
         // Show the floating tab bar only on top-level tab routes; it
@@ -533,6 +544,7 @@ fun SabqApp(
                         onBack = { navController.popBackStack() },
                         onOpenMatch = { id -> navController.navigate(SabqRoutes.gulfCupMatch(id)) },
                         onOpenTeam = { team -> navController.navigate(SabqRoutes.gulfCupTeam(team.id, team.name, team.logo)) },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
                     )
                 }
                 composable(

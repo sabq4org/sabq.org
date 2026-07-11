@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Copy, Crown, LogOut, Plus, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Check, Copy, Crown, LogOut, Plus, Trash2, Users } from "lucide-react";
+import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/format";
@@ -110,6 +111,15 @@ export function GcMajlisTab({
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-emerald-600/20 bg-gradient-to-l from-emerald-600/[0.08] to-card p-4 sm:flex-row sm:items-center">
+        <div className="min-w-0 flex-1">
+          <p className="font-black text-foreground">تجربة المجلس الكاملة</p>
+          <p className="mt-1 text-xs leading-6 text-muted-foreground">مباريات اليوم، توقعات الأعضاء بعد الإقفال، التحديات وبطل الجولة في صفحة مستقلة.</p>
+        </div>
+        <Link href="/gulf-cup/majlis" className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-[#0F8054] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#0A6B47]">
+          افتح المجالس <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        </Link>
+      </div>
       {/* إنشاء + انضمام */}
       <div className="grid gap-3 sm:grid-cols-2">
         <form

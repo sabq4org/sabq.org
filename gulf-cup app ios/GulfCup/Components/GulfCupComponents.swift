@@ -378,18 +378,54 @@ struct GcScreenScaffold<Content: View>: View {
 // الترتيب (ضيف‑مضيف) صحيح بصريًّا في RTL مع تثبيت الاتجاه LTR للأرقام فقط —
 // رقم المضيف يقع دائمًا بجوار شعار المضيف (يمين الشاشة). لا تغيّر هذا النمط.
 
+/// رسالة موحّدة ومحايدة للمباريات التي لا تدخل في النتائج أو نقاط التوقعات.
+struct GcVoidMatchNotice: View {
+    var compact = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "minus.circle.fill")
+                .font(.system(size: compact ? 10 : 12, weight: .semibold))
+            Text(L("state.void"))
+                .font(GulfCupFonts.app(size: compact ? 10.5 : 11.5, weight: .semibold))
+                .lineLimit(2)
+                .minimumScaleFactor(0.88)
+        }
+        .foregroundStyle(GcTheme.inkDim)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, compact ? 9 : 11)
+        .padding(.vertical, compact ? 6 : 8)
+        .background(
+            RoundedRectangle(cornerRadius: compact ? 9 : 11, style: .continuous)
+                .fill(GcTheme.chipFill.opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: compact ? 9 : 11, style: .continuous)
+                .stroke(GcTheme.line, lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+    }
+}
+
 struct GcScoreRow: View {
     let fixture: GcFixture
     private let logoSize: CGFloat = 34
     private let centerWidth: CGFloat = 56
 
-    private var started: Bool { fixture.status.live || fixture.status.finished }
+    private var started: Bool {
+        !fixture.status.isVoid && (fixture.status.live || fixture.status.finished)
+    }
 
     var body: some View {
-        HStack(spacing: 6) {
-            teamSide(fixture.home, home: true)
-            centerColumn
-            teamSide(fixture.away, home: false)
+        VStack(spacing: fixture.status.isVoid ? 7 : 0) {
+            HStack(spacing: 6) {
+                teamSide(fixture.home, home: true)
+                centerColumn
+                teamSide(fixture.away, home: false)
+            }
+            if fixture.status.isVoid {
+                GcVoidMatchNotice(compact: true)
+            }
         }
     }
 
@@ -408,7 +444,11 @@ struct GcScoreRow: View {
 
     private var centerColumn: some View {
         VStack(spacing: 2) {
-            if started {
+            if fixture.status.isVoid {
+                Text("—")
+                    .font(GulfCupFonts.app(size: 17, weight: .bold))
+                    .foregroundStyle(GcTheme.inkFaint)
+            } else if started {
                 Text("\(fixture.goals.away ?? 0)-\(fixture.goals.home ?? 0)")
                     .font(GulfCupFonts.app(size: 17, weight: .bold))
                     .foregroundStyle(fixture.status.live ? GcTheme.liveRed : GcTheme.ink)
@@ -421,7 +461,9 @@ struct GcScoreRow: View {
                     .monospacedDigit()
                     .environment(\.layoutDirection, .leftToRight)
             }
-            statusSub
+            if !fixture.status.isVoid {
+                statusSub
+            }
         }
         .frame(width: centerWidth)
     }

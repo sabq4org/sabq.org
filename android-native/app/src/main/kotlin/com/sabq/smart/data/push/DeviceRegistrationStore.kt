@@ -10,12 +10,14 @@ import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import java.util.UUID
 
 private val Context.deviceStore by preferencesDataStore(name = "device_prefs")
 
 private val LAST_REGISTERED_TOKEN = stringPreferencesKey("last_registered_token")
 private val LAST_REGISTERED_USER = stringPreferencesKey("last_registered_user")
 private val LAST_REGISTERED_DEVICE_ID = stringPreferencesKey("last_registered_device_id")
+private val INSTALLATION_ID = stringPreferencesKey("installation_id")
 
 /**
  * Stable record of the (FCM token, user id) pair that the
@@ -52,11 +54,20 @@ class DeviceRegistrationStore @Inject constructor(
         }
     }
 
+    /** Stable install identifier, equivalent to the iOS IDFV role. */
+    suspend fun installationId(): String {
+        context.deviceStore.data.first()[INSTALLATION_ID]?.let { return it }
+        val generated = UUID.randomUUID().toString().lowercase()
+        context.deviceStore.edit { it[INSTALLATION_ID] = generated }
+        return generated
+    }
+
     suspend fun clear() {
         context.deviceStore.edit { prefs ->
             prefs.remove(LAST_REGISTERED_TOKEN)
             prefs.remove(LAST_REGISTERED_USER)
             prefs.remove(LAST_REGISTERED_DEVICE_ID)
+            // Keep INSTALLATION_ID stable across logout/account switches.
         }
     }
 }

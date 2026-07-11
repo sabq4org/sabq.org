@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -14,6 +14,7 @@ import { ChevronLeft, Eye, EyeOff, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import { GoogleIcon } from "@/components/GoogleIcon";
 import { trackLogin } from "@/lib/analytics";
+import { consumePostAuthReturn, rememberPostAuthReturn } from "@/lib/postAuthRedirect";
 
 const loginSchema = z.object({
   email: z.string().email("البريد الإلكتروني غير صحيح"),
@@ -27,6 +28,21 @@ export default function Login() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("returnTo");
+    if (requested) rememberPostAuthReturn(requested);
+    // توافق مع آلية انتهاء الجلسة القديمة في queryClient.
+    try {
+      const legacy = localStorage.getItem("redirectAfterLogin");
+      if (legacy) {
+        rememberPostAuthReturn(legacy);
+        localStorage.removeItem("redirectAfterLogin");
+      }
+    } catch {
+      // التخزين قد يكون محجوبًا في وضع التصفح الخاص.
+    }
+  }, []);
 
   const form = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -85,7 +101,9 @@ export default function Login() {
     });
     toast({ title: "مرحباً بك!", description: "تم تسجيل الدخول بنجاح" });
     trackLogin(method);
-    navigate(getDefaultRedirectPath(userData));
+    const fallback = getDefaultRedirectPath(userData);
+    const mustFinishAccount = fallback === "/complete-name" || userData.isProfileComplete === false;
+    navigate(mustFinishAccount ? fallback : consumePostAuthReturn(fallback));
   };
 
   // ===== دخول/تسجيل بالجوال (OTP) =====

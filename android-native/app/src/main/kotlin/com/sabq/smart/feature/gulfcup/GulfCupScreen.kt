@@ -52,6 +52,7 @@ fun GulfCupScreen(
     onBack: () -> Unit,
     onOpenMatch: (Int) -> Unit,
     onOpenTeam: (GcTeam) -> Unit,
+    onRequireLogin: () -> Unit,
     viewModel: GulfCupViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -72,7 +73,7 @@ fun GulfCupScreen(
                 when (state.tab) {
                     GulfCupViewModel.Tab.HOME -> GcHomeTab(state, onOpenMatch)
                     GulfCupViewModel.Tab.MATCHES -> GcMatchesTab(state.fixtures, onOpenMatch)
-                    GulfCupViewModel.Tab.PREDICTIONS -> GcPredictionsPlaceholder()
+                    GulfCupViewModel.Tab.PREDICTIONS -> GcPredictionsHubScreen(onRequireLogin = onRequireLogin)
                     GulfCupViewModel.Tab.GROUPS -> GcGroupsTab(state.standings)
                     GulfCupViewModel.Tab.MORE -> GcMoreTab(state, onOpenMatch, onOpenTeam)
                 }
@@ -157,17 +158,6 @@ private fun GcMoreTab(state: GulfCupViewModel.UiState, onOpenMatch: (Int) -> Uni
         item { Text("الأدوار الإقصائية", color = GcColors.gold, fontWeight = FontWeight.Bold, fontFamily = IbmPlexSansArabic) }
         items(state.fixtures.filter { it.roundEn.contains("Semi", true) || it.roundEn.contains("Final", true) || it.round.contains("نهائي") }) {
             GcMatchCard(it, onOpenMatch)
-        }
-    }
-}
-
-@Composable
-private fun GcPredictionsPlaceholder() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("مسابقة التوقعات", color = GcColors.gold, fontWeight = FontWeight.Bold, fontFamily = IbmPlexSansArabic)
-            Spacer(Modifier.height(8.dp))
-            Text("سجّل الدخول عبر تطبيق خليجي 27 iOS\nأو انتظر التحديث القادم للأندرويد", color = GcColors.onDarkDim, fontSize = 12.sp, fontFamily = IbmPlexSansArabic)
         }
     }
 }

@@ -44,6 +44,15 @@
 		GC0000A0 /* GcHomeWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000A0 /* GcHomeWidget.swift */; };
 		GC0000A1 /* GcWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000A1 /* GcWidgetSnapshot.swift */; };
 		GC0000A2 /* GcWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000A1 /* GcWidgetSnapshot.swift */; };
+		GC0000B0 /* GcAppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000B0 /* GcAppRouter.swift */; };
+		GC0000B1 /* GcMajlisModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000B1 /* GcMajlisModels.swift */; };
+		GC0000B2 /* GcMajlisStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000B2 /* GcMajlisStore.swift */; };
+		GC0000B3 /* GcPushManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000B3 /* GcPushManager.swift */; };
+		GC0000B4 /* GcMajlisListScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000B4 /* GcMajlisListScreen.swift */; };
+		GC0000B5 /* GcMajlisDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000B5 /* GcMajlisDetailScreen.swift */; };
+		GC0000B6 /* GcMajlisMatchdayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000B6 /* GcMajlisMatchdayView.swift */; };
+		GC0000B7 /* GcMajlisOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000B7 /* GcMajlisOnboardingView.swift */; };
+		GC0000B8 /* GcMajlisInviteShare.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000B8 /* GcMajlisInviteShare.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -90,8 +99,6 @@
 		GC100011 /* GulfCup.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GulfCup.entitlements; sourceTree = "<group>"; };
 		GC100012 /* GcPredictionMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcPredictionMatchCard.swift; sourceTree = "<group>"; };
 		GC100013 /* GcTeamProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcTeamProfileScreen.swift; sourceTree = "<group>"; };
-		GC100045 /* GcAccountScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAccountScreen.swift; sourceTree = "<group>"; };
-		GC100046 /* GcMembershipLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMembershipLogin.swift; sourceTree = "<group>"; };
 		GC100014 /* GcMatchActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchActivity.swift; sourceTree = "<group>"; };
 		GC100015 /* GcLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcLiveActivityManager.swift; sourceTree = "<group>"; };
 		GC100016 /* GcMatchLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchLiveActivity.swift; sourceTree = "<group>"; };
@@ -109,8 +116,19 @@
 		GC100042 /* GcTournamentScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcTournamentScreen.swift; sourceTree = "<group>"; };
 		GC100043 /* GcPredictionsHubScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcPredictionsHubScreen.swift; sourceTree = "<group>"; };
 		GC100044 /* GcUserPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcUserPreferences.swift; sourceTree = "<group>"; };
+		GC100045 /* GcAccountScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAccountScreen.swift; sourceTree = "<group>"; };
+		GC100046 /* GcMembershipLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMembershipLogin.swift; sourceTree = "<group>"; };
 		GC1000A0 /* GcHomeWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcHomeWidget.swift; sourceTree = "<group>"; };
 		GC1000A1 /* GcWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcWidgetSnapshot.swift; sourceTree = "<group>"; };
+		GC1000B0 /* GcAppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAppRouter.swift; sourceTree = "<group>"; };
+		GC1000B1 /* GcMajlisModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMajlisModels.swift; sourceTree = "<group>"; };
+		GC1000B2 /* GcMajlisStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMajlisStore.swift; sourceTree = "<group>"; };
+		GC1000B3 /* GcPushManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcPushManager.swift; sourceTree = "<group>"; };
+		GC1000B4 /* GcMajlisListScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMajlisListScreen.swift; sourceTree = "<group>"; };
+		GC1000B5 /* GcMajlisDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMajlisDetailScreen.swift; sourceTree = "<group>"; };
+		GC1000B6 /* GcMajlisMatchdayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMajlisMatchdayView.swift; sourceTree = "<group>"; };
+		GC1000B7 /* GcMajlisOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMajlisOnboardingView.swift; sourceTree = "<group>"; };
+		GC1000B8 /* GcMajlisInviteShare.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMajlisInviteShare.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -150,6 +168,11 @@
 				GC100043 /* GcPredictionsHubScreen.swift */,
 				GC100045 /* GcAccountScreen.swift */,
 				GC100046 /* GcMembershipLogin.swift */,
+				GC1000B4 /* GcMajlisListScreen.swift */,
+				GC1000B5 /* GcMajlisDetailScreen.swift */,
+				GC1000B6 /* GcMajlisMatchdayView.swift */,
+				GC1000B7 /* GcMajlisOnboardingView.swift */,
+				GC1000B8 /* GcMajlisInviteShare.swift */,
 			);
 			path = Screens;
 			sourceTree = "<group>";
@@ -180,6 +203,10 @@
 				GC100007 /* APIClient.swift */,
 				GC100008 /* FontRegistration.swift */,
 				GC100009 /* URLConstants.swift */,
+				GC1000B0 /* GcAppRouter.swift */,
+				GC1000B1 /* GcMajlisModels.swift */,
+				GC1000B2 /* GcMajlisStore.swift */,
+				GC1000B3 /* GcPushManager.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -350,6 +377,15 @@
 				GC000007 /* APIClient.swift in Sources */,
 				GC000008 /* FontRegistration.swift in Sources */,
 				GC000009 /* URLConstants.swift in Sources */,
+				GC0000B0 /* GcAppRouter.swift in Sources */,
+				GC0000B1 /* GcMajlisModels.swift in Sources */,
+				GC0000B2 /* GcMajlisStore.swift in Sources */,
+				GC0000B3 /* GcPushManager.swift in Sources */,
+				GC0000B4 /* GcMajlisListScreen.swift in Sources */,
+				GC0000B5 /* GcMajlisDetailScreen.swift in Sources */,
+				GC0000B6 /* GcMajlisMatchdayView.swift in Sources */,
+				GC0000B7 /* GcMajlisOnboardingView.swift in Sources */,
+				GC0000B8 /* GcMajlisInviteShare.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -482,7 +518,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = GulfCup/GulfCup.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GulfCup/Info.plist;
@@ -510,7 +546,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = GulfCup/GulfCup.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GulfCup/Info.plist;
@@ -536,7 +572,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = GulfCupWidgets/GulfCupWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GulfCupWidgets/Info.plist;
@@ -561,7 +597,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = GulfCupWidgets/GulfCupWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GulfCupWidgets/Info.plist;

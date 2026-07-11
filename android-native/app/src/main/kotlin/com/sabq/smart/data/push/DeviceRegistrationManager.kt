@@ -8,6 +8,8 @@ import com.sabq.smart.BuildConfig
 import com.sabq.smart.data.AuthRepository
 import com.sabq.smart.data.api.DeviceRegisterRequest
 import com.sabq.smart.data.api.DeviceUnregisterRequest
+import com.sabq.smart.data.api.MemberPushTokenDeleteRequest
+import com.sabq.smart.data.api.MemberPushTokenRequest
 import com.sabq.smart.data.api.SabqApi
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -67,7 +69,8 @@ class DeviceRegistrationManager @Inject constructor(
     /** Called by [SabqMessagingService] when FCM rotates our token. */
     suspend fun onNewToken(token: String) {
         val userId = authRepo.user.value?.id
-        registerToken(token = token, userId = userId)
+        val registered = registerToken(token = token, userId = userId)
+        if (registered && userId != null) registerGulfCupToken(token)
     }
 
     /** Public re-trigger — useful for a "Resend registration" debug button. */
@@ -79,10 +82,50 @@ class DeviceRegistrationManager @Inject constructor(
     /** Sign-out helper. Drops the row on the server and clears our cache. */
     suspend fun unregister() {
         val cached = store.current()
-        val token = cached.token ?: return
+        // A member-scoped registration can succeed even when the generic
+        // registration/cache failed. Resolve the live FCM token as a privacy
+        // fallback so logout still deactivates that account-bound row.
+        val token = cached.token ?: fetchFcmToken()
+        if (token == null) {
+            store.clear()
+            return
+        }
+        runCatching { api.unregisterMemberPushToken(MemberPushTokenDeleteRequest(token)) }
+            .onFailure { Log.w(TAG, "unregisterMemberPushToken failed", it) }
         runCatching { api.unregisterDevice(DeviceUnregisterRequest(deviceToken = token)) }
             .onFailure { Log.w(TAG, "unregisterDevice failed", it) }
         store.clear()
+    }
+
+    /**
+     * Tags the current FCM token for the Gulf Cup app-scoped outbox. The server
+     * filters Majlis deliveries by this bundle marker, including on Android.
+     */
+    suspend fun syncGulfCupToken() {
+        if (authRepo.user.value == null) return
+        val token = fetchFcmToken() ?: return
+        registerGulfCupToken(token)
+    }
+
+    private suspend fun registerGulfCupToken(token: String) {
+        val request = MemberPushTokenRequest(
+            token = token,
+            provider = "fcm",
+            platform = "android",
+            deviceName = "${Build.MANUFACTURER} ${Build.MODEL}".trim(),
+            osVersion = "Android ${Build.VERSION.RELEASE}",
+            appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            locale = Locale.getDefault().toLanguageTag(),
+            timezone = TimeZone.getDefault().id,
+            bundleId = GULF_CUP_BUNDLE_MARKER,
+            installationId = store.installationId(),
+        )
+        runCatching { api.registerMemberPushToken(request) }
+            .onSuccess { response ->
+                if (response.success) Log.i(TAG, "Gulf Cup FCM token tagged for Majlis delivery")
+                else Log.w(TAG, "Gulf Cup token registration rejected: ${response.message.orEmpty()}")
+            }
+            .onFailure { Log.w(TAG, "Gulf Cup token registration failed", it) }
     }
 
     private suspend fun reconcile(userId: String?) {
@@ -91,20 +134,35 @@ class DeviceRegistrationManager @Inject constructor(
         val unchanged = cached.token == token && cached.userId == userId
         if (unchanged) {
             Log.d(TAG, "Device already registered for user=$userId, skipping")
+            // The app-scoped write is idempotent and deliberately retried once
+            // per authenticated app start. It repairs a previous member-token
+            // failure that the generic registration cache cannot observe.
+            if (userId != null) registerGulfCupToken(token)
             return
         }
-        registerToken(token = token, userId = userId)
+        val registered = registerToken(token = token, userId = userId)
+        // Generic registration can never grant the sensitive Majlis marker;
+        // immediately prove/refresh it through the authenticated endpoint.
+        if (registered && userId != null) registerGulfCupToken(token)
     }
 
-    private suspend fun registerToken(token: String, userId: String?) {
-        runCatching {
-            api.registerDevice(buildRequest(token = token, userId = userId))
-        }
-            .onSuccess { response ->
-                Log.i(TAG, "Device registered (deviceId=${response.deviceId}, userId=$userId)")
-                store.set(token = token, userId = userId, deviceId = response.deviceId)
-            }
-            .onFailure { Log.w(TAG, "registerDevice failed", it) }
+    private suspend fun registerToken(token: String, userId: String?): Boolean {
+        return runCatching { api.registerDevice(buildRequest(token = token)) }
+            .fold(
+                onSuccess = { response ->
+                    if (!response.success) {
+                        Log.w(TAG, "Device registration rejected: ${response.message.orEmpty()}")
+                        return@fold false
+                    }
+                    Log.i(TAG, "Device registered (deviceId=${response.deviceId}, userId=$userId)")
+                    store.set(token = token, userId = userId, deviceId = response.deviceId)
+                    true
+                },
+                onFailure = {
+                    Log.w(TAG, "registerDevice failed", it)
+                    false
+                },
+            )
     }
 
     private suspend fun fetchFcmToken(): String? {
@@ -116,7 +174,7 @@ class DeviceRegistrationManager @Inject constructor(
             ?.takeIf { it.isNotBlank() }
     }
 
-    private fun buildRequest(token: String, userId: String?): DeviceRegisterRequest =
+    private suspend fun buildRequest(token: String): DeviceRegisterRequest =
         DeviceRegisterRequest(
             deviceToken = token,
             platform = "android",
@@ -125,10 +183,11 @@ class DeviceRegistrationManager @Inject constructor(
             appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
             locale = Locale.getDefault().toLanguageTag(),
             timezone = TimeZone.getDefault().id,
-            userId = userId,
+            installationId = store.installationId(),
         )
 
     companion object {
         private const val TAG = "DeviceRegistrationMgr"
+        const val GULF_CUP_BUNDLE_MARKER = "com.sabq.gulfcup"
     }
 }

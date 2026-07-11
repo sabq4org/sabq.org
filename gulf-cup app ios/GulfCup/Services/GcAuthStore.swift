@@ -191,6 +191,7 @@ final class GcAuthStore {
         GcKeychain.save(tokenKey, value: t)
         await APIClient.shared.setAuthToken(t)
         await refreshProfile()
+        await GcPushManager.shared.syncWithSession()
     }
 
     /// يجلب الصورة والاسم من /members/profile (حساب سبق المشترك).
@@ -209,13 +210,24 @@ final class GcAuthStore {
     }
 
     func signOut() {
+        let shouldUnregisterPush = token != nil
         token = nil
         member = nil
         errorMessage = nil
         errorSource = .none
         GcKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
-        Task { await APIClient.shared.setAuthToken(nil) }
+        Task {
+            // APIClient still carries the departing Bearer token here, so the
+            // server can deactivate this device before the session is cleared.
+            if shouldUnregisterPush {
+                await GcPushManager.shared.unregisterCurrentDevice()
+            }
+            // Do not wipe a newer session if the member signed back in while
+            // the best-effort unregister request was in flight.
+            guard token == nil else { return }
+            await APIClient.shared.setAuthToken(nil)
+        }
     }
 
     private func friendly(_ error: Error) -> String {

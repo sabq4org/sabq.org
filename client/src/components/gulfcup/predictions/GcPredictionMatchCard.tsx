@@ -60,6 +60,7 @@ interface Props {
 export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, onSubmit, onRequireLogin }: Props) {
   const { fixture, myPrediction, settlement, locked, probs, crowd, poolAvailable } = match;
   const settled = settlement?.status === "settled";
+  const voided = settlement?.status === "void" || myPrediction?.status === "void";
   const started = fixture.status.live || fixture.status.finished;
 
   const [home, setHome] = useState(myPrediction?.predHome ?? 0);
@@ -74,7 +75,7 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
 
   const dirty = !myPrediction || myPrediction.predHome !== home || myPrediction.predAway !== away;
   const isWin = settled && myPrediction?.status === "correct" && (myPrediction?.pointsAwarded ?? 0) > 0;
-  const editable = !locked && !settled && !started;
+  const editable = !locked && !settled && !voided && !started;
   const jackpot = poolAvailable - 1000;
 
   return (
@@ -85,6 +86,10 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
           <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2 py-0.5 text-[10px] font-bold text-white">
             <Radio className="h-2.5 w-2.5 animate-pulse" />
             {fixture.status.elapsed != null ? `${fixture.status.elapsed}'` : "مباشر"}
+          </span>
+        ) : voided ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-300">
+            <X className="h-2.5 w-2.5" /> أُلغيت — لا تُحتسب
           </span>
         ) : settled ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-green-700 px-2 py-0.5 text-[10px] font-bold text-white">
@@ -101,7 +106,7 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
 
       <CardContent className="p-4">
         {/* البركة المتاحة */}
-        <div className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-amber-500/15 to-amber-400/5 px-3 py-1.5 ring-1 ring-amber-500/25">
+        {!voided && <div className="mb-3 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-l from-amber-500/15 to-amber-400/5 px-3 py-1.5 ring-1 ring-amber-500/25">
           <Coins className="h-4 w-4 text-amber-600 dark:text-amber-400" />
           <span className="text-xs font-bold text-amber-700 dark:text-amber-300">
             بركة هذه المباراة: <span className="tabular-nums">{formatNumber(poolAvailable)}</span> نقطة
@@ -111,12 +116,16 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
               +{formatNumber(jackpot)} متراكمة
             </span>
           )}
-        </div>
+        </div>}
 
         <div className="flex items-start justify-between gap-2">
           <TeamCrest team={fixture.home} />
           <div className="flex flex-1 flex-col items-center justify-center pt-1">
-            {settled || started ? (
+            {voided ? (
+              <div className="rounded-xl bg-muted px-4 py-2 text-sm font-black text-muted-foreground">
+                لا نتيجة محتسبة
+              </div>
+            ) : settled || started ? (
               <div className="flex items-center gap-3 text-4xl font-black tabular-nums">
                 <span>{settled ? settlement!.finalHome : fixture.goals.home ?? 0}</span>
                 <span className="text-2xl text-muted-foreground">-</span>
@@ -129,7 +138,7 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
                 <ScoreStepper value={away} onChange={setAway} disabled={locked} label={fixture.away.name} />
               </div>
             )}
-            {!settled && started && <span className="mt-1 text-[10px] text-muted-foreground">بانتظار احتساب النقاط…</span>}
+            {!settled && !voided && started && <span className="mt-1 text-[10px] text-muted-foreground">بانتظار احتساب النقاط…</span>}
           </div>
           <TeamCrest team={fixture.away} />
         </div>
@@ -177,7 +186,11 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
 
         {/* المنطقة السفلية */}
         <div className="mt-3">
-          {settled ? (
+          {voided ? (
+            <p className="rounded-lg bg-slate-500/10 px-3 py-2 text-center text-xs font-bold text-slate-600 dark:text-slate-300">
+              أُلغيت المباراة — توقّعك لا يُحتسب ولا يؤثر في رصيدك
+            </p>
+          ) : settled ? (
             <SettledFooter match={match} isWin={!!isWin} />
           ) : locked ? (
             <LockedFooter match={match} />
@@ -212,7 +225,7 @@ export function GcPredictionMatchCard({ match, isAuthenticated, isSubmitting, on
             <span>
               {match.predictionsCount > 0 ? `${formatNumber(match.predictionsCount)} توقّعوا` : "كن أول المتوقّعين"}
             </span>
-            {!started && !settled && <Countdown timestamp={fixture.timestamp} />}
+            {!started && !settled && !voided && <Countdown timestamp={fixture.timestamp} />}
           </div>
         </div>
       </CardContent>

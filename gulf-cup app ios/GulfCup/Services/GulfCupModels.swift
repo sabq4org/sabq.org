@@ -16,6 +16,26 @@ struct GcStatus: Decodable, Hashable {
     let finished: Bool
 }
 
+/// توحيد حالات المباراة غير المحتسبة بين بيانات المزود ولقطات التوقعات.
+/// يعامل المنتج CANC/ABD/WO/AWD كلها كإلغاء: لا نتيجة ولا نقاط ولا إخفاق.
+enum GcMatchDisposition {
+    private static let voidValues: Set<String> = [
+        "VOID", "CANC", "CANCELLED", "CANCELED", "ABD", "ABANDONED",
+        "WO", "WALKOVER", "AWD", "AWARDED",
+    ]
+
+    static func isVoid(_ value: String?) -> Bool {
+        guard let value else { return false }
+        return voidValues.contains(
+            value.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        )
+    }
+}
+
+extension GcStatus {
+    var isVoid: Bool { GcMatchDisposition.isVoid(code) }
+}
+
 struct GcScore: Decodable, Hashable { let home: Int?; let away: Int? }
 struct GcVenue: Decodable, Hashable { let name: String; let city: String }
 
@@ -161,6 +181,8 @@ struct GcMyPrediction: Decodable, Hashable {
     let marginHit: Bool?
     let exactHit: Bool?
     let pointsAwarded: Int?
+
+    var isVoid: Bool { GcMatchDisposition.isVoid(status) }
 }
 
 struct GcMatchSettlement: Decodable, Hashable {
@@ -174,6 +196,8 @@ struct GcMatchSettlement: Decodable, Hashable {
     let poolBase: Int?
     let poolCarryIn: Int?
     let carryOut: Int?
+
+    var isVoid: Bool { GcMatchDisposition.isVoid(status) }
 }
 
 struct GcPredictableMatch: Decodable, Identifiable, Hashable {
@@ -186,6 +210,10 @@ struct GcPredictableMatch: Decodable, Identifiable, Hashable {
     let myPrediction: GcMyPrediction?
     let settlement: GcMatchSettlement?
     var id: Int { fixture.id }
+
+    var isVoid: Bool {
+        fixture.status.isVoid || settlement?.isVoid == true || myPrediction?.isVoid == true
+    }
 }
 
 struct GcPredictionMeStats: Decodable, Hashable {
@@ -240,6 +268,11 @@ struct GcMyPredictionRow: Decodable, Identifiable, Hashable {
     let finalAway: Int?
     let matchStatus: String?
     var id: String { fixtureId }
+
+    /// قد تصل حالة الإلغاء من صف التوقع نفسه أو من لقطة المباراة المضمومة إليه.
+    var isVoid: Bool {
+        GcMatchDisposition.isVoid(status) || GcMatchDisposition.isVoid(matchStatus)
+    }
 }
 
 private struct GcMyPredictionsResponse: Decodable { let predictions: [GcMyPredictionRow] }
@@ -536,6 +569,7 @@ struct GcMajlisSummary: Decodable, Hashable, Identifiable {
     let code: String
     let isOwner: Bool
     let membersCount: Int
+    let joinedNow: Bool?
 }
 
 struct GcMajlisLeaderRow: Decodable, Hashable, Identifiable {

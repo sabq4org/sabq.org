@@ -50,6 +50,7 @@ sealed interface ResendActivationState {
 @HiltViewModel
 class AuthViewModel @Inject constructor(
     private val repo: AuthRepository,
+    private val deviceRegistrationManager: com.sabq.smart.data.push.DeviceRegistrationManager,
 ) : ViewModel() {
 
     val currentUser: StateFlow<User?> = repo.user
@@ -260,6 +261,9 @@ class AuthViewModel @Inject constructor(
 
     fun logout() {
         viewModelScope.launch {
+            // Deactivate the account-bound FCM row while the Bearer session is
+            // still valid; otherwise Majlis pushes could reach the next user.
+            runCatching { deviceRegistrationManager.unregister() }
             repo.logout()
             _form.value = AuthFormState.Idle
         }

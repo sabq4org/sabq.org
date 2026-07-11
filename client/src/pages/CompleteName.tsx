@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { getDefaultRedirectPath, needsDisplayName, type User } from "@/hooks/useAuth";
+import { consumePostAuthReturn } from "@/lib/postAuthRedirect";
 import { Loader2, UserRound } from "lucide-react";
 
 const schema = z.object({
@@ -52,7 +53,7 @@ export default function CompleteName() {
       return;
     }
     if (!needsDisplayName(user)) {
-      setLocation(getDefaultRedirectPath(user));
+      setLocation(consumePostAuthReturn(getDefaultRedirectPath(user)));
     }
   }, [user, isLoading, setLocation]);
 
@@ -81,7 +82,7 @@ export default function CompleteName() {
         staleTime: 0,
       });
       toast({ title: "تم حفظ الاسم", description: "مرحبًا بك في سبق" });
-      setLocation(getDefaultRedirectPath(fresh));
+      setLocation(consumePostAuthReturn(getDefaultRedirectPath(fresh)));
     },
     onError: () => {
       toast({

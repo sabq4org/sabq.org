@@ -1124,6 +1124,13 @@ export interface IStorage {
     source?: string;
     metadata?: any;
   }): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }>;
+  recordLoyaltyPointsInTx(tx: any, params: {
+    userId: string;
+    action: string;
+    points: number;
+    source?: string;
+    metadata?: any;
+  }, balanceLockHeld?: boolean): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }>;
   getUserPoints(userId: string): Promise<UserPointsTotal | undefined>;
   getUserLoyaltyHistory(userId: string, limit?: number): Promise<UserLoyaltyEvent[]>;
   getTopUsers(limit?: number): Promise<Array<UserPointsTotal & { user: User }>>;
@@ -9643,15 +9650,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Loyalty System - Points and Events
-  async recordLoyaltyPoints(params: {
+  async recordLoyaltyPointsInTx(tx: any, params: {
     userId: string;
     action: string;
     points: number;
     source?: string;
     metadata?: any;
-  }): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }> {
-    const result = await db.transaction(async (tx) => {
+  }, balanceLockHeld = false): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }> {
       const now = new Date();
+
+      // Every points mutation for this user shares one database lock, including
+      // different actions/sources. This prevents read-modify-write races from
+      // dropping a concurrent payout and also serializes first-row creation.
+      if (!balanceLockHeld) {
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtext(${`loyalty-balance:${params.userId}`}))`,
+        );
+      }
       
       // 1. Get active campaign inside transaction
       const applicableCampaign = await this.getApplicableCampaignInTx(
@@ -9688,7 +9703,8 @@ export class DatabaseStorage implements IStorage {
       const [existingPoints] = await tx
         .select()
         .from(userPointsTotal)
-        .where(eq(userPointsTotal.userId, params.userId));
+        .where(eq(userPointsTotal.userId, params.userId))
+        .for("update");
 
       const oldRank = existingPoints?.currentRank || "القارئ الجديد";
       const oldLevel = existingPoints?.rankLevel ?? 1;
@@ -9736,7 +9752,16 @@ export class DatabaseStorage implements IStorage {
         rankChanged,
         newRank: rankChanged ? newRank : undefined,
       };
-    });
+  }
+
+  async recordLoyaltyPoints(params: {
+    userId: string;
+    action: string;
+    points: number;
+    source?: string;
+    metadata?: any;
+  }): Promise<{ pointsEarned: number; totalPoints: number; rankChanged: boolean; newRank?: string }> {
+    const result = await db.transaction((tx) => this.recordLoyaltyPointsInTx(tx, params));
 
     // Trigger loyalty pass update (outside transaction)
     await this.triggerLoyaltyPassUpdate(params.userId, params.action);

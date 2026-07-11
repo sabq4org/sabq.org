@@ -6,13 +6,14 @@ import UIKit
 // هوية مونديال سبق بصياغة خليجية (زمردي + ذهبي، بطاقات بيضاء على غسلة خضراء)
 // وبنعومة VARA: أسطح مسطّحة، حدود شعرية، حركات ease قصيرة بلا springs.
 struct GulfCupView: View {
+    @Environment(GcAppRouter.self) private var router
     @State private var store = GcHubStore()
-    @State private var selectedTab: GcTab = .home
 
     var body: some View {
-        TabView(selection: $selectedTab) {
+        @Bindable var router = router
+        TabView(selection: $router.selectedTab) {
             NavigationStack {
-                GcHomeScreen(store: store, onSelectTab: { selectedTab = $0 })
+                GcHomeScreen(store: store, onSelectTab: { router.selectedTab = $0 })
             }
             .tabItem { Label(L("tab.home"), systemImage: "house.fill") }
             .tag(GcTab.home)
@@ -36,17 +37,19 @@ struct GulfCupView: View {
             .tag(GcTab.tournament)
 
             NavigationStack {
-                GcAccountScreen(store: store, onSelectTab: { selectedTab = $0 })
+                GcAccountScreen(store: store)
             }
             .tabItem { Label(L("tab.more"), systemImage: "person.crop.circle.fill") }
             .tag(GcTab.more)
         }
         .tint(GcTheme.sky)
         .task { await store.loadAll() }
+        .onOpenURL { router.handle(url: $0) }
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            if let url = activity.webpageURL { router.handle(url: url) }
+        }
     }
 }
-
-enum GcTab: Hashable { case home, matches, predictions, tournament, more }
 
 // MARK: - مخزن بيانات البطولة المشترك بين التبويبات
 

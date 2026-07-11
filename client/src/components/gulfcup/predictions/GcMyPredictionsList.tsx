@@ -45,6 +45,7 @@ export function GcMyPredictionsList({
     <div className="space-y-2">
       {predictions.map((p) => {
         const settled = p.matchStatus === "settled";
+        const voided = p.matchStatus === "void" || p.status === "void";
         const isWin = settled && p.status === "correct" && p.pointsAwarded > 0;
         const tier = p.tier as GcTier;
         return (
@@ -57,7 +58,11 @@ export function GcMyPredictionsList({
           >
             <div className="mb-1.5 flex items-center justify-between text-[10.5px] text-muted-foreground">
               <span>{p.kickoffAt ? formatKickoffDay(p.kickoffAt) : ""}</span>
-              {settled ? (
+              {voided ? (
+                <span className="inline-flex items-center gap-1 font-bold text-slate-600 dark:text-slate-300">
+                  <X className="h-3 w-3" /> أُلغيت — لا تُحتسب
+                </span>
+              ) : settled ? (
                 isWin ? (
                   <span className="inline-flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400">
                     <Coins className="h-3 w-3" /> +{formatNumber(p.pointsAwarded)} نقطة
@@ -82,7 +87,7 @@ export function GcMyPredictionsList({
                 </span>
                 <Crest name={p.awayTeamName} logo={p.awayTeamLogo} />
               </div>
-              {settled && p.finalHome != null && (
+              {settled && !voided && p.finalHome != null && (
                 <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-[10px] font-bold tabular-nums" dir="ltr">
                   النتيجة {p.finalAway}-{p.finalHome}
                 </span>

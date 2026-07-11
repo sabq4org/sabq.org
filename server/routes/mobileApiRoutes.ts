@@ -11,6 +11,7 @@
  */
 
 import { Router, Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 import { db, pool } from "../db";
 import { log } from "../utils/logger";
 import {
@@ -56,6 +57,7 @@ const contactReplyUsers = aliasedTable(users, "contact_reply_user");
 import { articleCardSelect } from "../selectHelpers";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
 import { sendEmailNotification } from "../services/email";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
 import { summarizeText } from "../ai-content-tools";
@@ -102,6 +104,20 @@ import {
   getMajlisLeaderboard as gcGetMajlisLeaderboard,
 } from "../services/gcMajlisService";
 import {
+  getMajlisChampionPicks as gcGetMajlisChampionPicks,
+  getMajlisFantasy as gcGetMajlisFantasy,
+  getMajlisHarvest as gcGetMajlisHarvest,
+  getMajlisInvitePreview as gcGetMajlisInvitePreview,
+  getMajlisMatchday as gcGetMajlisMatchday,
+  getMajlisNotificationPreference as gcGetMajlisNotificationPreference,
+  setMajlisNotificationPreference as gcSetMajlisNotificationPreference,
+} from "../services/gcMajlisSocialService";
+import {
+  actOnMajlisDuel as gcActOnMajlisDuel,
+  createMajlisDuel as gcCreateMajlisDuel,
+  listMajlisDuels as gcListMajlisDuels,
+} from "../services/gcDuelsService";
+import {
   getFantasyPool as gcGetFantasyPool,
   getMyFantasy as gcGetMyFantasy,
   saveFantasySquad as gcSaveFantasySquad,
@@ -110,6 +126,7 @@ import {
   FANTASY_SQUAD_SIZE as GC_FANTASY_SQUAD_SIZE,
 } from "../services/gcFantasyService";
 import { getMotmBoard as gcGetMotmBoard, voteMotm as gcVoteMotm } from "../services/gcMotmService";
+import { resolveGenericDeviceRegistrationPolicy } from "../services/deviceRegistrationPolicy";
 
 const router = Router();
 
@@ -580,16 +597,12 @@ router.post("/devices/register", async (req: Request, res: Response) => {
       locale,
       language, // alias for locale (مبرمج التطبيقات يرسل language)
       timezone,
-      userId,
       bundleId, // معرّف الحزمة (apns-topic) لتوجيه التطبيقات المتعددة
       installationId, // IDFV — يوحّد سبق وفارا على نفس الجهاز
     } = req.body;
 
-    // تجاهل القيم غير الصالحة وحدّ الطول دفاعيًا (نخزّن الـbundle كنص اختياري)
-    const safeBundleId =
-      typeof bundleId === "string" && bundleId.length > 0 && bundleId.length <= 255
-        ? bundleId
-        : undefined;
+    // userId from the public body is intentionally ignored. Ownership comes
+    // exclusively from a valid mobile Bearer session below.
     const safeInstallationId =
       typeof installationId === "string" && installationId.length > 0 && installationId.length <= 128
         ? installationId
@@ -620,25 +633,36 @@ router.post("/devices/register", async (req: Request, res: Response) => {
     // Determine token provider: iOS uses APNs, Android uses FCM
     // Accept provided tokenProvider or determine from platform
     const tokenProvider = providedTokenProvider || (platform === 'ios' ? 'apns' : 'fcm');
+    const session = await verifyMemberSession(req);
+    const basePolicy = resolveGenericDeviceRegistrationPolicy({
+      sessionUserId: session?.userId,
+      untrustedBodyUserId: req.body?.userId,
+      requestedBundleId: bundleId,
+    });
+    const effectiveUserId = basePolicy.effectiveUserId;
+    const safeBundleId = basePolicy.safeBundleId;
 
     // Keep one active token per user/platform/app bundle. APNs tokens can
     // rotate across reinstalls or restores; if we leave the old rows active,
     // the same sports alert can fan out as duplicate banners on iOS.
-    if (userId) {
+    if (effectiveUserId && safeInstallationId) {
+      // Token rotation belongs to one installation. Never deactivate another
+      // phone merely because it serves the same user/platform/bundle.
       const deactivated = await db
         .update(pushDevices)
         .set({ isActive: false, updatedAt: new Date() })
         .where(and(
-          eq(pushDevices.userId, userId),
+          eq(pushDevices.userId, effectiveUserId),
           eq(pushDevices.platform, platform),
           sql`${pushDevices.bundleId} IS NOT DISTINCT FROM ${safeBundleId ?? null}`,
+          eq(pushDevices.installationId, safeInstallationId),
           sql`${pushDevices.deviceToken} != ${finalToken}`,
           eq(pushDevices.isActive, true)
         ))
         .returning({ id: pushDevices.id });
 
       if (deactivated.length > 0) {
-        console.log(`[Mobile API] Deactivated ${deactivated.length} old tokens for user ${userId}`);
+        console.log(`[Mobile API] Deactivated ${deactivated.length} old tokens for user ${effectiveUserId}`);
       }
     }
 
@@ -650,9 +674,16 @@ router.post("/devices/register", async (req: Request, res: Response) => {
       .limit(1);
 
     if (existing) {
+      const policy = resolveGenericDeviceRegistrationPolicy({
+        sessionUserId: session?.userId,
+        untrustedBodyUserId: req.body?.userId,
+        requestedBundleId: bundleId,
+        existingBundleId: existing.bundleId,
+      });
       // Update existing device
       const updatePayload: Record<string, unknown> = {
-          userId: userId || existing.userId,
+          // Explicit null is privacy-critical on logout → guest transition.
+          userId: policy.effectiveUserId,
           tokenProvider,
           platform,
           deviceName,
@@ -660,7 +691,7 @@ router.post("/devices/register", async (req: Request, res: Response) => {
           appVersion,
           locale: deviceLocale,
           timezone,
-          ...(safeBundleId ? { bundleId: safeBundleId } : {}),
+          ...(policy.bundleIdUpdate !== undefined ? { bundleId: policy.bundleIdUpdate } : {}),
           isActive: true,
           lastActiveAt: new Date(),
           updatedAt: new Date(),
@@ -695,7 +726,7 @@ router.post("/devices/register", async (req: Request, res: Response) => {
     const insertPayload = {
         deviceToken: finalToken,
         tokenProvider,
-        userId,
+        userId: effectiveUserId,
         platform,
         deviceName,
         osVersion,
@@ -5642,17 +5673,23 @@ router.post("/members/push-token", async (req: Request, res: Response) => {
       ...(safeInstallationId ? { installationId: safeInstallationId } : {}),
     };
 
-    const deactivated = await db
-      .update(pushDevices)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(and(
-        eq(pushDevices.userId, session.userId),
-        eq(pushDevices.platform, data.platform),
-        sql`${pushDevices.bundleId} IS NOT DISTINCT FROM ${safeBundleId ?? null}`,
-        sql`${pushDevices.deviceToken} != ${data.token}`,
-        eq(pushDevices.isActive, true)
-      ))
-      .returning({ id: pushDevices.id });
+    // دوران token يخص تثبيتًا واحدًا، لا كل أجهزة المستخدم. عند غياب
+    // installationId لا نخمّن: إبقاء الجهاز الثاني فعالًا أهم من تنظيف token
+    // قديم، وسيتولى رد المزود غير الصالح تعطيله لاحقًا.
+    const deactivated = safeInstallationId
+      ? await db
+          .update(pushDevices)
+          .set({ isActive: false, updatedAt: new Date() })
+          .where(and(
+            eq(pushDevices.userId, session.userId),
+            eq(pushDevices.platform, data.platform),
+            sql`${pushDevices.bundleId} IS NOT DISTINCT FROM ${safeBundleId ?? null}`,
+            eq(pushDevices.installationId, safeInstallationId),
+            sql`${pushDevices.deviceToken} != ${data.token}`,
+            eq(pushDevices.isActive, true)
+          ))
+          .returning({ id: pushDevices.id })
+      : [];
 
     if (deactivated.length > 0) {
       console.log(`[Mobile API] /push-token deactivated ${deactivated.length} old tokens for user=${session.userId}`);
@@ -9496,7 +9533,56 @@ const GC_MAJLIS_REASONS: Record<string, { code: number; message: string }> = {
   FULL: { code: 409, message: "اكتمل المجلس (50 عضوًا)" },
   LIMIT_OWNED: { code: 409, message: "بلغت حدّ 5 مجالس" },
   CODE_COLLISION: { code: 500, message: "تعذّر توليد رمز — حاول مجددًا" },
+  ACTIVE_DUELS: { code: 409, message: "أنه تحديات المجلس النشطة قبل المغادرة أو الحذف" },
+  INVALID_DATE: { code: 400, message: "صيغة التاريخ المطلوبة YYYY-MM-DD" },
+  INVALID_STAKE: { code: 400, message: "الرهان من 10 إلى 100 نقطة وبمضاعفات 10" },
+  SELF_CHALLENGE: { code: 400, message: "اختر عضوًا آخر للتحدي" },
+  FIXTURE_NOT_FOUND: { code: 404, message: "المباراة غير موجودة" },
+  TARGET_NOT_MEMBER: { code: 400, message: "العضو المختار ليس في هذا المجلس" },
+  LOCKED: { code: 409, message: "أُغلق التحدي لانطلاق المباراة" },
+  DAILY_CAP: { code: 409, message: "بلغت سقف الرهان اليومي (200 نقطة)" },
+  INSUFFICIENT_POINTS: { code: 402, message: "رصيد نقاط الولاء غير كافٍ" },
+  DUPLICATE: { code: 409, message: "يوجد تحدٍ بينكما لهذه المباراة" },
+  NOT_ALLOWED: { code: 403, message: "لا تملك صلاحية تنفيذ هذا الإجراء" },
+  INVALID_STATE: { code: 409, message: "حالة التحدي لا تسمح بهذا الإجراء" },
+  EXPIRED: { code: 409, message: "انتهت مهلة التحدي وأُعيد الرهان" },
 };
+
+const mobileGcMajlisInviteLookupLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { message: "طلبات كثيرة لرموز الدعوة. حاول بعد دقيقة." },
+});
+
+const mobileGcMajlisJoinLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { message: "طلبات انضمام كثيرة. حاول بعد دقيقة." },
+});
+
+router.get("/gulf-cup/majlis/invite/:code", mobileGcMajlisInviteLookupLimiter, async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  try {
+    const result = await gcGetMajlisInvitePreview(String(req.params.code ?? ""));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب الدعوة" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=120");
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] invite preview error:", error);
+    res.status(502).json({ message: "تعذّر جلب بطاقة الدعوة حاليًا" });
+  }
+});
 
 router.post("/gulf-cup/majlis", async (req: Request, res: Response) => {
   if (!gcPredGuard(res)) return;
@@ -9516,7 +9602,7 @@ router.post("/gulf-cup/majlis", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/gulf-cup/majlis/join", async (req: Request, res: Response) => {
+router.post("/gulf-cup/majlis/join", mobileGcMajlisJoinLimiter, async (req: Request, res: Response) => {
   if (!gcPredGuard(res)) return;
   const session = await verifyMemberSession(req);
   if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
@@ -9580,6 +9666,168 @@ router.delete("/gulf-cup/majlis/:id", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile GC Majlis] leave error:", error);
     res.status(502).json({ message: "تعذّر تنفيذ الطلب حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/matchday", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const date = typeof req.query?.date === "string" ? req.query.date : undefined;
+    const result = await gcGetMajlisMatchday(session.userId, String(req.params.id), date);
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب يوم المجلس" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] matchday error:", error);
+    res.status(502).json({ message: "تعذّر جلب يوم المجلس حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/fantasy", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcGetMajlisFantasy(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب الفانتازي" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] fantasy error:", error);
+    res.status(502).json({ message: "تعذّر جلب فانتازي المجلس حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/champion-picks", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcGetMajlisChampionPicks(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب توقعات البطل" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] champion picks error:", error);
+    res.status(502).json({ message: "تعذّر جلب توقعات البطل حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/harvest", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcGetMajlisHarvest(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب الحصاد" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] harvest error:", error);
+    res.status(502).json({ message: "تعذّر جلب حصاد المجلس حاليًا" });
+  }
+});
+
+router.get("/gulf-cup/majlis/:id/duels", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcListMajlisDuels(session.userId, String(req.params.id));
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر جلب التحديات" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.json(result.data);
+  } catch (error) {
+    console.error("[Mobile GC Majlis] duels list error:", error);
+    res.status(502).json({ message: "تعذّر جلب تحديات المجلس حاليًا" });
+  }
+});
+
+router.post("/gulf-cup/majlis/:id/duels", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const result = await gcCreateMajlisDuel({
+      challengerId: session.userId,
+      majlisId: String(req.params.id),
+      fixtureId: Number(req.body?.fixtureId),
+      challengedUserId: String(req.body?.challengedUserId ?? ""),
+      stake: Number(req.body?.stake),
+    });
+    if (!result.ok) {
+      const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر إنشاء التحدي" };
+      return res.status(m.code).json({ message: m.message, reason: result.reason });
+    }
+    res.status(201).json({ duel: result.data });
+  } catch (error) {
+    console.error("[Mobile GC Majlis] duel create error:", error);
+    res.status(502).json({ message: "تعذّر إنشاء التحدي حاليًا" });
+  }
+});
+
+for (const action of ["accept", "decline", "cancel"] as const) {
+  router.post(`/gulf-cup/majlis/duels/:duelId/${action}`, async (req: Request, res: Response) => {
+    if (!gcPredGuard(res)) return;
+    const session = await verifyMemberSession(req);
+    if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+    res.set("Cache-Control", "private, no-store");
+    try {
+      const result = await gcActOnMajlisDuel(session.userId, String(req.params.duelId), action);
+      if (!result.ok) {
+        const m = GC_MAJLIS_REASONS[result.reason] ?? { code: 500, message: "تعذّر تحديث التحدي" };
+        return res.status(m.code).json({ message: m.message, reason: result.reason });
+      }
+      res.json({ duel: result.data });
+    } catch (error) {
+      console.error(`[Mobile GC Majlis] duel ${action} error:`, error);
+      res.status(502).json({ message: "تعذّر تحديث التحدي حاليًا" });
+    }
+  });
+}
+
+router.get("/gulf-cup/majlis/notification-preference", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json(await gcGetMajlisNotificationPreference(session.userId));
+  } catch (error) {
+    console.error("[Mobile GC Majlis] notification preference error:", error);
+    res.status(502).json({ message: "تعذّر جلب إعداد الإشعارات" });
+  }
+});
+
+router.put("/gulf-cup/majlis/notification-preference", async (req: Request, res: Response) => {
+  if (!gcPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  if (typeof req.body?.enabled !== "boolean") return res.status(400).json({ message: "enabled يجب أن تكون boolean" });
+  try {
+    res.json(await gcSetMajlisNotificationPreference(session.userId, req.body.enabled));
+  } catch (error) {
+    console.error("[Mobile GC Majlis] notification preference update error:", error);
+    res.status(502).json({ message: "تعذّر حفظ إعداد الإشعارات" });
   }
 });
 
