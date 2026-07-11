@@ -1027,12 +1027,29 @@ struct HomeView: View {
     }
 
     private func standingRow(_ row: SpStandingRow) -> some View {
-        HStack(spacing: 0) {
-            Text("\(row.rank)").font(SportsFonts.app(size: 13, weight: .heavy))
-                .foregroundStyle(zoneColor(row.rank)).monospacedDigit().frame(width: 26)
+        let isLive = row.live == true
+        let delta = row.liveDelta ?? 0
+        return HStack(spacing: 0) {
+            HStack(spacing: 2) {
+                Text("\(row.rank)").font(SportsFonts.app(size: 13, weight: .heavy))
+                    .foregroundStyle(zoneColor(row.rank)).monospacedDigit()
+                if isLive {
+                    Image(systemName: delta > 0 ? "arrow.up" : delta < 0 ? "arrow.down" : "minus")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(delta > 0 ? SpTheme.green : delta < 0 ? SpTheme.crimson : SpTheme.onDarkFaint)
+                }
+            }
+            .frame(width: 32, alignment: .leading)
             HStack(spacing: 9) {
                 SpTeamLogo(logo: row.team.logo, size: 26)
                 Text(row.team.name).font(SportsFonts.app(size: 13, weight: .semibold)).foregroundStyle(SpTheme.onDark).lineLimit(1).minimumScaleFactor(0.8)
+                if isLive {
+                    Text(L("مباشر"))
+                        .font(SportsFonts.app(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(SpTheme.crimson))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Text("\(row.played)").font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim).monospacedDigit().frame(width: 36)
@@ -1040,6 +1057,7 @@ struct HomeView: View {
             Text("\(row.points)").font(SportsFonts.app(size: 15, weight: .heavy)).foregroundStyle(SpTheme.onDark).monospacedDigit().frame(width: 40)
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(isLive ? SpTheme.crimson.opacity(0.04) : .clear)
         .contentShape(Rectangle())
     }
 

@@ -170,6 +170,7 @@ export interface WcStandingRow {
   qualifyStatus?: WcQualifyStatus | null;
   // true إذا حُدِّث الصفّ لحظيًّا من TheSports
   live?: boolean;
+  liveDelta?: number;
 }
 
 export interface WcGroup {

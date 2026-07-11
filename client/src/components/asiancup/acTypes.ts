@@ -51,6 +51,8 @@ export interface AcStandingRow {
   goalsAgainst: number;
   goalsDiff: number;
   points: number;
+  live?: boolean;
+  liveDelta?: number;
 }
 
 export interface AcGroup {

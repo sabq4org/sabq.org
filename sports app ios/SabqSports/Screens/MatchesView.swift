@@ -101,6 +101,7 @@ nonisolated struct SpWcStandingRow: Decodable, Identifiable {
     let points: Int
     let form: String?
     let live: Bool?
+    let liveDelta: Int?
     var id: Int { team.id }
 }
 

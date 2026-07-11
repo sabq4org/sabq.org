@@ -77,6 +77,7 @@ import {
   getMatchReferee,
   getTeamOfTheWeek,
   resolveSmIdByNames,
+  getSmLeaguesByDate,
   isSportmonksConfigured,
 } from "../services/sportmonksService";
 import { isTheSportsConfigured } from "../services/theSportsService";
@@ -335,6 +336,34 @@ export function registerSportsRoutes(app: Express) {
     } catch (error) {
       console.error("[Sports] world live failed:", error);
       res.status(502).json({ message: "تعذر جلب المباريات المباشرة حاليًا" });
+    }
+  });
+
+  // تجربة: مباريات يوم مجمّعة حسب الدوري عبر SportMonks leagues/date
+  // ?date=YYYY-MM-DD & ?all=1 (بدون فلتر فئة). الواجهة: /sports/sm-today
+  app.get("/api/sports/sm-today", async (req, res) => {
+    if (!isSportmonksConfigured()) {
+      res.set("Cache-Control", "public, max-age=30, s-maxage=60");
+      res.json({ available: false, date: null, leagues: [], filteredOut: 0 });
+      return;
+    }
+    const dateRaw = typeof req.query.date === "string" ? req.query.date.trim() : "";
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(dateRaw) ? dateRaw : undefined;
+    const includeAll =
+      req.query.all === "1" || req.query.all === "true" || req.query.all === "yes";
+    try {
+      const board = await getSmLeaguesByDate(date, includeAll);
+      const hot = board.leagues.some((l) => l.fixtures.some((f) => f.status.live));
+      res.set(
+        "Cache-Control",
+        hot
+          ? "public, max-age=0, s-maxage=10, stale-while-revalidate=30"
+          : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+      );
+      res.json(board);
+    } catch (error) {
+      console.error("[Sports] sm-today failed:", error);
+      res.status(502).json({ message: "تعذر جلب مباريات SportMonks لهذا اليوم" });
     }
   });
 

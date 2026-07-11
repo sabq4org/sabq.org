@@ -50,6 +50,8 @@ export interface GcStandingRow {
   goalsAgainst: number;
   goalsDiff: number;
   points: number;
+  live?: boolean;
+  liveDelta?: number;
 }
 
 export interface GcGroup {

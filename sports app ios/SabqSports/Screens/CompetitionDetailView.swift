@@ -87,6 +87,13 @@ struct CompetitionDetailView: View {
     }
     private var effectiveSegment: Segment { segments.contains(segment) ? segment : .overview }
     private var seasonValue: Int? { outlook?.season ?? comp.season }
+    /// مفتاح استطلاع الترتيب الحي: يتغيّر عند دخول/خروج صفوف live فيُعاد تشغيل الـ task.
+    private var standingsLiveKey: String {
+        let leagueLive = standings.filter { $0.live == true }.map(\.team.id)
+        let wcLive = wcGroups.flatMap(\.rows).filter { $0.live == true }.map(\.team.id)
+        let ids = (leagueLive + wcLive).sorted()
+        return ids.isEmpty ? "0" : ids.map(String.init).joined(separator: ",")
+    }
     private var regularFixtures: [SpFixture] {
         guard let matches else { return [] }
         return matches.live + matches.today + matches.upcoming + matches.results
@@ -149,6 +156,14 @@ struct CompetitionDetailView: View {
         .navigationTitle(comp.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadAll() }
+        .task(id: standingsLiveKey) {
+            guard standingsLiveKey != "0" else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                if Task.isCancelled { break }
+                await loadAll(force: true)
+            }
+        }
         .refreshable { await loadAll(force: true) }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
@@ -741,17 +756,33 @@ struct CompetitionDetailView: View {
     }
 
     private func wcGroupRow(_ row: SpWcStandingRow, compact: Bool) -> some View {
-        Button { selectedTeam = IDBox(id: row.team.id) } label: {
+        let isLive = row.live == true
+        let delta = row.liveDelta ?? 0
+        return Button { selectedTeam = IDBox(id: row.team.id) } label: {
             HStack(spacing: compact ? 6 : 9) {
-                Text("\(row.rank)")
-                    .font(SportsFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(row.rank <= 2 ? acc : SpTheme.onDarkFaint)
-                    .frame(width: 18)
+                HStack(spacing: 2) {
+                    Text("\(row.rank)")
+                        .font(SportsFonts.app(size: 11, weight: .bold))
+                        .foregroundStyle(row.rank <= 2 ? acc : SpTheme.onDarkFaint)
+                        .frame(width: 18)
+                    if isLive {
+                        Image(systemName: delta > 0 ? "arrow.up" : delta < 0 ? "arrow.down" : "minus")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(delta > 0 ? SpTheme.green : delta < 0 ? SpTheme.crimson : SpTheme.onDarkFaint)
+                    }
+                }
                 SpTeamLogo(logo: row.team.logo, size: compact ? 18 : 24)
                 Text(row.team.name)
                     .font(SportsFonts.app(size: compact ? 11.5 : 13, weight: row.rank <= 2 ? .bold : .semibold))
                     .foregroundStyle(SpTheme.onDark)
                     .lineLimit(1).minimumScaleFactor(0.78)
+                if isLive {
+                    Text(L("مباشر"))
+                        .font(SportsFonts.app(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Capsule().fill(SpTheme.crimson))
+                }
                 Spacer(minLength: 0)
                 Text("\(row.played)")
                     .font(SportsFonts.app(size: 11))
@@ -765,6 +796,7 @@ struct CompetitionDetailView: View {
                     .frame(width: 28)
             }
             .padding(.vertical, compact ? 5 : 8)
+            .background(isLive ? SpTheme.crimson.opacity(0.04) : .clear)
         }
         .buttonStyle(.plain)
     }
@@ -899,7 +931,7 @@ struct CompetitionDetailView: View {
 
     private var standingsHeader: some View {
         HStack(spacing: 0) {
-            Text("#").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 30)
+            Text("#").font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 36, alignment: .leading)
             Text(L("النادي")).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(L("لعب")).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint).frame(width: 36)
@@ -911,8 +943,10 @@ struct CompetitionDetailView: View {
 
     private func standingRow(_ row: SpStandingRow, full: Bool = false) -> some View {
         let isChampion = row.rank == 1
+        let isLive = row.live == true
+        let delta = row.liveDelta ?? 0
         return HStack(spacing: 0) {
-            HStack(spacing: 3) {
+            HStack(spacing: 2) {
                 if isChampion {
                     Image(systemName: "crown.fill").font(.system(size: 9)).foregroundStyle(SpTheme.gold)
                 }
@@ -920,13 +954,25 @@ struct CompetitionDetailView: View {
                     .font(SportsFonts.app(size: 12, weight: .bold))
                     .foregroundStyle(row.rank <= 3 ? acc : SpTheme.onDarkFaint)
                     .monospacedDigit()
+                if isLive {
+                    Image(systemName: delta > 0 ? "arrow.up" : delta < 0 ? "arrow.down" : "minus")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(delta > 0 ? SpTheme.green : delta < 0 ? SpTheme.crimson : SpTheme.onDarkFaint)
+                }
             }
-            .frame(width: 30)
+            .frame(width: 36, alignment: .leading)
             HStack(spacing: 10) {
                 SpTeamLogo(logo: row.team.logo, size: 26)
                 Text(row.team.name)
                     .font(SportsFonts.app(size: 13, weight: isChampion ? .heavy : .semibold))
                     .foregroundStyle(SpTheme.onDark).lineLimit(1).minimumScaleFactor(0.8)
+                if isLive {
+                    Text(L("مباشر"))
+                        .font(SportsFonts.app(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Capsule().fill(SpTheme.crimson))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Text("\(row.played)").font(SportsFonts.app(size: 13)).foregroundStyle(SpTheme.onDarkDim).monospacedDigit().frame(width: 36)
@@ -935,7 +981,7 @@ struct CompetitionDetailView: View {
             Text("\(row.points)").font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark).monospacedDigit().frame(width: 40)
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(isChampion ? SpTheme.gold.opacity(0.06) : .clear)
+        .background(isLive ? SpTheme.crimson.opacity(0.04) : isChampion ? SpTheme.gold.opacity(0.06) : .clear)
     }
 
     private func diff(_ row: SpStandingRow) -> String {

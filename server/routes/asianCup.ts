@@ -99,8 +99,15 @@ export function registerAsianCupRoutes(app: Express) {
   app.get("/api/asian-cup/standings", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=120, s-maxage=300, stale-while-revalidate=600");
-      res.json({ groups: await getAcStandings() });
+      const groups = await getAcStandings();
+      const hasLive = groups.some((g) => g.rows.some((r) => r.live));
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+      );
+      res.json({ groups });
     } catch (error) {
       console.error("[AsianCup] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });

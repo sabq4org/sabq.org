@@ -43,6 +43,8 @@ export default function AsianCup() {
   const { data: standingsData } = useQuery<{ groups: AcGroup[] }>({
     queryKey: ["/api/asian-cup/standings"],
     staleTime: 5 * 60_000,
+    refetchInterval: (query) =>
+      (query.state.data?.groups ?? []).some((g) => g.rows.some((r) => r.live)) ? 8_000 : false,
   });
 
   const fixtures = Array.isArray(fixturesData?.fixtures) ? fixturesData.fixtures : [];

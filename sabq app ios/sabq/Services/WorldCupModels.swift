@@ -107,6 +107,8 @@ nonisolated struct WCStandingRow: Decodable, Identifiable, Hashable {
     let qualifyStatus: String?
     /// true إذا حُدِّث الصفّ لحظيًّا من TheSports
     let live: Bool?
+    /// حراك المركز اللحظي: موجب = صعد، سالب = هبط
+    let liveDelta: Int?
 
     var id: Int { team.id }
 

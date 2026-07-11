@@ -262,44 +262,65 @@ function SportsHero({
         <VaraAppPromo />
       </div>
 
-      {/* مباشر أولًا (إن وُجد) ثم إحصاء اليوم — فوق شرائح الأقسام لمسار مسح أوضح. */}
-      <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5 sm:mt-5 sm:gap-3">
+      {/* صفّ الإجراءات الأساسية — وجهات حقيقية قبل قفزات الأقسام */}
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-2 sm:mt-6 sm:gap-2.5">
         {liveCount > 0 && (
           <button
             type="button"
             onClick={() => onJump("live-pulse")}
-            className="inline-flex items-center gap-2 rounded-full bg-red-500 px-4 py-2 text-[13px] font-bold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-full bg-red-500 px-4 py-2.5 text-[13px] font-bold text-white shadow-sm transition-opacity hover:opacity-90"
             data-testid="hero-live-chip"
           >
-            <span className="h-2 w-2 animate-pulse rounded-full bg-white" /> {liveCount} مباشر الآن
+            <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
+            {liveCount} مباشر
           </button>
         )}
-        <span className="inline-flex items-center rounded-full border border-border bg-background px-3 py-1.5 text-[12px] font-semibold text-foreground/75">
-          {today}
-          <span className="mx-1.5 text-foreground/30">·</span>
-          <span className="tabular-nums">{todayCount}</span> اليوم
-          <span className="mx-1.5 text-foreground/30">·</span>
-          <span className="tabular-nums">{compCount}</span> بطولة
-        </span>
+        <Link
+          href="/sports/matches"
+          className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[13px] font-bold text-primary-foreground transition-opacity hover:opacity-90"
+        >
+          <CalendarDays className="h-3.5 w-3.5" strokeWidth={2.2} />
+          مباريات اليوم
+          {todayCount > 0 ? (
+            <span className="rounded-full bg-white/20 px-1.5 text-[11px] tabular-nums">{todayCount}</span>
+          ) : null}
+        </Link>
+        <Link
+          href="/sports/live"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2.5 text-[13px] font-bold text-foreground transition-colors hover:border-primary/35 hover:bg-primary/10 hover:text-primary"
+        >
+          <Radio className="h-3.5 w-3.5 text-red-500" strokeWidth={2.2} />
+          البث المباشر
+        </Link>
       </div>
 
-      {/* مؤشّر دخول عضوية سبق — معاينة فقط (?vara=1)، غير مرئي للزوار. */}
+      <p className="mt-3 text-[12px] font-medium text-muted-foreground">
+        {today}
+        <span className="mx-1.5 text-foreground/25">·</span>
+        <span className="tabular-nums">{todayCount}</span> مباراة اليوم
+        <span className="mx-1.5 text-foreground/25">·</span>
+        <span className="tabular-nums">{compCount}</span> بطولة
+      </p>
+
       <VaraMembershipBadge />
 
+      {/* قفزات الأقسام — ثانوية وأخف بصريًا */}
       {nav.length > 0 && (
         <nav
-          className="scrollbar-hide mt-5 flex gap-2 overflow-x-auto border-t border-border/80 pt-4 pb-1 sm:mt-6 sm:flex-wrap sm:justify-center sm:overflow-visible sm:pt-5"
-          aria-label="تنقّل سريع بين أقسام البوابة"
+          className="scrollbar-hide mt-5 flex items-center justify-start gap-1 overflow-x-auto border-t border-border/80 pt-4 sm:mt-6 sm:flex-wrap sm:justify-center sm:overflow-visible sm:pt-5"
+          aria-label="أقسام البوابة"
         >
-          {nav.map((n) => (
-            <button
-              key={n.id}
-              type="button"
-              onClick={() => onJump(n.id)}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-[13px] font-bold text-foreground transition-colors hover:border-primary/35 hover:bg-primary/10 hover:text-primary sm:shrink"
-            >
-              {n.label}
-            </button>
+          {nav.map((n, i) => (
+            <span key={n.id} className="inline-flex shrink-0 items-center">
+              {i > 0 ? <span className="mx-0.5 hidden text-border sm:inline" aria-hidden>·</span> : null}
+              <button
+                type="button"
+                onClick={() => onJump(n.id)}
+                className="rounded-full px-3 py-1.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                {n.label}
+              </button>
+            </span>
           ))}
         </nav>
       )}
@@ -1261,12 +1282,11 @@ export default function SportsDashboard() {
   const scrollTo = (id: string) =>
     (document.getElementById(id) ?? document.getElementById("matches"))?.scrollIntoView({ behavior: "smooth", block: "start" });
 
-  // التنقّل السريع في الترويسة — حسب الأقسام المتاحة فعلًا.
+  // قفزات الأقسام فقط — «المباريات» صارت زرًا أساسيًا في الهيرو فلا نكرّرها هنا.
   const heroNav = useMemo(
     () => [
       { id: "tournaments", label: "البطولات", show: presentSummaryCats.length > 0 },
       { id: "news", label: "الأخبار", show: true },
-      { id: "matches", label: "المباريات", show: true },
       { id: "standings", label: "الترتيب", show: showStandingsSection },
       { id: "scorers", label: "الهدّافون", show: showScorersSection },
       { id: "leaderboard", label: "التوقّعات", show: true },
@@ -1306,25 +1326,33 @@ export default function SportsDashboard() {
               action={moreLink("/sports/matches", "كل المباريات")}
             />
             {presentSummaryCats.length > 1 && (
-              <div className="scrollbar-hide mb-5 flex gap-2 overflow-x-auto pb-1 sm:justify-center">
-                {presentSummaryCats.map((cat) => {
-                  const count = summaries.filter((c) => c.category === cat).length;
-                  const liveInCat = summaries.some((c) => c.category === cat && c.liveCount > 0);
-                  const active = summaryCat === cat;
-                  return (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSummaryCat(cat)}
-                      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-4 py-2.5 text-[13px] font-bold transition-colors sm:text-sm ${active ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-background text-foreground hover:border-primary/35 hover:bg-primary/10 hover:text-primary"}`}
-                      data-testid={`summary-cat-${cat}`}
-                    >
-                      {liveInCat && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />}
-                      {COMP_CATEGORY_LABELS[cat]}
-                      <span className={`text-[11px] tabular-nums ${active ? "text-primary/80" : "text-foreground/55"}`}>{count}</span>
-                    </button>
-                  );
-                })}
+              <div className="mb-5 flex justify-center">
+                <div className="scrollbar-hide inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-muted/60 p-1">
+                  {presentSummaryCats.map((cat) => {
+                    const count = summaries.filter((c) => c.category === cat).length;
+                    const liveInCat = summaries.some((c) => c.category === cat && c.liveCount > 0);
+                    const active = summaryCat === cat;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setSummaryCat(cat)}
+                        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-2 text-[13px] font-bold transition-colors sm:text-sm ${
+                          active
+                            ? "bg-card text-primary shadow-sm ring-1 ring-border"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                        data-testid={`summary-cat-${cat}`}
+                      >
+                        {liveInCat && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />}
+                        {COMP_CATEGORY_LABELS[cat]}
+                        <span className={`text-[11px] tabular-nums ${active ? "text-primary/80" : "text-muted-foreground/80"}`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
             <div className="space-y-4 sm:space-y-6">
