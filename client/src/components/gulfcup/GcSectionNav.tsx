@@ -25,7 +25,7 @@ export function GcSectionNav() {
     <nav
       dir="rtl"
       aria-label="أقسام صفحة خليجي 27"
-      className="sticky top-0 z-30 border-b border-emerald-900/20 bg-[#03241a]/95 backdrop-blur supports-[backdrop-filter]:bg-[#03241a]/85"
+      className="sticky top-0 z-30 border-b border-emerald-900/20 bg-[#08573B]/95 backdrop-blur supports-[backdrop-filter]:bg-[#08573B]/85"
     >
       <div className="container max-w-6xl mx-auto flex items-center gap-1 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8">
         {/* الشعار الرسمي مصغّرًا على رقعة بيضاء — مرجع بصري ثابت أثناء التمرير */}
@@ -50,7 +50,7 @@ export function GcSectionNav() {
         <span className="mx-1 h-5 w-px shrink-0 bg-white/15" />
         <Link
           href="/gulf-cup/predictions"
-          className="flex shrink-0 items-center gap-1 rounded-full bg-amber-300 px-4 py-1.5 text-[13px] font-black text-emerald-950 transition-colors hover:bg-amber-200"
+          className="flex shrink-0 items-center gap-1 rounded-full bg-gradient-to-b from-[#F5D46B] to-[#E7A93C] px-4 py-1.5 text-[13px] font-black text-emerald-950 transition-colors hover:from-[#F8DD82] hover:to-[#EDB44E]"
         >
           <Sparkles className="h-3.5 w-3.5" />
           توقّع واربح

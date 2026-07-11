@@ -20,7 +20,7 @@ export function GcSaudiSpotlight({
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.45 }}
-        className="overflow-hidden rounded-3xl border border-emerald-300/40 bg-gradient-to-bl from-emerald-600 via-emerald-700 to-green-800 shadow-xl"
+        className="overflow-hidden rounded-3xl border border-emerald-300/40 bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#08573B] shadow-xl"
       >
         <div className="flex flex-col items-center gap-4 p-6 sm:flex-row sm:items-center sm:gap-6 sm:p-8">
           <div className="grid h-24 w-24 shrink-0 place-items-center rounded-2xl bg-white p-3 shadow-lg ring-1 ring-white/30">

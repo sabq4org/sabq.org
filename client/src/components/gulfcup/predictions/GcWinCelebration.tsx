@@ -20,7 +20,7 @@ export interface GcWin {
 }
 
 function fireConfetti() {
-  const colors = ["#f59e0b", "#15803d", "#fde68a", "#22c55e"];
+  const colors = ["#F5B833", "#0F8054", "#F5D46B", "#29BC7A"];
   const burst = (ratio: number, opts: confetti.Options) =>
     confetti({ ...opts, origin: { y: 0.6 }, particleCount: Math.floor(180 * ratio), colors });
   burst(0.25, { spread: 26, startVelocity: 55 });
@@ -82,7 +82,7 @@ export function GcWinCelebration({ win, onClose }: { win: GcWin; onClose: () => 
         dir="rtl"
       >
         <motion.div
-          className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-gradient-to-b from-green-700 via-green-800 to-emerald-900 p-6 text-center text-white shadow-2xl"
+          className="relative w-full max-w-sm overflow-hidden rounded-3xl bg-gradient-to-b from-[#14905C] via-[#0F8054] to-[#08573B] p-6 text-center text-white shadow-2xl"
           initial={{ scale: 0.8, y: 24 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.8, opacity: 0 }}

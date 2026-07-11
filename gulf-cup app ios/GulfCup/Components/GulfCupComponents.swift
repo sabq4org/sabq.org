@@ -35,10 +35,10 @@ struct GcEmblem: View {
             .scaledToFit()
             .frame(height: height)
             .shadow(color: glow ? GcTheme.goldLite.opacity(0.35) : .clear, radius: 18, y: 2)
-            .scaleEffect(entered ? 1 : 0.88)
+            .scaleEffect(entered ? 1 : 0.92)
             .opacity(entered ? 1 : 0)
             .onAppear {
-                withAnimation(.spring(response: 0.6, dampingFraction: 0.72)) { entered = true }
+                withAnimation(.easeOut(duration: 0.45)) { entered = true }
             }
     }
 }
@@ -50,9 +50,9 @@ struct GcHeroDecor: View {
         GeometryReader { geo in
             let w = geo.size.width
             ZStack {
-                // توهّج ذهبي أعلى الزاوية
+                // توهّج ورقي أعلى الزاوية (توقيع المونديال)
                 RadialGradient(
-                    colors: [GcTheme.goldLite.opacity(0.16), .clear],
+                    colors: [GcTheme.leaf.opacity(0.22), .clear],
                     center: .topTrailing, startRadius: 0, endRadius: w * 0.55
                 )
                 // أقواس متّحدة المركز حول الزاوية العليا
@@ -91,7 +91,7 @@ struct GcHeroPanel<Content: View>: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .stroke(GcTheme.goldLite.opacity(0.22), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
             )
             .shadow(color: GcTheme.heroShadow, radius: 18, y: 8)
     }
@@ -722,4 +722,58 @@ struct GcFooterSignature: View {
         .frame(maxWidth: .infinity)
         .padding(.top, 10)
     }
+}
+
+// MARK: - ظهور متدرّج (نعومة VARA: تلاشٍ + صعود 18pt بـ easeOut 0.55s)
+
+private struct GcRevealModifier: ViewModifier {
+    var delay: Double
+    @State private var shown = false
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .offset(y: shown ? 0 : 18)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.55).delay(delay)) { shown = true }
+            }
+    }
+}
+
+extension View {
+    /// ظهور القسم بتلاشٍ وصعود خفيف — مرّر تأخيرًا متدرّجًا للأقسام العلوية فقط.
+    func gcReveal(delay: Double = 0) -> some View { modifier(GcRevealModifier(delay: delay)) }
+}
+
+// MARK: - إخفاء شريط التبويب مع التمرير (iOS 18+ — يبقى ظاهرًا فيما دونه)
+
+@Observable
+final class GcTabBarVisibility {
+    static let shared = GcTabBarVisibility()
+    var hidden = false
+}
+
+private struct GcAutoHideTabBar: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.onScrollGeometryChange(for: CGFloat.self) { geo in
+                geo.contentOffset.y
+            } action: { oldY, newY in
+                let delta = newY - oldY
+                if newY < 36 { set(false) }
+                else if delta > 6 { set(true) }
+                else if delta < -6 { set(false) }
+            }
+        } else {
+            content
+        }
+    }
+
+    private func set(_ hidden: Bool) {
+        guard GcTabBarVisibility.shared.hidden != hidden else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { GcTabBarVisibility.shared.hidden = hidden }
+    }
+}
+
+extension View {
+    func gcAutoHideTabBar() -> some View { modifier(GcAutoHideTabBar()) }
 }

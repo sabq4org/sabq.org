@@ -21,14 +21,15 @@ interface GcOverviewLite {
   blockHidden?: boolean;
 }
 
-// ليالي الخليج — بنفسجي ليلي بلمسة ذهبية (تمييزًا عن أخضر المونديال)
+// ليل الخليج الزمردي — درجة أعمق من أخضر المونديال الساطع: الشريطان يتجاوران
+// في الرئيسية فيبقى التمييز بالعمق اللوني مع وحدة هوية خليجي 27 (زمردي + ذهبي).
 const GULF_THEME: CupStripTheme = {
-  band: "bg-violet-50 dark:bg-violet-950/25 border-violet-600/10 dark:border-violet-400/10",
-  card: "bg-gradient-to-bl from-[#1d1040] via-[#2a1745] to-[#120a2e]",
-  ring: "ring-violet-900/40",
-  soft: "text-violet-200/80",
+  band: "bg-emerald-50 dark:bg-emerald-950/25 border-emerald-600/10 dark:border-emerald-400/10",
+  card: "bg-gradient-to-bl from-[#0A6B47] via-[#08573B] to-[#04241A]",
+  ring: "ring-emerald-900/40",
+  soft: "text-emerald-200/80",
   accent: "text-amber-300",
-  cta: "bg-amber-300 text-violet-950 hover:bg-amber-200",
+  cta: "bg-amber-300 text-emerald-950 hover:bg-amber-200",
 };
 
 export default function GulfCupHomeSection() {

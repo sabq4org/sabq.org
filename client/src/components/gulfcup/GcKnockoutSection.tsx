@@ -35,7 +35,7 @@ export function GcKnockoutSection({
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ duration: 0.4 }}
-        className="space-y-4"
+        className="mx-auto max-w-3xl space-y-4"
       >
         {semis.length > 0 && (
           <div>
@@ -49,7 +49,7 @@ export function GcKnockoutSection({
         )}
 
         {final && (
-          <div className="sm:px-16 lg:px-32">
+          <div className="sm:px-14">
             <p className="mb-2 flex items-center gap-1.5 text-sm font-black text-amber-600 dark:text-amber-400">
               <Trophy className="h-4 w-4" />
               النهائي — {final.venue?.name ?? ""}

@@ -7,10 +7,10 @@ function GroupTable({ group }: { group: GcGroup }) {
   const isLive = group.rows.some((r) => r.live);
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center justify-between bg-gradient-to-l from-emerald-600 to-emerald-700 px-4 py-2.5">
+      <div className="flex items-center justify-between bg-gradient-to-l from-[#0F8054] to-[#0A6B47] px-4 py-2.5">
         <h3 className="text-sm font-black text-white">{group.name || "مجموعة"}</h3>
         {isLive ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/90 px-2 py-0.5 text-[10px] font-bold text-white">
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#DE2B3D]/90 px-2 py-0.5 text-[10px] font-bold text-white">
             <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
             مباشر
           </span>
@@ -77,8 +77,8 @@ function GroupTable({ group }: { group: GcGroup }) {
                       {row.team.name}
                     </span>
                     {row.live && (
-                      <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[9px] font-black text-red-600 dark:text-red-400">
-                        <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+                      <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-[#DE2B3D]/10 px-1.5 py-0.5 text-[9px] font-black text-[#DE2B3D] dark:text-red-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[#DE2B3D] animate-pulse" />
                         مباشر
                       </span>
                     )}
@@ -108,8 +108,8 @@ export function GcGroups({ groups }: { groups: GcGroup[] }) {
         <LayoutGrid className="h-6 w-6 text-emerald-500" />
         <h2 className="text-2xl font-black text-foreground">المجموعات والترتيب</h2>
         {isLive && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-[11px] font-bold text-red-600 dark:text-red-400">
-            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="inline-flex items-center gap-1 rounded-full bg-[#DE2B3D]/10 px-2 py-0.5 text-[11px] font-bold text-[#DE2B3D] dark:text-red-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#DE2B3D] animate-pulse" />
             تحديث لحظي
           </span>
         )}

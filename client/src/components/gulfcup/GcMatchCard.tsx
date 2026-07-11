@@ -68,7 +68,7 @@ export function GcMatchCard({
           {fixture.round}
         </span>
         {fixture.status.live ? (
-          <span className="flex items-center gap-1 font-bold text-red-500">
+          <span className="flex items-center gap-1 font-bold text-[#DE2B3D] dark:text-red-400">
             <Radio className="h-3 w-3 animate-pulse" />
             {fixture.status.elapsed != null ? `${fixture.status.elapsed}'` : "مباشر"}
           </span>
