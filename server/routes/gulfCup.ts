@@ -84,8 +84,15 @@ export function registerGulfCupRoutes(app: Express) {
   app.get("/api/gulf-cup/standings", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      res.set("Cache-Control", "public, max-age=120, s-maxage=300, stale-while-revalidate=600");
-      res.json({ groups: await getGcStandings() });
+      const groups = await getGcStandings();
+      const hasLive = groups.some((g) => g.rows.some((r) => r.live));
+      res.set(
+        "Cache-Control",
+        hasLive
+          ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
+          : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+      );
+      res.json({ groups });
     } catch (error) {
       console.error("[GulfCup] standings failed:", error);
       res.status(502).json({ message: "تعذر جلب ترتيب المجموعات حاليًا" });

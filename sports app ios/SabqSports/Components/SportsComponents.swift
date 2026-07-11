@@ -1097,6 +1097,7 @@ struct SpCountdownChips: View {
                 HStack(spacing: 8) {
                     chip(days, L("يوم")); chip(hours, L("ساعة")); chip(mins, L("دقيقة")); chip(secs, L("ثانية"))
                 }
+                .environment(\.layoutDirection, .leftToRight)
             }
         }
     }

@@ -964,6 +964,7 @@ function Router() {
         <Route path="/sports/match/:id">{() => <LazyRoute component={SportsMatch} />}</Route>
         <Route path="/sports/matches">{() => <LazyRoute component={SportsMatchesBoard} />}</Route>
         <Route path="/sports/live">{() => <LazyRoute component={SportsLive} />}</Route>
+        <Route path="/sports/sm-today">{() => <Redirect to="/sports/matches" />}</Route>
         <Route path="/sports/transfers/story/:playerId">{() => <LazyRoute component={TransferStory} />}</Route>
         <Route path="/sports/transfers">{() => <LazyRoute component={SportsTransfers} />}</Route>
         <Route path="/sports">{() => <LazyRoute component={SportsDashboard} />}</Route>

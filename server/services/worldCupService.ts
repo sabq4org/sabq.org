@@ -234,6 +234,8 @@ export interface WcStandingRow {
   qualifyStatus?: WcQualifyStatus | null;
   // true إذا حُدِّث هذا الصفّ لحظيًّا من TheSports (أسرع من تحديث API-Football).
   live?: boolean;
+  /** حراك المركز اللحظي: موجب = صعد، سالب = هبط. */
+  liveDelta?: number;
 }
 
 export interface WcGroup {
@@ -461,6 +463,15 @@ export function buildGroupStandings(baseGroups: WcGroup[], fixtures: WcFixture[]
     }
 
     const rows = rankGroupRows([...display.values()]);
+    const confirmedRanked = rankGroupRows([...confirmed.values()]);
+    const baseRank = new Map(confirmedRanked.map((r) => [r.team.id, r.rank]));
+    const anyLive = rows.some((r) => r.live);
+    if (anyLive) {
+      for (const r of rows) {
+        const br = baseRank.get(r.team.id);
+        r.liveDelta = typeof br === "number" ? br - r.rank : 0;
+      }
+    }
     const status =
       remaining.length > 0
         ? computeGroupQualification([...confirmed.values()], remaining)

@@ -87,6 +87,7 @@ struct KcCountdownChips: View {
                     chip(minutes, "دقيقة")
                     chip(seconds, "ثانية")
                 }
+                .environment(\.layoutDirection, .leftToRight)
             }
         }
     }

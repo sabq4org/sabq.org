@@ -88,3 +88,19 @@ export function applyProvisionalTable<T extends StandingRowLike>(
   });
   return out;
 }
+
+/**
+ * يطبّق الترتيب المبدئي على جداول مجموعات (كأس آسيا / خليجي / …).
+ * المباريات الجارية تُفلتر داخليًّا؛ إن لم تمسّ مجموعةً تُعاد كما هي.
+ */
+export function applyProvisionalGroups<T extends StandingRowLike, G extends { rows: T[] }>(
+  groups: G[],
+  liveFixtures: LiveFixtureLike[],
+): G[] {
+  const live = liveFixtures.filter((f) => f.status.live && !f.status.finished);
+  if (live.length === 0) return groups;
+  return groups.map((g) => ({
+    ...g,
+    rows: applyProvisionalTable(g.rows, live),
+  }));
+}

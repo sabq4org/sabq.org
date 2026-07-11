@@ -171,7 +171,7 @@ function CountdownChipsRow({ timestamp, soft }: { timestamp: number; soft: strin
     { value: countdown.seconds, label: "ثانية" },
   ];
   return (
-    <div className="flex items-center justify-center gap-1.5" aria-label="العد التنازلي لانطلاق الجولة">
+    <div className="flex items-center justify-center gap-1.5" dir="ltr" aria-label="العد التنازلي لانطلاق الجولة">
       {chips.map((chip) => (
         <div key={chip.label} className="flex min-w-[2.75rem] flex-col items-center rounded-lg bg-white/10 px-2 py-1 backdrop-blur-sm">
           <span className="text-base font-black text-white tabular-nums leading-tight">{chip.value}</span>

@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { ListOrdered } from "lucide-react";
+import { ArrowDown, ArrowUp, ListOrdered, Minus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { WcGroup, WcQualifyStatus, WcStandingRow } from "./wcTypes";
@@ -46,8 +46,13 @@ function StandingRowItem({ row }: { row: WcStandingRow }) {
         : "border-r-2 border-transparent";
   const dim = row.qualifyStatus === "eliminated" ? "opacity-60" : "";
   return (
-    <div className={`grid grid-cols-[1.25rem_1fr_2rem_2.5rem_2rem] items-center gap-1 rounded-md px-2 py-1.5 text-sm ${highlight} ${dim}`}>
-      <span className="text-center text-xs text-muted-foreground tabular-nums">{row.rank}</span>
+    <div className={`grid grid-cols-[1.25rem_1fr_2rem_2.5rem_2rem] items-center gap-1 rounded-md px-2 py-1.5 text-sm ${highlight} ${dim} ${row.live ? "bg-emerald-500/[0.06]" : ""}`}>
+      <span className="inline-flex items-center justify-center gap-0.5 text-xs text-muted-foreground tabular-nums">
+        {row.rank}
+        {row.live && (row.liveDelta ?? 0) > 0 && <ArrowUp className="h-3 w-3 text-emerald-500" aria-label={`صعد ${row.liveDelta} مركزًا`} />}
+        {row.live && (row.liveDelta ?? 0) < 0 && <ArrowDown className="h-3 w-3 text-rose-500" aria-label={`هبط ${Math.abs(row.liveDelta ?? 0)} مركزًا`} />}
+        {row.live && (row.liveDelta ?? 0) === 0 && <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="ثابت لحظيًا" />}
+      </span>
       <div className="flex items-center gap-2 min-w-0">
         <Link
           href={`/world-cup/team/${row.team.id}`}
@@ -56,6 +61,12 @@ function StandingRowItem({ row }: { row: WcStandingRow }) {
           <img src={row.team.logo} alt={row.team.name} className="h-[18px] w-[18px] object-contain shrink-0" loading="lazy" />
           <span className="truncate font-semibold">{row.team.name}</span>
         </Link>
+        {row.live && (
+          <span className="inline-flex items-center gap-1 shrink-0 rounded-full bg-red-500/10 px-1.5 py-0.5 text-[9px] font-black text-red-600 dark:text-red-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+            مباشر
+          </span>
+        )}
         <FormDots form={row.form} />
       </div>
       <span className="text-center text-xs text-muted-foreground tabular-nums">{row.played}</span>

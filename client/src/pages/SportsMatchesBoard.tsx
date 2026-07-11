@@ -1,18 +1,12 @@
 /**
  * لوحة "مباريات اليوم" — /sports/matches بهوية موقع سبق الفاتحة (مطابقة لـ /sports).
  *
- * ترويسة فاتحة (أيقونة بخلفية زرقاء + عنوان + وصف)، طبقة تحكّم بالتاريخ والبحث،
- * شريط فلاتر لاصق، ومجموعات بطولات ببطاقات فاتحة وترويسة رمادية خفيفة. الأزرق
- * الأساسي للتمييز والأحمر للمباشر، بدون أسطح كحلية غامقة أو خطوط خاصة.
+ * ترويسة فاتحة، طبقة تحكّم بالتاريخ والبحث، شريط فلاتر لاصق، ومجموعات بطولات.
+ * صفوف المباريات بتصميم نظيف (فريق · نتيجة/شارة · فريق) مجمّعة حسب البطولة.
  *
- * كل مباريات اليوم عبر بطولاتنا، مرتّبة بالوقت ومجمّعة حسب البطولة، مع توسيع
- * كل مباراة لإظهار الأهداف والبطاقات. فلترة: التاريخ، الحالة، الفئة، البحث،
- * وطريقة العرض (حسب البطولة / حسب الوقت).
- *
- * تستهلك نفس مصادر البوابة الرياضية /sports دون أي اعتماد جديد:
- *   GET /api/sports/today?date=YYYY-MM-DD   (لوحة اليوم)
- *   GET /api/sports/competitions            (شعار/فئة/حالة لكل بطولة)
- *   GET /api/sports/match/:id               (مسجّلو الأهداف عند التوسيع)
+ *   GET /api/sports/today?date=YYYY-MM-DD
+ *   GET /api/sports/competitions
+ *   GET /api/sports/match/:id
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
@@ -207,14 +201,6 @@ function liveClockLabel(f: SpLiveItem): string {
   return `${f.status.elapsed}${extra}'`;
 }
 
-function livePhaseLabel(f: SpLiveItem): string {
-  if (f.status.label && f.status.label !== f.status.code) return f.status.label;
-  if (f.status.code === "1H") return "الشوط الأول";
-  if (f.status.code === "2H") return "الشوط الثاني";
-  if (f.status.code === "HT") return "استراحة الشوطين";
-  return "مباشر";
-}
-
 const STATE_FILTERS: { key: "all" | MatchState; label: string }[] = [
   { key: "all", label: "الكل" },
   { key: "live", label: "جارية الآن" },
@@ -344,28 +330,35 @@ function MatchScorers({ fixture }: { fixture: SpLiveItem }) {
   );
 }
 
-// ---------- صف المباراة ----------
+// ---------- صف المباراة — الشعارات بجانب الوقت، الأسماء على الأطراف ----------
+
+function TeamLogo({ src, name }: { src: string | null | undefined; name: string }) {
+  if (src) {
+    return (
+      <img src={src} alt="" title={name} className="h-7 w-7 shrink-0 object-contain sm:h-8 sm:w-8" loading="lazy" />
+    );
+  }
+  return <span className="h-7 w-7 shrink-0 rounded-full bg-muted sm:h-8 sm:w-8" />;
+}
 
 export function MatchRow({
   f,
   expanded,
   onToggle,
   onOpen,
-  flat = false,
+  flat: _flat = false,
 }: {
   f: SpLiveItem;
   expanded: boolean;
   onToggle: () => void;
   onOpen: (id: number) => void;
-  // flat: يُلغي خلفية المباشر الحمراء (لصفحة /sports/live حيث كل الصفوف مباشرة،
-  // فالتعبئة الحمراء تطغى) — يبقى المؤشّر الدقيق (نقطة + دقيقة حمراء) فقط.
+  /** محفوظ للتوافق مع /sports/live — التصميم موحّد الآن */
   flat?: boolean;
 }) {
   const st = stateOf(f);
   const decided = st === "live" || st === "finished";
   const hg = f.goals.home;
   const ag = f.goals.away;
-  // الترجيح يحسم الفائز حين تتعادل الأهداف (خروج المغلوب) — وإلا الأهداف.
   const pen = f.penalties;
   const penHome = pen?.home;
   const penAway = pen?.away;
@@ -374,7 +367,6 @@ export function MatchRow({
   const awayWon = (decided && hg != null && ag != null && ag > hg) || (hasPens && penAway! > penHome!);
   const isLive = st === "live";
 
-  // وميض أخضر عند تغيّر النتيجة (تحديث لحظي) لمباراة جارية.
   const prevScore = useRef<string>(`${hg}-${ag}`);
   const [flash, setFlash] = useState(false);
   useEffect(() => {
@@ -390,118 +382,95 @@ export function MatchRow({
     }
   }, [hg, ag, isLive]);
 
+  // شبكة ثابتة LTR: اسم | شعار | وقت | شعار | اسم
+  // الشعارات ملاصقة للكبسولة في الوسط، والأسماء على الحافتين.
   return (
-    <div
-      className={`${flat ? "border-b-0" : "border-b border-border last:border-b-0"} ${
-        isLive && !flat
-          ? "relative overflow-hidden border-r-4 border-r-red-500 bg-red-500/[0.06] shadow-[inset_0_0_0_1px_rgba(239,68,68,0.12)] dark:bg-red-500/[0.12]"
-          : ""
-      }`}
-    >
+    <div className="relative">
       <div
-        className={`grid grid-cols-[44px_minmax(0,1fr)_58px_minmax(0,1fr)_34px] items-center gap-1.5 px-2.5 py-3 transition-colors sm:flex sm:gap-3 sm:px-4 sm:py-2.5 ${
-          flash ? "bg-emerald-500/20" : isLive && !flat ? "hover:bg-red-500/[0.10]" : "hover:bg-muted/40"
+        className={`grid grid-cols-[minmax(0,1fr)_auto_auto_auto_minmax(0,1fr)] items-center gap-x-2 px-4 py-3.5 transition-colors sm:gap-x-3 sm:px-5 ${
+          flash ? "bg-emerald-500/15" : "hover:bg-muted/30"
         }`}
+        dir="ltr"
       >
-        {/* الحالة (المباشر فقط) — وقت الانطلاق انتقل بين الفريقين بقرار المالك 2026-07-05 */}
-        <button
-          type="button"
-          onClick={() => onOpen(f.id)}
-          className="min-h-10 shrink-0 text-center sm:w-16"
-          title="تفاصيل المباراة"
-        >
-          {isLive ? (
-            // الجوال: العمود الجانبي أضيق من «الدقيقة + الشوط» فيزاحم اسم النادي —
-            // تُعرض الدقيقة داخل كبسولة النتيجة بدلًا منه (sm فأوسع يبقيان هنا).
-            <span className="hidden sm:inline-flex flex-col items-center gap-0.5 text-red-500">
-              <span className="inline-flex items-center gap-1 text-xs font-black tabular-nums">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                {liveClockLabel(f)}
-              </span>
-              <span className={`rounded-full px-1.5 py-px text-[9px] font-black leading-none whitespace-nowrap ${flat ? "bg-muted text-muted-foreground" : "bg-red-500 text-white"}`}>
-                {livePhaseLabel(f)}
-              </span>
-            </span>
-          ) : (
-            <span aria-label={st === "finished" ? f.status.label || "انتهت" : "لم تبدأ"} />
-          )}
-        </button>
-
-        {/* الفريق المضيف */}
         <Link
-          href={`/sports/team/${f.home.id}`}
-          className={`flex min-w-0 flex-1 items-center justify-end gap-1.5 sm:gap-2 ${homeWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
+          href={`/sports/team/${f.away.id}`}
+          className={`min-w-0 truncate text-start text-sm sm:text-[15px] text-foreground ${
+            awayWon ? "font-bold" : "font-normal"
+          }`}
+          dir="auto"
         >
-          <span className="truncate text-[11px] leading-4 sm:text-sm sm:leading-5">{f.home.name}</span>
-          {f.home.logo ? (
-            <img src={f.home.logo} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
-          ) : (
-            <span className="h-5 w-5 shrink-0 rounded-full bg-muted sm:h-6 sm:w-6" />
-          )}
+          {f.away.name}
         </Link>
 
-        {/* النتيجة / مقابل */}
+        <Link href={`/sports/team/${f.away.id}`} className="shrink-0" tabIndex={-1} aria-hidden>
+          <TeamLogo src={f.away.logo} name={f.away.name} />
+        </Link>
+
         <button
           type="button"
           onClick={() => onOpen(f.id)}
-          className="min-h-10 shrink-0 text-center"
+          className="flex shrink-0 flex-col items-center gap-0.5"
+          title="تفاصيل المباراة"
         >
           {decided && hg != null && ag != null ? (
-            <span
-              className={`inline-flex min-w-[3.75rem] flex-col items-center justify-center rounded-[10px] px-2 py-1 text-base font-black tabular-nums leading-none sm:py-0.5 ${isLive && !flat ? "bg-red-600 text-white shadow-sm shadow-red-500/20" : "bg-muted text-foreground"}`}
-              dir="ltr"
-            >
-              <span>{ag} - {hg}</span>
+            <>
+              <span
+                className={`inline-flex min-w-[3.5rem] items-center justify-center rounded-full px-3 py-1.5 text-sm font-bold tabular-nums leading-none ${
+                  isLive ? "bg-red-600 text-white" : "bg-muted text-foreground"
+                }`}
+              >
+                {ag} – {hg}
+              </span>
               {hasPens ? (
-                <span className="mt-1 text-[9px] font-black leading-none text-emerald-600 dark:text-emerald-400" dir="rtl">
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400" dir="rtl">
                   ترجيح <span dir="ltr">{Math.max(penHome!, penAway!)}-{Math.min(penHome!, penAway!)}</span>
                 </span>
-              ) : st === "finished" ? (
-                <span className="mt-1 text-[9px] font-black leading-none text-muted-foreground" dir="rtl">
+              ) : isLive ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
+                  {liveClockLabel(f)}
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium text-muted-foreground" dir="rtl">
                   {f.status.label || "انتهت"}
                 </span>
-              ) : isLive ? (
-                // دقيقة اللعب داخل الكبسولة — للجوال فقط (الساعة الجانبية تظهر من sm)
-                <span className={`mt-1 inline-flex items-center gap-1 text-[9px] font-black leading-none sm:hidden ${flat ? "text-red-500" : "text-white/90"}`}>
-                  <span className={`h-1 w-1 animate-pulse rounded-full ${flat ? "bg-red-500" : "bg-white"}`} />
-                  <span dir="ltr">{liveClockLabel(f)}</span>
-                </span>
-              ) : null}
-            </span>
+              )}
+            </>
           ) : (
-            <span
-              className="inline-flex min-w-[3.75rem] items-center justify-center rounded-[10px] bg-muted px-2 py-1 text-sm font-black tabular-nums text-foreground"
-              dir="ltr"
-            >
+            <span className="inline-flex min-w-[3.5rem] items-center justify-center rounded-full bg-muted px-3 py-1.5 text-sm font-bold tabular-nums leading-none text-foreground">
               {kickoffTime(f)}
             </span>
           )}
         </button>
 
-        {/* الفريق الضيف */}
-        <Link
-          href={`/sports/team/${f.away.id}`}
-          className={`flex min-w-0 flex-1 items-center gap-1.5 sm:gap-2 ${awayWon ? "font-black text-foreground" : "font-semibold text-foreground/90"}`}
-        >
-          {f.away.logo ? (
-            <img src={f.away.logo} alt="" className="h-5 w-5 shrink-0 object-contain sm:h-6 sm:w-6" loading="lazy" />
-          ) : (
-            <span className="h-5 w-5 shrink-0 rounded-full bg-muted sm:h-6 sm:w-6" />
-          )}
-          <span className="truncate text-[11px] leading-4 sm:text-sm sm:leading-5">{f.away.name}</span>
+        <Link href={`/sports/team/${f.home.id}`} className="shrink-0" tabIndex={-1} aria-hidden>
+          <TeamLogo src={f.home.logo} name={f.home.name} />
         </Link>
 
-        {/* توسيع مسجّلي الأهداف */}
+        <Link
+          href={`/sports/team/${f.home.id}`}
+          className={`min-w-0 truncate text-end text-sm sm:text-[15px] text-foreground ${
+            homeWon ? "font-bold" : "font-normal"
+          }`}
+          dir="auto"
+        >
+          {f.home.name}
+        </Link>
+      </div>
+
+      {decided ? (
         <button
           type="button"
           onClick={onToggle}
-          className={`grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors sm:h-7 sm:w-7 ${expanded ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"} ${!decided ? "opacity-0 pointer-events-none" : ""}`}
+          className={`absolute start-1 top-1/2 z-10 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-full transition-colors sm:start-2 ${
+            expanded ? "bg-primary/10 text-primary" : "text-muted-foreground/70 hover:bg-muted hover:text-foreground"
+          }`}
           title="مسجّلو الأهداف"
           aria-label="مسجّلو الأهداف"
         >
-          <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-180" : ""}`} />
         </button>
-      </div>
+      ) : null}
 
       {expanded && decided && <MatchScorers fixture={f} />}
     </div>
@@ -514,6 +483,7 @@ function CompetitionGroup({
   name,
   logo,
   slug,
+  category,
   matches,
   expandedIds,
   collapsed,
@@ -524,6 +494,7 @@ function CompetitionGroup({
   name: string;
   logo: string | null;
   slug: string | null;
+  category: SpCompetitionCategory | null;
   matches: SpLiveItem[];
   expandedIds: Set<number>;
   collapsed: boolean;
@@ -532,58 +503,67 @@ function CompetitionGroup({
   onOpen: (id: number) => void;
 }) {
   const liveCount = matches.filter((m) => m.status.live).length;
+  const subtitle = [
+    category ? COMP_CATEGORY_LABELS[category] : null,
+    `${matches.length} مباراة`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center gap-2.5 border-b border-border bg-muted/60 px-3 py-2.5 sm:px-4 sm:py-3">
+    <section className="overflow-hidden rounded-2xl border border-border bg-card">
+      <div className="flex items-center gap-3 border-b border-border px-4 py-3">
         <button
           type="button"
           onClick={onToggleGroup}
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-card text-muted-foreground ring-1 ring-border transition-colors hover:text-primary"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           aria-label={collapsed ? "إظهار مباريات البطولة" : "إخفاء مباريات البطولة"}
         >
-          <ChevronDown className={`h-4 w-4 transition-transform ${collapsed ? "rotate-90" : ""}`} strokeWidth={2} />
+          <ChevronDown className={`h-4 w-4 transition-transform ${collapsed ? "-rotate-90" : ""}`} strokeWidth={2} />
         </button>
-        {slug ? (
-          <Link
-            href={competitionHref(slug)}
-            className="group flex min-w-0 flex-1 items-center gap-2.5"
-            title={`صفحة بطولة ${name}`}
-          >
-            {logo ? (
-              <img src={logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
-            ) : (
-              <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} strokeWidth={1.8} />
-            )}
-            <span className="truncate font-black text-foreground transition-colors group-hover:text-primary">{name}</span>
-            <ChevronLeft className="w-4 h-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" strokeWidth={1.8} />
-          </Link>
+        {logo ? (
+          <img src={logo} alt="" className="h-7 w-7 shrink-0 object-contain" loading="lazy" />
         ) : (
-          <>
-            {logo ? (
-              <img src={logo} alt="" className="w-7 h-7 object-contain shrink-0" loading="lazy" />
-            ) : (
-              <Trophy className={`w-5 h-5 shrink-0 ${ACCENT}`} strokeWidth={1.8} />
-            )}
-            <span className="truncate font-black text-foreground flex-1">{name}</span>
-          </>
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+            <Trophy className={`h-3.5 w-3.5 ${ACCENT}`} strokeWidth={1.8} />
+          </span>
         )}
+        <div className="min-w-0 flex-1">
+          {slug ? (
+            <Link
+              href={competitionHref(slug)}
+              className="block truncate text-sm font-bold text-foreground transition-colors hover:text-primary"
+              title={`صفحة بطولة ${name}`}
+            >
+              {name}
+            </Link>
+          ) : (
+            <h2 className="truncate text-sm font-bold text-foreground">{name}</h2>
+          )}
+          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+        </div>
         {liveCount > 0 ? (
-          <span className="inline-flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-0.5 text-[10px] font-bold tabular-nums text-white">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-0.5 text-[11px] font-bold tabular-nums text-red-600">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" />
             {liveCount} مباشر
           </span>
-        ) : (
-          <span className="text-[11px] font-bold tabular-nums text-muted-foreground">{matches.length}</span>
-        )}
+        ) : null}
       </div>
       {!collapsed && (
-        <div>
+        <ul className="divide-y divide-border">
           {matches.map((m) => (
-            <MatchRow key={m.id} f={m} expanded={expandedIds.has(m.id)} onToggle={() => toggle(m.id)} onOpen={onOpen} />
+            <li key={m.id}>
+              <MatchRow
+                f={m}
+                expanded={expandedIds.has(m.id)}
+                onToggle={() => toggle(m.id)}
+                onOpen={onOpen}
+              />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -711,7 +691,14 @@ export default function SportsMatchesBoard() {
       const slug = sorted[0]?.competitionSlug ?? null;
       const meta = slug ? compMeta.get(slug) : undefined;
       const liveCount = matches.filter((m) => m.status.live).length;
-      return { name, matches: sorted, logo: meta?.logo ?? null, slug, liveCount };
+      return {
+        name,
+        matches: sorted,
+        logo: meta?.logo ?? null,
+        slug,
+        category: meta?.category ?? null,
+        liveCount,
+      };
     });
   }, [filtered, compMeta]);
 
@@ -898,8 +885,6 @@ export default function SportsMatchesBoard() {
           {/* شريط الفلاتر وحده لاصق أعلى الشاشة — يبقى عند النزول لتحرير المساحة */}
           <div className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
             <div className="mx-auto max-w-[1200px] px-4 py-2 sm:px-6 sm:py-2.5">
-              {/* صفّ فلترة واحد: قائمة «العدسة» تتصدّره ثم شرائح البطولات ضمن نطاقها.
-                  دمج صفّ العدسة المنفصل هنا وفّر صفًّا كاملًا وألغى تكرار «الكل». */}
               <div className="mb-2 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -973,7 +958,6 @@ export default function SportsMatchesBoard() {
                   );
                 })}
               </div>
-              {/* الحالة + الفئة + طريقة العرض */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide sm:pb-0">
                 <div className="flex items-center gap-1 rounded-[10px] bg-muted p-0.5 shrink-0">
                   {STATE_FILTERS.map((s) => (
@@ -1034,7 +1018,7 @@ export default function SportsMatchesBoard() {
             </div>
           </div>
 
-          {/* المحتوى */}
+          {/* المحتوى — الجدول بالتصميم الجديد فقط */}
           <div className="mx-auto max-w-[1200px] px-4 py-4 sm:px-6 sm:py-6">
             {isLoading ? (
               <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
@@ -1055,6 +1039,7 @@ export default function SportsMatchesBoard() {
                     name={g.name}
                     logo={g.logo}
                     slug={g.slug}
+                    category={g.category}
                     matches={g.matches}
                     expandedIds={expandedIds}
                     collapsed={collapsedGroups.has(g.slug ?? g.name)}
@@ -1065,19 +1050,19 @@ export default function SportsMatchesBoard() {
                 ))}
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-border bg-card">
+              <div className="overflow-hidden rounded-2xl border border-border bg-card divide-y divide-border">
                 {flat.map((m) => (
-                  <div key={m.id} className="border-b border-border last:border-b-0">
+                  <div key={m.id}>
                     {m.competitionSlug ? (
                       <Link
                         href={competitionHref(m.competitionSlug)}
-                        className="flex w-fit items-center gap-1 px-4 pt-2 text-[11px] font-bold text-muted-foreground transition-colors hover:text-primary"
+                        className="flex w-fit items-center gap-1 px-4 pt-2.5 text-[11px] font-bold text-muted-foreground transition-colors hover:text-primary"
                       >
                         {m.competition}
                         <ChevronLeft className="w-3 h-3" strokeWidth={1.8} />
                       </Link>
                     ) : (
-                      <div className="flex items-center gap-2 px-4 pt-2 text-[11px] font-bold text-muted-foreground">
+                      <div className="px-4 pt-2.5 text-[11px] font-bold text-muted-foreground">
                         {m.competition}
                       </div>
                     )}

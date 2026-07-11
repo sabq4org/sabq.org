@@ -12,6 +12,7 @@
  * تلقائيًّا للوضع الحيّ متى توفّرت المباريات.
  */
 import { withSWR } from "../memoryCache";
+import { applyProvisionalTable } from "./liveStandings";
 import {
   SAUDI_TEAM_ID,
   WC_FINISHED_STATUSES,
@@ -88,6 +89,10 @@ export interface AcStandingRow {
   goalsAgainst: number;
   goalsDiff: number;
   points: number;
+  /** صفّ يتأثّر بمباراة جارية (ترتيب مبدئي لحظي). */
+  live?: boolean;
+  /** حراك المركز اللحظي: موجب = صعد، سالب = هبط. */
+  liveDelta?: number;
 }
 
 export interface AcGroup {
@@ -191,8 +196,9 @@ const GROUP_ORDINALS = [
  * مجموعات النهائيات + ترتيبها — **محسوبة من جدول المباريات نفسه**، لا من نقطة
  * `standings` (التي تُرجع حاليًّا مجموعات التصفيات «Promotion» المضلِّلة).
  * الفِرق التي تلعب ضد بعضها في دور المجموعات = مجموعة واحدة (Union-Find على
- * مباريات «Group Stage»). الترتيب يُحسب من النتائج المنتهية فقط (قبل البطولة:
- * أصفار = تكوين المجموعات فحسب). مجموعة المضيف (السعودية) أولًا.
+ * مباريات «Group Stage»). الأساس من النتائج المنتهية؛ المباريات الجارية تُطبَّق
+ * مبدئيًّا عبر `applyProvisionalTable` فيتحرّك الجدول مع كل هدف. مجموعة المضيف
+ * (السعودية) أولًا.
  */
 function buildGroupsFromFixtures(fixtures: AcFixture[], teams: AcTeam[]): AcGroup[] {
   const teamMap = new Map<number, AcTeam>();
@@ -303,15 +309,32 @@ function buildGroupsFromFixtures(fixtures: AcFixture[], teams: AcTeam[]): AcGrou
         a.team.name.localeCompare(b.team.name, "ar"),
     );
     rows.forEach((row, i) => (row.rank = i + 1));
-    return { name: `المجموعة ${GROUP_ORDINALS[idx] ?? String(idx + 1)}`, rows };
+    const liveInGroup = gs.filter(
+      (f) =>
+        f.status.live &&
+        !f.status.finished &&
+        members.get(r)!.has(f.home.id) &&
+        members.get(r)!.has(f.away.id),
+    );
+    return {
+      name: `المجموعة ${GROUP_ORDINALS[idx] ?? String(idx + 1)}`,
+      rows: applyProvisionalTable(rows, liveInGroup),
+    };
   });
 }
 
 /** مجموعات النهائيات وترتيبها (محسوبة من الجدول) — فارغة قبل اعتماد القرعة. */
 export async function getAcStandings(): Promise<AcGroup[]> {
+  // لا نُخزّن الناتج النهائي طويلًا: أثناء المباريات الجارية يجب أن يتحرّك
+  // الترتيب مع النتيجة. كاش المباريات/الفرق يكفي؛ عند غياب الحيّ نُخزّن الأساس.
+  const [fixtures, teams] = await Promise.all([getAcFixtures(), getAcTeams()]);
+  const hasLive = fixtures.some(
+    (f) => f.roundEn.startsWith("Group Stage") && f.status.live && !f.status.finished,
+  );
+  if (hasLive) return buildGroupsFromFixtures(fixtures, teams);
   return withSWR("ac:standings", STANDINGS_TTL, STANDINGS_TTL * 3, async () => {
-    const [fixtures, teams] = await Promise.all([getAcFixtures(), getAcTeams()]);
-    return buildGroupsFromFixtures(fixtures, teams);
+    const [fx, tm] = await Promise.all([getAcFixtures(), getAcTeams()]);
+    return buildGroupsFromFixtures(fx, tm);
   });
 }
 

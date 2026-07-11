@@ -56,6 +56,8 @@ export default function GulfCup() {
   const { data: standingsData } = useQuery<{ groups: GcGroup[] }>({
     queryKey: ["/api/gulf-cup/standings"],
     staleTime: 5 * 60_000,
+    refetchInterval: (query) =>
+      (query.state.data?.groups ?? []).some((g) => g.rows.some((r) => r.live)) ? 8_000 : false,
   });
 
   // سجلّ البطولة (ثابت) — يغذّي بادج «حامل اللقب» في الهيرو وقسم السجلّ

@@ -74,7 +74,7 @@ function CountdownChips({ timestamp, big = false }: { timestamp: number; big?: b
     { value: countdown.seconds, label: "ثانية" },
   ];
   return (
-    <div className="flex items-center justify-center gap-2" aria-label="العد التنازلي للانطلاق">
+    <div className="flex items-center justify-center gap-2" dir="ltr" aria-label="العد التنازلي للانطلاق">
       {chips.map((chip) => (
         <div
           key={chip.label}

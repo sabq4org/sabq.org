@@ -1623,3 +1623,213 @@ export async function getCommentary(
   if (!r) return EMPTY_COMMENTARY;
   return withSWR(`wc:commentary:${r.smId}`, r.ttl, r.ttl * 3, () => buildCommentary(r.smId));
 }
+
+// ---------- مباريات يوم مجمّعة حسب الدوري (leagues/date) — تجربة ----------
+// نداء واحد يعيد الدوريات التي لها مباريات في التاريخ مع مباريات `today`
+// (نتيجة + فرق + مرحلة + مجموعة + جولة + حالة). مناسب لـ «مباريات العالم اليوم»
+// مع فلترة باقة سبق (فئة ≤2 + دورياتنا المعروفة). ليس لجدول الترتيب.
+
+const SM_TODAY_INCLUDE =
+  "today.scores;today.participants;today.stage;today.group;today.round;today.state;country";
+const SM_TODAY_TTL = 30 * 1000;
+const SM_TODAY_SWR = 60 * 1000;
+
+/** دوريات باقة سبق التي نُبقيها حتى لو كانت فئتها أعلى من 2 */
+const SM_PRIORITY_LEAGUE_IDS = new Set([
+  732, // World Cup
+  944, // Saudi Pro League (Roshn)
+  950, // King's Cup
+  953, // Crown Prince Cup
+  1085, // AFC Champions League Elite
+]);
+
+export interface SmTodayTeam {
+  id: number;
+  name: string;
+  logo: string | null;
+}
+
+export interface SmTodayFixture {
+  id: number;
+  name: string;
+  startingAt: string;
+  timestamp: number;
+  status: {
+    code: string;
+    label: string;
+    elapsed: number | null;
+    live: boolean;
+    finished: boolean;
+  };
+  home: SmTodayTeam;
+  away: SmTodayTeam;
+  goals: { home: number | null; away: number | null };
+  round: string | null;
+  stage: string | null;
+  group: string | null;
+}
+
+export interface SmTodayLeague {
+  id: number;
+  name: string;
+  shortCode: string | null;
+  imagePath: string | null;
+  category: number;
+  country: string | null;
+  countryCode: string | null;
+  fixtures: SmTodayFixture[];
+}
+
+export interface SmTodayBoard {
+  available: boolean;
+  date: string;
+  leagues: SmTodayLeague[];
+  /** عدد الدوريات التي استُبعدت بالفلتر (للتجربة/التشخيص) */
+  filteredOut: number;
+}
+
+function smGoalsFromScores(scores: any[] | undefined, side: "home" | "away"): number | null {
+  if (!Array.isArray(scores) || scores.length === 0) return null;
+  const current = scores.find(
+    (s) => s?.description === "CURRENT" && s?.score?.participant === side
+  );
+  if (current && typeof current.score?.goals === "number") return current.score.goals;
+  const any = scores.find((s) => s?.score?.participant === side);
+  return typeof any?.score?.goals === "number" ? any.score.goals : null;
+}
+
+function smParticipant(parts: any[] | undefined, side: "home" | "away"): SmTodayTeam {
+  const p = Array.isArray(parts)
+    ? parts.find((x) => x?.meta?.location === side) ?? null
+    : null;
+  return {
+    id: Number(p?.id) || 0,
+    name: String(p?.name || (side === "home" ? "مضيف" : "ضيف")),
+    logo: typeof p?.image_path === "string" ? p.image_path : null,
+  };
+}
+
+function normalizeSmTodayFixture(raw: any): SmTodayFixture | null {
+  if (!raw || typeof raw.id !== "number") return null;
+  const stateDev = String(raw?.state?.developer_name || "").toUpperCase();
+  const stateShort = String(raw?.state?.short_name || raw?.state?.name || stateDev || "NS");
+  const live = LIVE_STATES.has(stateDev);
+  const finished = FINISHED_STATES.has(stateDev) || stateDev === "FT" || Number(raw.state_id) === 5;
+  const minute =
+    typeof raw?.state?.payload?.minute === "number"
+      ? raw.state.payload.minute
+      : typeof raw?.minute === "number"
+        ? raw.minute
+        : null;
+  const ts =
+    typeof raw.starting_at_timestamp === "number"
+      ? raw.starting_at_timestamp
+      : raw.starting_at
+        ? Math.floor(new Date(String(raw.starting_at).replace(" ", "T") + "Z").getTime() / 1000)
+        : 0;
+
+  return {
+    id: raw.id,
+    name: String(raw.name || ""),
+    startingAt: String(raw.starting_at || ""),
+    timestamp: ts,
+    status: {
+      code: stateDev || stateShort || "NS",
+      label: stateShort || stateDev || "NS",
+      elapsed: live ? minute : null,
+      live,
+      finished,
+    },
+    home: smParticipant(raw.participants, "home"),
+    away: smParticipant(raw.participants, "away"),
+    goals: {
+      home: smGoalsFromScores(raw.scores, "home"),
+      away: smGoalsFromScores(raw.scores, "away"),
+    },
+    round: raw?.round?.name ? String(raw.round.name) : null,
+    stage: raw?.stage?.name ? String(raw.stage.name) : null,
+    group: raw?.group?.name ? String(raw.group.name) : null,
+  };
+}
+
+function shouldKeepSmLeague(raw: any, includeAll: boolean): boolean {
+  if (includeAll) return true;
+  const id = Number(raw?.id) || 0;
+  if (SM_PRIORITY_LEAGUE_IDS.has(id)) return true;
+  const category = Number(raw?.category);
+  // فئة 1–2 = دوريات/كؤوس بارزة في باقة SportMonks؛ 3+ هامشية غالبًا
+  return Number.isFinite(category) && category > 0 && category <= 2;
+}
+
+async function fetchLeaguesByDate(day: string, includeAll: boolean): Promise<SmTodayBoard> {
+  if (!isSportmonksConfigured()) {
+    return { available: false, date: day, leagues: [], filteredOut: 0 };
+  }
+
+  const leagues: SmTodayLeague[] = [];
+  let filteredOut = 0;
+  let page = 1;
+  let hasMore = true;
+
+  while (hasMore && page <= 8) {
+    const resp = await smGet(`leagues/date/${day}`, {
+      include: SM_TODAY_INCLUDE,
+      per_page: "50",
+      page: String(page),
+    });
+    const rows: any[] = Array.isArray(resp?.data) ? resp.data : [];
+    for (const raw of rows) {
+      if (!raw || typeof raw.id !== "number") continue;
+      if (!shouldKeepSmLeague(raw, includeAll)) {
+        filteredOut += 1;
+        continue;
+      }
+      const fixtures = (Array.isArray(raw.today) ? raw.today : [])
+        .map(normalizeSmTodayFixture)
+        .filter((f: SmTodayFixture | null): f is SmTodayFixture => Boolean(f))
+        .sort((a: SmTodayFixture, b: SmTodayFixture) => a.timestamp - b.timestamp);
+      if (fixtures.length === 0) continue;
+      leagues.push({
+        id: raw.id,
+        name: String(raw.name || ""),
+        shortCode: raw.short_code ? String(raw.short_code) : null,
+        imagePath: typeof raw.image_path === "string" ? raw.image_path : null,
+        category: Number(raw.category) || 0,
+        country: raw?.country?.name ? String(raw.country.name) : null,
+        countryCode: raw?.country?.fifa_name || raw?.country?.iso2 || null,
+        fixtures,
+      });
+    }
+    const pagination = resp?.pagination;
+    hasMore = Boolean(pagination?.has_more);
+    page += 1;
+    if (rows.length === 0) break;
+  }
+
+  leagues.sort((a, b) => {
+    const aPri = SM_PRIORITY_LEAGUE_IDS.has(a.id) ? 0 : 1;
+    const bPri = SM_PRIORITY_LEAGUE_IDS.has(b.id) ? 0 : 1;
+    if (aPri !== bPri) return aPri - bPri;
+    if (a.category !== b.category) return a.category - b.category;
+    return a.name.localeCompare(b.name, "en");
+  });
+
+  return { available: true, date: day, leagues, filteredOut };
+}
+
+/**
+ * مباريات يوم مجمّعة حسب الدوري عبر SportMonks `leagues/date/{date}`.
+ * @param date YYYY-MM-DD (UTC تقريبًا كما يعيد المزوّد)
+ * @param includeAll إن true تُعرض كل الدوريات دون فلتر فئة
+ */
+export async function getSmLeaguesByDate(
+  date?: string,
+  includeAll = false
+): Promise<SmTodayBoard> {
+  const day =
+    date && /^\d{4}-\d{2}-\d{2}$/.test(date)
+      ? date
+      : new Date().toISOString().slice(0, 10);
+  const key = `sm:leagues-date:${day}:${includeAll ? "all" : "top"}`;
+  return withSWR(key, SM_TODAY_TTL, SM_TODAY_SWR, () => fetchLeaguesByDate(day, includeAll));
+}

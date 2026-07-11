@@ -549,19 +549,35 @@ struct GcGroupCard: View {
 
     private func standingRow(_ row: GcStandingRow) -> some View {
         let qualifies = row.rank <= 2
+        let isLive = row.live == true
+        let delta = row.liveDelta ?? 0
         return HStack(spacing: 0) {
             HStack(spacing: 8) {
                 Rectangle()
                     .fill(qualifies ? GcTheme.qualifyBar : Color.clear)
                     .frame(width: 3, height: 26).clipShape(Capsule())
-                Text("\(row.rank)")
-                    .font(GulfCupFonts.app(size: 12, weight: .bold))
-                    .foregroundStyle(qualifies ? GcTheme.emerald : GcTheme.inkFaint)
-                    .frame(width: 14)
+                HStack(spacing: 2) {
+                    Text("\(row.rank)")
+                        .font(GulfCupFonts.app(size: 12, weight: .bold))
+                        .foregroundStyle(qualifies ? GcTheme.emerald : GcTheme.inkFaint)
+                        .frame(width: 14)
+                    if isLive {
+                        Image(systemName: delta > 0 ? "arrow.up" : delta < 0 ? "arrow.down" : "minus")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(delta > 0 ? GcTheme.emerald : delta < 0 ? GcTheme.crimson : GcTheme.inkFaint)
+                    }
+                }
                 GcTeamLogo(logo: row.team.logo, size: 24)
                 Text(row.team.name)
                     .font(GulfCupFonts.app(size: 12.5, weight: qualifies ? .bold : .regular))
                     .foregroundStyle(GcTheme.ink).lineLimit(1)
+                if isLive {
+                    Text(L("state.live"))
+                        .font(GulfCupFonts.app(size: 8, weight: .bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Capsule().fill(GcTheme.liveRed))
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -579,7 +595,10 @@ struct GcGroupCard: View {
                 .frame(width: 30)
         }
         .padding(.horizontal, 13).padding(.vertical, 9)
-        .background(row.team.id == highlightTeamId ? GcTheme.gold.opacity(0.07) : Color.clear)
+        .background(
+            isLive ? GcTheme.liveRed.opacity(0.05)
+                : row.team.id == highlightTeamId ? GcTheme.gold.opacity(0.07) : Color.clear
+        )
         .contentShape(Rectangle())
     }
 

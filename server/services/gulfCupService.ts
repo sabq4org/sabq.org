@@ -11,6 +11,7 @@
  * خلف كاش SWR. أفضل جهد بالكامل: أي فشل في API-Football يُبقي الأساس الثابت.
  */
 import { withSWR } from "../memoryCache";
+import { applyProvisionalTable } from "./liveStandings";
 import {
   SAUDI_TEAM_ID,
   WC_FINISHED_STATUSES,
@@ -93,6 +94,10 @@ export interface GcStandingRow {
   goalsAgainst: number;
   goalsDiff: number;
   points: number;
+  /** صفّ يتأثّر بمباراة جارية (ترتيب مبدئي لحظي). */
+  live?: boolean;
+  /** حراك المركز اللحظي: موجب = صعد، سالب = هبط. */
+  liveDelta?: number;
 }
 
 export interface GcGroup {
@@ -257,67 +262,85 @@ export async function getGcFixtures(): Promise<GcFixture[]> {
   });
 }
 
-/** مجموعتا البطولة وترتيبهما — محسوب من النتائج المنتهية (أصفار قبل الانطلاق). */
-export async function getGcStandings(): Promise<GcGroup[]> {
-  return withSWR("gc:standings", STANDINGS_TTL, STANDINGS_TTL * 3, async () => {
-    const fixtures = await getGcFixtures();
-    type Stat = { played: number; win: number; draw: number; lose: number; gf: number; ga: number };
-    const stats = new Map<number, Stat>();
-    const ensure = (id: number): Stat => {
-      if (!stats.has(id)) stats.set(id, { played: 0, win: 0, draw: 0, lose: 0, gf: 0, ga: 0 });
-      return stats.get(id)!;
-    };
-    for (const f of fixtures) {
-      if (!f.roundEn.startsWith("Group Stage") || !f.status.finished) continue;
-      const hg = f.goals.home;
-      const ag = f.goals.away;
-      if (hg == null || ag == null) continue;
-      const h = ensure(f.home.id);
-      const a = ensure(f.away.id);
-      h.played++;
-      a.played++;
-      h.gf += hg;
-      h.ga += ag;
-      a.gf += ag;
-      a.ga += hg;
-      if (hg > ag) {
-        h.win++;
-        a.lose++;
-      } else if (hg < ag) {
-        a.win++;
-        h.lose++;
-      } else {
-        h.draw++;
-        a.draw++;
-      }
+/** يبني ترتيب المجموعات من النتائج المنتهية ثم يطبّق المباريات الجارية مبدئيًّا. */
+function buildGcGroupsFromFixtures(fixtures: GcFixture[]): GcGroup[] {
+  type Stat = { played: number; win: number; draw: number; lose: number; gf: number; ga: number };
+  const stats = new Map<number, Stat>();
+  const ensure = (id: number): Stat => {
+    if (!stats.has(id)) stats.set(id, { played: 0, win: 0, draw: 0, lose: 0, gf: 0, ga: 0 });
+    return stats.get(id)!;
+  };
+  for (const f of fixtures) {
+    if (!f.roundEn.startsWith("Group Stage") || !f.status.finished) continue;
+    const hg = f.goals.home;
+    const ag = f.goals.away;
+    if (hg == null || ag == null) continue;
+    const h = ensure(f.home.id);
+    const a = ensure(f.away.id);
+    h.played++;
+    a.played++;
+    h.gf += hg;
+    h.ga += ag;
+    a.gf += ag;
+    a.ga += hg;
+    if (hg > ag) {
+      h.win++;
+      a.lose++;
+    } else if (hg < ag) {
+      a.win++;
+      h.lose++;
+    } else {
+      h.draw++;
+      a.draw++;
     }
+  }
 
-    return GC_GROUPS.map((group): GcGroup => {
-      const rows: GcStandingRow[] = group.teamIds.map((id) => {
-        const s = stats.get(id) ?? { played: 0, win: 0, draw: 0, lose: 0, gf: 0, ga: 0 };
-        return {
-          rank: 0,
-          team: seedTeam(id),
-          played: s.played,
-          win: s.win,
-          draw: s.draw,
-          lose: s.lose,
-          goalsFor: s.gf,
-          goalsAgainst: s.ga,
-          goalsDiff: s.gf - s.ga,
-          points: s.win * 3 + s.draw,
-        };
-      });
-      rows.sort(
-        (a, b) =>
-          b.points - a.points ||
-          b.goalsDiff - a.goalsDiff ||
-          b.goalsFor - a.goalsFor ||
-          a.team.name.localeCompare(b.team.name, "ar"),
-      );
-      rows.forEach((row, i) => (row.rank = i + 1));
-      return { name: group.name, rows };
+  return GC_GROUPS.map((group): GcGroup => {
+    const memberIds = new Set(group.teamIds);
+    const rows: GcStandingRow[] = group.teamIds.map((id) => {
+      const s = stats.get(id) ?? { played: 0, win: 0, draw: 0, lose: 0, gf: 0, ga: 0 };
+      return {
+        rank: 0,
+        team: seedTeam(id),
+        played: s.played,
+        win: s.win,
+        draw: s.draw,
+        lose: s.lose,
+        goalsFor: s.gf,
+        goalsAgainst: s.ga,
+        goalsDiff: s.gf - s.ga,
+        points: s.win * 3 + s.draw,
+      };
     });
+    rows.sort(
+      (a, b) =>
+        b.points - a.points ||
+        b.goalsDiff - a.goalsDiff ||
+        b.goalsFor - a.goalsFor ||
+        a.team.name.localeCompare(b.team.name, "ar"),
+    );
+    rows.forEach((row, i) => (row.rank = i + 1));
+    const liveInGroup = fixtures.filter(
+      (f) =>
+        f.roundEn.startsWith("Group Stage") &&
+        f.status.live &&
+        !f.status.finished &&
+        memberIds.has(f.home.id) &&
+        memberIds.has(f.away.id),
+    );
+    return { name: group.name, rows: applyProvisionalTable(rows, liveInGroup) };
+  });
+}
+
+/** مجموعتا البطولة وترتيبهما — منتهية نهائيًّا + جارية مبدئيًّا (أصفار قبل الانطلاق). */
+export async function getGcStandings(): Promise<GcGroup[]> {
+  const fixtures = await getGcFixtures();
+  const hasLive = fixtures.some(
+    (f) => f.roundEn.startsWith("Group Stage") && f.status.live && !f.status.finished,
+  );
+  if (hasLive) return buildGcGroupsFromFixtures(fixtures);
+  return withSWR("gc:standings", STANDINGS_TTL, STANDINGS_TTL * 3, async () => {
+    return buildGcGroupsFromFixtures(await getGcFixtures());
   });
 }
 

@@ -590,14 +590,27 @@ struct WCTeamSheet: View {
         let qualify: Color = row.qualifyStatus != nil
             ? row.qualifyColor
             : (row.rank <= 2 ? WCTheme.emeraldDeep : (row.rank == 3 ? WCTheme.gold : .clear))
+        let isLive = row.live == true
+        let delta = row.liveDelta ?? 0
         let content = HStack(spacing: 8) {
-            Text("\(row.rank)").foregroundStyle(WCTheme.onDarkDim).frame(width: 16)
+            HStack(spacing: 2) {
+                Text("\(row.rank)").foregroundStyle(WCTheme.onDarkDim).frame(width: 16)
+                if isLive {
+                    Image(systemName: delta > 0 ? "arrow.up" : delta < 0 ? "arrow.down" : "minus")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(delta > 0 ? WCTheme.emeraldDeep : delta < 0 ? WCTheme.liveRed : WCTheme.onDarkDim)
+                }
+            }
             WCTeamLogo(team: row.team, size: 20, ring: WCTheme.cardStroke)
             Text(row.team.name)
                 .font(SabqFonts.app(size: 13, weight: isCurrent ? .black : .semibold))
                 .foregroundStyle(WCTheme.onDark).lineLimit(1)
-            if row.live == true {
-                Circle().fill(WCTheme.liveRed).frame(width: 6, height: 6)
+            if isLive {
+                Text("مباشر")
+                    .font(SabqFonts.app(size: 8, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Capsule().fill(WCTheme.liveRed))
             }
             if let label = row.qualifyLabel {
                 Text(label)

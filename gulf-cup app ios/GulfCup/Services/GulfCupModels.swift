@@ -53,6 +53,8 @@ struct GcStandingRow: Decodable, Identifiable, Hashable {
     let goalsAgainst: Int
     let goalsDiff: Int
     let points: Int
+    let live: Bool?
+    let liveDelta: Int?
     var id: Int { team.id }
 }
 
