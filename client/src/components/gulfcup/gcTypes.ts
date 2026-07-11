@@ -125,6 +125,63 @@ export interface GcH2HSummary {
   recent: GcH2HMatch[];
 }
 
+// ---------- إثراء TheSports (اختيارية كلها — تغيب قبل توفر بيانات المزوّد) ----------
+
+export interface GcRichLineupPlayer {
+  id: string;
+  name: string;
+  number: number | null;
+  position: string | null;
+  x: number | null;
+  y: number | null;
+  rating: number | null;
+  photo: string | null;
+  captain: boolean;
+  starter: boolean;
+}
+
+export interface GcRichLineup {
+  confirmed: boolean;
+  homeFormation: string | null;
+  awayFormation: string | null;
+  home: GcRichLineupPlayer[];
+  away: GcRichLineupPlayer[];
+}
+
+export interface GcTrend {
+  perMinutes: number;
+  values: { minute: number; value: number }[];
+}
+
+export interface GcTvChannel {
+  name: string;
+  country: string | null;
+  logo: string | null;
+}
+
+export interface GcPlayerMatchStat {
+  playerId: string;
+  name: string;
+  photo: string | null;
+  side: "home" | "away" | null;
+  starter: boolean;
+  minutes: number;
+  rating: number | null;
+  values: Record<string, number>;
+}
+
+export interface GcInjury {
+  player: string;
+  reason: string | null;
+  missedMatches: number | null;
+}
+
+export interface GcFifaRank {
+  rank: number;
+  points: number | null;
+  change: number | null;
+}
+
 export interface GcMatchDetail {
   fixture: GcFixture;
   events: GcMatchEvent[];
@@ -132,6 +189,12 @@ export interface GcMatchDetail {
   statistics: GcStatistic[];
   headToHead: GcFixture[];
   history: GcH2HSummary | null;
+  lineupsRich?: GcRichLineup | null;
+  trend?: GcTrend | null;
+  tv?: GcTvChannel[];
+  playerStats?: GcPlayerMatchStat[];
+  injuries?: { home: GcInjury[]; away: GcInjury[] } | null;
+  fifa?: { home: GcFifaRank | null; away: GcFifaRank | null } | null;
 }
 
 // ---------- الهدّافون + سجلّ البطولة (يطابقان الخادم) ----------
