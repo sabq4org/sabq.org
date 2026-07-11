@@ -2317,6 +2317,21 @@ export const gcMotmVotes = pgTable("gc_motm_votes", {
 
 export type GcMotmVote = typeof gcMotmVotes.$inferSelect;
 
+// «فانتازي خليجي المصغّر»: تشكيلة من 7 لاعبين ضمن ميزانية، ونقاطها من
+// تقييمات TheSports الفعلية لكل مباراة (يُضاعَف القائد). صفّ واحد لكل مستخدم.
+export const gcFantasySquads = pgTable("gc_fantasy_squads", {
+  userId: varchar("user_id").references(() => users.id).primaryKey(),
+  // معرّفات اللاعبين لدى TheSports (نصية) — 7 عناصر.
+  playerIds: jsonb("player_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  captainId: varchar("captain_id").notNull().default(""),
+  // إجمالي القيمة المصروفة وقت الحفظ (لعرض «المتبقّي» دون إعادة حساب).
+  spent: integer("spent").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type GcFantasySquad = typeof gcFantasySquads.$inferSelect;
+
 export type GcPrediction = typeof gcPredictions.$inferSelect;
 export type GcPredictionMatch = typeof gcPredictionMatches.$inferSelect;
 export type GcLongPrediction = typeof gcLongPredictions.$inferSelect;

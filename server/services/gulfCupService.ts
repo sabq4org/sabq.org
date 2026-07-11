@@ -1580,4 +1580,91 @@ export async function getGcStars(limit = 20): Promise<GcStarPlayer[]> {
   }).catch(() => []);
 }
 
+// ---------- تجميعة الفانتازي: مجموعة اللاعبين بالأسعار + نقاط التقييمات ----------
+
+export interface GcFantasyPoolPlayer {
+  id: string;
+  name: string;
+  team: GcTeam | null;
+  position: string | null;
+  /** السعر (نقاط ميزانية) مشتق من القيمة السوقية، أو سعر أساسي عند غيابها. */
+  price: number;
+}
+
+const FANTASY_POOL_TTL = 6 * 60 * 60 * 1000;
+const FANTASY_POINTS_TTL = 5 * 60 * 1000;
+const FANTASY_BASE_PRICE = 4;
+
+/** يحوّل القيمة السوقية إلى سعر ميزانية 4..15 (لوغاريتمي كي لا يحتكر النجوم). */
+function priceFromMarket(value: number | undefined): number {
+  if (!value || value <= 0) return FANTASY_BASE_PRICE;
+  const m = value / 1_000_000; // بالمليون
+  const price = Math.round(FANTASY_BASE_PRICE + Math.min(Math.log10(m + 1) * 6, 11));
+  return Math.max(FANTASY_BASE_PRICE, Math.min(price, 15));
+}
+
+/** مجموعة لاعبي البطولة بالأسعar — من قوائم المنتخبات + سوق TheSports. */
+export async function getGcFantasyPool(): Promise<GcFantasyPoolPlayer[]> {
+  if (!GC_TS_COMPETITION_ID) return [];
+  return withSWR("gc:fantasy:pool", FANTASY_POOL_TTL, FANTASY_POOL_TTL * 2, async () => {
+    const [market, bridge] = await Promise.all([
+      getTsCompetitionPlayerMarket(GC_TS_COMPETITION_ID),
+      getGcTeamBridge(),
+    ]);
+    if (bridge.size === 0) return [];
+    const squads = await Promise.all(
+      GC_TEAM_IDS.map(async (teamId) => {
+        const uuid = bridge.get(teamId);
+        if (!uuid) return { teamId, players: [] as Awaited<ReturnType<typeof getTsTeamSquad>> };
+        return { teamId, players: await getTsTeamSquad(uuid).catch(() => []) };
+      }),
+    );
+    const flat: { id: string; rawName: string; team: GcTeam; position: string | null; price: number }[] = [];
+    for (const squad of squads) {
+      for (const p of squad.players) {
+        flat.push({
+          id: p.id,
+          rawName: p.name,
+          team: seedTeam(squad.teamId),
+          position: p.position,
+          price: priceFromMarket(market.get(p.id)?.marketValue ?? undefined),
+        });
+      }
+    }
+    if (flat.length === 0) return [];
+    const tr = await resolveNames(flat.map((f) => f.rawName)).catch(
+      () => (n: string | null | undefined) => n ?? "",
+    );
+    return flat.map((f): GcFantasyPoolPlayer => ({
+      id: f.id,
+      name: tr(f.rawName),
+      team: f.team,
+      position: f.position,
+      price: f.price,
+    }));
+  }).catch(() => []);
+}
+
+/**
+ * نقاط الفانتازي لكل لاعب — مجموع تقييمات TheSports عبر كل المباريات المنتهية
+ * (تقييم 6.0 = خط الأساس؛ النقاط = (rating − 6) × 10 مقرّبة، فالأداء المميّز
+ * يُكافأ والضعيف يُخصم). يُحسب عند القراءة بكاش قصير — لا وظيفة تسوية منفصلة.
+ */
+export async function getGcFantasyPoints(): Promise<Map<string, number>> {
+  return withSWR("gc:fantasy:points", FANTASY_POINTS_TTL, FANTASY_POINTS_TTL * 3, async () => {
+    const fixtures = await getGcFixtures().catch(() => [] as GcFixture[]);
+    const finished = fixtures.filter((f) => f.status.finished && f.home.id > 0 && f.away.id > 0);
+    const points = new Map<string, number>();
+    for (const fx of finished) {
+      const detail = await getGcMatchDetail(fx.id).catch(() => null);
+      for (const p of detail?.playerStats ?? []) {
+        if (p.rating == null) continue;
+        const pts = Math.round((p.rating - 6) * 10);
+        points.set(p.playerId, (points.get(p.playerId) ?? 0) + pts);
+      }
+    }
+    return points;
+  }).catch(() => new Map<string, number>());
+}
+
 export { TIMEZONE as GC_TIMEZONE, LEAGUE_ID as GC_LEAGUE_ID, SEASON as GC_SEASON };

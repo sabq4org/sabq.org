@@ -52,6 +52,7 @@ import wcPredictionsRouter from "./wcPredictions";
 import acPredictionsRouter from "./acPredictions";
 import gcPredictionsRouter from "./gcPredictions";
 import gcMajlisRouter from "./gcMajlis";
+import gcFantasyRouter from "./gcFantasy";
 import rslPredictionsRouter from "./rslPredictions";
 import { registerCupPredictionRoutes } from "./cupPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
@@ -125,6 +126,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(acPredictionsRouter);
   app.use(gcPredictionsRouter);
   app.use(gcMajlisRouter);
+  app.use(gcFantasyRouter);
   app.use(rslPredictionsRouter);
   registerCupPredictionRoutes(app);
   app.use(mediaLibraryRouter);
