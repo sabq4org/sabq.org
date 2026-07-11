@@ -53,10 +53,43 @@ const POSTMATCH_CRON_WINDOW_MS = 24 * 60 * 60 * 1000;
 const MAX_GENERATIONS_PER_CRON = Number(process.env.SPORTMONKS_NEWS_MAX_PER_RUN || 3);
 
 const kindToSlugKind = (kind: SmNewsKind) => (kind === "postmatch" ? "report" : "preview");
+
+// ---------- هوية البطولة في النص والروابط ----------
+// البرومبتات كانت مونديالية حصرًا؛ الآن تتفرّع بهوية البطولة: خليجي 27 متى
+// ضُبط SM_GULF_LEAGUE_ID (نفس مفتاح تشكيلة الجولة)، والمونديال لما سواه.
+const GULF_SM_LEAGUE_ID = Number(process.env.SM_GULF_LEAGUE_ID || 0);
+
+interface SmLeagueBrand {
+  tournament: string;
+  hubFooter: string;
+}
+
+function leagueBrand(leagueId?: number | null): SmLeagueBrand {
+  if (GULF_SM_LEAGUE_ID > 0 && leagueId === GULF_SM_LEAGUE_ID) {
+    return {
+      tournament: "كأس الخليج العربي «خليجي 27»",
+      hubFooter:
+        '<p>تابع <a href="/gulf-cup">تغطية خليجي 27 لحظة بلحظة — النتائج وجدول المباريات والترتيب</a> على سبق.</p>',
+    };
+  }
+  return {
+    tournament: "كأس العالم 2026",
+    hubFooter:
+      '<p>تابع <a href="/world-cup">تغطية كأس العالم 2026 لحظة بلحظة — النتائج وجدول المباريات وترتيب المجموعات</a> على سبق.</p>',
+  };
+}
+
 // معرّف المباراة فريد عالميًّا عند SportMonks؛ المونديال يحتفظ بسابقته التاريخية
-// (استمرارية منع التكرار) وبقية البطولات على سابقة عامة
-const slugFor = (kind: SmNewsKind, fixtureId: number, leagueId?: number) =>
-  `${leagueId == null || leagueId === WC_LEAGUE_ID ? SLUG_PREFIX : "smfx"}-${kindToSlugKind(kind)}-${fixtureId}`;
+// (استمرارية منع التكرار)، وخليجي بسابقة خاصة، وبقية البطولات على سابقة عامة
+const slugFor = (kind: SmNewsKind, fixtureId: number, leagueId?: number) => {
+  const prefix =
+    leagueId == null || leagueId === WC_LEAGUE_ID
+      ? SLUG_PREFIX
+      : GULF_SM_LEAGUE_ID > 0 && leagueId === GULF_SM_LEAGUE_ID
+        ? "smgc27"
+        : "smfx";
+  return `${prefix}-${kindToSlugKind(kind)}-${fixtureId}`;
+};
 
 // ---------- تعريب أسماء المنتخبات (إرشاد للنموذج + عرض اللوحة) ----------
 // أسماء المنتخبات تصل من SportMonks بالإنجليزية فقط (لا معرّف API-Football)،
@@ -282,7 +315,7 @@ function buildPrematchPrompt(item: SmNewsItem): string {
     : "";
   return `${EDITORIAL_RULES}
 
-المطلوب: معاينة صحفية (تقرير ما قبل المباراة) لمباراة في كأس العالم 2026.
+المطلوب: معاينة صحفية (تقرير ما قبل المباراة) لمباراة في ${leagueBrand(item.league_id).tournament}.
 
 المباراة: ${localizeMatchName(item.fixture?.name)}
 ${kickoff}
@@ -302,7 +335,7 @@ function buildPostmatchPrompt(item: SmNewsItem): string {
     : "";
   return `${EDITORIAL_RULES}
 
-المطلوب: تقرير صحفي لمباراة انتهت في كأس العالم 2026.
+المطلوب: تقرير صحفي لمباراة انتهت في ${leagueBrand(item.league_id).tournament}.
 
 المباراة: ${localizeMatchName(item.fixture?.name)}
 ${result}
@@ -370,8 +403,7 @@ async function generateText(prompt: string): Promise<AIResponse> {
   throw new Error(`[SM News] AI generation failed: ${lastError}`);
 }
 
-const HUB_FOOTER =
-  '<p>تابع <a href="/world-cup">تغطية كأس العالم 2026 لحظة بلحظة — النتائج وجدول المباريات وترتيب المجموعات</a> على سبق.</p>';
+// تذييل الهَب حسب البطولة — انظر leagueBrand.
 
 /**
  * يولّد مسودّة عربية من خبر SportMonks ويحفظها في جدول المقالات.
@@ -393,7 +425,7 @@ async function generateAndStoreDraft(
     title: generated.title,
     slug,
     legacySlug: slug,
-    content: `${generated.content}\n${HUB_FOOTER}`,
+    content: `${generated.content}\n${leagueBrand(item.league_id).hubFooter}`,
     excerpt: (generated.summary || generated.metaDescription).substring(0, 200),
     aiSummary: generated.summary,
     locale: "ar",

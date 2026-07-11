@@ -69,6 +69,10 @@ export function matchImportance(fx: RankableFixture): number {
   const base = fx.category ? CATEGORY_BASE[fx.category] ?? 55 : 55;
   let score = base;
 
+  // خليجي 27: بطولة قصيرة على أرضنا — كل مباراة حدث وطني، فترتقي لعتبة
+  // «المباراة الكبيرة» (80) بمجرد الانطلاق بدل انتظار معزّزات الأهداف.
+  if (fx.competitionSlug === "gulf-cup") score += 18;
+
   const gh = fx.goals.home ?? 0;
   const ga = fx.goals.away ?? 0;
   const total = gh + ga;

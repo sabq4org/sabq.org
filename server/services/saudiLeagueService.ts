@@ -22,6 +22,7 @@ import {
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
 import { getFixtures as getWorldCupMergedFixtures } from "./worldCupService";
+import { getGcFixtures as getGulfCupMergedFixtures, type GcFixture } from "./gulfCupService";
 import { isSyntheticFixtureId } from "./wc2026Bracket";
 import { getPlayerForm as smGetPlayerForm, isSportmonksConfigured } from "./sportmonksService";
 import {
@@ -483,13 +484,46 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
     const ours = rows.filter((r: any) => byId.has(r.league?.id));
     const tr = await fixtureTranslators(ours);
-    return ours
-      .map((r: any): SplLiveBoardItem => {
-        const comp = byId.get(r.league.id)!;
-        return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
-      })
-      .sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => a.timestamp - b.timestamp);
+    let items = ours.map((r: any): SplLiveBoardItem => {
+      const comp = byId.get(r.league.id)!;
+      return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
+    });
+    // خليجي 27: جدوله مركّب محليًّا (أساس ثابت + تراكب المزوّدين) — نستبدل صفوف
+    // المزوّد الخام بجدولنا كي تصل مبارياته للتنبيهات/السنابات حتى قبل ظهور
+    // الموسم لدى API-Football (نفس منطق دمج المونديال في لوحة اليوم).
+    try {
+      const gcLive = (await getGulfCupMergedFixtures()).filter(
+        (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
+      );
+      if (gcLive.length) {
+        const gcComp = byId.get(25);
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
+          ...gcLive.map((fx) => gcFixtureToBoardItem(fx, gcComp ? compDisplayName(gcComp) : "خليجي 27")),
+        ];
+      }
+    } catch {
+      // تعثّر خليجي لا يُسقط اللوحة الحية.
+    }
+    return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => a.timestamp - b.timestamp);
   });
+}
+
+/** تحويل مباراة خليجي (جدول محلي مركّب) إلى عنصر لوحة موحّد. */
+function gcFixtureToBoardItem(fx: GcFixture, competition: string): SplLiveBoardItem {
+  return {
+    id: fx.id,
+    date: fx.date,
+    timestamp: fx.timestamp,
+    status: { ...fx.status, extra: null },
+    round: fx.round,
+    venue: fx.venue,
+    home: { ...fx.home, winner: null },
+    away: { ...fx.away, winner: null },
+    goals: fx.goals,
+    competition,
+    competitionSlug: "gulf-cup",
+  };
 }
 
 /** مفتاح يوم بتوقيت الرياض (YYYY-MM-DD) — لتحديد نطاق "اليوم" محليًا بدقة. */
@@ -537,6 +571,22 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
       }
     } catch {
       // المونديال المتعثر لا يُسقط لوحة اليوم — تبقى صفوف المزوّد الخام.
+    }
+    // خليجي 27: نفس المنطق — الجدول المحلي المركّب يستبدل صفوف المزوّد الخام.
+    try {
+      const gcDay = (await getGulfCupMergedFixtures()).filter(
+        (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
+      );
+      if (gcDay.length) {
+        const gcComp = byId.get(25);
+        const gcName = gcComp ? compDisplayName(gcComp) : "خليجي 27";
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
+          ...gcDay.map((fx) => gcFixtureToBoardItem(fx, gcName)),
+        ];
+      }
+    } catch {
+      // تعثّر خليجي لا يُسقط لوحة اليوم.
     }
     return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => {
       if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
