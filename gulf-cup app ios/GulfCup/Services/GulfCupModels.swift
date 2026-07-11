@@ -460,6 +460,54 @@ struct GcMatchFifa: Decodable, Hashable {
     let away: GcFifaRank?
 }
 
+// ---------- إثراء Sportmonks (اختيارية كلها) ----------
+
+struct GcXg: Decodable, Hashable {
+    let home: Double?
+    let away: Double?
+}
+
+struct GcForecast: Decodable, Hashable {
+    let home: Int
+    let draw: Int
+    let away: Int
+}
+
+struct GcExpectedPlayer: Decodable, Hashable, Identifiable {
+    let name: String
+    let jersey: Int?
+    let row: Int?
+    var id: String { name + String(jersey ?? 0) }
+}
+
+struct GcExpectedSide: Decodable, Hashable {
+    let formation: String?
+    let starters: [GcExpectedPlayer]
+}
+
+struct GcExpectedLineups: Decodable, Hashable {
+    let home: GcExpectedSide?
+    let away: GcExpectedSide?
+}
+
+struct GcReferee: Decodable, Hashable {
+    let name: String
+    let photo: String?
+    let country: String?
+    let matches: Int?
+    let yellowAvg: Double?
+    let penaltiesAvg: Double?
+}
+
+struct GcCommentaryItem: Decodable, Hashable, Identifiable {
+    let minute: Int?
+    let extraMinute: Int?
+    let goal: Bool
+    let important: Bool
+    let text: String
+    var id: String { "\(minute ?? -1)-\(extraMinute ?? 0)-\(text.prefix(24))" }
+}
+
 struct GcMatchDetail: Decodable, Hashable {
     let fixture: GcFixture
     let events: [GcMatchEvent]
@@ -473,6 +521,11 @@ struct GcMatchDetail: Decodable, Hashable {
     let playerStats: [GcPlayerMatchStat]?
     let injuries: GcMatchInjuries?
     let fifa: GcMatchFifa?
+    let xg: GcXg?
+    let forecast: GcForecast?
+    let expectedLineups: GcExpectedLineups?
+    let referee: GcReferee?
+    let commentary: [GcCommentaryItem]?
 }
 
 struct GcDayGroup: Identifiable {

@@ -33,6 +33,16 @@ import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistor
 import { resolveNames } from "./worldCupNameTranslator";
 import { apiFootballGet } from "./apiFootballClient";
 import {
+  getCommentary,
+  getExpectedLineups,
+  getForecast,
+  getMatchReferee,
+  getPressure,
+  getXg,
+  isSportmonksConfigured,
+  resolveSmIdByNames,
+} from "./sportmonksService";
+import {
   getTheSportsFastScore,
   getTheSportsMatchLiveByUuid,
   getTsCompetitionExtra,
@@ -540,6 +550,12 @@ export interface GcMatchDetail {
   playerStats?: GcPlayerMatchStat[];
   injuries?: { home: GcInjury[]; away: GcInjury[] } | null;
   fifa?: { home: GcFifaRank | null; away: GcFifaRank | null } | null;
+  /** إثراء Sportmonks — اختيارية كلها، تغيب بأمان قبل توفر بيانات المزوّد. */
+  xg?: GcXg | null;
+  forecast?: GcForecast | null;
+  expectedLineups?: GcExpectedLineups | null;
+  referee?: GcReferee | null;
+  commentary?: GcCommentaryItem[] | null;
 }
 
 /** تعريب أسماء إحصاءات API-Football الشائعة (يُترك الاسم كما هو إن لم يُعرَّف). */
@@ -1054,6 +1070,78 @@ export async function getGcMatchDetail(fixtureId: number): Promise<GcMatchDetail
     }
   }
 
+  // ---------- إثراء Sportmonks (أفضل جهد — حلّ بالاسم واليوم) ----------
+  let xg: GcXg | null = null;
+  let forecast: GcForecast | null = null;
+  let expectedLineups: GcExpectedLineups | null = null;
+  let referee: GcReferee | null = null;
+  let commentary: GcCommentaryItem[] | null = null;
+  if (isSportmonksConfigured()) {
+    const smId = await getGcSmId(fixture.id).catch(() => null);
+    if (smId) {
+      const matchStarted = fixture.status.live || fixture.status.finished;
+      const ttl = fixture.status.live ? MATCH_DETAIL_LIVE_TTL : MATCH_DETAIL_TTL;
+      const sm = await withSWR(`gc:match:sm:${fixture.id}`, ttl, ttl * 2, async () => {
+        const [x, fc, el, ref, com, pr] = await Promise.all([
+          matchStarted ? getXg(fixture.id, { directSmId: smId }).catch(() => null) : null,
+          getForecast(fixture.id, { directSmId: smId }).catch(() => null),
+          !matchStarted ? getExpectedLineups(fixture.id, { directSmId: smId }).catch(() => null) : null,
+          getMatchReferee(fixture.id, { directSmId: smId }).catch(() => null),
+          matchStarted ? getCommentary(fixture.id, { directSmId: smId }).catch(() => null) : null,
+          matchStarted ? getPressure(fixture.id, { directSmId: smId }).catch(() => null) : null,
+        ]);
+        return { x, fc, el, ref, com, pr };
+      }).catch(() => null);
+
+      if (sm) {
+        if (sm.x?.available) xg = { home: sm.x.home?.xg ?? null, away: sm.x.away?.xg ?? null };
+        if (sm.fc?.available && sm.fc.fulltime) forecast = { ...sm.fc.fulltime };
+        if (sm.el?.available && (sm.el.home || sm.el.away)) {
+          const side = (s: typeof sm.el.home): GcExpectedSide | null =>
+            s
+              ? {
+                  formation: s.formation ?? null,
+                  starters: (s.starters ?? []).map((p) => ({
+                    name: p.name,
+                    jersey: p.jersey ?? null,
+                    row: p.row ?? null,
+                  })),
+                }
+              : null;
+          expectedLineups = { home: side(sm.el.home), away: side(sm.el.away) };
+        }
+        if (sm.ref?.available && sm.ref.name) {
+          referee = {
+            name: sm.ref.name,
+            photo: sm.ref.photo ?? null,
+            country: sm.ref.countryName ?? null,
+            matches: sm.ref.stats?.matches ?? null,
+            yellowAvg: sm.ref.stats?.yellowAvg ?? null,
+            penaltiesAvg: sm.ref.stats?.penaltiesAvg ?? null,
+          };
+        }
+        if (sm.com?.available && sm.com.items.length > 0) {
+          commentary = sm.com.items.slice(0, 40).map((i) => ({
+            minute: i.minute ?? null,
+            extraMinute: i.extraMinute ?? null,
+            goal: i.goal,
+            important: i.important,
+            text: i.textAr || i.textEn || "",
+          }));
+        }
+        // مؤشر الضغط بديل الزخم متى غاب TheSports — نفس مكوّن الواجهة.
+        if (!trend && sm.pr?.available && sm.pr.points.length > 0) {
+          trend = {
+            perMinutes: 1,
+            values: sm.pr.points
+              .filter((p) => p.minute != null)
+              .map((p) => ({ minute: p.minute, value: p.net })),
+          };
+        }
+      }
+    }
+  }
+
   const [homeInjuries, awayInjuries, fifaHome, fifaAway] = await Promise.all([
     fixture.home.id ? getGcTeamInjuryList(fixture.home.id).catch(() => []) : Promise.resolve([]),
     fixture.away.id ? getGcTeamInjuryList(fixture.away.id).catch(() => []) : Promise.resolve([]),
@@ -1075,6 +1163,11 @@ export async function getGcMatchDetail(fixtureId: number): Promise<GcMatchDetail
     injuries:
       homeInjuries.length || awayInjuries.length ? { home: homeInjuries, away: awayInjuries } : null,
     fifa: fifaHome || fifaAway ? { home: fifaHome, away: fifaAway } : null,
+    xg,
+    forecast,
+    expectedLineups,
+    referee,
+    commentary,
   };
 }
 
@@ -1321,6 +1414,96 @@ async function getGcTeamInjuryList(teamId: number): Promise<GcInjury[]> {
       })
       .filter((x): x is GcInjury => x !== null);
   }).catch(() => []);
+}
+
+// ---------- جسر Sportmonks (حلّ بالاسم الإنجليزي + يوم المباراة — محايد للبطولات) ----------
+
+/** أسماء المنتخبات الثمانية بالإنجليزية — ثابتة، تعمل قبل ظهور موسم المزوّد الأساسي. */
+const GC_TEAM_EN: Record<number, string> = {
+  23: "Saudi Arabia",
+  1567: "Iraq",
+  1552: "Oman",
+  1570: "Kuwait",
+  1563: "United Arab Emirates",
+  1569: "Qatar",
+  1547: "Bahrain",
+  1550: "Yemen",
+};
+
+export interface GcFixtureIdentity {
+  fixtureId: number;
+  kickoffIso: string | null;
+  homeNameEn: string | null;
+  awayNameEn: string | null;
+}
+
+/** هوية مباراة للربط مع Sportmonks — من الجدول المحلي بأسماء إنجليزية ثابتة. */
+export async function getGcFixtureIdentity(fixtureId: number): Promise<GcFixtureIdentity | null> {
+  const fx = (await getGcFixtures().catch(() => [] as GcFixture[])).find((f) => f.id === fixtureId);
+  if (!fx || !fx.home.id || !fx.away.id) return null;
+  return {
+    fixtureId,
+    kickoffIso: fx.date,
+    homeNameEn: GC_TEAM_EN[fx.home.id] ?? null,
+    awayNameEn: GC_TEAM_EN[fx.away.id] ?? null,
+  };
+}
+
+/** معرّف Sportmonks للمباراة — null قبل توفر بيانات اليوم لدى المزوّد. */
+export async function getGcSmId(fixtureId: number): Promise<number | null> {
+  if (!isSportmonksConfigured()) return null;
+  const identity = await getGcFixtureIdentity(fixtureId);
+  if (!identity?.homeNameEn || !identity?.awayNameEn) return null;
+  return resolveSmIdByNames({
+    key: `gc:${fixtureId}`,
+    kickoffIso: identity.kickoffIso,
+    homeNameEn: identity.homeNameEn,
+    awayNameEn: identity.awayNameEn,
+  }).catch(() => null);
+}
+
+export interface GcXg {
+  home: number | null;
+  away: number | null;
+}
+
+export interface GcForecast {
+  home: number;
+  draw: number;
+  away: number;
+}
+
+export interface GcExpectedPlayer {
+  name: string;
+  jersey: number | null;
+  row: number | null;
+}
+
+export interface GcExpectedSide {
+  formation: string | null;
+  starters: GcExpectedPlayer[];
+}
+
+export interface GcExpectedLineups {
+  home: GcExpectedSide | null;
+  away: GcExpectedSide | null;
+}
+
+export interface GcReferee {
+  name: string;
+  photo: string | null;
+  country: string | null;
+  matches: number | null;
+  yellowAvg: number | null;
+  penaltiesAvg: number | null;
+}
+
+export interface GcCommentaryItem {
+  minute: number | null;
+  extraMinute: number | null;
+  goal: boolean;
+  important: boolean;
+  text: string;
 }
 
 /** تصنيف الفيفا لمنتخب — null قبل توفّر جسر الفريق أو التصنيف. */

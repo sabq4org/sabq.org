@@ -182,6 +182,50 @@ export interface GcFifaRank {
   change: number | null;
 }
 
+export interface GcXg {
+  home: number | null;
+  away: number | null;
+}
+
+export interface GcForecast {
+  home: number;
+  draw: number;
+  away: number;
+}
+
+export interface GcExpectedPlayer {
+  name: string;
+  jersey: number | null;
+  row: number | null;
+}
+
+export interface GcExpectedSide {
+  formation: string | null;
+  starters: GcExpectedPlayer[];
+}
+
+export interface GcExpectedLineups {
+  home: GcExpectedSide | null;
+  away: GcExpectedSide | null;
+}
+
+export interface GcReferee {
+  name: string;
+  photo: string | null;
+  country: string | null;
+  matches: number | null;
+  yellowAvg: number | null;
+  penaltiesAvg: number | null;
+}
+
+export interface GcCommentaryItem {
+  minute: number | null;
+  extraMinute: number | null;
+  goal: boolean;
+  important: boolean;
+  text: string;
+}
+
 export interface GcMatchDetail {
   fixture: GcFixture;
   events: GcMatchEvent[];
@@ -195,6 +239,11 @@ export interface GcMatchDetail {
   playerStats?: GcPlayerMatchStat[];
   injuries?: { home: GcInjury[]; away: GcInjury[] } | null;
   fifa?: { home: GcFifaRank | null; away: GcFifaRank | null } | null;
+  xg?: GcXg | null;
+  forecast?: GcForecast | null;
+  expectedLineups?: GcExpectedLineups | null;
+  referee?: GcReferee | null;
+  commentary?: GcCommentaryItem[] | null;
 }
 
 // ---------- الهدّافون + سجلّ البطولة (يطابقان الخادم) ----------

@@ -273,6 +273,109 @@ function InjuriesBlock({ detail }: { detail: GcMatchDetail }) {
   );
 }
 
+/** توقّع النموذج (ELO + Sportmonks) — شريط ثلاثي فوز/تعادل/فوز. */
+function ForecastBar({ detail }: { detail: GcMatchDetail }) {
+  const fc = detail.forecast;
+  if (!fc) return null;
+  return (
+    <div className="mb-4">
+      <p className="mb-1.5 text-xs font-bold text-muted-foreground">توقّع النموذج</p>
+      <div className="flex h-2 gap-0.5 overflow-hidden rounded-full" dir="rtl">
+        <div className="bg-emerald-500" style={{ width: `${fc.home}%` }} />
+        <div className="bg-muted-foreground/30" style={{ width: `${fc.draw}%` }} />
+        <div className="bg-amber-400" style={{ width: `${fc.away}%` }} />
+      </div>
+      <div className="mt-1 flex items-center justify-between text-[10px] font-bold">
+        <span className="text-emerald-600 dark:text-emerald-400">{detail.fixture.home.name} {fc.home}%</span>
+        <span className="text-muted-foreground">تعادل {fc.draw}%</span>
+        <span className="text-amber-600 dark:text-amber-400">{detail.fixture.away.name} {fc.away}%</span>
+      </div>
+    </div>
+  );
+}
+
+/** التشكيلة المتوقعة قبل المباراة — تختفي فور توفر التشكيلة الرسمية. */
+function ExpectedLineups({ detail }: { detail: GcMatchDetail }) {
+  const el = detail.expectedLineups;
+  if (!el || (!el.home && !el.away) || detail.lineups.length > 0 || detail.lineupsRich) return null;
+  const side = (s: NonNullable<typeof el.home>, name: string) => (
+    <div className="min-w-0">
+      <p className="truncate text-xs font-black text-foreground">
+        {name}
+        {s.formation ? <span className="font-semibold text-muted-foreground"> · {s.formation}</span> : null}
+      </p>
+      <ul className="mt-1.5 space-y-1">
+        {s.starters.map((p, i) => (
+          <li key={`${p.name}-${i}`} className="flex items-center gap-2 text-sm">
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-emerald-500/10 text-[10px] font-black text-emerald-700 dark:text-emerald-300 tabular-nums">
+              {p.jersey ?? "–"}
+            </span>
+            <span className="truncate text-foreground">{p.name}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+  return (
+    <div className="py-2">
+      <p className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300">
+        تشكيلة متوقعة — تُستبدل بالرسمية فور إعلانها
+      </p>
+      <div className="grid grid-cols-2 gap-4">
+        {el.home && side(el.home, detail.fixture.home.name)}
+        {el.away && side(el.away, detail.fixture.away.name)}
+      </div>
+    </div>
+  );
+}
+
+/** بطاقة الحكم وسجله — زاوية نقاش جماهيرية. */
+function RefereeCard({ detail }: { detail: GcMatchDetail }) {
+  const r = detail.referee;
+  if (!r) return null;
+  return (
+    <div className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-muted/30 px-3.5 py-3">
+      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">
+        {r.photo ? <img src={r.photo} alt={r.name} className="h-full w-full object-cover" loading="lazy" /> : null}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold text-foreground">
+          الحكم: {r.name}
+          {r.country ? <span className="font-semibold text-muted-foreground"> · {r.country}</span> : null}
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          {r.matches != null ? `${r.matches} مباراة` : ""}
+          {r.yellowAvg != null ? ` · ${r.yellowAvg} بطاقة صفراء/مباراة` : ""}
+          {r.penaltiesAvg != null ? ` · ${r.penaltiesAvg} ركلة جزاء/مباراة` : ""}
+        </p>
+      </div>
+      <span>🟨</span>
+    </div>
+  );
+}
+
+/** التعليق النصي الحي (معرّب) — أسفل شريط الأحداث. */
+function CommentaryList({ detail }: { detail: GcMatchDetail }) {
+  const items = detail.commentary ?? [];
+  if (items.length === 0) return null;
+  return (
+    <div className="mt-4">
+      <p className="mb-2 text-xs font-bold text-muted-foreground">التعليق المباشر</p>
+      <ol className="space-y-1.5">
+        {items.slice(0, 20).map((c, i) => (
+          <li key={i} className={`flex gap-2 rounded-xl px-3 py-1.5 text-xs leading-relaxed ${c.goal ? "bg-emerald-500/10" : c.important ? "bg-amber-500/10" : "bg-muted/40"}`}>
+            <span className="shrink-0 font-black tabular-nums text-muted-foreground">
+              {c.minute != null ? `${c.minute}${c.extraMinute ? `+${c.extraMinute}` : ""}′` : "•"}
+            </span>
+            {c.goal && <span className="shrink-0">⚽</span>}
+            <span className={c.important || c.goal ? "font-bold text-foreground" : "text-muted-foreground"}>{c.text}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function StatBar({ label, home, away }: { label: string; home: string; away: string }) {
   // نِسَب الشريط تُحسب فقط للقيم الرقمية (أو النسب المئوية)
   const num = (v: string) => Number(String(v).replace("%", "")) || 0;
@@ -492,17 +595,19 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
 
             <TabsContent value="events">
               {detail && f && <EventsTimeline events={detail.events} fixture={f} />}
+              {detail && <CommentaryList detail={detail} />}
             </TabsContent>
 
             <TabsContent value="lineups">
               {detail?.lineupsRich && <RichLineups rich={detail.lineupsRich} />}
+              {detail && <ExpectedLineups detail={detail} />}
               {detail && detail.lineups.length > 0 ? (
                 <div className="grid grid-cols-2 gap-4 py-2">
                   {detail.lineups.map((l) => (
                     <LineupColumn key={l.teamId} lineup={l} />
                   ))}
                 </div>
-              ) : detail?.lineupsRich ? null : (
+              ) : detail?.lineupsRich || detail?.expectedLineups ? null : (
                 <p className="py-10 text-center text-sm text-muted-foreground">
                   تُعلن التشكيلات قبل انطلاق المباراة بنحو ساعة
                 </p>
@@ -511,19 +616,30 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
             </TabsContent>
 
             <TabsContent value="stats">
+              {detail && <ForecastBar detail={detail} />}
               {detail?.trend && <TrendChart trend={detail.trend} />}
+              {detail?.xg && (detail.xg.home != null || detail.xg.away != null) && (
+                <div className="mb-3">
+                  <StatBar
+                    label="الأهداف المتوقعة xG"
+                    home={String(detail.xg.home ?? 0)}
+                    away={String(detail.xg.away ?? 0)}
+                  />
+                </div>
+              )}
               {detail && detail.statistics.length > 0 ? (
                 <div className="space-y-3 py-2">
                   {detail.statistics.map((s) => (
                     <StatBar key={s.key} label={s.label} home={s.home} away={s.away} />
                   ))}
                 </div>
-              ) : detail?.trend || (detail?.playerStats?.length ?? 0) > 0 ? null : (
+              ) : detail?.trend || detail?.forecast || (detail?.playerStats?.length ?? 0) > 0 ? null : (
                 <p className="py-10 text-center text-sm text-muted-foreground">
                   تظهر إحصائيات المباراة هنا بعد الانطلاق
                 </p>
               )}
               {detail && <PlayerRatings detail={detail} />}
+              {detail && <RefereeCard detail={detail} />}
             </TabsContent>
 
             <TabsContent value="h2h">{detail && <H2HBlock detail={detail} />}</TabsContent>

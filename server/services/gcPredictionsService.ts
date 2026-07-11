@@ -24,11 +24,13 @@ import {
 } from "@shared/schema";
 import {
   getGcFixtures,
+  getGcSmId,
   getGcStandings,
   getGcTeams,
   type GcFixture,
   type GcStandingRow,
 } from "./gulfCupService";
+import { getForecast, isSportmonksConfigured } from "./sportmonksService";
 import { WC_FINISHED_STATUSES, WC_LIVE_STATUSES } from "./worldCupNames";
 import { computeMatchProbabilities, toWholePercents } from "./asianCupRatings";
 import {
@@ -86,6 +88,37 @@ function percentsFor(fx: GcFixture, smap: Map<number, GcStandingRow>) {
     awayRow: smap.get(fx.away.id) as any,
   });
   return toWholePercents(probs);
+}
+
+/**
+ * دمج نموذجنا (ELO محلي) مع توقّع نموذج Sportmonks متى توفّر — متوسط الاثنين
+ * ثم إعادة تطبيع إلى 100. أفضل جهد: أي غياب يُبقي ELO وحده. تُخزَّن النتيجة في
+ * لقطة المباراة عند أول توقّع فتخدم الجميع بعدها.
+ */
+async function blendedPercentsFor(
+  fx: GcFixture,
+  smap: Map<number, GcStandingRow>,
+): Promise<GcModelProbs> {
+  const elo = percentsFor(fx, smap);
+  if (!isSportmonksConfigured()) return elo;
+  try {
+    const smId = await getGcSmId(fx.id);
+    if (!smId) return elo;
+    const fc = await getForecast(fx.id, { directSmId: smId });
+    const ft = fc?.available ? fc.fulltime : null;
+    if (!ft) return elo;
+    const mix = {
+      home: (elo.home + ft.home) / 2,
+      draw: (elo.draw + ft.draw) / 2,
+      away: (elo.away + ft.away) / 2,
+    };
+    const sum = mix.home + mix.draw + mix.away || 100;
+    const home = Math.round((mix.home / sum) * 100);
+    const draw = Math.round((mix.draw / sum) * 100);
+    return { home, draw, away: Math.max(0, 100 - home - draw) };
+  } catch {
+    return elo;
+  }
 }
 
 const probOfPick = (predHome: number, predAway: number, p: { home: number; draw: number; away: number }): number =>
@@ -182,7 +215,7 @@ export async function submitPrediction(
   if (!fx || !isPredictable(fx)) return { ok: false, reason: "NOT_FOUND" };
   if (isLocked(fx)) return { ok: false, reason: "LOCKED" };
 
-  const pct = percentsFor(fx, await standingsMap());
+  const pct = await blendedPercentsFor(fx, await standingsMap());
   await db
     .insert(gcPredictionMatches)
     .values({
