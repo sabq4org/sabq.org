@@ -1,11 +1,17 @@
 import SwiftUI
 import CoreText
+#if canImport(UIKit)
+import UIKit
+#endif
 
 // تسجيل خط IBM Plex Sans Arabic المُجمَّع (woff2) وقت التشغيل عبر CoreText — نفس
 // نمط تطبيق سبق (لا نعتمد UIAppFonts في Info.plist). ثلاث أوزان تكفي الواجهة.
 enum GulfCupFonts {
-    static let regular  = "IBMPlexSansArabic-Regular"
-    static let semibold = "IBMPlexSansArabic-SemiBold"
+    // الأسماء هنا هي أسماء PostScript الداخلية للملفات المُجمَّعة — وليست أسماء
+    // الملفات. Regular اسمه الداخلي بلا لاحقة، وSemiBold لاحقته «SmBld».
+    // استخدام اسم خاطئ لا يُظهر خطأً: يسقط SwiftUI بصمت إلى خط النظام.
+    static let regular  = "IBMPlexSansArabic"
+    static let semibold = "IBMPlexSansArabic-SmBld"
     static let bold     = "IBMPlexSansArabic-Bold"
 
     /// موحّد: يربط أوزان SwiftUI الثلاثة بالخط المُجمَّع.
@@ -38,6 +44,26 @@ enum FontRegistration {
         for filename in filenames {
             registerFont(named: filename)
         }
+        applyChromeAppearance()
+    }
+
+    /// توحيد خط عناصر النظام (شريط التبويب، شريط التنقل، أزرار الرجوع) مع خط
+    /// المحتوى — بدونها تظهر تسمياتها بخط النظام فيبدو التطبيق بخطّين.
+    private static func applyChromeAppearance() {
+        #if canImport(UIKit)
+        if let tabFont = UIFont(name: GulfCupFonts.semibold, size: 10) {
+            UITabBarItem.appearance().setTitleTextAttributes([.font: tabFont], for: .normal)
+            UITabBarItem.appearance().setTitleTextAttributes([.font: tabFont], for: .selected)
+        }
+        if let navFont = UIFont(name: GulfCupFonts.bold, size: 17),
+           let largeFont = UIFont(name: GulfCupFonts.bold, size: 30) {
+            UINavigationBar.appearance().titleTextAttributes = [.font: navFont]
+            UINavigationBar.appearance().largeTitleTextAttributes = [.font: largeFont]
+        }
+        if let barButtonFont = UIFont(name: GulfCupFonts.semibold, size: 15) {
+            UIBarButtonItem.appearance().setTitleTextAttributes([.font: barButtonFont], for: .normal)
+        }
+        #endif
     }
 
     private static func registerFont(named filename: String) {

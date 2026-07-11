@@ -320,8 +320,19 @@ struct GcProbBar: View {
     let home: GcTeam
     let away: GcTeam
 
-    private var pHome: Int { Int((probs.home * 100).rounded()) }
-    private var pDraw: Int { Int((probs.draw * 100).rounded()) }
+    /// الـ API قد يعيد كسورًا (0–1) أو نسبًا مئوية (0–100) — نطبّع على المجموع
+    /// كي لا يتجاوز الشريط عرض الشاشة ولا تظهر نسب مثل ‎4800%‎ مهما كان شكل القيم.
+    private var fractions: (home: CGFloat, draw: CGFloat, away: CGFloat) {
+        let h = max(CGFloat(probs.home), 0)
+        let d = max(CGFloat(probs.draw), 0)
+        let a = max(CGFloat(probs.away), 0)
+        let sum = h + d + a
+        guard sum > 0 else { return (1.0 / 3, 1.0 / 3, 1.0 / 3) }
+        return (h / sum, d / sum, a / sum)
+    }
+
+    private var pHome: Int { Int((fractions.home * 100).rounded()) }
+    private var pDraw: Int { Int((fractions.draw * 100).rounded()) }
     private var pAway: Int { max(0, 100 - pHome - pDraw) }
 
     var body: some View {
@@ -331,12 +342,15 @@ struct GcProbBar: View {
                 Spacer()
             }
             GeometryReader { geo in
+                // خصم الفواصل والحدود الدنيا للشرائح كي لا يتعدّى المجموع عرض الحاوية
+                let w = max(geo.size.width - 13, 0)
                 HStack(spacing: 2) {
                     // RTL: المضيف يبدأ من اليمين تلقائيًّا
-                    segment(width: geo.size.width * probs.home, color: GcTheme.emerald)
-                    segment(width: geo.size.width * probs.draw, color: GcTheme.inkFaint.opacity(0.4))
-                    segment(width: geo.size.width * probs.away, color: GcTheme.teal)
+                    segment(width: w * fractions.home, color: GcTheme.emerald)
+                    segment(width: w * fractions.draw, color: GcTheme.inkFaint.opacity(0.4))
+                    segment(width: w * fractions.away, color: GcTheme.teal)
                 }
+                .frame(width: geo.size.width, alignment: .leading)
             }
             .frame(height: 7)
             HStack {
@@ -350,7 +364,7 @@ struct GcProbBar: View {
     }
 
     private func segment(width: CGFloat, color: Color) -> some View {
-        Capsule().fill(color).frame(width: max(width - 2, 3))
+        Capsule().fill(color).frame(width: max(width, 3))
     }
 
     private func probLabel(_ text: String, _ color: Color) -> some View {
@@ -364,7 +378,10 @@ struct GcCrowdBar: View {
     let crowd: GcPredictionCrowd
 
     var body: some View {
-        let total = max(crowd.total, 1)
+        // نطبّع على مجموع التوزيع نفسه لا على عدد المشاركين — الـ API قد يعيد
+        // التوزيع نسبًا مئوية (مجموعها 100) وليس عدّادات، فتنفجر الأعراض بالقسمة
+        // على عدد المشاركين.
+        let total = max(crowd.home + crowd.draw + crowd.away, 1)
         VStack(spacing: 5) {
             HStack {
                 Text(L("predictions.crowd.title")).font(GulfCupFonts.app(size: 10, weight: .bold)).foregroundStyle(GcTheme.inkFaint)
@@ -373,14 +390,17 @@ struct GcCrowdBar: View {
                     .font(GulfCupFonts.app(size: 9.5)).foregroundStyle(GcTheme.inkFaint)
             }
             GeometryReader { geo in
+                // خصم الفواصل والحدود الدنيا للشرائح كي لا يتعدّى المجموع عرض الحاوية
+                let w = max(geo.size.width - 13, 0)
                 HStack(spacing: 2) {
                     Capsule().fill(GcTheme.gold)
-                        .frame(width: max(geo.size.width * CGFloat(crowd.home) / CGFloat(total) - 2, 3))
+                        .frame(width: max(w * CGFloat(crowd.home) / CGFloat(total), 3))
                     Capsule().fill(GcTheme.inkFaint.opacity(0.4))
-                        .frame(width: max(geo.size.width * CGFloat(crowd.draw) / CGFloat(total) - 2, 3))
+                        .frame(width: max(w * CGFloat(crowd.draw) / CGFloat(total), 3))
                     Capsule().fill(GcTheme.amber.opacity(0.8))
-                        .frame(width: max(geo.size.width * CGFloat(crowd.away) / CGFloat(total) - 2, 3))
+                        .frame(width: max(w * CGFloat(crowd.away) / CGFloat(total), 3))
                 }
+                .frame(width: geo.size.width, alignment: .leading)
             }
             .frame(height: 7)
         }
