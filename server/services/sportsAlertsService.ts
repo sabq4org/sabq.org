@@ -97,6 +97,48 @@ let lastCleanup = 0;
 // لإثراء إشعار النهاية بأرقام المباراة (المونديال).
 const lastStats = new Map<number, TsLiveStats>();
 
+// «نهاية» متعادلة بلا ركلات ترجيح في دور إقصائي لا تكون نهاية حقيقية — القاعدة
+// تحتّم أشواطًا إضافية أو ترجيحًا، والغالب أنها FT خاطفة من المزوّد عند د90 قبل
+// التحوّل لحالة الإضافي (ET). نحتجز الإعلان حتى تنحسم أو تثبت مهلةً كاملة
+// (حارس ضد مزوّد لا يُحدّث حالته أبدًا). id → أول لحظة رصد. ذاكرة فقط — إعادة
+// النشر أثناء الاحتجاز تعيد عدّ المهلة، وهذا أهون من تعقيد الحالة المحفوظة.
+const pendingLevelFulltime = new Map<number, number>();
+const LEVEL_FULLTIME_HOLD_MS = Number(
+  process.env.SPORTS_LEVEL_FULLTIME_HOLD_MS ?? 5 * 60_000,
+);
+
+// أدوار إقصائية بالتسميات المتداولة في مصادرنا (عربية من worldCupNames/التعريب،
+// أو إنجليزية كما يمرّرها المزوّد في وضع en). مطابقة جزئية متساهلة — الحارس
+// احترازي ولا يضرّ لو فاته دورٌ غريب التسمية (نعود لسلوك الإرسال الفوري).
+const KNOCKOUT_ROUND_HINTS = [
+  "نهائي", // النهائي/نصف النهائي/ربع النهائي/ثمن النهائي
+  "دور الـ", // دور الـ32/دور الـ16
+  "المركز الثالث",
+  "الملحق",
+  "final",
+  "round of",
+  "quarter",
+  "semi",
+  "third place",
+  "play-off",
+  "playoff",
+  "knockout",
+];
+
+function isKnockoutRound(round: string): boolean {
+  const r = round.trim().toLowerCase();
+  if (!r) return false;
+  return KNOCKOUT_ROUND_HINTS.some((hint) => r.includes(hint));
+}
+
+/** تعادل بلا حسم ترجيحي في دور إقصائي — «نهايته» مشبوهة حتى إشعار آخر. */
+function isSuspectLevelKnockoutEnd(m: SplLiveBoardItem): boolean {
+  if ((m.goals.home ?? 0) !== (m.goals.away ?? 0)) return false;
+  const pens = m.penalties;
+  if (pens && pens.home != null && pens.away != null && pens.home !== pens.away) return false;
+  return isKnockoutRound(m.round);
+}
+
 // توقيعات أحداث الكروت/الفار المُرسَلة لكل مباراة (id → set of signatures). أول
 // رصدٍ لمباراة يؤسّس خطّ الأساس بلا إرسال (يتفادى إغراق متابعٍ جديد بكروت سابقة).
 const eventSeen = new Map<number, Set<string>>();
@@ -343,6 +385,13 @@ const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?
 // (بلا نداء API ولا LLM في المسار الحسّاس — التزاماً بضوابط كلفة/كمون المحرّك):
 // حسم متأخّر، فوز عريض، تعادل مثير... جملةٌ قصيرة تُضاف لجسم الإشعار.
 function resultContext(m: SplLiveBoardItem): string | null {
+  // ترجيح محسوم يسبق كل القراءات — «تعادل يقسّم النقاط» لغة دوريات لا تصلح
+  // لمباراة إقصائية حُسمت من علامة الجزاء.
+  const pens = m.penalties;
+  if (pens && pens.home != null && pens.away != null && pens.home !== pens.away) {
+    const winner = pens.home > pens.away ? m.home.name : m.away.name;
+    return `${winner} يحسمها بركلات الترجيح ${pens.home}-${pens.away}`;
+  }
   const gh = m.goals.home ?? 0;
   const ga = m.goals.away ?? 0;
   const total = gh + ga;
@@ -702,8 +751,26 @@ function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<n
       });
     }
 
+    // عادت حيّة (أشواط إضافية/ترجيح بعد FT خاطفة) — يسقط أي احتجاز معلّق.
+    if (!m.status.finished) pendingLevelFulltime.delete(m.id);
+
     // نهاية المباراة
     if (!prev.finished && cur.finished) {
+      // حذر الأدوار الإقصائية: تعادل بلا ترجيح لا يُنهي مباراة إقصائية — الغالب
+      // FT خاطفة قبل الأشواط الإضافية. نُبقي اللقطة «غير منتهية» فيُعاد فحص
+      // التحوّل كل دورة، ولا نُعلن إلا إن صمدت «النهاية» المهلة كاملة.
+      if (isSuspectLevelKnockoutEnd(m)) {
+        const firstSeen = pendingLevelFulltime.get(m.id) ?? Date.now();
+        pendingLevelFulltime.set(m.id, firstSeen);
+        if (Date.now() - firstSeen < LEVEL_FULLTIME_HOLD_MS) {
+          // «ما زالت جارية» من منظور اللقطة: يبقى التحوّل قابلًا للاكتشاف كل
+          // دورة، وعودة ET لا تبدو انطلاقةً جديدة (live=false كانت ستوهم بذلك).
+          cur.finished = false;
+          cur.live = true;
+          continue;
+        }
+      }
+      pendingLevelFulltime.delete(m.id);
       const why = resultContext(m);
       alerts.push({
         fixtureId: m.id,
@@ -724,6 +791,9 @@ function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<n
     lastCleanup = now;
     for (const id of snapshots.keys()) {
       if (!seenIds.has(id)) snapshots.delete(id);
+    }
+    for (const id of pendingLevelFulltime.keys()) {
+      if (!seenIds.has(id)) pendingLevelFulltime.delete(id);
     }
   }
 
@@ -1144,6 +1214,12 @@ function applyTsOverlay(
     return {
       ...m,
       goals: { home: ts.home, away: ts.away },
+      // نتيجة الترجيح من TheSports أسرع من AF بدورة كاملة — بدونها يبدو حسم
+      // الركلات «تعادلًا مشبوهًا» فيُحتجز إشعار النهاية بلا داعٍ حتى يلحق AF.
+      penalties:
+        ts.penHome != null && ts.penAway != null && (ts.penHome > 0 || ts.penAway > 0)
+          ? { home: ts.penHome, away: ts.penAway }
+          : m.penalties,
       status: {
         ...m.status,
         elapsed: ts.elapsed ?? m.status.elapsed,
