@@ -7,10 +7,10 @@ export function GcTeams({ teams, isLoading }: { teams: GcTeam[]; isLoading: bool
   return (
     <section id="gc-teams" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="mb-6 flex items-center gap-2">
-        <Users className="h-6 w-6 text-emerald-500" />
+        <Users className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">المنتخبات المشاركة</h2>
         {!!teams.length && (
-          <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">
+          <span className="rounded-full bg-sky-500/10 px-2.5 py-0.5 text-sm font-bold text-sky-700 dark:text-sky-300">
             {teams.length}
           </span>
         )}

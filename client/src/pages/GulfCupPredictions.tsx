@@ -183,31 +183,32 @@ export default function GulfCupPredictions() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-50/70 via-background to-background dark:from-emerald-950/20 dark:via-background dark:to-background" dir="rtl">
+    <div className="flex min-h-screen flex-col bg-[#EEF1F2] dark:bg-[#090E0F]" dir="rtl">
       <Header user={user || undefined} />
       <NavigationBar />
 
       {celebration && <GcWinCelebration win={celebration} onClose={dismissCelebration} />}
 
       <main className="flex-1">
-        <section className="relative overflow-hidden bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#08573B] text-white">
+        <section className="relative overflow-hidden bg-gradient-to-bl from-[#041C22] via-[#052830] to-[#0A3D45] text-white">
           <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(circle_at_20%_30%,white_1px,transparent_1px)] [background-size:24px_24px]" />
+          <div className="absolute -top-24 -left-16 h-64 w-64 rounded-full bg-sky-400/15 blur-3xl" />
           <div className="relative mx-auto max-w-4xl px-4 py-10 sm:py-12">
-            <div className="flex items-center gap-2 text-emerald-100">
-              <Trophy className="h-5 w-5" />
+            <div className="flex items-center gap-2 text-sky-100">
+              <Trophy className="h-5 w-5 text-sky-300" />
               <span className="text-sm font-bold">كأس الخليج العربي 27 · السعودية</span>
             </div>
             <h1 className="mt-2 text-3xl font-black sm:text-4xl">توقّعات خليجي 27</h1>
-            <p className="mt-2 max-w-xl text-emerald-50/90">
+            <p className="mt-2 max-w-xl text-sky-50/90">
               توقّع نتيجة كل مباراة وتقاسم <strong>بركة 1000 نقطة ولاء</strong> مع المصيبين — كلّما قلّ عددهم زاد نصيبك.
               يرشدك توقّع سبق الذكي وإجماع الجمهور، والنتيجة الدقيقة تأخذ النصيب الأكبر.
             </p>
 
             {/* الجائزة المتراكمة */}
             {jackpot > 0 && (
-              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-400/20 px-4 py-1.5 ring-1 ring-amber-300/40">
-                <Coins className="h-4 w-4 text-amber-300" />
-                <span className="text-sm font-bold text-amber-100">
+              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-sky-400/20 px-4 py-1.5 ring-1 ring-sky-300/40">
+                <Coins className="h-4 w-4 text-sky-300" />
+                <span className="text-sm font-bold text-sky-100">
                   جائزة متراكمة: <span className="tabular-nums">{formatNumber(jackpot)}</span> نقطة تُضاف للمباراة القادمة!
                 </span>
               </div>
@@ -225,9 +226,9 @@ export default function GulfCupPredictions() {
                     <Divider />
                     <div className="text-center">
                       <p className="inline-flex items-center gap-1 text-xl font-black tabular-nums">
-                        <Flame className="h-4 w-4 text-orange-300" /> {formatNumber(me!.currentStreak)}
+                        <Flame className="h-4 w-4 text-sky-300" /> {formatNumber(me!.currentStreak)}
                       </p>
-                      <p className="text-[11px] text-emerald-100">سلسلة حالية</p>
+                      <p className="text-[11px] text-sky-100">سلسلة حالية</p>
                     </div>
                   </>
                 )}
@@ -241,7 +242,7 @@ export default function GulfCupPredictions() {
             ) : (
               <button
                 onClick={goLogin}
-                className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#0A6B47] transition hover:bg-emerald-50"
+                className="mt-5 inline-flex items-center gap-2 rounded-full bg-sky-300 px-5 py-2.5 text-sm font-bold text-sky-950 transition hover:bg-sky-200"
               >
                 <Sparkles className="h-4 w-4" /> سجّل دخولك وابدأ التوقّع
               </button>
@@ -252,13 +253,13 @@ export default function GulfCupPredictions() {
         <div className="mx-auto max-w-4xl px-4 py-6">
           <GcHowToPlay />
 
-          <div className="mb-5 flex w-full gap-1 overflow-x-auto rounded-full bg-muted p-1">
+          <div className="mb-5 flex w-full gap-1 overflow-x-auto rounded-full bg-white p-1 shadow-sm ring-1 ring-border dark:bg-card">
             {TABS.map((t) => (
               <button
                 key={t.key}
                 onClick={() => selectTab(t.key)}
                 className={`flex-1 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition ${
-                  tab === t.key ? "bg-[#0F8054] text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  tab === t.key ? "bg-sky-500 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
                 data-testid={`gc-pred-tab-${t.key}`}
               >
@@ -322,7 +323,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="text-center">
       <p className="text-xl font-black tabular-nums">{value}</p>
-      <p className="text-[11px] text-emerald-100">{label}</p>
+      <p className="text-[11px] text-sky-100">{label}</p>
     </div>
   );
 }
@@ -384,7 +385,7 @@ function GcHowToPlay() {
         aria-expanded={open}
         className="flex w-full items-center gap-2 px-4 py-3 text-start transition-colors hover:bg-muted/50"
       >
-        <HelpCircle className="h-5 w-5 shrink-0 text-[#0F8054] dark:text-emerald-400" />
+        <HelpCircle className="h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400" />
         <span className="flex-1 text-sm font-black text-foreground">كيف تلعب وتربح؟</span>
         <span className="hidden text-xs text-muted-foreground sm:block">
           بركة 1000 نقطة لكل مباراة · ثلاث طبقات إصابة
@@ -399,7 +400,7 @@ function GcHowToPlay() {
             <ol className="space-y-3">
               {steps.map((s, i) => (
                 <li key={s.title} className="flex gap-3">
-                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#0F8054]/10 text-xs font-black text-[#0A6B47] dark:bg-emerald-400/15 dark:text-emerald-300">
+                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sky-600/10 text-xs font-black text-sky-800 dark:bg-sky-400/15 dark:text-sky-300">
                     {i + 1}
                   </span>
                   <div>
@@ -414,7 +415,7 @@ function GcHowToPlay() {
             <div className="space-y-2">
               {tiers.map((t) => (
                 <div key={t.pts} className="flex items-center gap-3 rounded-xl bg-muted/50 px-3 py-2.5">
-                  <span className="grid h-10 w-14 shrink-0 place-items-center rounded-lg bg-gradient-to-b from-[#F5D46B]/30 to-[#E7A93C]/20 text-sm font-black tabular-nums text-[#96700F] dark:text-amber-300">
+                  <span className="grid h-10 w-14 shrink-0 place-items-center rounded-lg bg-gradient-to-b from-sky-300/30 to-sky-400/20 text-sm font-black tabular-nums text-sky-800 dark:text-sky-300">
                     {t.pts}
                   </span>
                   <div className="min-w-0">
@@ -427,11 +428,11 @@ function GcHowToPlay() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#0F8054]/8 px-3 py-1.5 text-[11px] font-bold text-[#0A6B47] dark:bg-emerald-400/10 dark:text-emerald-300">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-600/8 px-3 py-1.5 text-[11px] font-bold text-sky-800 dark:bg-sky-400/10 dark:text-sky-300">
               <Users className="h-3.5 w-3.5" />
               كلّما قلّ المصيبون في طبقتك كبر نصيبك منها
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1.5 text-[11px] font-bold text-[#96700F] dark:text-amber-300">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-3 py-1.5 text-[11px] font-bold text-sky-800 dark:text-sky-300">
               <Crown className="h-3.5 w-3.5" />
               الطبقة التي لا يُصيبها أحد تتراكم جائزةً للمباراة التالية
             </span>
@@ -504,8 +505,8 @@ function TodayTab({
     <div className="space-y-6">
       {groups.map((g) => (
         <section key={g.key}>
-          <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-[#0A6B47] dark:text-emerald-300">
-            <span className="h-4 w-1 rounded-full bg-[#0F8054]" />
+          <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-sky-800 dark:text-sky-300">
+            <span className="h-4 w-1 rounded-full bg-sky-600" />
             {g.label}
             <span className="text-xs font-normal text-muted-foreground">({formatNumber(g.items.length)})</span>
           </h2>
@@ -534,7 +535,7 @@ function SignInPrompt({ onLogin }: { onLogin: () => void }) {
       <p className="font-bold">سجّل دخولك لعرض توقّعاتك</p>
       <button
         onClick={onLogin}
-        className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#0F8054] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#0A6B47]"
+        className="mt-3 inline-flex items-center gap-2 rounded-full bg-sky-600 px-5 py-2 text-sm font-bold text-white transition hover:bg-sky-800"
       >
         تسجيل الدخول
       </button>

@@ -86,11 +86,11 @@ export function GcLongPredictions({
   return (
     <div className="space-y-5">
       {/* البطل */}
-      <section className="rounded-2xl border border-amber-500/20 bg-gradient-to-l from-amber-500/[0.06] to-transparent p-4">
+      <section className="rounded-2xl border border-sky-500/20 bg-gradient-to-l from-sky-500/[0.06] to-transparent p-4">
         <div className="mb-1 flex items-center gap-2">
-          <Crown className="h-5 w-5 text-amber-500" />
+          <Crown className="h-5 w-5 text-sky-500" />
           <h3 className="text-base font-black">من يرفع كأس خليجي 27؟</h3>
-          <span className="ms-auto inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-0.5 text-[11px] font-black text-white">
+          <span className="ms-auto inline-flex items-center gap-1 rounded-full bg-sky-500 px-2.5 py-0.5 text-[11px] font-black text-white">
             <Coins className="h-3 w-3" /> {formatNumber(data?.pools.champion ?? 5000)} نقطة
           </span>
         </div>
@@ -113,7 +113,7 @@ export function GcLongPredictions({
                 key={t.id}
                 onClick={() => (isAuthenticated ? setChampPick(t.id) : onRequireLogin())}
                 className={`relative flex flex-col items-center gap-1.5 overflow-hidden rounded-xl border p-2.5 text-center transition ${
-                  selected ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/40" : "border-border hover:border-amber-400/50"
+                  selected ? "border-sky-500 bg-sky-500/10 ring-1 ring-sky-500/40" : "border-border hover:border-sky-400/50"
                 }`}
                 data-testid={`gc-champion-${t.id}`}
               >
@@ -129,7 +129,7 @@ export function GcLongPredictions({
 
         {isAuthenticated ? (
           <Button
-            className="mt-3 w-full gap-2 bg-amber-500 text-white hover:bg-amber-600"
+            className="mt-3 w-full gap-2 bg-sky-500 text-white hover:bg-sky-600"
             disabled={champPick == null || champPick === myChampion?.teamId || champMutation.isPending}
             onClick={() => champPick != null && champMutation.mutate(champPick)}
           >

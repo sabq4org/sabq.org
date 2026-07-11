@@ -153,7 +153,7 @@ function normalizeMatchday(raw: unknown): GcMajlisMatchdayResponse {
 function Avatar({ name, src, size = "md" }: { name: string; src?: string | null; size?: "sm" | "md" }) {
   const classes = size === "sm" ? "h-7 w-7 text-[10px]" : "h-10 w-10 text-xs";
   return (
-    <span className={`grid shrink-0 place-items-center overflow-hidden rounded-full bg-emerald-900/10 font-black text-[#0A6B47] ring-1 ring-border ${classes}`}>
+    <span className={`grid shrink-0 place-items-center overflow-hidden rounded-full bg-emerald-900/10 font-black text-sky-800 ring-1 ring-border ${classes}`}>
       {src ? <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" /> : name.slice(0, 1)}
     </span>
   );
@@ -231,12 +231,12 @@ function MatchCard({ match, focused = false }: { match: GcMajlisMatchdayMatch; f
     <article
       id={`gc-majlis-fixture-${match.fixtureId}`}
       className={`overflow-hidden rounded-2xl border bg-card shadow-sm transition-colors motion-reduce:transition-none ${
-        focused ? "border-amber-400 ring-2 ring-amber-400/30" : "border-border"
+        focused ? "border-sky-400 ring-2 ring-sky-400/30" : "border-border"
       }`}
       aria-label={focused ? "المباراة المرتبطة بالإشعار" : undefined}
     >
       <header className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/25 px-4 py-3">
-        <Clock3 className="h-4 w-4 text-[#0F8054]" aria-hidden="true" />
+        <Clock3 className="h-4 w-4 text-sky-600" aria-hidden="true" />
         <p className="text-xs font-bold text-muted-foreground">{kickoffLabel(match.kickoffAt)}</p>
         <span
           className={`mr-auto rounded-full px-2.5 py-1 text-[10px] font-black ${
@@ -245,9 +245,9 @@ function MatchCard({ match, focused = false }: { match: GcMajlisMatchdayMatch; f
               : match.voided
                 ? "bg-slate-500/10 text-slate-600 dark:text-slate-300"
               : match.settled
-                ? "bg-emerald-600/10 text-emerald-700 dark:text-emerald-300"
+                ? "bg-sky-600/10 text-emerald-700 dark:text-sky-300"
                 : match.locked
-                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                  ? "bg-sky-500/10 text-sky-700 dark:text-sky-300"
                   : "bg-sky-500/10 text-sky-700 dark:text-sky-300"
           }`}
         >
@@ -277,7 +277,7 @@ function MatchCard({ match, focused = false }: { match: GcMajlisMatchdayMatch; f
                 <li key={member.userId} className="flex items-center gap-2 rounded-xl bg-muted/35 px-3 py-2">
                   <Avatar name={member.name} src={member.avatar} size="sm" />
                   <span className="min-w-0 flex-1 truncate text-xs font-bold">
-                    {member.name}{member.isOwner ? " · العميد" : ""}
+                    {member.name}{member.isOwner ? " · صاحب المجلس" : ""}
                   </span>
                   {revealed ? (
                     <div className="text-left">
@@ -285,7 +285,7 @@ function MatchCard({ match, focused = false }: { match: GcMajlisMatchdayMatch; f
                         {member.predHome} - {member.predAway}
                       </p>
                       {match.settled || match.live || member.provisional ? (
-                        <p className={`mt-1 text-[9px] font-bold ${member.pointsAwarded ? "text-emerald-700 dark:text-emerald-300" : "text-muted-foreground"}`}>
+                        <p className={`mt-1 text-[9px] font-bold ${member.pointsAwarded ? "text-emerald-700 dark:text-sky-300" : "text-muted-foreground"}`}>
                           {match.voided
                             ? "أُلغيت المباراة — لا تُحتسب"
                             : match.live
@@ -297,7 +297,7 @@ function MatchCard({ match, focused = false }: { match: GcMajlisMatchdayMatch; f
                       ) : null}
                     </div>
                   ) : member.hasPredicted ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/10 px-2 py-1 text-[10px] font-black text-emerald-700 dark:text-emerald-300">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-sky-600/10 px-2 py-1 text-[10px] font-black text-emerald-700 dark:text-sky-300">
                       <Check className="h-3 w-3" aria-hidden="true" /> توقّع
                     </span>
                   ) : (
@@ -442,7 +442,7 @@ export function GcMajlisTodayView({ majlisId, focusFixtureId }: { majlisId: stri
       </Button>
       <div className="min-w-0 flex-1 text-center">
         <p className="truncate text-sm font-black">{date === today ? "اليوم · " : ""}{matchdayDateLabel(date)}</p>
-        {date !== today ? <button type="button" onClick={() => selectDate(today)} className="mt-0.5 text-[10px] font-bold text-[#0F8054] dark:text-emerald-300">العودة إلى اليوم</button> : <p className="mt-0.5 text-[10px] text-muted-foreground">بتوقيت الرياض</p>}
+        {date !== today ? <button type="button" onClick={() => selectDate(today)} className="mt-0.5 text-[10px] font-bold text-sky-600 dark:text-sky-300">العودة إلى اليوم</button> : <p className="mt-0.5 text-[10px] text-muted-foreground">بتوقيت الرياض</p>}
       </div>
       <Button type="button" size="icon" variant="ghost" onClick={() => selectDate(shiftDateKey(date, 1))} aria-label="اليوم التالي">
         <ChevronLeft className="h-4 w-4" aria-hidden="true" />
@@ -460,7 +460,7 @@ export function GcMajlisTodayView({ majlisId, focusFixtureId }: { majlisId: stri
         title={date === today ? "لا مباريات للمجلس اليوم" : "لا مباريات في هذا اليوم"}
         description={date === today ? "سنضع مباريات اليوم هنا فور فتح التوقعات. يمكنك مراجعة توقعاتك أو ترتيب المجلس الآن." : "جرّب اليوم السابق أو عد إلى اليوم لمراجعة توقعات المجلس."}
         action={
-          <Button asChild className="gap-2 bg-[#0F8054] text-white hover:bg-[#0A6B47]">
+          <Button asChild className="gap-2 bg-sky-600 text-white hover:bg-sky-800">
             <Link href="/gulf-cup/predictions">
               اذهب إلى التوقعات <ArrowLeft className="h-4 w-4" />
             </Link>
@@ -473,15 +473,15 @@ export function GcMajlisTodayView({ majlisId, focusFixtureId }: { majlisId: stri
   return withNavigator(
     <>
       {data.champions.length > 0 ? (
-        <section className="relative overflow-hidden rounded-2xl border border-amber-400/30 bg-gradient-to-l from-amber-400/15 via-card to-card p-4">
-          <Trophy className="absolute -bottom-5 left-4 h-24 w-24 text-amber-400/10" aria-hidden="true" />
-          <p className="text-xs font-black text-amber-700 dark:text-amber-300">بطل اليوم في مجلسك</p>
+        <section className="relative overflow-hidden rounded-2xl border border-sky-400/30 bg-gradient-to-l from-sky-400/15 via-card to-card p-4">
+          <Trophy className="absolute -bottom-5 left-4 h-24 w-24 text-sky-400/10" aria-hidden="true" />
+          <p className="text-xs font-black text-sky-700 dark:text-sky-300">بطل اليوم في مجلسك</p>
           <div className="mt-2 flex flex-wrap items-center gap-3">
             {data.champions.map((champion) => (
-              <div key={champion.userId} className="flex items-center gap-2 rounded-full bg-background/80 py-1.5 pl-3 pr-1.5 ring-1 ring-amber-400/30">
+              <div key={champion.userId} className="flex items-center gap-2 rounded-full bg-background/80 py-1.5 pl-3 pr-1.5 ring-1 ring-sky-400/30">
                 <Avatar name={champion.name} src={champion.avatar} size="sm" />
                 <span className="text-sm font-black">{champion.name}</span>
-                <span className="text-xs font-black text-amber-700 dark:text-amber-300">+{formatNumber(champion.points)}</span>
+                <span className="text-xs font-black text-sky-700 dark:text-sky-300">+{formatNumber(champion.points)}</span>
               </div>
             ))}
           </div>
@@ -513,15 +513,20 @@ export function GcMajlisLeaderboardView({ majlisId, currentUserId }: { majlisId:
       {rows.map((row) => {
         const me = row.userId === currentUserId;
         return (
-          <li key={row.userId} className={`flex items-center gap-3 rounded-2xl border px-3 py-3 ${me ? "border-amber-400/50 bg-amber-400/[0.07]" : "border-border bg-card"}`}>
+          <li key={row.userId} className={`flex items-center gap-3 rounded-2xl border px-3 py-3 ${me ? "border-sky-400/50 bg-sky-400/[0.07]" : "border-border bg-card"}`}>
             <span className="grid w-7 place-items-center font-black text-muted-foreground">{row.rank <= 3 ? ["🥇", "🥈", "🥉"][row.rank - 1] : formatNumber(row.rank)}</span>
             <Avatar name={row.name} src={row.avatar} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-black">{row.name}{me ? " (أنت)" : ""}{row.isOwner ? " · العميد" : ""}</p>
-              <p className="mt-0.5 text-[10px] text-muted-foreground">{formatNumber(row.correctCount)} إصابة · {formatNumber(row.exactCount)} مطابقة دقيقة</p>
+              <p className="truncate text-sm font-black">
+                {row.name}{me ? " (أنت)" : ""}{row.isOwner ? " · صاحب المجلس" : ""}{row.isDayChampion ? " 🏆" : ""}
+              </p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                {row.isDayChampion ? "بطل الجولة · " : ""}
+                {formatNumber(row.correctCount)} إصابة · {formatNumber(row.exactCount)} مطابقة دقيقة
+              </p>
             </div>
             <div className="text-left">
-              <p className="text-lg font-black tabular-nums text-[#0A6B47] dark:text-emerald-300">{formatNumber(row.totalPoints)}</p>
+              <p className="text-lg font-black tabular-nums text-sky-800 dark:text-sky-300">{formatNumber(row.totalPoints)}</p>
               <p className="text-[9px] text-muted-foreground">نقطة</p>
             </div>
           </li>
@@ -548,16 +553,16 @@ export function GcMajlisFantasyView({ majlisId, currentUserId }: { majlisId: str
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {rows.map((row, index) => (
-        <article key={row.userId} className={`rounded-2xl border p-4 ${row.userId === currentUserId ? "border-amber-400/50 bg-amber-400/[0.07]" : "border-border bg-card"}`}>
+        <article key={row.userId} className={`rounded-2xl border p-4 ${row.userId === currentUserId ? "border-sky-400/50 bg-sky-400/[0.07]" : "border-border bg-card"}`}>
           <div className="flex items-center gap-3">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-600/10 font-black text-[#0A6B47]">#{formatNumber(row.rank ?? index + 1)}</span>
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-sky-600/10 font-black text-sky-800">#{formatNumber(row.rank ?? index + 1)}</span>
             <Avatar name={row.name} src={row.avatar} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-black">{row.name}</p>
               {row.captainName ? <p className="truncate text-[10px] text-muted-foreground">القائد: {row.captainName}</p> : null}
             </div>
             <div className="text-left">
-              <p className="text-lg font-black text-[#0A6B47] dark:text-emerald-300">{row.hasSquad ? formatNumber(row.totalPoints) : "—"}</p>
+              <p className="text-lg font-black text-sky-800 dark:text-sky-300">{row.hasSquad ? formatNumber(row.totalPoints) : "—"}</p>
               {!row.hasSquad ? <p className="text-[9px] text-muted-foreground">بلا تشكيلة</p> : null}
             </div>
           </div>
@@ -600,7 +605,7 @@ export function GcMajlisChampionPicksView({ majlisId }: { majlisId: string }) {
             <p className="text-[10px] text-muted-foreground">اختيار البطل</p>
           </div>
           {row.teamLogo ? <img src={row.teamLogo} alt="" className="h-9 w-9 object-contain" /> : null}
-          <p className="max-w-28 truncate text-sm font-black text-amber-700 dark:text-amber-300">{row.teamName || (row.hasPicked ? "اختار سرًا" : "لم يختر")}</p>
+          <p className="max-w-28 truncate text-sm font-black text-sky-700 dark:text-sky-300">{row.teamName || (row.hasPicked ? "اختار سرًا" : "لم يختر")}</p>
         </article>
       ))}
     </div>
@@ -706,7 +711,7 @@ export function GcMajlisDuelsView({ majlisId, currentUserId }: { majlisId: strin
     <div className="space-y-4">
       <section className="rounded-2xl border border-border bg-card p-4">
         <div className="flex items-center gap-2">
-          <Swords className="h-5 w-5 text-[#0F8054]" aria-hidden="true" />
+          <Swords className="h-5 w-5 text-sky-600" aria-hidden="true" />
           <h3 className="font-black">تحدَّ عضوًا من مجلسك</h3>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">اختر مباراة مفتوحة ورهانًا ضمن سقفك اليومي. لا يُحسم شيء قبل قبول الطرف الآخر.</p>
@@ -732,7 +737,7 @@ export function GcMajlisDuelsView({ majlisId, currentUserId }: { majlisId: strin
                 {[10, 50, 100].map((value) => <option key={value} value={value}>{formatNumber(value)} نقطة</option>)}
               </select>
             </label>
-            <Button onClick={() => create.mutate()} disabled={!challengedUserId || !fixtureId || create.isPending} className="gap-2 bg-[#0F8054] text-white hover:bg-[#0A6B47] sm:col-span-3 sm:mr-auto">
+            <Button onClick={() => create.mutate()} disabled={!challengedUserId || !fixtureId || create.isPending} className="gap-2 bg-sky-600 text-white hover:bg-sky-800 sm:col-span-3 sm:mr-auto">
               <Swords className="h-4 w-4" /> {create.isPending ? "جارٍ الإرسال…" : "أرسل التحدي"}
             </Button>
           </div>
@@ -748,16 +753,16 @@ export function GcMajlisDuelsView({ majlisId, currentUserId }: { majlisId: strin
           {duels.map((duel) => (
             <article key={duel.id} className="rounded-2xl border border-border bg-card p-4">
               <div className="flex items-center gap-2 text-xs font-black">
-                <Swords className="h-4 w-4 text-[#0F8054]" />
+                <Swords className="h-4 w-4 text-sky-600" />
                 {duel.challengerName} <span className="text-muted-foreground">ضد</span> {duel.challengedName}
               </div>
               {duel.homeTeamName ? <p className="mt-2 text-xs text-muted-foreground">{duel.homeTeamName} × {duel.awayTeamName}</p> : null}
               <div className="mt-3 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1 rounded-full bg-amber-400/10 px-2 py-1 text-[10px] font-black text-amber-700 dark:text-amber-300"><Coins className="h-3 w-3" /> {formatNumber(duel.stake)}</span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-sky-400/10 px-2 py-1 text-[10px] font-black text-sky-700 dark:text-sky-300"><Coins className="h-3 w-3" /> {formatNumber(duel.stake)}</span>
                 <span className="mr-auto rounded-full bg-muted px-2 py-1 text-[10px] font-bold">{duelStatus(duel.status)}</span>
               </div>
               {duel.status === "settled" && duel.winnerId ? (
-                <p className="mt-3 rounded-xl bg-emerald-600/10 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200">
+                <p className="mt-3 rounded-xl bg-sky-600/10 px-3 py-2 text-xs font-bold text-emerald-800 dark:text-emerald-200">
                   الفائز: {duel.winnerId === duel.challengerId ? duel.challengerName : duel.winnerId === duel.challengedId ? duel.challengedName : "عضو المجلس"} 🏆
                 </p>
               ) : duel.status === "refunded" ? (
@@ -765,7 +770,7 @@ export function GcMajlisDuelsView({ majlisId, currentUserId }: { majlisId: strin
               ) : null}
               {duel.status === "pending" && duel.challengedId === currentUserId ? (
                 <div className="mt-3 flex gap-2 border-t border-border pt-3">
-                  <Button size="sm" disabled={act.isPending} onClick={() => act.mutate({ duelId: duel.id, action: "accept" })} className="flex-1 bg-[#0F8054] text-white hover:bg-[#0A6B47]">قبول</Button>
+                  <Button size="sm" disabled={act.isPending} onClick={() => act.mutate({ duelId: duel.id, action: "accept" })} className="flex-1 bg-sky-600 text-white hover:bg-sky-800">قبول</Button>
                   <Button size="sm" disabled={act.isPending} onClick={() => act.mutate({ duelId: duel.id, action: "decline" })} variant="outline" className="flex-1">رفض</Button>
                 </div>
               ) : duel.status === "pending" && duel.challengerId === currentUserId ? (
@@ -831,10 +836,10 @@ export function GcMajlisHarvestView({ majlisId }: { majlisId: string }) {
   if (!data.ready) return <StateCard icon={Trophy} title="حصاد المجلس بعد النهائي" description="عند نهاية البطولة نلخّص بطل المجلس، الأدق، الأجرأ والعنيد في بطاقة واحدة قابلة للمشاركة." />;
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#075339] p-5 text-white">
+      <section className="rounded-2xl bg-gradient-to-bl from-sky-500 via-sky-600 to-[#075339] p-5 text-white">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-bold text-emerald-100">خليجي 27 · الختام</p>
+            <p className="text-xs font-bold text-sky-100">خليجي 27 · الختام</p>
             <h3 className="mt-1 text-2xl font-black">{data.title || "حصاد مجلسكم"}</h3>
             <p className="mt-2 text-sm text-emerald-50/85">14 يومًا من التوقعات والمسامرة… وهذه حكاية المجلس بالأرقام.</p>
           </div>
@@ -845,16 +850,16 @@ export function GcMajlisHarvestView({ majlisId }: { majlisId: string }) {
         {data.awards.map((award) => {
           const Icon = awardIcon(award.key);
           return (
-            <article key={`${award.key}-${award.userId ?? award.name}`} className="relative overflow-hidden rounded-2xl border border-amber-400/20 bg-gradient-to-l from-amber-400/[0.08] to-card p-4">
-              <Icon className="absolute -bottom-3 left-1 h-20 w-20 text-amber-400/10" />
-              <p className="text-[10px] font-black text-amber-700 dark:text-amber-300">{award.title}</p>
+            <article key={`${award.key}-${award.userId ?? award.name}`} className="relative overflow-hidden rounded-2xl border border-sky-400/20 bg-gradient-to-l from-sky-400/[0.08] to-card p-4">
+              <Icon className="absolute -bottom-3 left-1 h-20 w-20 text-sky-400/10" />
+              <p className="text-[10px] font-black text-sky-700 dark:text-sky-300">{award.title}</p>
               <div className="mt-3 flex items-center gap-3">
                 <Avatar name={award.name} src={award.avatar} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-black">{award.name}</p>
                   {award.description ? <p className="mt-0.5 text-[10px] text-muted-foreground">{award.description}</p> : null}
                 </div>
-                {award.value != null ? <span className="font-black text-[#0A6B47] dark:text-emerald-300">{String(award.value)}</span> : null}
+                {award.value != null ? <span className="font-black text-sky-800 dark:text-sky-300">{String(award.value)}</span> : null}
               </div>
             </article>
           );

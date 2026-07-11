@@ -71,9 +71,9 @@ async function renderCard(majlis: GcMajlisSummary): Promise<Blob> {
   if (!ctx) throw new Error("المتصفح لا يدعم إنشاء البطاقة");
 
   const gradient = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT);
-  gradient.addColorStop(0, "#075339");
-  gradient.addColorStop(0.55, "#0F8054");
-  gradient.addColorStop(1, "#14905C");
+  gradient.addColorStop(0, "#041C22");
+  gradient.addColorStop(0.55, "sky-600");
+  gradient.addColorStop(1, "sky-500");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
@@ -101,7 +101,7 @@ async function renderCard(majlis: GcMajlisSummary): Promise<Blob> {
 
   ctx.textAlign = "center";
   ctx.direction = "rtl";
-  ctx.fillStyle = "#D8F7E9";
+  ctx.fillStyle = "#E0F2FE";
   ctx.font = '700 32px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("دعوة خاصة إلى مجلس توقعات خليجي 27", CARD_WIDTH / 2, 285);
 
@@ -124,11 +124,11 @@ async function renderCard(majlis: GcMajlisSummary): Promise<Blob> {
 
   ctx.direction = "rtl";
   ctx.textAlign = "center";
-  ctx.fillStyle = "#D8F7E9";
+  ctx.fillStyle = "#E0F2FE";
   ctx.font = '700 25px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("رمز الدعوة", CARD_WIDTH / 2, pillY + 52);
   ctx.direction = "ltr";
-  ctx.fillStyle = "#F5D46B";
+  ctx.fillStyle = "sky-300";
   ctx.font = '900 72px ui-monospace, "SFMono-Regular", monospace';
   ctx.fillText(majlis.code, CARD_WIDTH / 2, pillY + 132);
 
@@ -137,7 +137,7 @@ async function renderCard(majlis: GcMajlisSummary): Promise<Blob> {
   ctx.fillStyle = "#FFFFFF";
   ctx.font = '800 42px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("نافسنا… والمجلس يحلى بأهله", CARD_WIDTH / 2, 860);
-  ctx.fillStyle = "#D8F7E9";
+  ctx.fillStyle = "#E0F2FE";
   ctx.font = '600 28px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("توقّع قبل الصافرة، واكتشف توقعاتنا بعد الإقفال", CARD_WIDTH / 2, 925);
 
@@ -148,7 +148,7 @@ async function renderCard(majlis: GcMajlisSummary): Promise<Blob> {
   ctx.fillStyle = "#FFFFFF";
   ctx.font = '800 30px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("افتح الرابط وانضم مباشرةً", CARD_WIDTH / 2, 1110);
-  ctx.fillStyle = "#F5D46B";
+  ctx.fillStyle = "sky-300";
   ctx.font = '700 27px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("sabq.org/gulf-cup/majlis", CARD_WIDTH / 2, 1158);
 
@@ -177,9 +177,9 @@ async function renderHarvestCard(majlisName: string, awards: GcMajlisHarvestAwar
   if (!ctx) throw new Error("المتصفح لا يدعم إنشاء البطاقة");
 
   const gradient = ctx.createLinearGradient(0, 0, CARD_WIDTH, CARD_HEIGHT);
-  gradient.addColorStop(0, "#063E2D");
-  gradient.addColorStop(0.52, "#0F8054");
-  gradient.addColorStop(1, "#C48A1B");
+  gradient.addColorStop(0, "#041C22");
+  gradient.addColorStop(0.52, "sky-600");
+  gradient.addColorStop(1, "#38BDF8");
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, CARD_WIDTH, CARD_HEIGHT);
 
@@ -197,14 +197,14 @@ async function renderHarvestCard(majlisName: string, awards: GcMajlisHarvestAwar
   await drawTournamentLogo(ctx, CARD_WIDTH / 2, 60, 290, 95);
   ctx.direction = "rtl";
   ctx.textAlign = "center";
-  ctx.fillStyle = "#F5D46B";
+  ctx.fillStyle = "sky-300";
   ctx.font = '800 30px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("حصاد مجلس توقعات خليجي 27", CARD_WIDTH / 2, 225);
   ctx.fillStyle = "#FFFFFF";
   const safeName = majlisName.length > 38 ? `${majlisName.slice(0, 37)}…` : majlisName;
   setFittedFont(ctx, safeName, 900, 76);
   ctx.fillText(safeName, CARD_WIDTH / 2, 340);
-  ctx.fillStyle = "#D8F7E9";
+  ctx.fillStyle = "#E0F2FE";
   ctx.font = '600 25px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("أربعة أوسمة تلخّص حكاية المجلس طوال البطولة", CARD_WIDTH / 2, 395);
 
@@ -224,14 +224,14 @@ async function renderHarvestCard(majlisName: string, awards: GcMajlisHarvestAwar
     ctx.fillText(definition.emoji, 930, y + 91);
 
     ctx.textAlign = "right";
-    ctx.fillStyle = "#F5D46B";
+    ctx.fillStyle = "sky-300";
     ctx.font = '800 24px "IBM Plex Sans Arabic", Arial, sans-serif';
     ctx.fillText(definition.title, 845, y + 43);
     ctx.fillStyle = "#FFFFFF";
     const winner = award?.name || "لم يُحسم";
     setFittedFont(ctx, winner, 545, 39, 900);
     ctx.fillText(winner, 845, y + 92);
-    ctx.fillStyle = "#D8F7E9";
+    ctx.fillStyle = "#E0F2FE";
     ctx.font = '600 20px "IBM Plex Sans Arabic", Arial, sans-serif';
     const detail = [award?.description, award?.value != null ? String(award.value) : null].filter(Boolean).join(" · ") || "لا تتوفر بيانات كافية";
     ctx.fillText(detail.length > 64 ? `${detail.slice(0, 63)}…` : detail, 845, y + 124);
@@ -241,7 +241,7 @@ async function renderHarvestCard(majlisName: string, awards: GcMajlisHarvestAwar
   ctx.fillStyle = "#FFFFFF";
   ctx.font = '800 34px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("المنافسة انتهت… والسوالف تبقى", CARD_WIDTH / 2, 1195);
-  ctx.fillStyle = "#F5D46B";
+  ctx.fillStyle = "sky-300";
   ctx.font = '700 25px "IBM Plex Sans Arabic", Arial, sans-serif';
   ctx.fillText("sabq.org/gulf-cup/majlis", CARD_WIDTH / 2, 1242);
   ctx.fillStyle = "rgba(255,255,255,0.72)";
@@ -335,7 +335,7 @@ export function GcMajlisShareDialog({ majlis }: { majlis: GcMajlisSummary }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2 bg-white text-[#0A6B47] hover:bg-emerald-50">
+        <Button className="gap-2 rounded-full bg-sky-500 text-white hover:bg-sky-400">
           <Share2 className="h-4 w-4" aria-hidden="true" />
           ادعُ مجلسك
         </Button>
@@ -349,7 +349,7 @@ export function GcMajlisShareDialog({ majlis }: { majlis: GcMajlisSummary }) {
         <div className="overflow-hidden rounded-2xl border border-border bg-muted/50">
           {loading ? (
             <div className="grid aspect-[4/5] max-h-[62vh] place-items-center" role="status">
-              <Loader2 className="h-7 w-7 animate-spin text-[#0F8054] motion-reduce:animate-none" />
+              <Loader2 className="h-7 w-7 animate-spin text-sky-600 motion-reduce:animate-none" />
               <span className="sr-only">جارٍ إنشاء بطاقة الدعوة</span>
             </div>
           ) : preview ? (
@@ -360,7 +360,7 @@ export function GcMajlisShareDialog({ majlis }: { majlis: GcMajlisSummary }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button onClick={share} className="gap-2 bg-[#0F8054] text-white hover:bg-[#0A6B47]">
+          <Button onClick={share} className="gap-2 bg-sky-600 text-white hover:bg-sky-800">
             <Share2 className="h-4 w-4" aria-hidden="true" /> مشاركة
           </Button>
           <Button variant="outline" onClick={download} disabled={!blob} className="gap-2">
@@ -463,7 +463,7 @@ export function GcMajlisHarvestShareDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2 bg-white text-[#0A6B47] hover:bg-emerald-50">
+        <Button className="gap-2 bg-white text-sky-800 hover:bg-emerald-50">
           <Share2 className="h-4 w-4" aria-hidden="true" /> مشاركة الحصاد
         </Button>
       </DialogTrigger>
@@ -475,7 +475,7 @@ export function GcMajlisHarvestShareDialog({
         <div className="overflow-hidden rounded-2xl border border-border bg-muted/50">
           {loading ? (
             <div className="grid aspect-[4/5] max-h-[58vh] place-items-center" role="status">
-              <Loader2 className="h-7 w-7 animate-spin text-[#0F8054] motion-reduce:animate-none" />
+              <Loader2 className="h-7 w-7 animate-spin text-sky-600 motion-reduce:animate-none" />
               <span className="sr-only">جارٍ إنشاء بطاقة الحصاد</span>
             </div>
           ) : preview ? (
@@ -485,7 +485,7 @@ export function GcMajlisHarvestShareDialog({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={share} disabled={!blob} className="gap-2 bg-[#0F8054] text-white hover:bg-[#0A6B47]"><Share2 className="h-4 w-4" /> مشاركة</Button>
+          <Button onClick={share} disabled={!blob} className="gap-2 bg-sky-600 text-white hover:bg-sky-800"><Share2 className="h-4 w-4" /> مشاركة</Button>
           <Button variant="outline" onClick={download} disabled={!blob} className="gap-2"><Download className="h-4 w-4" /> حفظ الصورة</Button>
           <Button variant="outline" onClick={copyLink} className="gap-2"><Copy className="h-4 w-4" /> نسخ الرابط</Button>
         </div>

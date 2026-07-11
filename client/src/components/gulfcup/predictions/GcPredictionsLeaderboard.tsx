@@ -6,9 +6,9 @@ import type { GcLeaderRow, GcLeaderboardViewer } from "./gcPredictionTypes";
 const SERVER_LIMIT_CAP = 500;
 
 function RankBadge({ rank }: { rank: number }) {
-  if (rank === 1) return <Crown className="h-5 w-5 text-amber-500" />;
+  if (rank === 1) return <Crown className="h-5 w-5 text-sky-500" />;
   if (rank === 2) return <Medal className="h-5 w-5 text-slate-400" />;
-  if (rank === 3) return <Medal className="h-5 w-5 text-amber-700" />;
+  if (rank === 3) return <Medal className="h-5 w-5 text-sky-700" />;
   return <span className="grid h-5 w-5 place-items-center text-xs font-black tabular-nums text-muted-foreground">{rank}</span>;
 }
 
@@ -73,7 +73,7 @@ export function GcPredictionsLeaderboard({
             key={l.userId}
             className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
               me
-                ? "border-amber-400/60 bg-amber-50/70 dark:border-amber-500/40 dark:bg-amber-950/30"
+                ? "border-sky-400/60 bg-sky-50/70 dark:border-sky-500/40 dark:bg-sky-950/30"
                 : "border-border bg-card"
             }`}
             data-testid={`gc-leader-${l.rank}`}
@@ -93,7 +93,7 @@ export function GcPredictionsLeaderboard({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold">
                 {l.name}
-                {me && <span className="mr-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400"> (أنت)</span>}
+                {me && <span className="mr-1 text-[10px] font-semibold text-sky-600 dark:text-sky-400"> (أنت)</span>}
               </p>
               <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <span>دقّة {l.accuracy}%</span>
@@ -101,7 +101,7 @@ export function GcPredictionsLeaderboard({
               </p>
             </div>
             <div className="shrink-0 text-left">
-              <p className="text-base font-black tabular-nums text-amber-700 dark:text-amber-300">
+              <p className="text-base font-black tabular-nums text-sky-700 dark:text-sky-300">
                 {formatNumber(l.totalPoints)}
               </p>
               <p className="text-[10px] text-muted-foreground">نقطة</p>
@@ -114,7 +114,7 @@ export function GcPredictionsLeaderboard({
       {viewer && currentUserId && !viewerInList && (
         <div className="border-t border-dashed border-border pt-2">
           <div
-            className="flex items-center gap-3 rounded-xl border border-amber-400/60 bg-amber-50/70 px-3 py-2.5 dark:border-amber-500/40 dark:bg-amber-950/30"
+            className="flex items-center gap-3 rounded-xl border border-sky-400/60 bg-sky-50/70 px-3 py-2.5 dark:border-sky-500/40 dark:bg-sky-950/30"
             data-testid="gc-leader-viewer"
           >
             <div className="flex w-6 shrink-0 justify-center">
@@ -134,7 +134,7 @@ export function GcPredictionsLeaderboard({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-bold">
                 {viewerName || "أنت"}
-                <span className="mr-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400"> (أنت)</span>
+                <span className="mr-1 text-[10px] font-semibold text-sky-600 dark:text-sky-400"> (أنت)</span>
               </p>
               <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <span>دقّة {viewer.accuracy}%</span>
@@ -142,7 +142,7 @@ export function GcPredictionsLeaderboard({
               </p>
             </div>
             <div className="shrink-0 text-left">
-              <p className="text-base font-black tabular-nums text-amber-700 dark:text-amber-300">
+              <p className="text-base font-black tabular-nums text-sky-700 dark:text-sky-300">
                 {formatNumber(viewer.totalPoints)}
               </p>
               <p className="text-[10px] text-muted-foreground">نقطة</p>

@@ -7,7 +7,7 @@ function GroupTable({ group }: { group: GcGroup }) {
   const isLive = group.rows.some((r) => r.live);
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center justify-between bg-gradient-to-l from-[#0F8054] to-[#0A6B47] px-4 py-2.5">
+      <div className="flex items-center justify-between bg-gradient-to-l from-sky-700 to-sky-950 px-4 py-2.5">
         <h3 className="text-sm font-black text-white">{group.name || "مجموعة"}</h3>
         {isLive ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-[#DE2B3D]/90 px-2 py-0.5 text-[10px] font-bold text-white">
@@ -15,7 +15,7 @@ function GroupTable({ group }: { group: GcGroup }) {
             مباشر
           </span>
         ) : !started ? (
-          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold text-emerald-50">
+          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold text-sky-50">
             لم تبدأ
           </span>
         ) : null}
@@ -38,7 +38,7 @@ function GroupTable({ group }: { group: GcGroup }) {
                 key={row.team.id}
                 className={`border-b border-border/60 last:border-0 ${
                   row.live
-                    ? "bg-emerald-500/[0.06]"
+                    ? "bg-sky-500/[0.06]"
                     : isSaudi
                       ? "bg-emerald-50/70 dark:bg-emerald-950/20"
                       : ""
@@ -48,18 +48,18 @@ function GroupTable({ group }: { group: GcGroup }) {
                   <div className="flex items-center gap-2">
                     <span
                       className={`inline-flex items-center gap-0.5 shrink-0 ${
-                        qualifying ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                        qualifying ? "text-teal-700 dark:text-teal-300" : "text-muted-foreground"
                       }`}
                     >
                       <span
                         className={`grid h-5 w-5 place-items-center rounded text-[10px] font-bold ${
-                          qualifying ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
+                          qualifying ? "bg-teal-600 text-white" : "bg-muted text-muted-foreground"
                         }`}
                       >
                         {row.rank}
                       </span>
                       {row.live && (row.liveDelta ?? 0) > 0 && (
-                        <ArrowUp className="h-3 w-3 text-emerald-500" aria-label={`صعد ${row.liveDelta} مركزًا`} />
+                        <ArrowUp className="h-3 w-3 text-teal-600" aria-label={`صعد ${row.liveDelta} مركزًا`} />
                       )}
                       {row.live && (row.liveDelta ?? 0) < 0 && (
                         <ArrowDown className="h-3 w-3 text-rose-500" aria-label={`هبط ${Math.abs(row.liveDelta ?? 0)} مركزًا`} />
@@ -105,7 +105,7 @@ export function GcGroups({ groups }: { groups: GcGroup[] }) {
   return (
     <section id="gc-groups" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="mb-6 flex flex-wrap items-center gap-2">
-        <LayoutGrid className="h-6 w-6 text-emerald-500" />
+        <LayoutGrid className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">المجموعات والترتيب</h2>
         {isLive && (
           <span className="inline-flex items-center gap-1 rounded-full bg-[#DE2B3D]/10 px-2 py-0.5 text-[11px] font-bold text-[#DE2B3D] dark:text-red-400">

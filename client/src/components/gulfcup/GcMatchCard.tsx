@@ -55,7 +55,7 @@ export function GcMatchCard({
           : undefined
       }
       className={`rounded-2xl border p-3.5 transition-shadow hover:shadow-md ${
-        clickable ? "cursor-pointer hover:ring-2 hover:ring-emerald-400/40" : ""
+        clickable ? "cursor-pointer hover:ring-2 hover:ring-sky-400/40" : ""
       } ${
         involvesSaudi
           ? "border-emerald-300/50 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-950/20"
@@ -64,7 +64,7 @@ export function GcMatchCard({
     >
       <div className="mb-2.5 flex items-center justify-between text-[11px] text-muted-foreground">
         <span className="truncate">
-          <span className="text-emerald-600 dark:text-emerald-400">#{fixture.matchNo}</span>{" "}
+          <span className="text-sky-600 dark:text-sky-400">#{fixture.matchNo}</span>{" "}
           {fixture.round}
         </span>
         {fixture.status.live ? (
@@ -103,7 +103,7 @@ export function GcMatchCard({
             </span>
           </span>
           {clickable && (
-            <span className="shrink-0 font-bold text-emerald-600 dark:text-emerald-400">
+            <span className="shrink-0 font-bold text-sky-600 dark:text-sky-400">
               التفاصيل ‹
             </span>
           )}

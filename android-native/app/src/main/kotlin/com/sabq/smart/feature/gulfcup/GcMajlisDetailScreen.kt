@@ -341,7 +341,20 @@ private fun GcMatchdaySection(state: GcPredictionsViewModel.UiState, vm: GcPredi
     val rows = state.board?.rows.orEmpty()
     if (rows.isEmpty()) return GcSectionEmptyFull("الترتيب لم يبدأ", "تظهر المراكز بعد أول مباراة مسوّاة.", colors)
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(rows, key = { it.userId }) { row -> GcRankRow(row.rank, row.name + if (row.isOwner) " 👑" else "", row.avatar, row.totalPoints, row.userId == state.user?.id, colors, "${row.correctCount} إصابة · ${row.exactCount} دقيقة") }
+        items(rows, key = { it.userId }) { row ->
+            GcRankRow(
+                row.rank,
+                row.name + (if (row.isOwner) " 👑" else "") + (if (row.isDayChampion) " 🏆" else ""),
+                row.avatar,
+                row.totalPoints,
+                row.userId == state.user?.id,
+                colors,
+                buildString {
+                    if (row.isDayChampion) append("بطل الجولة · ")
+                    append("${row.correctCount} إصابة · ${row.exactCount} دقيقة")
+                },
+            )
+        }
     }
 }
 

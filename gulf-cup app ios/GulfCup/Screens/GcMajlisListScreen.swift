@@ -1,16 +1,27 @@
 import SwiftUI
 
+/// مسار ترحيب المجلس — يُعرض عبر fullScreenCover(item:) لتفادي صفحة بيضاء.
+private struct GcMajlisOnboardingRoute: Identifiable, Hashable {
+    let majlis: GcMajlisSummary
+    let fixtureId: Int?
+    var id: String { majlis.id }
+}
+
+/// مسار تفاصيل المجلس — خارج ScrollView الأب عبر غطاء كامل الشاشة.
+private struct GcMajlisDetailRoute: Identifiable, Hashable {
+    let majlis: GcMajlisSummary
+    let fixtureId: Int?
+    var id: String { majlis.id }
+}
+
 struct GcMajlisListScreen: View {
     @Environment(GcAuthStore.self) private var auth
     @Environment(GcAppRouter.self) private var router
 
     @State private var store = GcMajlisStore()
     @State private var notifications = GcMajlisNotificationPreferenceStore.shared
-    @State private var selectedMajlis: GcMajlisSummary?
-    @State private var selectedFixtureId: Int?
-    @State private var pendingOnboardingMajlis: GcMajlisSummary?
-    @State private var pendingOnboardingFixtureId: Int?
-    @State private var showOnboarding = false
+    @State private var detailRoute: GcMajlisDetailRoute?
+    @State private var onboardingRoute: GcMajlisOnboardingRoute?
     @State private var showCreate = false
     @State private var showJoin = false
     @State private var shareMajlis: GcMajlisSummary?
@@ -37,8 +48,15 @@ struct GcMajlisListScreen: View {
             openPendingMajlisIfAvailable()
         }
         .onChange(of: router.pendingMajlisId) { _, _ in openPendingMajlisIfAvailable() }
-        .navigationDestination(item: $selectedMajlis) { majlis in
-            GcMajlisDetailScreen(majlis: majlis, focusFixtureId: selectedFixtureId)
+        .fullScreenCover(item: $detailRoute) { route in
+            NavigationStack {
+                GcMajlisDetailScreen(majlis: route.majlis, focusFixtureId: route.fixtureId)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(L("auth.close")) { detailRoute = nil }
+                        }
+                    }
+            }
         }
         .sheet(isPresented: $showCreate) {
             GcMajlisCreateSheet(store: store) { majlis in
@@ -63,65 +81,77 @@ struct GcMajlisListScreen: View {
         .sheet(item: $shareMajlis) { majlis in
             GcMajlisInviteSheet(majlis: majlis)
         }
-        .fullScreenCover(isPresented: $showOnboarding) {
-            if let userId = auth.member?.id, let onboardingMajlis = pendingOnboardingMajlis {
-                GcMajlisOnboardingView(
-                    userId: userId,
-                    majlisId: onboardingMajlis.id,
-                    onFinish: {
-                        showOnboarding = false
-                        selectedFixtureId = pendingOnboardingFixtureId
-                        selectedMajlis = pendingOnboardingMajlis
-                        pendingOnboardingMajlis = nil
-                        pendingOnboardingFixtureId = nil
-                    },
-                    onPredictNow: {
-                        showOnboarding = false
-                        pendingOnboardingMajlis = nil
-                        pendingOnboardingFixtureId = nil
-                        router.openPredictions(.matches)
+        .fullScreenCover(item: $onboardingRoute) { route in
+            Group {
+                if let userId = auth.member?.id {
+                    GcMajlisOnboardingView(
+                        userId: userId,
+                        majlisId: route.majlis.id,
+                        onFinish: {
+                            let next = route
+                            onboardingRoute = nil
+                            detailRoute = GcMajlisDetailRoute(majlis: next.majlis, fixtureId: next.fixtureId)
+                        },
+                        onPredictNow: {
+                            onboardingRoute = nil
+                            router.openPredictions(.matches)
+                        }
+                    )
+                } else {
+                    // احتياط: لا نترك غطاءً أبيضًا فارغًا
+                    Color.clear.onAppear {
+                        onboardingRoute = nil
+                        detailRoute = GcMajlisDetailRoute(majlis: route.majlis, fixtureId: route.fixtureId)
                     }
-                )
+                }
             }
         }
     }
 
+    /// ترويسة خفيفة بأسلوب حسابي — بلا هيرو ليلي.
     private var hero: some View {
-        GcHeroPanel(radius: GcTheme.cardRadius) {
-            VStack(alignment: .leading, spacing: 13) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(L("majlis.title"))
-                            .font(GulfCupFonts.headline(size: 22))
-                            .foregroundStyle(.white)
-                        Text(L("majlis.hero.subtitle"))
-                            .font(GulfCupFonts.app(size: 12))
-                            .foregroundStyle(GcTheme.onHeroDim)
-                            .lineSpacing(3)
-                    }
-                    Spacer(minLength: 8)
-                    Image(systemName: "person.3.fill")
-                        .font(.system(size: 25, weight: .semibold))
-                        .foregroundStyle(GcTheme.skyLite)
-                        .frame(width: 48, height: 48)
-                        .background(Circle().fill(Color.white.opacity(0.08)))
-                        .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(L("majlis.title"))
+                        .font(GulfCupFonts.headline(size: 20))
+                        .foregroundStyle(GcTheme.ink)
+                    Text(L("majlis.hero.subtitle"))
+                        .font(GulfCupFonts.app(size: 12.5))
+                        .foregroundStyle(GcTheme.inkDim)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-
-                HStack(spacing: 8) {
-                    Label(L("majlis.hero.private"), systemImage: "lock.fill")
-                    Label(L("majlis.hero.reveal"), systemImage: "eye.fill")
-                    Label(L("majlis.hero.limit"), systemImage: "person.2.fill")
-                }
-                .font(GulfCupFonts.app(size: 9.5, weight: .semibold))
-                .foregroundStyle(GcTheme.onHeroDim)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                Spacer(minLength: 8)
+                Image(systemName: "person.3.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(GcTheme.skyDeep)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(GcTheme.sky.opacity(0.14)))
+                    .accessibilityHidden(true)
             }
-            .padding(16)
+
+            HStack(spacing: 6) {
+                heroChip(L("majlis.hero.private"), icon: "lock.fill")
+                heroChip(L("majlis.hero.reveal"), icon: "eye.fill")
+                heroChip(L("majlis.hero.limit"), icon: "person.2.fill")
+            }
         }
+        .padding(16)
+        .gcCard()
         .padding(.top, 2)
         .accessibilityElement(children: .combine)
+    }
+
+    private func heroChip(_ title: String, icon: String) -> some View {
+        Label(title, systemImage: icon)
+            .font(GulfCupFonts.app(size: 9.5, weight: .semibold))
+            .foregroundStyle(GcTheme.skyDeep)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .background(Capsule().fill(GcTheme.sky.opacity(0.10)))
     }
 
     private var signedOutCard: some View {
@@ -173,7 +203,7 @@ struct GcMajlisListScreen: View {
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .bold))
                     .frame(width: 32, height: 32)
-                    .background(Circle().fill(filled ? Color.white.opacity(0.15) : GcTheme.sky.opacity(0.12)))
+                    .background(Circle().fill(filled ? Color.white.opacity(0.22) : GcTheme.sky.opacity(0.12)))
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(GulfCupFonts.app(size: 13, weight: .bold))
                     Text(subtitle).font(GulfCupFonts.app(size: 9.5))
@@ -186,7 +216,7 @@ struct GcMajlisListScreen: View {
             .frame(maxWidth: .infinity, minHeight: 60)
             .background(
                 RoundedRectangle(cornerRadius: GcTheme.tileRadius, style: .continuous)
-                    .fill(filled ? GcTheme.emerald : GcTheme.cardBg)
+                    .fill(filled ? GcTheme.sky : GcTheme.cardBg)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: GcTheme.tileRadius, style: .continuous)
@@ -231,7 +261,7 @@ struct GcMajlisListScreen: View {
                 Text(text)
             }
             .font(GulfCupFonts.app(size: 11.5, weight: .semibold))
-            .foregroundStyle(GcTheme.emeraldDeep)
+            .foregroundStyle(GcTheme.skyDeep)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 4)
         }
@@ -277,9 +307,9 @@ struct GcMajlisListScreen: View {
                 HStack(spacing: 11) {
                     Image(systemName: majlis.isOwner ? "crown.fill" : "person.3.fill")
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(majlis.isOwner ? GcTheme.skyDeep : GcTheme.emerald)
+                        .foregroundStyle(GcTheme.skyDeep)
                         .frame(width: 38, height: 38)
-                        .background(Circle().fill((majlis.isOwner ? GcTheme.sky : GcTheme.emerald).opacity(0.12)))
+                        .background(Circle().fill(GcTheme.sky.opacity(0.12)))
                     VStack(alignment: .leading, spacing: 3) {
                         Text(majlis.name)
                             .font(GulfCupFonts.app(size: 14, weight: .bold))
@@ -324,17 +354,13 @@ struct GcMajlisListScreen: View {
 
     private func openAfterMembership(_ majlis: GcMajlisSummary, fixtureId: Int? = nil) {
         guard let userId = auth.member?.id else {
-            selectedFixtureId = fixtureId
-            selectedMajlis = majlis
+            detailRoute = GcMajlisDetailRoute(majlis: majlis, fixtureId: fixtureId)
             return
         }
         if GcMajlisOnboarding.shouldShow(userId: userId, majlisId: majlis.id) {
-            pendingOnboardingMajlis = majlis
-            pendingOnboardingFixtureId = fixtureId
-            showOnboarding = true
+            onboardingRoute = GcMajlisOnboardingRoute(majlis: majlis, fixtureId: fixtureId)
         } else {
-            selectedFixtureId = fixtureId
-            selectedMajlis = majlis
+            detailRoute = GcMajlisDetailRoute(majlis: majlis, fixtureId: fixtureId)
         }
     }
 

@@ -13,10 +13,10 @@ import type { GcScorer, GcScorersBoard } from "./gcTypes";
 function PodiumCard({ scorer, place }: { scorer: GcScorer; place: 1 | 2 | 3 }) {
   const ring =
     place === 1
-      ? "ring-amber-400 bg-amber-50/80 dark:bg-amber-950/20"
+      ? "ring-sky-400 bg-sky-50/80 dark:bg-sky-950/20"
       : place === 2
         ? "ring-slate-300 bg-slate-50/80 dark:bg-slate-900/40"
-        : "ring-orange-300 bg-orange-50/60 dark:bg-orange-950/20";
+        : "ring-teal-300 bg-teal-50/60 dark:bg-teal-950/20";
   const medal = place === 1 ? "🥇" : place === 2 ? "🥈" : "🥉";
   return (
     <div
@@ -37,7 +37,7 @@ function PodiumCard({ scorer, place }: { scorer: GcScorer; place: 1 | 2 | 3 }) {
         )}
         <span className="truncate max-w-[6rem]">{scorer.team.name}</span>
       </p>
-      <p className="mt-1.5 text-2xl font-black tabular-nums text-emerald-600 dark:text-emerald-400">
+      <p className="mt-1.5 text-2xl font-black tabular-nums text-sky-600 dark:text-sky-400">
         {scorer.goals}
       </p>
       <p className="text-[10px] text-muted-foreground">هدفًا</p>
@@ -63,10 +63,10 @@ export function GcScorersSection() {
   return (
     <section id="gc-scorers" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
       <div className="mb-6 flex flex-wrap items-center gap-2">
-        <Target className="h-6 w-6 text-emerald-500" />
+        <Target className="h-6 w-6 text-sky-600 dark:text-sky-400" />
         <h2 className="text-2xl font-black text-foreground">الهدّافون وصنّاع اللعب</h2>
         {data && !data.isCurrent && (
-          <Badge variant="outline" className="border-amber-400/50 text-amber-600 dark:text-amber-300">
+          <Badge variant="outline" className="border-sky-400/50 text-sky-700 dark:text-sky-300">
             أرقام خليجي 26 — إلى حين انطلاق البطولة
           </Badge>
         )}
@@ -108,7 +108,7 @@ export function GcScorersSection() {
                     <p className="truncate text-sm font-bold text-foreground">{s.name}</p>
                     <p className="truncate text-[11px] text-muted-foreground">{s.team.name}</p>
                   </div>
-                  <span className="text-lg font-black tabular-nums text-emerald-600 dark:text-emerald-400">
+                  <span className="text-lg font-black tabular-nums text-sky-600 dark:text-sky-400">
                     {s.goals}
                   </span>
                 </li>
@@ -127,7 +127,7 @@ export function GcScorersSection() {
           >
             <div className="rounded-2xl border border-border bg-card p-4">
               <h3 className="mb-3 flex items-center gap-1.5 text-sm font-black text-foreground">
-                <Handshake className="h-4 w-4 text-amber-500" />
+                <Handshake className="h-4 w-4 text-sky-500" />
                 صنّاع الأهداف
               </h3>
               <ul className="space-y-2.5">
@@ -144,7 +144,7 @@ export function GcScorersSection() {
                     <span className="min-w-0 flex-1 truncate text-sm font-bold text-foreground">
                       {s.name}
                     </span>
-                    <span className="text-sm font-black tabular-nums text-amber-600 dark:text-amber-400">
+                    <span className="text-sm font-black tabular-nums text-sky-600 dark:text-sky-400">
                       {s.assists}
                     </span>
                   </li>

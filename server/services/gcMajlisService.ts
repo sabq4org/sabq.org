@@ -15,6 +15,7 @@ import { randomInt } from "node:crypto";
 import { db } from "../db";
 import { gcBadges, gcDuels, gcMajalis, gcMajlisMembers, gcPredictions, users } from "@shared/schema";
 import { enqueueGcMajlisMemberJoinedInTransaction } from "./gcMajlisNotificationsService";
+import { resolveMajlisDayChampionUserIds } from "./gcMajlisSocialService";
 
 const MAX_OWNED = 5;
 const MAX_MEMBERS = 50;
@@ -50,6 +51,8 @@ export interface GcMajlisLeaderboardRow {
   name: string;
   avatar: string | null;
   isOwner: boolean;
+  /** بطل جولة اليوم في هذا المجلس — يبقى معلّقًا حتى تُسوّى جولة تالية. */
+  isDayChampion: boolean;
   totalPoints: number;
   correctCount: number;
   exactCount: number;
@@ -316,6 +319,10 @@ export async function getMajlisLeaderboard(
       asc(gcMajlisMembers.userId),
     );
 
+  const dayChampionIds = new Set(
+    await resolveMajlisDayChampionUserIds(rows.map((r) => r.userId)),
+  );
+
   return {
     ok: true,
     data: {
@@ -334,6 +341,7 @@ export async function getMajlisLeaderboard(
         name: displayName(r.firstName, r.lastName),
         avatar: r.avatar,
         isOwner: r.userId === majlis.ownerId,
+        isDayChampion: dayChampionIds.has(r.userId),
         totalPoints: Number(r.totalPoints),
         correctCount: Number(r.correctCount),
         exactCount: Number(r.exactCount),

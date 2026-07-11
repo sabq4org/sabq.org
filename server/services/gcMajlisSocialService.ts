@@ -69,6 +69,83 @@ function fixtureDateKey(fixture: GcFixture): string {
   return riyadhDateKey(new Date(fixture.timestamp * 1000));
 }
 
+/**
+ * أبطال آخر جولة مكتملة التسوية داخل المجلس — تُعلَّق الشارة على الترتيب
+ * حتى تكتمل جولة لاحقة لها فائزون جدد (وفق الخطة).
+ */
+export async function resolveMajlisDayChampionUserIds(
+  memberIds: string[],
+): Promise<string[]> {
+  if (memberIds.length === 0) return [];
+  const fixtures = await getGcFixtures();
+  if (fixtures.length === 0) return [];
+
+  const byDate = new Map<string, GcFixture[]>();
+  for (const fixture of fixtures) {
+    const key = fixtureDateKey(fixture);
+    const list = byDate.get(key) ?? [];
+    list.push(fixture);
+    byDate.set(key, list);
+  }
+  const dates = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
+
+  for (const date of dates) {
+    const dayFixtures = byDate.get(date) ?? [];
+    const fixtureIds = dayFixtures.map((fixture) => String(fixture.id));
+    const [predictionRows, snapshots] = await Promise.all([
+      db.select().from(gcPredictions).where(and(
+        inArray(gcPredictions.fixtureId, fixtureIds),
+        inArray(gcPredictions.userId, memberIds),
+      )),
+      db.select().from(gcPredictionMatches).where(inArray(gcPredictionMatches.fixtureId, fixtureIds)),
+    ]);
+    const snapshotByFixture = new Map(snapshots.map((row) => [row.fixtureId, row]));
+    const championByUser = new Map<string, DayChampionCandidate>();
+    let settledMatches = 0;
+
+    for (const fixture of dayFixtures) {
+      const fixtureId = String(fixture.id);
+      const matchPredictions = predictionRows.filter((row) => row.fixtureId === fixtureId);
+      const snapshot = snapshotByFixture.get(fixtureId);
+      const disposition = gcFixtureSettlementDisposition({
+        statusCode: fixture.status.code,
+        goalsHome: fixture.goals.home,
+        goalsAway: fixture.goals.away,
+      });
+      const voidFixture = disposition === "void";
+      const settled = voidFixture || isGcClosedMatchStatus(snapshot?.status) || (
+        fixture.status.finished && matchPredictions.every((row) => row.status !== "pending")
+      );
+      if (!settled) continue;
+      settledMatches += 1;
+      for (const prediction of matchPredictions) {
+        if (!isGcCountedPredictionStatus(prediction.status)) continue;
+        const current = championByUser.get(prediction.userId) ?? {
+          userId: prediction.userId,
+          name: "",
+          avatar: null,
+          points: 0,
+          exact: 0,
+          correct: 0,
+          played: 0,
+        };
+        current.points += Number(prediction.pointsAwarded || 0);
+        current.exact += prediction.exactHit ? 1 : 0;
+        current.correct += prediction.outcomeHit ? 1 : 0;
+        current.played += 1;
+        championByUser.set(prediction.userId, current);
+      }
+    }
+
+    // جولة جارية غير مكتملة — نتخطاها ونعلّق أبطال آخر يوم مُسوّى بالكامل.
+    if (settledMatches !== dayFixtures.length) continue;
+    if (championByUser.size === 0) continue;
+    return selectDayChampions([...championByUser.values()]).map((row) => row.userId);
+  }
+
+  return [];
+}
+
 function validDateKey(raw: string | undefined): string | null {
   if (!raw) return riyadhDateKey(new Date());
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null;

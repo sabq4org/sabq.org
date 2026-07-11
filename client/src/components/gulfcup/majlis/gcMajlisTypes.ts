@@ -68,6 +68,8 @@ export interface GcMajlisLeaderboardRow {
   name: string;
   avatar: string | null;
   isOwner: boolean;
+  /** بطل آخر جولة مكتملة — يبقى حتى تُسوّى جولة تالية */
+  isDayChampion?: boolean;
   totalPoints: number;
   correctCount: number;
   exactCount: number;

@@ -294,7 +294,7 @@ function ManOfTheMatch({ detail }: { detail: GcMatchDetail }) {
                 disabled={vote.isPending}
                 className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
                   picked
-                    ? "bg-[#0F8054] text-white"
+                    ? "bg-sky-600 text-white"
                     : "bg-card text-foreground hover:bg-emerald-500/10 border border-border"
                 }`}
               >

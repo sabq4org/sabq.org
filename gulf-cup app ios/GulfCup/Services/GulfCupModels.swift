@@ -578,6 +578,7 @@ struct GcMajlisLeaderRow: Decodable, Hashable, Identifiable {
     let name: String
     let avatar: String?
     let isOwner: Bool
+    let isDayChampion: Bool?
     let totalPoints: Int
     let correctCount: Int
     let exactCount: Int

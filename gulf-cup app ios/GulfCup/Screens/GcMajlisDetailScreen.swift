@@ -124,60 +124,57 @@ struct GcMajlisDetailScreen: View {
     }
 
     private var detailHero: some View {
-        GcHeroPanel(radius: GcTheme.cardRadius) {
-            VStack(spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack(spacing: 6) {
-                            if majlis.isOwner {
-                                Label(L("majlis.owner"), systemImage: "crown.fill")
-                                    .font(GulfCupFonts.app(size: 9.5, weight: .bold))
-                                    .foregroundStyle(GcTheme.skyLite)
-                            }
-                        }
-                        Text(majlis.name)
-                            .font(GulfCupFonts.headline(size: 23))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                        Text(L("majlis.members.count", ["n": "\(majlis.membersCount)"]))
-                            .font(GulfCupFonts.app(size: 11.5))
-                            .foregroundStyle(GcTheme.onHeroDim)
-                    }
-                    Spacer(minLength: 8)
-                    Button { showInvite = true } label: {
-                        Image(systemName: "paperplane.fill")
-                            .font(.system(size: 15, weight: .semibold))
+        VStack(spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 5) {
+                    if majlis.isOwner {
+                        Label(L("majlis.owner"), systemImage: "crown.fill")
+                            .font(GulfCupFonts.app(size: 10, weight: .bold))
                             .foregroundStyle(GcTheme.skyDeep)
-                            .frame(width: 46, height: 46)
-                            .background(Circle().fill(GcTheme.skyLite))
                     }
-                    .buttonStyle(GcPressStyle())
-                    .accessibilityLabel(L("majlis.invite.share"))
+                    Text(majlis.name)
+                        .font(GulfCupFonts.headline(size: 20))
+                        .foregroundStyle(GcTheme.ink)
+                        .lineLimit(2)
+                    Text(L("majlis.members.count", ["n": "\(majlis.membersCount)"]))
+                        .font(GulfCupFonts.app(size: 12))
+                        .foregroundStyle(GcTheme.inkDim)
                 }
-
-                HStack(spacing: 9) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(L("majlis.invite.code"))
-                            .font(GulfCupFonts.app(size: 9.5))
-                            .foregroundStyle(GcTheme.onHeroFaint)
-                        Text(verbatim: majlis.code)
-                            .font(.system(size: 16, weight: .heavy, design: .rounded).monospaced())
-                            .tracking(1.5)
-                            .foregroundStyle(.white)
-                            .environment(\.layoutDirection, .leftToRight)
-                    }
-                    Spacer()
-                    Text(L("majlis.detail.revealPromise"))
-                        .font(GulfCupFonts.app(size: 10.5, weight: .semibold))
-                        .foregroundStyle(GcTheme.onHeroDim)
-                        .multilineTextAlignment(.trailing)
+                Spacer(minLength: 8)
+                Button { showInvite = true } label: {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(GcTheme.skyDeep)
+                        .frame(width: 44, height: 44)
+                        .background(Circle().fill(GcTheme.sky.opacity(0.14)))
                 }
-                .padding(11)
-                .background(RoundedRectangle(cornerRadius: 13).fill(Color.white.opacity(0.07)))
+                .buttonStyle(GcPressStyle())
+                .accessibilityLabel(L("majlis.invite.share"))
             }
-            .padding(16)
+
+            HStack(spacing: 9) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("majlis.invite.code"))
+                        .font(GulfCupFonts.app(size: 10))
+                        .foregroundStyle(GcTheme.inkFaint)
+                    Text(verbatim: majlis.code)
+                        .font(.system(size: 16, weight: .heavy, design: .rounded).monospaced())
+                        .tracking(1.5)
+                        .foregroundStyle(GcTheme.skyDeep)
+                        .environment(\.layoutDirection, .leftToRight)
+                }
+                Spacer()
+                Text(L("majlis.detail.revealPromise"))
+                    .font(GulfCupFonts.app(size: 10.5, weight: .semibold))
+                    .foregroundStyle(GcTheme.inkDim)
+                    .multilineTextAlignment(.trailing)
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(GcTheme.sky.opacity(0.08)))
         }
-        .padding(.top, 6)
+        .padding(16)
+        .gcCard()
+        .padding(.top, 4)
     }
 
     private var sectionBar: some View {
@@ -193,7 +190,7 @@ struct GcMajlisDetailScreen: View {
                             .padding(.horizontal, 13)
                             .frame(minHeight: 44)
                             .background(
-                                Capsule().fill(section == item ? GcTheme.emerald : GcTheme.cardBg)
+                                Capsule().fill(section == item ? GcTheme.sky : GcTheme.cardBg)
                             )
                             .overlay(Capsule().stroke(section == item ? Color.clear : GcTheme.line, lineWidth: 1))
                     }
@@ -291,14 +288,21 @@ private struct GcMajlisRankingView: View {
                                 .frame(width: 28)
                             GcPlayerPhoto(url: row.avatar, size: 30)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(row.name + (row.isOwner ? " 👑" : ""))
+                                Text(row.name + (row.isOwner ? " 👑" : "") + ((row.isDayChampion ?? false) ? " 🏆" : ""))
                                     .font(GulfCupFonts.app(size: 12.5, weight: .semibold))
                                     .foregroundStyle(GcTheme.ink)
                                     .lineLimit(1)
-                                Text(L("majlis.ranking.stats", [
-                                    "correct": "\(row.correctCount)",
-                                    "exact": "\(row.exactCount)",
-                                ]))
+                                Text(
+                                    (row.isDayChampion ?? false)
+                                        ? L("majlis.champion.today") + " · " + L("majlis.ranking.stats", [
+                                            "correct": "\(row.correctCount)",
+                                            "exact": "\(row.exactCount)",
+                                        ])
+                                        : L("majlis.ranking.stats", [
+                                            "correct": "\(row.correctCount)",
+                                            "exact": "\(row.exactCount)",
+                                        ])
+                                )
                                     .font(GulfCupFonts.app(size: 9.5))
                                     .foregroundStyle(GcTheme.inkDim)
                             }
@@ -762,37 +766,39 @@ private struct GcMajlisHarvestView: View {
     }
 
     private func harvestHero(_ data: GcMajlisHarvestResponse) -> some View {
-        GcHeroPanel(radius: GcTheme.cardRadius) {
-            VStack(spacing: 13) {
-                Image(systemName: "trophy.fill")
-                    .font(.system(size: 27))
-                    .foregroundStyle(GcTheme.skyLite)
-                Text(L("majlis.harvest.title"))
-                    .font(GulfCupFonts.headline(size: 20))
-                    .foregroundStyle(.white)
-                ForEach(data.awards.champions) { champion in
-                    HStack(spacing: 10) {
-                        GcPlayerPhoto(url: champion.avatar, size: 38)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(champion.name)
-                                .font(GulfCupFonts.app(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-                            Text(L("majlis.harvest.champion"))
-                                .font(GulfCupFonts.app(size: 10.5))
-                                .foregroundStyle(GcTheme.onHeroDim)
-                        }
-                        Spacer()
-                        Text("\(champion.totalPoints)")
-                            .font(GulfCupFonts.headline(size: 21))
-                            .foregroundStyle(GcTheme.skyLite)
-                            .monospacedDigit()
+        VStack(spacing: 13) {
+            Image(systemName: "trophy.fill")
+                .font(.system(size: 26))
+                .foregroundStyle(GcTheme.skyDeep)
+                .frame(width: 52, height: 52)
+                .background(Circle().fill(GcTheme.sky.opacity(0.14)))
+            Text(L("majlis.harvest.title"))
+                .font(GulfCupFonts.headline(size: 19))
+                .foregroundStyle(GcTheme.ink)
+            ForEach(data.awards.champions) { champion in
+                HStack(spacing: 10) {
+                    GcPlayerPhoto(url: champion.avatar, size: 38)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(champion.name)
+                            .font(GulfCupFonts.app(size: 14, weight: .bold))
+                            .foregroundStyle(GcTheme.ink)
+                        Text(L("majlis.harvest.champion"))
+                            .font(GulfCupFonts.app(size: 10.5))
+                            .foregroundStyle(GcTheme.inkDim)
                     }
-                    .padding(11)
-                    .background(RoundedRectangle(cornerRadius: 13).fill(Color.white.opacity(0.08)))
+                    Spacer()
+                    Text("\(champion.totalPoints)")
+                        .font(GulfCupFonts.headline(size: 21))
+                        .foregroundStyle(GcTheme.skyDeep)
+                        .monospacedDigit()
                 }
+                .padding(11)
+                .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(GcTheme.sky.opacity(0.08)))
             }
-            .padding(16)
         }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .gcCard()
     }
 
     @ViewBuilder private func awardSection(icon: String, title: String, rows: [(String, String, String?)]) -> some View {

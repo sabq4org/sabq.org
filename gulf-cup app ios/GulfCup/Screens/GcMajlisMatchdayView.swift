@@ -67,16 +67,16 @@ struct GcMajlisMatchdayView: View {
             VStack(alignment: .leading, spacing: 11) {
                 HStack(spacing: 8) {
                     Image(systemName: "trophy.fill")
-                        .foregroundStyle(GcTheme.skyLite)
+                        .foregroundStyle(GcTheme.skyDeep)
                     Text(champion.winners.count > 1
                          ? L("majlis.champion.tie")
                          : L("majlis.champion.today"))
                         .font(GulfCupFonts.headline(size: 16))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(GcTheme.ink)
                     Spacer()
                     Text("\(champion.settledMatches)/\(champion.totalMatches)")
                         .font(GulfCupFonts.app(size: 10, weight: .bold))
-                        .foregroundStyle(GcTheme.onHeroDim)
+                        .foregroundStyle(GcTheme.inkDim)
                         .monospacedDigit()
                 }
                 ForEach(champion.winners) { winner in
@@ -84,21 +84,21 @@ struct GcMajlisMatchdayView: View {
                         GcPlayerPhoto(url: winner.avatar, size: 32)
                         Text(winner.name)
                             .font(GulfCupFonts.app(size: 13.5, weight: .bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(GcTheme.ink)
                             .lineLimit(1)
                         Spacer()
                         Text("+\(winner.points)")
                             .font(GulfCupFonts.app(size: 16, weight: .bold))
-                            .foregroundStyle(GcTheme.skyLite)
+                            .foregroundStyle(GcTheme.skyDeep)
                             .monospacedDigit()
                     }
                 }
             }
             .padding(15)
-            .background(
+            .gcCard()
+            .overlay(
                 RoundedRectangle(cornerRadius: GcTheme.cardRadius, style: .continuous)
-                    .fill(GcTheme.heroGradient)
-                    .overlay(GcHeroDecor().clipShape(RoundedRectangle(cornerRadius: GcTheme.cardRadius)))
+                    .stroke(GcTheme.sky.opacity(0.22), lineWidth: 1)
             )
             .accessibilityElement(children: .combine)
         } else if champion.status == "in_progress" {
