@@ -31,9 +31,6 @@
 		GC000016 /* GcMatchActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100014 /* GcMatchActivity.swift */; };
 		GC000017 /* GcMatchLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100016 /* GcMatchLiveActivity.swift */; };
 		GC000018 /* GulfCupWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100017 /* GulfCupWidgetsBundle.swift */; };
-		GC0000A0 /* GcHomeWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000A0 /* GcHomeWidget.swift */; };
-		GC0000A1 /* GcWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000A1 /* GcWidgetSnapshot.swift */; };
-		GC0000A2 /* GcWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000A1 /* GcWidgetSnapshot.swift */; };
 		GC000019 /* GulfCupWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = GC100030 /* GulfCupWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		GC00001A /* GcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100025 /* GcMatchActivityAttributes.swift */; };
 		GC00001B /* GcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100026 /* GcMatchActivityAttributes.swift */; };
@@ -41,6 +38,12 @@
 		GC000030 /* GcMatchCenterScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100041 /* GcMatchCenterScreen.swift */; };
 		GC000031 /* GcTournamentScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100042 /* GcTournamentScreen.swift */; };
 		GC000032 /* GcPredictionsHubScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100043 /* GcPredictionsHubScreen.swift */; };
+		GC000033 /* GcUserPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100044 /* GcUserPreferences.swift */; };
+		GC000045 /* GcAccountScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100045 /* GcAccountScreen.swift */; };
+		GC000046 /* GcMembershipLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC100046 /* GcMembershipLogin.swift */; };
+		GC0000A0 /* GcHomeWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000A0 /* GcHomeWidget.swift */; };
+		GC0000A1 /* GcWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000A1 /* GcWidgetSnapshot.swift */; };
+		GC0000A2 /* GcWidgetSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = GC1000A1 /* GcWidgetSnapshot.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -87,12 +90,12 @@
 		GC100011 /* GulfCup.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GulfCup.entitlements; sourceTree = "<group>"; };
 		GC100012 /* GcPredictionMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcPredictionMatchCard.swift; sourceTree = "<group>"; };
 		GC100013 /* GcTeamProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcTeamProfileScreen.swift; sourceTree = "<group>"; };
+		GC100045 /* GcAccountScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcAccountScreen.swift; sourceTree = "<group>"; };
+		GC100046 /* GcMembershipLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMembershipLogin.swift; sourceTree = "<group>"; };
 		GC100014 /* GcMatchActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchActivity.swift; sourceTree = "<group>"; };
 		GC100015 /* GcLiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcLiveActivityManager.swift; sourceTree = "<group>"; };
 		GC100016 /* GcMatchLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchLiveActivity.swift; sourceTree = "<group>"; };
 		GC100017 /* GulfCupWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GulfCupWidgetsBundle.swift; sourceTree = "<group>"; };
-		GC1000A0 /* GcHomeWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcHomeWidget.swift; sourceTree = "<group>"; };
-		GC1000A1 /* GcWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcWidgetSnapshot.swift; sourceTree = "<group>"; };
 		GC100018 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		GC100019 /* GulfCupWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GulfCupWidgets.entitlements; sourceTree = "<group>"; };
 		GC100020 /* GulfCup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = GulfCup.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -105,6 +108,9 @@
 		GC100041 /* GcMatchCenterScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcMatchCenterScreen.swift; sourceTree = "<group>"; };
 		GC100042 /* GcTournamentScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcTournamentScreen.swift; sourceTree = "<group>"; };
 		GC100043 /* GcPredictionsHubScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcPredictionsHubScreen.swift; sourceTree = "<group>"; };
+		GC100044 /* GcUserPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcUserPreferences.swift; sourceTree = "<group>"; };
+		GC1000A0 /* GcHomeWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcHomeWidget.swift; sourceTree = "<group>"; };
+		GC1000A1 /* GcWidgetSnapshot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GcWidgetSnapshot.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -142,6 +148,8 @@
 				GC100041 /* GcMatchCenterScreen.swift */,
 				GC100042 /* GcTournamentScreen.swift */,
 				GC100043 /* GcPredictionsHubScreen.swift */,
+				GC100045 /* GcAccountScreen.swift */,
+				GC100046 /* GcMembershipLogin.swift */,
 			);
 			path = Screens;
 			sourceTree = "<group>";
@@ -164,6 +172,7 @@
 				GC10000A /* GcStrings.swift */,
 				GC100023 /* GcAuthStore.swift */,
 				GC100024 /* GcAuthModels.swift */,
+				GC100044 /* GcUserPreferences.swift */,
 				GC100014 /* GcMatchActivity.swift */,
 				GC100015 /* GcLiveActivityManager.swift */,
 				GC100025 /* GcMatchActivityAttributes.swift */,
@@ -265,8 +274,9 @@
 		GC600000 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastSwiftUpdateCheck = 1500;
-				LastUpgradeCheck = 1500;
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					GC300000 = {
 						CreatedOnToolsVersion = 15.0;
@@ -327,9 +337,12 @@
 				GC000011 /* GcAuthModels.swift in Sources */,
 				GC000012 /* GcPredictionMatchCard.swift in Sources */,
 				GC000013 /* GcTeamProfileScreen.swift in Sources */,
+				GC000045 /* GcAccountScreen.swift in Sources */,
+				GC000046 /* GcMembershipLogin.swift in Sources */,
 				GC000030 /* GcMatchCenterScreen.swift in Sources */,
 				GC000031 /* GcTournamentScreen.swift in Sources */,
 				GC000032 /* GcPredictionsHubScreen.swift in Sources */,
+				GC000033 /* GcUserPreferences.swift in Sources */,
 				GC000014 /* GcMatchActivity.swift in Sources */,
 				GC000015 /* GcLiveActivityManager.swift in Sources */,
 				GC00001A /* GcMatchActivityAttributes.swift in Sources */,
@@ -368,14 +381,42 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
@@ -390,14 +431,42 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -413,7 +482,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = GulfCup/GulfCup.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GulfCup/Info.plist;
@@ -441,7 +510,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = GulfCup/GulfCup.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GulfCup/Info.plist;
@@ -467,7 +536,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = GulfCupWidgets/GulfCupWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GulfCupWidgets/Info.plist;
@@ -492,7 +561,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = GulfCupWidgets/GulfCupWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = GulfCupWidgets/Info.plist;

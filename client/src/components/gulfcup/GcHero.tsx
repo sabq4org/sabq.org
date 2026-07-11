@@ -1,204 +1,219 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { CalendarDays, Crown, MapPin, Radio, Sparkles, Trophy, Users } from "lucide-react";
+import { CalendarDays, Crown, MapPin, Sparkles, Trophy, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-// الشعار الرسمي (SVG متجهي — حادّ على كل المقاسات). نصّه أخضر داكن،
-// لذا يُعرض دائمًا فوق لوح فاتح لا فوق الخلفية الداكنة مباشرة.
+// الشعار الرسمي (SVG متجهي). نصّه أخضر داكن — يُعرض فوق لوح أبيض كروشن.
 import gulfCupLogo from "@assets/gulf-cup-27-logo.svg";
 import { countdownFromIso, formatDateRange, type GcOverview, type GcTeam } from "./gcTypes";
 
 interface GcHeroProps {
   overview: GcOverview | undefined;
   onJump: (id: "schedule" | "teams") => void;
-  /** حامل اللقب (بطل آخر نسخة منتهية) — من /api/gulf-cup/history */
   titleHolder?: GcTeam | null;
 }
 
-function CountdownUnit({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="flex flex-col items-center">
-      <div className="relative grid place-items-center rounded-xl bg-white/[0.07] px-3 py-2 sm:px-4 sm:py-2.5 min-w-[3.25rem] sm:min-w-[4rem] ring-1 ring-emerald-300/20 backdrop-blur-md shadow-lg">
-        <span className="bg-gradient-to-b from-white to-emerald-100 bg-clip-text text-2xl sm:text-3xl font-black tabular-nums text-transparent">
-          {String(value).padStart(2, "0")}
-        </span>
-        <span className="absolute inset-x-2 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/50 to-transparent" />
-      </div>
-      <span className="mt-1.5 text-[10px] sm:text-[11px] font-semibold text-emerald-100/70">{label}</span>
-    </div>
-  );
-}
-
-function Countdown({ startsAt }: { startsAt: string | null }) {
+/** رقائق العدّ التنازلي — أسلوب هيرو روشن */
+function CountdownChips({ startsAt }: { startsAt: string }) {
   const [c, setC] = useState(() => countdownFromIso(startsAt));
   useEffect(() => {
     const t = setInterval(() => setC(countdownFromIso(startsAt)), 1000);
     return () => clearInterval(t);
   }, [startsAt]);
 
-  if (!startsAt || c.total <= 0) {
-    return (
-      <div className="flex items-center justify-center gap-2 text-base font-bold text-amber-200">
-        <span className="relative flex h-3 w-3">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-300 opacity-75" />
-          <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-300" />
-        </span>
-        انطلقت البطولة — التغطية الحيّة جارية
-      </div>
-    );
-  }
+  if (c.total <= 0) return null;
+
+  const chips = [
+    { value: c.days, label: "يوم" },
+    { value: c.hours, label: "ساعة" },
+    { value: c.minutes, label: "دقيقة" },
+    { value: c.seconds, label: "ثانية" },
+  ];
 
   return (
-    <div className="flex items-end justify-center gap-2 sm:gap-3" dir="ltr" aria-label="العد التنازلي">
-      <CountdownUnit value={c.days} label="يوم" />
-      <span className="pb-6 text-xl font-black text-emerald-300/40">:</span>
-      <CountdownUnit value={c.hours} label="ساعة" />
-      <span className="pb-6 text-xl font-black text-emerald-300/40">:</span>
-      <CountdownUnit value={c.minutes} label="دقيقة" />
-      <span className="pb-6 text-xl font-black text-emerald-300/40">:</span>
-      <CountdownUnit value={c.seconds} label="ثانية" />
+    <div className="flex items-center justify-center gap-2 sm:gap-2.5" dir="ltr" aria-label="العد التنازلي">
+      {chips.map((chip) => (
+        <div
+          key={chip.label}
+          className="flex min-w-[3.75rem] flex-col items-center rounded-xl bg-white/10 px-3 py-2.5 backdrop-blur-sm sm:min-w-[4.5rem] sm:px-4 sm:py-3"
+        >
+          <span className="text-2xl font-black tabular-nums text-white sm:text-3xl">
+            {String(chip.value).padStart(2, "0")}
+          </span>
+          <span className="mt-0.5 text-[10px] text-emerald-100/75">{chip.label}</span>
+        </div>
+      ))}
     </div>
   );
 }
 
 export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
   const dateRange = formatDateRange(overview?.startsAt ?? null, overview?.endsAt ?? null);
+  const startsAt = overview?.startsAt ?? null;
+
+  const [countdownLeft, setCountdownLeft] = useState(() =>
+    startsAt ? countdownFromIso(startsAt).total : 0,
+  );
+  useEffect(() => {
+    if (!startsAt) {
+      setCountdownLeft(0);
+      return;
+    }
+    setCountdownLeft(countdownFromIso(startsAt).total);
+    const t = setInterval(() => setCountdownLeft(countdownFromIso(startsAt).total), 1000);
+    return () => clearInterval(t);
+  }, [startsAt]);
+
+  const countdownActive = !!startsAt && countdownLeft > 0 && !overview?.started;
 
   return (
     <section dir="rtl" className="relative overflow-hidden">
-      {/* خلفية الهوية: تدرج المونديال الزمردي + توهّج ذهبي (خليجي 27 v4) */}
-      <div className="absolute inset-0 bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#08573B]" />
-      <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-[120px]" />
-      <div className="absolute -bottom-48 -right-24 h-96 w-96 rounded-full bg-amber-400/10 blur-3xl" />
-      <div className="absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-teal-400/10 blur-3xl" />
+      {/* أرضية الملعب الليلي — روشن / المونديال */}
+      <div className="absolute inset-0 bg-gradient-to-bl from-emerald-950 via-[#04261b] to-[#063828]" />
       <div
-        className="absolute inset-0 opacity-[0.04]"
+        className="absolute inset-0 opacity-[0.05]"
         style={{
           backgroundImage:
-            "repeating-linear-gradient(45deg, rgba(255,255,255,0.7) 0 2px, transparent 2px 22px)",
+            "repeating-linear-gradient(90deg, rgba(255,255,255,0.6) 0 90px, transparent 90px 180px)",
         }}
       />
+      <div className="absolute -bottom-56 left-1/2 h-[480px] w-[480px] -translate-x-1/2 rounded-full border-2 border-white/[0.07]" />
+      <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-sky-400/15 blur-3xl" />
+      <div className="absolute -bottom-32 -left-32 h-96 w-96 rounded-full bg-emerald-400/10 blur-3xl" />
 
-      <div className="relative container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-9">
+      <div className="relative container mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-14 lg:px-8">
         <motion.div
-          initial={{ opacity: 0, y: 18 }}
+          initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex flex-col items-center text-center gap-3.5"
+          transition={{ duration: 0.4 }}
+          className="flex flex-col items-center gap-3.5 text-center"
         >
-          <div className="relative">
-            <motion.div
-              className="absolute inset-0 -m-5 rounded-3xl bg-amber-300/20 blur-2xl"
-              animate={{ scale: [1, 1.1, 1], opacity: [0.45, 0.75, 0.45] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+          <div className="rounded-2xl bg-white px-4 py-3 shadow-2xl ring-1 ring-white/20">
+            <img
+              src={gulfCupLogo}
+              alt="شعار خليجي 27 — كأس الخليج العربي في السعودية 2026"
+              className="h-16 w-auto object-contain sm:h-20"
+              loading="eager"
+              decoding="async"
             />
-            {/* لوح عاجي خلف الشعار الرسمي — نص الهوية الداكن يبقى واضحًا فوق
-                الهيرو الداكن. المقاس مضبوط على مرجع هيرو المونديال (h-20) */}
-            <motion.div
-              className="relative rounded-2xl bg-gradient-to-b from-white to-amber-50/90 px-3 py-2 shadow-2xl ring-1 ring-amber-300/40"
-              initial={{ scale: 0.88, rotate: -2 }}
-              animate={{ scale: 1, rotate: 0 }}
-              transition={{ type: "spring", stiffness: 120, damping: 12 }}
-            >
-              <img
-                src={gulfCupLogo}
-                alt="شعار خليجي 27 — كأس الخليج العربي في السعودية 2026"
-                className="h-14 w-auto object-contain sm:h-16"
-                loading="eager"
-                decoding="async"
-              />
-            </motion.div>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <Badge className="gap-1.5 border border-amber-300/30 bg-amber-400/10 px-3 py-1 text-amber-200">
+            <Badge className="gap-1.5 border border-sky-300/20 bg-sky-400/15 px-3 py-1 text-sky-200">
               <Trophy className="h-3.5 w-3.5" />
               تغطية خاصة
             </Badge>
-            <Badge className="gap-1.5 border border-emerald-300/30 bg-emerald-400/10 px-3 py-1 text-emerald-100">
-              <MapPin className="h-3.5 w-3.5" />
-              تستضيفها جدة — السعودية
-            </Badge>
+            {overview?.started ? (
+              <Badge className="gap-1.5 border-0 bg-red-500 px-3 py-1 text-white">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
+                </span>
+                البطولة جارية
+              </Badge>
+            ) : (
+              <Badge className="gap-1.5 border border-white/15 bg-white/5 px-3 py-1 text-emerald-100/85">
+                <MapPin className="h-3.5 w-3.5" />
+                جدة — السعودية
+              </Badge>
+            )}
             {titleHolder && (
-              <Badge className="gap-1.5 border border-amber-300/30 bg-white/5 px-3 py-1 text-amber-100">
-                <Crown className="h-3.5 w-3.5 text-amber-300" />
+              <Badge className="gap-1.5 border border-white/15 bg-white/5 px-3 py-1 text-emerald-100/85">
+                <Crown className="h-3.5 w-3.5 text-sky-300" />
                 حامل اللقب: {titleHolder.name}
               </Badge>
             )}
           </div>
 
           <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl">
-            خليجي{" "}
-            <span className="bg-gradient-to-l from-amber-300 via-amber-200 to-emerald-300 bg-clip-text text-transparent">
-              27
-            </span>
+            خليجي <span className="text-sky-300">27</span>
           </h1>
-          <p className="-mt-2 text-sm font-bold text-emerald-100/70 sm:text-base">
-            كأس الخليج العربي السابع والعشرون
+          <p className="max-w-xl text-sm text-emerald-100/70 sm:text-base">
+            كأس الخليج العربي السابع والعشرون — تغطية حية لحظة بلحظة بتوقيت الرياض
           </p>
 
-          {dateRange && (
-            <p className="flex items-center gap-2 text-sm text-emerald-100/80 sm:text-base">
-              <CalendarDays className="h-4 w-4 text-amber-300" />
-              {dateRange}
-            </p>
-          )}
-
-          <div className="mt-1 w-full">
-            <Countdown startsAt={overview?.startsAt ?? null} />
-          </div>
-
-          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-emerald-100/80">
-            {!!overview?.teamsCount && (
-              <span className="flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-emerald-300" />
-                {overview.teamsCount} منتخبات
-              </span>
-            )}
-            {!!overview?.venues?.length && (
-              <span className="flex items-center gap-1.5">
-                <MapPin className="h-4 w-4 text-emerald-300" />
-                {overview.venues.length} ملاعب
-              </span>
-            )}
-            {overview?.started && (
-              <span className="flex items-center gap-1.5 font-bold text-[#FFB4BB]">
-                <Radio className="h-4 w-4 animate-pulse" />
-                البطولة جارية
-              </span>
-            )}
-          </div>
-
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
-            <Button
-              onClick={() => onJump("schedule")}
-              className="rounded-full bg-white px-6 font-bold text-emerald-900 hover:bg-emerald-50"
-            >
-              جدول المباريات
-            </Button>
-            <Link href="/gulf-cup/predictions">
-              <Button className="rounded-full bg-gradient-to-b from-[#F5D46B] to-[#E7A93C] px-6 font-black text-emerald-950 hover:from-[#F8DD82] hover:to-[#EDB44E]">
-                <Sparkles className="h-4 w-4" />
-                توقّع واربح
-              </Button>
-            </Link>
-            <Button
-              onClick={() => onJump("teams")}
-              variant="outline"
-              className="rounded-full border-emerald-300/30 bg-white/5 px-6 font-bold text-emerald-100 hover:bg-white/10"
-            >
-              المنتخبات المشاركة
-            </Button>
-          </div>
-
-          {!overview?.startsAt && (
-            <p className="mt-2 flex items-center gap-1.5 text-xs text-emerald-100/50">
-              <Sparkles className="h-3.5 w-3.5" />
-              يجري تجهيز التغطية — الجدول والمنتخبات ستظهر هنا أولًا بأول
-            </p>
+          {(!!overview?.teamsCount || !!overview?.venues?.length || !!dateRange) && (
+            <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-emerald-100/65 sm:text-sm">
+              {!!overview?.teamsCount && (
+                <span className="inline-flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5 text-sky-300/80" />
+                  {overview.teamsCount} منتخبات
+                </span>
+              )}
+              {!!overview?.venues?.length && (
+                <>
+                  <span className="text-white/25">·</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="h-3.5 w-3.5 text-sky-300/80" />
+                    {overview.venues.length} ملاعب
+                  </span>
+                </>
+              )}
+              {dateRange && (
+                <>
+                  <span className="text-white/25">·</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-sky-300/80" />
+                    {dateRange}
+                  </span>
+                </>
+              )}
+            </div>
           )}
         </motion.div>
+
+        {/* العدّاد فقط — يظهر قبل الانطلاق، ويختفي بعده بدون أن يأخذ معه أزرار الدخول */}
+        {countdownActive && overview?.startsAt && (
+          <motion.div
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45, delay: 0.1 }}
+            className="mx-auto mt-8 max-w-3xl"
+          >
+            <div className="rounded-3xl bg-white/[0.06] p-6 shadow-2xl ring-1 ring-white/10 backdrop-blur-md sm:p-8">
+              <p className="mb-5 text-center text-xs font-bold text-sky-200">
+                العدّ التنازلي لانطلاق البطولة
+              </p>
+              <CountdownChips startsAt={overview.startsAt} />
+            </div>
+          </motion.div>
+        )}
+
+        {/* أزرار ثابتة خارج بلوك العدّاد — تبقى بعد اختفائه */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.15 }}
+          className="mt-8 flex flex-wrap items-center justify-center gap-3"
+        >
+          <Button
+            onClick={() => onJump("schedule")}
+            className="rounded-full bg-sky-300 px-6 font-bold text-sky-950 hover:bg-sky-200"
+          >
+            جدول المباريات
+          </Button>
+          <Link href="/gulf-cup/predictions">
+            <Button className="rounded-full bg-white px-6 font-bold text-emerald-950 hover:bg-emerald-50">
+              <Sparkles className="h-4 w-4 text-sky-500" />
+              توقّع واربح
+            </Button>
+          </Link>
+          <Button
+            onClick={() => onJump("teams")}
+            variant="outline"
+            className="rounded-full border-white/20 bg-white/5 px-6 font-bold text-emerald-100 hover:bg-white/10"
+          >
+            المنتخبات
+          </Button>
+        </motion.div>
+
+        {!overview?.startsAt && (
+          <p className="mt-4 flex items-center justify-center gap-1.5 text-xs text-emerald-100/50">
+            <Sparkles className="h-3.5 w-3.5 text-sky-300" />
+            يجري تجهيز التغطية — الجدول والمنتخبات ستظهر هنا أولًا بأول
+          </p>
+        )}
       </div>
     </section>
   );

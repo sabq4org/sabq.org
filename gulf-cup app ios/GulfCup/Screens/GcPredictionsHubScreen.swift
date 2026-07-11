@@ -40,6 +40,20 @@ struct GcPredictionsHubScreen: View {
         .task { await load() }
         .refreshable { await load(force: true) }
         .navigationBarHidden(true)
+        .onAppear { consumeDeepLink() }
+        .onReceive(NotificationCenter.default.publisher(for: GcPredRouter.openSegmentNotification)) { note in
+            if let raw = note.userInfo?["segment"] as? String,
+               let seg = GcPredSegment(rawValue: raw) {
+                segment = seg
+                GcPredRouter.shared.pendingSegment = nil
+            }
+        }
+    }
+
+    private func consumeDeepLink() {
+        guard let pending = GcPredRouter.shared.pendingSegment else { return }
+        segment = pending
+        GcPredRouter.shared.pendingSegment = nil
     }
 
     private var myRank: Int? {
@@ -90,7 +104,7 @@ struct GcPredictionsHubScreen: View {
                     .font(GulfCupFonts.app(size: 12.5))
                     .foregroundStyle(GcTheme.inkDim)
                     .multilineTextAlignment(.center)
-                GcAppleSignInButton()
+                GcSignInPromptButton()
             }
             .padding(16)
             .gcCard()
@@ -140,6 +154,25 @@ enum GcPredSegment: String, CaseIterable, Identifiable {
         case .long: return L("predictions.seg.long")
         case .mine: return L("predictions.seg.mine")
         }
+    }
+}
+
+/// توجيه عميق من حسابي → تبويب التوقعات بقسم محدد (فانتازي / مجالس / …).
+@MainActor
+@Observable
+final class GcPredRouter {
+    static let shared = GcPredRouter()
+    static let openSegmentNotification = Notification.Name("gc.pred.openSegment")
+
+    var pendingSegment: GcPredSegment?
+
+    func open(_ segment: GcPredSegment) {
+        pendingSegment = segment
+        NotificationCenter.default.post(
+            name: Self.openSegmentNotification,
+            object: nil,
+            userInfo: ["segment": segment.rawValue]
+        )
     }
 }
 
@@ -317,7 +350,7 @@ private struct GcLongPredictionsView: View {
                             .font(GulfCupFonts.app(size: 12))
                             .foregroundStyle(GcTheme.inkDim)
                             .multilineTextAlignment(.center)
-                        GcAppleSignInButton()
+                        GcSignInPromptButton()
                     }
                     .padding(14)
                     .gcCard()
@@ -573,7 +606,7 @@ struct GcMajlisSection: View {
                     .font(GulfCupFonts.app(size: 12.5))
                     .foregroundStyle(GcTheme.inkDim)
                     .multilineTextAlignment(.center)
-                GcAppleSignInButton()
+                GcSignInPromptButton()
             }
             .padding(16)
             .gcCard()
@@ -799,7 +832,7 @@ struct GcFantasySection: View {
                     .font(GulfCupFonts.app(size: 12.5))
                     .foregroundStyle(GcTheme.inkDim)
                     .multilineTextAlignment(.center)
-                GcAppleSignInButton()
+                GcSignInPromptButton()
             }
             .padding(16)
             .gcCard()

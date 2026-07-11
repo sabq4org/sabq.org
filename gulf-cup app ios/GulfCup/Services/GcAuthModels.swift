@@ -53,6 +53,28 @@ struct GcDeviceInfo: Encodable {
     let deviceId: String?
 }
 
+struct GcLoginRequest: Encodable {
+    let email: String?
+    let phone: String?
+    let password: String
+    let deviceInfo: GcDeviceInfo?
+}
+
+struct GcPhoneSendRequest: Encodable {
+    let phone: String
+}
+
+struct GcPhoneSendResponse: Decodable {
+    let success: Bool
+    let message: String?
+}
+
+struct GcPhoneVerifyRequest: Encodable {
+    let phone: String
+    let code: String
+    let deviceInfo: GcDeviceInfo?
+}
+
 struct GcAppleAuthRequest: Encodable {
     let identityToken: String
     let fullName: AppleFullName?
@@ -120,6 +142,33 @@ extension APIClient {
         return try await post(GcLoginResponse.self, path: "/auth/apple", body: body, apiRoot: URLConstants.mobileAPI)
     }
 
+    /// دخول بعضوية سبق — بريد أو جوال + كلمة مرور.
+    func loginWithIdentifier(_ identifier: String, password: String) async throws -> GcLoginResponse {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isEmail = trimmed.contains("@")
+        let body = GcLoginRequest(
+            email: isEmail ? trimmed.lowercased() : nil,
+            phone: isEmail ? nil : trimmed,
+            password: password,
+            deviceInfo: Self.deviceInfo()
+        )
+        return try await post(GcLoginResponse.self, path: "/auth/login", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    func sendPhoneCode(_ phone: String) async throws -> GcPhoneSendResponse {
+        try await post(
+            GcPhoneSendResponse.self,
+            path: "/auth/phone/send",
+            body: GcPhoneSendRequest(phone: phone),
+            apiRoot: URLConstants.mobileAPI
+        )
+    }
+
+    func verifyPhoneCode(_ phone: String, code: String) async throws -> GcLoginResponse {
+        let body = GcPhoneVerifyRequest(phone: phone, code: code, deviceInfo: Self.deviceInfo())
+        return try await post(GcLoginResponse.self, path: "/auth/phone/verify", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
     func submitGcPrediction(fixtureId: Int, predHome: Int, predAway: Int) async throws -> GcSubmittedPrediction {
         let body = GcPredictionSubmitBody(fixtureId: fixtureId, predHome: predHome, predAway: predAway)
         let resp = try await post(
@@ -135,5 +184,19 @@ extension APIClient {
         struct Ok: Decodable { let ok: Bool? }
         let body = GcLongSubmitBody(kind: kind, teamId: teamId, playerName: playerName)
         _ = try await post(Ok.self, path: "/gulf-cup/predictions/long", body: body, apiRoot: URLConstants.mobileAPI)
+    }
+
+    /// ملف العضو من سبق — يجلب الصورة الشخصية والاسم المحدَّث.
+    func fetchMemberProfile(ignoreCache: Bool = true) async throws -> GcMember? {
+        struct R: Decodable {
+            let member: GcMember?
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: GcFlexKey.self)
+                member = (try? c.decode(GcMember.self, forKey: GcFlexKey("user")))
+                    ?? (try? c.decode(GcMember.self, forKey: GcFlexKey("member")))
+                    ?? (try? GcMember(from: decoder))
+            }
+        }
+        return try await get(R.self, path: "/members/profile", ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI).member
     }
 }

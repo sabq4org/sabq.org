@@ -32,15 +32,15 @@ interface GcMatchCenterDialogProps {
 
 function TeamBlock({ team, highlight }: { team: GcFixture["home"]; highlight: boolean }) {
   return (
-    <div className="flex flex-col items-center gap-2 min-w-0">
-      <div className="h-16 w-16 rounded-full bg-white p-1.5 ring-2 ring-emerald-500/20 shadow">
+    <div className="flex min-w-0 flex-col items-center gap-2">
+      <div className="h-16 w-16 rounded-full bg-white p-1.5 shadow-xl ring-4 ring-white/15">
         {team.logo ? (
           <img src={team.logo} alt={team.name} className="h-full w-full object-contain" loading="lazy" />
         ) : null}
       </div>
       <span
-        className={`text-sm text-center truncate max-w-[7.5rem] ${
-          highlight ? "font-black text-emerald-600 dark:text-emerald-300" : "font-bold text-foreground"
+        className={`max-w-[7.5rem] truncate text-center text-sm ${
+          highlight ? "font-black text-sky-200" : "font-bold text-white"
         }`}
       >
         {team.name}
@@ -146,7 +146,7 @@ function PitchHalf({ players, formation, teamName }: { players: GcRichLineupPlay
       </p>
       <div
         className="relative w-full overflow-hidden rounded-2xl border border-emerald-900/20"
-        style={{ aspectRatio: "3 / 4", background: "linear-gradient(180deg,#0F7A4D,#0A6B47)" }}
+        style={{ aspectRatio: "3 / 4", background: "linear-gradient(180deg,#063828,#04261b)" }}
         dir="ltr"
       >
         {/* خطوط الملعب */}
@@ -506,18 +506,39 @@ function H2HBlock({ detail }: { detail: GcMatchDetail }) {
       </p>
     );
   }
+
+  const fmtDate = (d: string) => {
+    const t = Date.parse(d);
+    if (!Number.isFinite(t)) return (d ?? "").slice(0, 4);
+    return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+      year: "numeric",
+      month: "short",
+    }).format(t);
+  };
+
   return (
     <div className="space-y-4 py-2">
-      {/* ملخّص كل التاريخ */}
       <div className="grid grid-cols-3 gap-2 text-center">
         {[
-          { label: `فوز ${detail.fixture.home.name}`, value: h.homeWins },
-          { label: "تعادل", value: h.draws },
-          { label: `فوز ${detail.fixture.away.name}`, value: h.awayWins },
+          {
+            label: `فوز ${detail.fixture.home.name}`,
+            value: h.homeWins,
+            tone: "bg-sky-400/10 text-sky-700 dark:text-sky-300 ring-1 ring-sky-400/20",
+          },
+          {
+            label: "تعادل",
+            value: h.draws,
+            tone: "bg-muted/70 text-foreground ring-1 ring-border/60",
+          },
+          {
+            label: `فوز ${detail.fixture.away.name}`,
+            value: h.awayWins,
+            tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20",
+          },
         ].map((cell) => (
-          <div key={cell.label} className="rounded-2xl bg-muted/60 px-2 py-3">
-            <p className="text-2xl font-black text-foreground tabular-nums">{cell.value}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground truncate">{cell.label}</p>
+          <div key={cell.label} className={`rounded-2xl px-2 py-3 ${cell.tone}`}>
+            <p className="text-2xl font-black tabular-nums">{cell.value}</p>
+            <p className="mt-0.5 truncate text-[11px] opacity-80">{cell.label}</p>
           </div>
         ))}
       </div>
@@ -527,26 +548,79 @@ function H2HBlock({ detail }: { detail: GcMatchDetail }) {
 
       {h.recent.length > 0 && (
         <div>
-          <p className="mb-2 text-xs font-bold text-muted-foreground">آخر المواجهات</p>
-          <ul className="space-y-2">
-            {h.recent.map((m, i) => (
-              <li
-                key={i}
-                className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-xs"
-              >
-                <span className="truncate text-muted-foreground">{m.competition}</span>
-                <span className="flex items-center gap-1.5 font-bold text-foreground">
-                  <span className="truncate max-w-[5.5rem]">{m.home.name}</span>
-                  <span className="tabular-nums font-black" dir="ltr">
-                    {m.goals.away ?? 0} - {m.goals.home ?? 0}
-                  </span>
-                  <span className="truncate max-w-[5.5rem]">{m.away.name}</span>
-                </span>
-                <span className="shrink-0 text-muted-foreground tabular-nums">
-                  {(m.date ?? "").slice(0, 4)}
-                </span>
-              </li>
-            ))}
+          <p className="mb-3 text-xs font-bold text-foreground">آخر المواجهات</p>
+          <ul className="space-y-2.5">
+            {h.recent.map((m, i) => {
+              const decided = m.goals.home != null && m.goals.away != null;
+              const homeWon = decided && m.goals.home! > m.goals.away!;
+              const awayWon = decided && m.goals.away! > m.goals.home!;
+              return (
+                <li
+                  key={i}
+                  className="rounded-2xl border border-border/80 bg-card px-3 py-3 shadow-sm"
+                >
+                  <div className="mb-2.5 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                    <span className="truncate font-medium">{m.competition || "مواجهة سابقة"}</span>
+                    <span className="shrink-0 tabular-nums">{fmtDate(m.date)}</span>
+                  </div>
+
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <div className="flex min-w-0 items-center justify-end gap-2">
+                      <span
+                        className={`truncate text-sm ${
+                          homeWon ? "font-black text-foreground" : "font-semibold text-muted-foreground"
+                        }`}
+                      >
+                        {m.home.name}
+                      </span>
+                      <div className="h-8 w-8 shrink-0 rounded-full bg-white p-0.5 ring-1 ring-border/60">
+                        {m.home.logo ? (
+                          <img
+                            src={m.home.logo}
+                            alt=""
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                          />
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div
+                      className="min-w-[3.75rem] rounded-xl bg-muted/80 px-2.5 py-1.5 text-center"
+                      dir="ltr"
+                    >
+                      {decided ? (
+                        <span className="text-base font-black tabular-nums text-foreground">
+                          {m.goals.away}–{m.goals.home}
+                        </span>
+                      ) : (
+                        <span className="text-sm font-bold text-muted-foreground">—</span>
+                      )}
+                    </div>
+
+                    <div className="flex min-w-0 items-center justify-start gap-2">
+                      <div className="h-8 w-8 shrink-0 rounded-full bg-white p-0.5 ring-1 ring-border/60">
+                        {m.away.logo ? (
+                          <img
+                            src={m.away.logo}
+                            alt=""
+                            className="h-full w-full object-contain"
+                            loading="lazy"
+                          />
+                        ) : null}
+                      </div>
+                      <span
+                        className={`truncate text-sm ${
+                          awayWon ? "font-black text-foreground" : "font-semibold text-muted-foreground"
+                        }`}
+                      >
+                        {m.away.name}
+                      </span>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}
@@ -578,15 +652,24 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
 
   return (
     <Dialog open={fixtureId != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent dir="rtl" className="max-w-2xl max-h-[85vh] overflow-y-auto p-0 gap-0">
-        {/* ترويسة النتيجة بهوية خليجي: تدرج المونديال الزمردي + لمسة ذهبية */}
-        <div className="relative overflow-hidden bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#08573B] px-5 pb-5 pt-4">
-          <div className="absolute -top-16 -left-10 h-40 w-40 rounded-full bg-amber-400/10 blur-3xl" />
-          <DialogHeader className="mb-3">
+      <DialogContent dir="rtl" className="max-h-[85vh] max-w-2xl gap-0 overflow-y-auto p-0">
+        {/* ترويسة الملعب الليلي — أسلوب روشن */}
+        <div className="relative overflow-hidden bg-gradient-to-bl from-emerald-950 via-[#04261b] to-[#063828] px-5 pb-5 pt-4">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.05]"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(90deg, rgba(255,255,255,0.6) 0 90px, transparent 90px 180px)",
+            }}
+          />
+          <div className="pointer-events-none absolute -top-16 -left-10 h-40 w-40 rounded-full bg-sky-400/15 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-20 -right-10 h-36 w-36 rounded-full bg-emerald-400/10 blur-3xl" />
+
+          <DialogHeader className="relative mb-3">
             <DialogTitle className="text-right text-xs font-bold text-emerald-100/70">
               {f ? (
                 <>
-                  <span className="text-amber-300">#{f.matchNo}</span> {f.round} ·{" "}
+                  <span className="text-sky-300">#{f.matchNo}</span> {f.round} ·{" "}
                   {formatKickoffDay(f.date)}
                 </>
               ) : (
@@ -596,23 +679,22 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
           </DialogHeader>
 
           {isLoading || !f ? (
-            <div className="flex items-center justify-center gap-6 py-2">
+            <div className="relative flex items-center justify-center gap-6 py-2">
               <Skeleton className="h-16 w-16 rounded-full bg-white/10" />
               <Skeleton className="h-8 w-16 bg-white/10" />
               <Skeleton className="h-16 w-16 rounded-full bg-white/10" />
             </div>
           ) : (
-            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="relative grid grid-cols-[1fr_auto_1fr] items-center gap-3">
               <TeamBlock team={f.home} highlight={f.home.id === SAUDI_TEAM_ID} />
               <div className="flex flex-col items-center gap-1 px-2">
                 {started ? (
                   <>
-                    {/* المضيف يمينًا في RTL — الضيف أولًا داخل LTR */}
-                    <span className="text-4xl font-black text-white tabular-nums" dir="ltr">
+                    <span className="text-4xl font-black tabular-nums text-white" dir="ltr">
                       {f.goals.away ?? 0} - {f.goals.home ?? 0}
                     </span>
                     {f.status.live ? (
-                      <span className="flex items-center gap-1 rounded-full bg-[#DE2B3D] px-2.5 py-0.5 text-[11px] font-black text-white">
+                      <span className="flex items-center gap-1 rounded-full bg-red-500 px-2.5 py-0.5 text-[11px] font-black text-white">
                         <Radio className="h-3 w-3 animate-pulse" />
                         {f.status.elapsed != null ? `${f.status.elapsed}′` : f.status.label}
                       </span>
@@ -624,7 +706,7 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
                   </>
                 ) : (
                   <>
-                    <span className="text-2xl font-black text-white">{formatKickoffTime(f.date)}</span>
+                    <span className="text-2xl font-black text-white sm:text-3xl">{formatKickoffTime(f.date)}</span>
                     <span className="text-[11px] text-emerald-100/70">بتوقيت الرياض</span>
                   </>
                 )}
@@ -633,36 +715,34 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
             </div>
           )}
 
-          {/* تصنيف الفيفا للطرفين — يظهر متى توفّر الجسر */}
           {detail?.fifa && (detail.fifa.home || detail.fifa.away) && (
-            <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
-              <span className="text-[10px] font-bold text-emerald-100/70">
+            <div className="relative mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-3 text-center">
+              <span className="text-[10px] font-bold text-sky-200/80">
                 {detail.fifa.home ? `فيفا #${detail.fifa.home.rank}` : ""}
               </span>
               <span />
-              <span className="text-[10px] font-bold text-emerald-100/70">
+              <span className="text-[10px] font-bold text-sky-200/80">
                 {detail.fifa.away ? `فيفا #${detail.fifa.away.rank}` : ""}
               </span>
             </div>
           )}
 
           {f?.venue?.name && (
-            <p className="mt-3 flex items-center justify-center gap-1 text-[11px] text-emerald-100/60">
-              <MapPin className="h-3 w-3" />
+            <p className="relative mt-3 flex items-center justify-center gap-1 text-[11px] text-emerald-100/60">
+              <MapPin className="h-3 w-3 text-sky-300/80" />
               {f.venue.name}
               {f.venue.city ? ` — ${f.venue.city}` : ""}
             </p>
           )}
 
-          {/* القنوات الناقلة — «وين أشوف المباراة؟» */}
           {(detail?.tv?.length ?? 0) > 0 && (
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+            <div className="relative mt-2 flex flex-wrap items-center justify-center gap-1.5">
               {detail!.tv!.slice(0, 4).map((c, i) => (
                 <span
                   key={`${c.name}-${i}`}
                   className="inline-flex items-center gap-1 rounded-full bg-white/12 px-2.5 py-0.5 text-[10px] font-bold text-white"
                 >
-                  <Tv className="h-3 w-3 text-amber-300" />
+                  <Tv className="h-3 w-3 text-sky-300" />
                   {c.name}
                 </span>
               ))}
@@ -670,23 +750,34 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
           )}
         </div>
 
-        {/* التبويبات */}
         <div className="p-4">
           <Tabs defaultValue={started ? "events" : "h2h"} dir="rtl">
-            <TabsList className="w-full grid grid-cols-4">
-              <TabsTrigger value="events" className="gap-1 text-xs">
+            <TabsList className="grid w-full grid-cols-4 bg-muted/60">
+              <TabsTrigger
+                value="events"
+                className="gap-1 text-xs data-[state=active]:bg-white data-[state=active]:text-sky-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-emerald-950 dark:data-[state=active]:text-sky-300"
+              >
                 <ListOrdered className="h-3.5 w-3.5" />
                 الأحداث
               </TabsTrigger>
-              <TabsTrigger value="lineups" className="gap-1 text-xs">
+              <TabsTrigger
+                value="lineups"
+                className="gap-1 text-xs data-[state=active]:bg-white data-[state=active]:text-sky-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-emerald-950 dark:data-[state=active]:text-sky-300"
+              >
                 <Users className="h-3.5 w-3.5" />
                 التشكيلات
               </TabsTrigger>
-              <TabsTrigger value="stats" className="gap-1 text-xs">
+              <TabsTrigger
+                value="stats"
+                className="gap-1 text-xs data-[state=active]:bg-white data-[state=active]:text-sky-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-emerald-950 dark:data-[state=active]:text-sky-300"
+              >
                 <BarChart3 className="h-3.5 w-3.5" />
                 الإحصائيات
               </TabsTrigger>
-              <TabsTrigger value="h2h" className="gap-1 text-xs">
+              <TabsTrigger
+                value="h2h"
+                className="gap-1 text-xs data-[state=active]:bg-white data-[state=active]:text-sky-700 data-[state=active]:shadow-sm dark:data-[state=active]:bg-emerald-950 dark:data-[state=active]:text-sky-300"
+              >
                 <History className="h-3.5 w-3.5" />
                 المواجهات
               </TabsTrigger>

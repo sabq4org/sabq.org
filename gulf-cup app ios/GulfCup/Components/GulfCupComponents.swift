@@ -34,7 +34,7 @@ struct GcEmblem: View {
             .resizable()
             .scaledToFit()
             .frame(height: height)
-            .shadow(color: glow ? GcTheme.goldLite.opacity(0.35) : .clear, radius: 18, y: 2)
+            .shadow(color: glow ? GcTheme.sky.opacity(0.30) : .clear, radius: 18, y: 2)
             .scaleEffect(entered ? 1 : 0.92)
             .opacity(entered ? 1 : 0)
             .onAppear {
@@ -43,34 +43,39 @@ struct GcEmblem: View {
     }
 }
 
-// MARK: - زخرفة لوحة الليل (أقواس متّحدة المركز + توهّج ذهبي خفيف)
+// MARK: - زخرفة الملعب الليلي (خطوط الملعب + توهّج سكاي روشن)
 
 struct GcHeroDecor: View {
     var body: some View {
         GeometryReader { geo in
             let w = geo.size.width
+            let h = geo.size.height
             ZStack {
-                // توهّج ورقي أعلى الزاوية (توقيع المونديال)
+                // خطوط الملعب العمودية
+                HStack(spacing: w * 0.22) {
+                    ForEach(0..<5, id: \.self) { _ in
+                        Rectangle()
+                            .fill(Color.white.opacity(0.05))
+                            .frame(width: 1)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                // دائرة منتصف الملعب
+                Circle()
+                    .stroke(Color.white.opacity(0.07), lineWidth: 2)
+                    .frame(width: min(w, h) * 0.55)
+                    .position(x: w * 0.5, y: h + 20)
+
+                // توهّج سكاي (روشن)
                 RadialGradient(
-                    colors: [GcTheme.leaf.opacity(0.22), .clear],
+                    colors: [GcTheme.sky.opacity(0.22), .clear],
                     center: .topTrailing, startRadius: 0, endRadius: w * 0.55
                 )
-                // أقواس متّحدة المركز حول الزاوية العليا
-                ForEach(0..<4, id: \.self) { i in
-                    Circle()
-                        .stroke(Color.white.opacity(0.05 - Double(i) * 0.008), lineWidth: 1.2)
-                        .frame(width: w * (0.5 + CGFloat(i) * 0.28))
-                        .position(x: w * 0.96, y: 0)
-                }
-                // نجمة/معيّن خليجي صغير
-                Image(systemName: "diamond.fill")
-                    .font(.system(size: 8))
-                    .foregroundStyle(GcTheme.goldLite.opacity(0.30))
-                    .position(x: w * 0.14, y: 26)
-                Image(systemName: "diamond.fill")
-                    .font(.system(size: 5))
-                    .foregroundStyle(Color.white.opacity(0.18))
-                    .position(x: w * 0.24, y: 54)
+                RadialGradient(
+                    colors: [GcTheme.teal.opacity(0.14), .clear],
+                    center: .bottomLeading, startRadius: 0, endRadius: w * 0.5
+                )
             }
         }
         .allowsHitTesting(false)
@@ -100,7 +105,7 @@ struct GcHeroPanel<Content: View>: View {
 struct GcHeroBadge: View {
     let icon: String
     let text: String
-    var tint: Color = GcTheme.goldLite
+    var tint: Color = GcTheme.skyLite
     var onDark: Bool = true
 
     var body: some View {
@@ -597,7 +602,7 @@ struct GcGroupCard: View {
         .padding(.horizontal, 13).padding(.vertical, 9)
         .background(
             isLive ? GcTheme.liveRed.opacity(0.05)
-                : row.team.id == highlightTeamId ? GcTheme.gold.opacity(0.07) : Color.clear
+                : row.team.id == highlightTeamId ? GcTheme.emerald.opacity(0.06) : Color.clear
         )
         .contentShape(Rectangle())
     }
@@ -711,7 +716,7 @@ struct GcFooterSignature: View {
     var body: some View {
         VStack(spacing: 4) {
             HStack(spacing: 6) {
-                Image(systemName: "trophy.fill").font(.system(size: 10)).foregroundStyle(GcTheme.gold)
+                Image(systemName: "trophy.fill").font(.system(size: 10)).foregroundStyle(GcTheme.sky)
                 Text("\(GulfCupConstants.tournamentName) · \(L("app.host"))")
                     .font(GulfCupFonts.app(size: 11, weight: .semibold))
             }

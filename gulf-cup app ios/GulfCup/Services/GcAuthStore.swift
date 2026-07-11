@@ -2,7 +2,7 @@ import SwiftUI
 import AuthenticationServices
 import Security
 
-// جلسة العضو — Apple Sign-In → Bearer على /api/v1/*
+// جلسة العضو — Apple / جوال OTP / عضوية سبق → Bearer على /api/v1/*
 @MainActor
 @Observable
 final class GcAuthStore {
@@ -12,6 +12,7 @@ final class GcAuthStore {
     private(set) var token: String?
     var isLoading = false
     var errorMessage: String?
+    var errorSource: GcAuthErrorSource = .none
 
     var isLoggedIn: Bool { token != nil }
 
@@ -30,6 +31,9 @@ final class GcAuthStore {
            let stored = try? JSONDecoder().decode(GcStoredMember.self, from: data) {
             member = GcMember(id: stored.id, name: stored.name, email: stored.email, avatar: stored.avatar)
         }
+        if token != nil {
+            await refreshProfile()
+        }
     }
 
     func completeAppleSignIn(_ result: Result<ASAuthorization, Error>) {
@@ -39,6 +43,7 @@ final class GcAuthStore {
                 handleApple(credential)
             } else {
                 errorMessage = "تعذّر قراءة بيانات Apple"
+                errorSource = .apple
             }
         case .failure(let error):
             handleAppleFailure(error)
@@ -47,6 +52,7 @@ final class GcAuthStore {
 
     func startAppleSignIn() {
         errorMessage = nil
+        errorSource = .none
         let provider = ASAuthorizationAppleIDProvider()
         let request = provider.createRequest()
         request.requestedScopes = [.fullName, .email]
@@ -74,6 +80,7 @@ final class GcAuthStore {
         guard let data = credential.identityToken,
               let identityToken = String(data: data, encoding: .utf8) else {
             errorMessage = "تعذّر قراءة بيانات Apple"
+            errorSource = .apple
             return
         }
         Task {
@@ -89,11 +96,13 @@ final class GcAuthStore {
     private func handleAppleFailure(_ error: Error) {
         if let asError = error as? ASAuthorizationError, asError.code == .canceled { return }
         errorMessage = "تعذّر تسجيل الدخول عبر Apple"
+        errorSource = .apple
     }
 
     private func exchange(identityToken: String, firstName: String?, lastName: String?, email: String?) async {
         isLoading = true
         errorMessage = nil
+        errorSource = .none
         do {
             let resp = try await APIClient.shared.loginWithApple(
                 identityToken: identityToken,
@@ -104,8 +113,70 @@ final class GcAuthStore {
             try await applySession(resp)
         } catch {
             errorMessage = friendly(error)
+            errorSource = .apple
         }
         isLoading = false
+    }
+
+    // MARK: عضوية سبق (بريد/جوال + كلمة مرور)
+
+    func loginWithCredentials(identifier: String, password: String) async {
+        let id = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, !password.isEmpty else {
+            errorMessage = L("auth.error.emptyCredentials")
+            errorSource = .credentials
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        errorSource = .none
+        do {
+            let resp = try await APIClient.shared.loginWithIdentifier(id, password: password)
+            try await applySession(resp)
+        } catch {
+            errorMessage = friendly(error)
+            errorSource = .credentials
+        }
+        isLoading = false
+    }
+
+    // MARK: جوال OTP
+
+    func sendPhoneCode(_ phone: String) async -> (ok: Bool, message: String) {
+        isLoading = true
+        errorMessage = nil
+        errorSource = .none
+        defer { isLoading = false }
+        do {
+            let resp = try await APIClient.shared.sendPhoneCode(phone)
+            let msg = resp.message ?? (resp.success ? L("auth.phone.sent") : L("auth.phone.sendFailed"))
+            if !resp.success {
+                errorMessage = msg
+                errorSource = .phone
+            }
+            return (resp.success, msg)
+        } catch {
+            let msg = friendly(error)
+            errorMessage = msg
+            errorSource = .phone
+            return (false, msg)
+        }
+    }
+
+    func verifyPhoneCode(_ phone: String, code: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        errorSource = .phone
+        defer { isLoading = false }
+        do {
+            let resp = try await APIClient.shared.verifyPhoneCode(phone, code: code)
+            try await applySession(resp)
+            return true
+        } catch {
+            errorMessage = friendly(error)
+            errorSource = .phone
+            return false
+        }
     }
 
     private func applySession(_ resp: GcLoginResponse) async throws {
@@ -114,18 +185,34 @@ final class GcAuthStore {
                           userInfo: [NSLocalizedDescriptionKey: resp.message ?? "تعذّر تسجيل الدخول"])
         }
         token = t
-        member = resp.member
+        if let m = resp.member { persistMember(m) }
+        errorSource = .none
+        errorMessage = nil
         GcKeychain.save(tokenKey, value: t)
-        if let m = resp.member,
-           let data = try? JSONEncoder().encode(GcStoredMember(id: m.id, name: m.name, email: m.email, avatar: m.avatar)) {
+        await APIClient.shared.setAuthToken(t)
+        await refreshProfile()
+    }
+
+    /// يجلب الصورة والاسم من /members/profile (حساب سبق المشترك).
+    func refreshProfile() async {
+        guard token != nil else { return }
+        if let m = try? await APIClient.shared.fetchMemberProfile(), !m.id.isEmpty {
+            persistMember(m)
+        }
+    }
+
+    private func persistMember(_ m: GcMember) {
+        member = m
+        if let data = try? JSONEncoder().encode(GcStoredMember(id: m.id, name: m.name, email: m.email, avatar: m.avatar)) {
             UserDefaults.standard.set(data, forKey: memberKey)
         }
-        await APIClient.shared.setAuthToken(t)
     }
 
     func signOut() {
         token = nil
         member = nil
+        errorMessage = nil
+        errorSource = .none
         GcKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
         Task { await APIClient.shared.setAuthToken(nil) }
@@ -134,13 +221,17 @@ final class GcAuthStore {
     private func friendly(_ error: Error) -> String {
         if let e = error as? APIError {
             switch e {
-            case .unauthorized: return "تعذّر التحقق من Apple — حاول مجددًا"
-            case .rateLimited: return "محاولات كثيرة، حاول بعد قليل"
-            default: return e.errorDescription ?? "تعذّر تسجيل الدخول"
+            case .unauthorized: return L("auth.error.unauthorized")
+            case .rateLimited: return L("auth.error.rateLimited")
+            default: return e.errorDescription ?? L("auth.error.generic")
             }
         }
         return error.localizedDescription
     }
+}
+
+enum GcAuthErrorSource {
+    case none, credentials, apple, phone
 }
 
 struct GcStoredMember: Codable {
@@ -151,7 +242,7 @@ struct GcStoredMember: Codable {
 }
 
 extension GcMember {
-    fileprivate init(id: String, name: String?, email: String?, avatar: String?) {
+    init(id: String, name: String?, email: String?, avatar: String?) {
         self.id = id
         self.name = name
         self.email = email

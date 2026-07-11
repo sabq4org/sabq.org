@@ -31,9 +31,9 @@ struct GcMatchLiveActivity: Widget {
             } minimal: {
                 Text("\(context.state.homeScore)-\(context.state.awayScore)")
                     .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(GcLA.gold)
+                    .foregroundStyle(GcLA.sky)
             }
-            .keylineTint(GcLA.gold)
+            .keylineTint(GcLA.sky)
         }
     }
 }
@@ -75,7 +75,7 @@ private struct GcLockScreenView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text(context.attributes.competition).font(.system(size: 13, weight: .heavy)).foregroundStyle(GcLA.gold)
+                Text(context.attributes.competition).font(.system(size: 13, weight: .heavy)).foregroundStyle(GcLA.sky)
                 Spacer()
                 Text(context.state.statusLabel).font(.system(size: 11)).foregroundStyle(GcLA.dim)
             }
@@ -126,10 +126,10 @@ private struct GcLogoView: View {
 }
 
 enum GcLA {
-    static let gold = Color(red: 0.85, green: 0.68, blue: 0.22)
-    static let emerald = Color(red: 0.05, green: 0.45, blue: 0.32)
+    static let sky = Color(red: 0.220, green: 0.741, blue: 0.973)
+    static let emerald = Color(red: 0.055, green: 0.455, blue: 0.420)
     static let dim = Color.white.opacity(0.66)
-    static let background = Color(red: 0.02, green: 0.08, blue: 0.06)
+    static let background = Color(red: 0.016, green: 0.110, blue: 0.133)
 
     static func shortName(_ name: String) -> String {
         var t = name.trimmingCharacters(in: .whitespaces)

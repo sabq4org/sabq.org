@@ -1,10 +1,9 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, Coins, Sparkles } from "lucide-react";
+import { ChevronLeft, Trophy } from "lucide-react";
 
 /**
- * بانر دعوة لمسابقة توقّعات خليجي 27 داخل هب البطولة. يكشف نفسه فقط متى فُعّلت
- * المسابقة (GC_PREDICTIONS_ENABLED): يجسّ نقطة المتصدّرين، وإن ردّت 503 لا يظهر.
+ * بانر توقّعات خليجي — أسلوب بانر توقّعات روشن.
  */
 export function GcPredictionsCTA() {
   const { isSuccess } = useQuery({
@@ -16,24 +15,24 @@ export function GcPredictionsCTA() {
   if (!isSuccess) return null;
 
   return (
-    <section className="mx-auto max-w-6xl px-3 py-3 sm:px-4">
+    <section className="mx-auto max-w-6xl px-3 py-4 sm:px-4">
       <Link
         href="/gulf-cup/predictions"
-        className="group flex cursor-pointer items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#08573B] p-4 text-white shadow-sm transition hover:shadow-md"
+        className="group flex cursor-pointer items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-bl from-emerald-600 via-emerald-700 to-emerald-800 p-4 text-white shadow-sm transition hover:shadow-md sm:p-5"
         data-testid="gc-predictions-cta"
       >
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-400/20">
-          <Coins className="h-6 w-6 text-amber-300" />
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/10">
+          <Trophy className="h-6 w-6 text-sky-300" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-base font-black sm:text-lg">توقّعات خليجي 27 💰</p>
-          <p className="truncate text-sm text-emerald-50/90">
-            توقّع نتائج المباريات وتقاسم بركة 1000 نقطة ولاء لكل مباراة — كلّما قلّ المصيبون زاد نصيبك.
+          <p className="text-base font-black sm:text-lg">شارك في توقّعات خليجي 27</p>
+          <p className="mt-0.5 truncate text-sm text-emerald-50/90">
+            توقّع النتائج واربح من بركة 1000 نقطة ولاء لكل مباراة — كلّما قلّ المصيبون زاد نصيبك
           </p>
         </div>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-4 py-2 text-sm font-bold text-[#0A6B47] transition group-hover:bg-emerald-50">
-          <Sparkles className="h-4 w-4" /> ابدأ
-          <ChevronLeft className="h-4 w-4" />
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-4 py-2 text-sm font-bold text-emerald-700 transition group-hover:bg-sky-50">
+          ابدأ التوقّع
+          <ChevronLeft className="h-4 w-4 transition group-hover:-translate-x-0.5" />
         </span>
       </Link>
     </section>
