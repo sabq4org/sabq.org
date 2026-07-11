@@ -32,6 +32,20 @@ import {
 import { GC_EDITIONS, getGcTeamLegacy, type GcTeamLegacy } from "./gulfCupHistory";
 import { resolveNames } from "./worldCupNameTranslator";
 import { apiFootballGet } from "./apiFootballClient";
+import {
+  getTheSportsFastScore,
+  getTheSportsMatchLiveByUuid,
+  getTsCompetitionExtra,
+  getTsCompetitionId,
+  getTsCompetitionMatchPairs,
+  getTsFifaRanking,
+  getTsLineup,
+  getTsMatchPlayerStats,
+  getTsMatchTrend,
+  getTsMatchTv,
+  getTsTeamInjuries,
+  getTsTeamSquad,
+} from "./theSportsService";
 
 const LEAGUE_ID = 25; // Gulf Cup of Nations (API-Football)
 const SEASON = 2026; // خليجي 27 — السعودية 2026 (يظهر لاحقًا لدى المزوّد)
@@ -254,12 +268,15 @@ export async function getGcTeams(): Promise<GcTeam[]> {
 
 /** جدول المباريات كاملًا (مُرتَّب زمنيًّا) مع دمج بيانات المزوّد متى توفّرت. */
 export async function getGcFixtures(): Promise<GcFixture[]> {
-  return withSWR("gc:fixtures", FIXTURES_TTL, FIXTURES_TTL * 3, async () => {
+  const base = await withSWR("gc:fixtures", FIXTURES_TTL, FIXTURES_TTL * 3, async () => {
     const provider = await getProviderFixtures();
     return GC_FIXTURES.map(seedToFixture)
       .map((fx) => overlayFixture(fx, provider))
       .sort((a, b) => a.timestamp - b.timestamp);
   });
+  // فوق الكاش: نتيجة TheSports اللحظية (MQTT/بولينغ 2ث) للمباريات الجارية فقط —
+  // تصل الأهداف بثوانٍ بدل انتظار دورة كاش المزوّد الأساسي.
+  return overlayGcLiveScores(base);
 }
 
 /** يبني ترتيب المجموعات من النتائج المنتهية ثم يطبّق المباريات الجارية مبدئيًّا. */
@@ -332,13 +349,53 @@ function buildGcGroupsFromFixtures(fixtures: GcFixture[]): GcGroup[] {
   });
 }
 
-/** مجموعتا البطولة وترتيبهما — منتهية نهائيًّا + جارية مبدئيًّا (أصفار قبل الانطلاق). */
+/** جدول المزوّد الرسمي (standings) — null قبل توفّر الموسم أو عند أي فشل. */
+async function getProviderStandings(): Promise<GcGroup[] | null> {
+  if (!apiFootballEnabled()) return null;
+  return withSWR("gc:standings:official", STANDINGS_TTL, STANDINGS_TTL * 3, async () => {
+    const rows = await apiGet("standings", { league: LEAGUE_ID, season: SEASON }).catch(() => [] as any[]);
+    const tables: any[][] = rows[0]?.league?.standings ?? [];
+    if (!Array.isArray(tables) || tables.length === 0) return null;
+    const groups: GcGroup[] = [];
+    for (const table of tables) {
+      if (!Array.isArray(table) || table.length === 0) continue;
+      const ids = new Set(table.map((r: any) => r?.team?.id ?? 0));
+      // اسم المجموعة العربي من الأساس الثابت بمطابقة العضوية، لا من نص المزوّد.
+      const seedGroup = GC_GROUPS.find((g) => g.teamIds.filter((id) => ids.has(id)).length >= 3);
+      groups.push({
+        name: seedGroup?.name ?? String(table[0]?.group ?? "مجموعة"),
+        rows: table.map(
+          (row: any): GcStandingRow => ({
+            rank: row?.rank ?? 0,
+            team: seedTeam(row?.team?.id ?? 0),
+            played: row?.all?.played ?? 0,
+            win: row?.all?.win ?? 0,
+            draw: row?.all?.draw ?? 0,
+            lose: row?.all?.lose ?? 0,
+            goalsFor: row?.all?.goals?.for ?? 0,
+            goalsAgainst: row?.all?.goals?.against ?? 0,
+            goalsDiff: row?.goalsDiff ?? (row?.all?.goals?.for ?? 0) - (row?.all?.goals?.against ?? 0),
+            points: row?.points ?? 0,
+          }),
+        ),
+      });
+    }
+    return groups.length > 0 ? groups : null;
+  }).catch(() => null);
+}
+
+/**
+ * مجموعتا البطولة وترتيبهما — أثناء المباريات: حساب مبدئي لحظي (أسرع استجابة)؛
+ * خارجها: جدول المزوّد الرسمي إن وُجد (يحسم حالات التعادل الشاذة)، وإلا المحسوب.
+ */
 export async function getGcStandings(): Promise<GcGroup[]> {
   const fixtures = await getGcFixtures();
   const hasLive = fixtures.some(
     (f) => f.roundEn.startsWith("Group Stage") && f.status.live && !f.status.finished,
   );
   if (hasLive) return buildGcGroupsFromFixtures(fixtures);
+  const official = await getProviderStandings();
+  if (official) return official;
   return withSWR("gc:standings", STANDINGS_TTL, STANDINGS_TTL * 3, async () => {
     return buildGcGroupsFromFixtures(await getGcFixtures());
   });
@@ -430,6 +487,10 @@ export interface GcTeamProfile {
   squad: GcSquadPlayer[];
   /** إرث المنتخب في تاريخ البطولة (ألقاب/وصافات/استضافات) — ثابت محلّي. */
   legacy: GcTeamLegacy | null;
+  /** تصنيف الفيفا (TheSports) — null قبل توفّر الجسر. */
+  fifaRank?: GcFifaRank | null;
+  /** الإصابات والغيابات الحالية (TheSports) — [] قبل توفّر الجسر. */
+  injuries?: GcInjury[];
 }
 
 export interface GcMatchEvent {
@@ -472,6 +533,13 @@ export interface GcMatchDetail {
   headToHead: GcFixture[];
   /** سجلّ المواجهات عبر التاريخ (كل البطولات) — null إن غاب المزوّد. */
   history: GcH2HSummary | null;
+  /** إثراء TheSports — اختيارية كلها، تغيب بأمان قبل توفر بيانات المزوّد. */
+  lineupsRich?: GcRichLineup | null;
+  trend?: GcTrend | null;
+  tv?: GcTvChannel[];
+  playerStats?: GcPlayerMatchStat[];
+  injuries?: { home: GcInjury[]; away: GcInjury[] } | null;
+  fifa?: { home: GcFifaRank | null; away: GcFifaRank | null } | null;
 }
 
 /** تعريب أسماء إحصاءات API-Football الشائعة (يُترك الاسم كما هو إن لم يُعرَّف). */
@@ -562,12 +630,14 @@ function resultForTeam(fixture: GcFixture, teamId: number): "W" | "D" | "L" | nu
 export async function getGcTeamProfile(teamId: number): Promise<GcTeamProfile | null> {
   if (!GC_TEAM_IDS.includes(teamId)) return null;
 
-  const [fixtures, standings, teams, squad, coach] = await Promise.all([
+  const [fixtures, standings, teams, squad, coach, fifaRank, injuries] = await Promise.all([
     getGcFixtures(),
     getGcStandings(),
     getGcTeams(),
     getGcSquad(teamId),
     getGcCoach(teamId),
+    getGcFifaRank(teamId).catch(() => null),
+    getGcTeamInjuryList(teamId).catch(() => [] as GcInjury[]),
   ]);
 
   const team = teams.find((t) => t.id === teamId) ?? seedTeam(teamId);
@@ -629,6 +699,8 @@ export async function getGcTeamProfile(teamId: number): Promise<GcTeamProfile | 
     fixtures: teamFixtures,
     squad,
     legacy: getGcTeamLegacy(teamId),
+    fifaRank,
+    injuries,
   };
 }
 
@@ -939,13 +1011,326 @@ export async function getGcMatchDetail(fixtureId: number): Promise<GcMatchDetail
       : Promise.resolve(null),
   ]);
 
-  return { fixture, events, lineups, statistics, headToHead, history };
+  // ---------- إثراء TheSports (أفضل جهد — يغيب كليًّا قبل توفر الموسم) ----------
+  let lineupsRich: GcRichLineup | null = null;
+  let trend: GcTrend | null = null;
+  let tv: GcTvChannel[] = [];
+  let playerStats: GcPlayerMatchStat[] = [];
+  const tsUuid = await getGcMatchTsId(fixture).catch(() => null);
+  if (tsUuid) {
+    const ttl = fixture.status.live ? MATCH_DETAIL_LIVE_TTL : MATCH_DETAIL_TTL;
+    const extras = await withSWR(`gc:match:ts:${fixture.id}`, ttl, ttl * 2, async () => {
+      const [lu, tr, channels, ps] = await Promise.all([
+        getTsLineup(tsUuid).catch(() => null),
+        getTsMatchTrend(tsUuid).catch(() => null),
+        getTsMatchTv(tsUuid).catch(() => []),
+        getTsMatchPlayerStats(tsUuid).catch(() => []),
+      ]);
+      return { lu, tr, channels, ps };
+    }).catch(() => null);
+
+    if (extras) {
+      lineupsRich = extras.lu ? mapTsLineupToGc(extras.lu) : null;
+      trend = extras.tr ? { perMinutes: extras.tr.perMinutes, values: extras.tr.values } : null;
+      tv = (extras.channels ?? []).map((c) => ({ name: c.name, country: c.country, logo: c.logo }));
+      playerStats = mapTsPlayerStats(extras.ps ?? [], extras.lu ?? null);
+    }
+
+    // نتيجة/حالة لحظية من خريطة MQTT الحية — تسبق كاش المزوّد الأساسي.
+    if (fixture.status.live) {
+      const liveTs = await getTheSportsMatchLiveByUuid(tsUuid).catch(() => null);
+      if (liveTs && (liveTs.live || liveTs.finished)) {
+        fixture = {
+          ...fixture,
+          goals: { home: liveTs.home, away: liveTs.away },
+          status: {
+            ...fixture.status,
+            elapsed: liveTs.elapsed ?? fixture.status.elapsed,
+            live: liveTs.live,
+            finished: liveTs.finished || fixture.status.finished,
+          },
+        };
+      }
+    }
+  }
+
+  const [homeInjuries, awayInjuries, fifaHome, fifaAway] = await Promise.all([
+    fixture.home.id ? getGcTeamInjuryList(fixture.home.id).catch(() => []) : Promise.resolve([]),
+    fixture.away.id ? getGcTeamInjuryList(fixture.away.id).catch(() => []) : Promise.resolve([]),
+    fixture.home.id ? getGcFifaRank(fixture.home.id).catch(() => null) : Promise.resolve(null),
+    fixture.away.id ? getGcFifaRank(fixture.away.id).catch(() => null) : Promise.resolve(null),
+  ]);
+
+  return {
+    fixture,
+    events,
+    lineups,
+    statistics,
+    headToHead,
+    history,
+    lineupsRich,
+    trend,
+    tv,
+    playerStats,
+    injuries:
+      homeInjuries.length || awayInjuries.length ? { home: homeInjuries, away: awayInjuries } : null,
+    fifa: fifaHome || fifaAway ? { home: fifaHome, away: fifaAway } : null,
+  };
 }
 
 /** يحوّل مباراة خليجي إلى SplMatchDetail لدورة Live Activity عند فشل getMatchDetail. */
 export async function getGcFixtureForLiveActivity(fixtureId: number): Promise<GcFixture | null> {
   const fixtures = await getGcFixtures().catch(() => [] as GcFixture[]);
   return fixtures.find((f) => f.id === fixtureId) ?? null;
+}
+
+// ---------- جسر TheSports (نفس نمط المونديال — كله أفضل جهد) ----------
+// معرّف كأس الخليج لدى TheSports مسجّل في خريطة البطولات؛ عامل MQTT يستقبل
+// مبارياتها أصلًا (لا فلتر بطولات) — كل المطلوب هنا حلّ المعرّفات ثم السحب.
+
+const GC_TS_COMPETITION_ID = getTsCompetitionId("gulf-cup");
+const GC_BRIDGE_TTL = 6 * 60 * 60 * 1000;
+const INJURY_TTL = 6 * 60 * 60 * 1000;
+
+export interface GcRichLineupPlayer {
+  id: string;
+  name: string;
+  number: number | null;
+  position: string | null;
+  /** إحداثيات على الملعب (0..100) — null إن غابت لدى المزوّد. */
+  x: number | null;
+  y: number | null;
+  /** تقييم المباراة (يتجدّد أثناء اللعب). */
+  rating: number | null;
+  photo: string | null;
+  captain: boolean;
+  starter: boolean;
+}
+
+export interface GcRichLineup {
+  confirmed: boolean;
+  homeFormation: string | null;
+  awayFormation: string | null;
+  home: GcRichLineupPlayer[];
+  away: GcRichLineupPlayer[];
+}
+
+export interface GcTrend {
+  perMinutes: number;
+  /** القيمة −100..100: موجب = ضغط المضيف، سالب = ضغط الضيف. */
+  values: { minute: number; value: number }[];
+}
+
+export interface GcTvChannel {
+  name: string;
+  country: string | null;
+  logo: string | null;
+}
+
+export interface GcPlayerMatchStat {
+  playerId: string;
+  name: string;
+  photo: string | null;
+  side: "home" | "away" | null;
+  starter: boolean;
+  minutes: number;
+  rating: number | null;
+  /** خام إحصاءات المزوّد (goals/shots/passes...) — تختار الواجهة ما يهمّها. */
+  values: Record<string, number>;
+}
+
+export interface GcInjury {
+  player: string;
+  reason: string | null;
+  missedMatches: number | null;
+}
+
+export interface GcFifaRank {
+  rank: number;
+  points: number | null;
+  change: number | null;
+}
+
+/** جسر منتخب API-Football → uuid لدى TheSports (تصويت تطابق أوقات فريد). */
+let gcTeamBridge: { at: number; map: Map<number, string> } | null = null;
+
+async function getGcTeamBridge(): Promise<Map<number, string>> {
+  if (gcTeamBridge && Date.now() - gcTeamBridge.at < GC_BRIDGE_TTL) return gcTeamBridge.map;
+  const map = new Map<number, string>();
+  if (GC_TS_COMPETITION_ID) {
+    try {
+      const comp = await getTsCompetitionExtra(GC_TS_COMPETITION_ID);
+      const [fixtures, pairs] = await Promise.all([
+        getGcFixtures(),
+        getTsCompetitionMatchPairs(GC_TS_COMPETITION_ID, comp?.curSeasonId ?? null),
+      ]);
+      if (pairs.length > 0) {
+        const votes = new Map<number, Map<string, number>>();
+        const vote = (apiId: number, uuid: string) => {
+          if (!apiId || !uuid) return;
+          const m = votes.get(apiId) ?? new Map<string, number>();
+          m.set(uuid, (m.get(uuid) ?? 0) + 1);
+          votes.set(apiId, m);
+        };
+        for (const fx of fixtures) {
+          if (!fx.home.id || !fx.away.id || !fx.timestamp) continue;
+          const hits = pairs.filter((p) => Math.abs(p.time - fx.timestamp) <= 120);
+          if (hits.length !== 1) continue; // تطابق فريد فقط — اتجاه آمن
+          vote(fx.home.id, hits[0].home);
+          vote(fx.away.id, hits[0].away);
+        }
+        for (const [apiId, m] of votes) {
+          let best = "";
+          let bestN = 0;
+          for (const [uuid, n] of m) if (n > bestN) ((best = uuid), (bestN = n));
+          if (best) map.set(apiId, best);
+        }
+      }
+    } catch (error) {
+      console.warn("[GulfCup] TheSports team bridge failed:", error);
+    }
+  }
+  gcTeamBridge = { at: Date.now(), map };
+  return map;
+}
+
+/** جسر معرّف المباراة (زوج uuid المنتخبين ∩ match/recent/list) — يُكاش بعد أول حلّ. */
+const gcMatchIdBridge = new Map<number, string>();
+
+async function getGcMatchTsId(fx: GcFixture): Promise<string | null> {
+  if (!GC_TS_COMPETITION_ID || !fx.home.id || !fx.away.id) return null;
+  const cached = gcMatchIdBridge.get(fx.id);
+  if (cached) return cached;
+  const [bridge, comp] = await Promise.all([
+    getGcTeamBridge(),
+    getTsCompetitionExtra(GC_TS_COMPETITION_ID),
+  ]);
+  const homeUuid = bridge.get(fx.home.id);
+  const awayUuid = bridge.get(fx.away.id);
+  if (!homeUuid || !awayUuid) return null;
+  const pairs = await getTsCompetitionMatchPairs(GC_TS_COMPETITION_ID, comp?.curSeasonId ?? null);
+  const matches = pairs.filter(
+    (p) =>
+      p.id &&
+      ((p.home === homeUuid && p.away === awayUuid) ||
+        (p.home === awayUuid && p.away === homeUuid)),
+  );
+  if (matches.length === 0) return null;
+  const best = matches.reduce((a, b) =>
+    Math.abs(b.time - fx.timestamp) < Math.abs(a.time - fx.timestamp) ? b : a,
+  );
+  if (!best.id) return null;
+  gcMatchIdBridge.set(fx.id, best.id);
+  return best.id;
+}
+
+/** نتيجة TheSports اللحظية فوق المباريات الجارية فقط (الجسر الزمني ±دقيقتين). */
+async function overlayGcLiveScores(fixtures: GcFixture[]): Promise<GcFixture[]> {
+  if (!GC_TS_COMPETITION_ID) return fixtures;
+  if (!fixtures.some((f) => f.status.live && !f.status.finished)) return fixtures;
+  return Promise.all(
+    fixtures.map(async (f) => {
+      if (!f.status.live || f.status.finished) return f;
+      const ts = await getTheSportsFastScore(f.id, f.timestamp, GC_TS_COMPETITION_ID).catch(
+        () => null,
+      );
+      if (!ts || (!ts.live && !ts.finished)) return f;
+      return {
+        ...f,
+        goals: { home: ts.home, away: ts.away },
+        status: {
+          ...f.status,
+          elapsed: ts.elapsed ?? f.status.elapsed,
+          live: ts.live,
+          finished: ts.finished || f.status.finished,
+        },
+      };
+    }),
+  );
+}
+
+function mapTsLineupToGc(lu: NonNullable<Awaited<ReturnType<typeof getTsLineup>>>): GcRichLineup {
+  const mapPlayer = (p: (typeof lu.home)[number]): GcRichLineupPlayer => ({
+    id: p.id,
+    name: p.nameAr ?? p.name,
+    number: p.shirtNumber,
+    position: p.position,
+    x: p.x,
+    y: p.y,
+    rating: p.rating,
+    photo: p.photo,
+    captain: p.captain,
+    starter: p.starter,
+  });
+  return {
+    confirmed: lu.confirmed,
+    homeFormation: lu.homeFormation,
+    awayFormation: lu.awayFormation,
+    home: lu.home.map(mapPlayer),
+    away: lu.away.map(mapPlayer),
+  };
+}
+
+function mapTsPlayerStats(
+  stats: Awaited<ReturnType<typeof getTsMatchPlayerStats>>,
+  lu: Awaited<ReturnType<typeof getTsLineup>>,
+): GcPlayerMatchStat[] {
+  if (stats.length === 0) return [];
+  const meta = new Map<string, { name: string; photo: string | null; side: "home" | "away" }>();
+  for (const p of lu?.home ?? []) meta.set(p.id, { name: p.nameAr ?? p.name, photo: p.photo, side: "home" });
+  for (const p of lu?.away ?? []) meta.set(p.id, { name: p.nameAr ?? p.name, photo: p.photo, side: "away" });
+  return stats
+    .map((s): GcPlayerMatchStat => {
+      const m = meta.get(s.playerId);
+      return {
+        playerId: s.playerId,
+        name: m?.name ?? "",
+        photo: m?.photo ?? null,
+        side: m?.side ?? null,
+        starter: s.starter,
+        minutes: s.minutes,
+        rating: s.rating,
+        values: s.values,
+      };
+    })
+    .filter((s) => s.name)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0));
+}
+
+/** إصابات منتخب بأسماء معرّبة (uuid عبر الجسر، الأسماء من قائمة الفريق). */
+async function getGcTeamInjuryList(teamId: number): Promise<GcInjury[]> {
+  const bridge = await getGcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return [];
+  return withSWR(`gc:injuries:${teamId}`, INJURY_TTL, INJURY_TTL * 2, async () => {
+    const [injuries, squad] = await Promise.all([
+      getTsTeamInjuries(uuid).catch(() => []),
+      getTsTeamSquad(uuid).catch(() => []),
+    ]);
+    if (injuries.length === 0) return [];
+    const nameById = new Map(squad.map((p) => [p.id, p.name]));
+    const rawNames = injuries.map((i) => nameById.get(i.playerId ?? "") ?? null);
+    const tr = await resolveNames(rawNames.filter((n): n is string => Boolean(n))).catch(
+      () => (n: string | null | undefined) => n ?? "",
+    );
+    return injuries
+      .map((i, idx): GcInjury | null => {
+        const raw = rawNames[idx];
+        if (!raw) return null;
+        return { player: tr(raw), reason: i.reason, missedMatches: i.missedMatches };
+      })
+      .filter((x): x is GcInjury => x !== null);
+  }).catch(() => []);
+}
+
+/** تصنيف الفيفا لمنتخب — null قبل توفّر جسر الفريق أو التصنيف. */
+async function getGcFifaRank(teamId: number): Promise<GcFifaRank | null> {
+  const bridge = await getGcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return null;
+  const ranks = await getTsFifaRanking().catch(() => new Map());
+  const r = ranks.get(uuid);
+  return r ? { rank: r.rank, points: r.points, change: r.change } : null;
 }
 
 export { TIMEZONE as GC_TIMEZONE, LEAGUE_ID as GC_LEAGUE_ID, SEASON as GC_SEASON };
