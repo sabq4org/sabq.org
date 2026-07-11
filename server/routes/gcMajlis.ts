@@ -110,4 +110,63 @@ router.delete("/api/gulf-cup/majlis/:id", requireAuth, async (req: any, res) => 
   }
 });
 
+// ---------- «رجل المباراة — الجمهور ضد الأرقام» ----------
+// GET عام (يعرض التوزيعة للجميع)؛ POST للمسجّلين ضمن نافذة التصويت.
+
+import { getMotmBoard, voteMotm } from "../services/gcMotmService";
+
+const MOTM_REASONS: Record<string, { status: number; message: string }> = {
+  INVALID_PLAYER: { status: 400, message: "اختر لاعبًا صالحًا" },
+  NOT_FOUND: { status: 404, message: "المباراة غير موجودة" },
+  TOO_EARLY: { status: 409, message: "التصويت يُفتح من الشوط الثاني" },
+  NOT_STARTED: { status: 409, message: "التصويت يُفتح بعد انطلاق المباراة" },
+  CLOSED: { status: 409, message: "أُغلق التصويت لهذه المباراة" },
+};
+
+router.get("/api/gulf-cup/motm/:fixtureId", async (req: any, res) => {
+  if (!guard(res)) return;
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+    res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    return;
+  }
+  try {
+    const userId = req.isAuthenticated?.() && req.user ? req.user.id : undefined;
+    const board = await getMotmBoard(fixtureId, userId);
+    if (userId) noStore(res);
+    else res.set("Cache-Control", "public, max-age=15, s-maxage=30, stale-while-revalidate=60");
+    res.json(board);
+  } catch (error) {
+    console.error("[GC MOTM] board error:", error);
+    res.status(502).json({ message: "تعذّر جلب التصويت حاليًا" });
+  }
+});
+
+router.post("/api/gulf-cup/motm/:fixtureId", requireAuth, async (req: any, res) => {
+  if (!guard(res)) return;
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+    res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    return;
+  }
+  try {
+    const result = await voteMotm(
+      req.user.id,
+      fixtureId,
+      String(req.body?.playerId ?? ""),
+      String(req.body?.playerName ?? ""),
+    );
+    if (!result.ok) {
+      const m = MOTM_REASONS[result.reason] ?? { status: 500, message: "تعذّر حفظ الصوت" };
+      res.status(m.status).json({ message: m.message, reason: result.reason });
+      return;
+    }
+    noStore(res);
+    res.json({ saved: true });
+  } catch (error) {
+    console.error("[GC MOTM] vote error:", error);
+    res.status(502).json({ message: "تعذّر حفظ الصوت حاليًا" });
+  }
+});
+
 export default router;

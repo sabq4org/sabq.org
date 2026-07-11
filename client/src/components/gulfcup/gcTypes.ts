@@ -226,6 +226,17 @@ export interface GcCommentaryItem {
   text: string;
 }
 
+export interface GcStarPlayer {
+  rank: number;
+  name: string;
+  photo: string | null;
+  team: GcTeam | null;
+  shirtNumber: number | null;
+  position: string | null;
+  marketValue: number;
+  currency: string;
+}
+
 export interface GcMatchDetail {
   fixture: GcFixture;
   events: GcMatchEvent[];

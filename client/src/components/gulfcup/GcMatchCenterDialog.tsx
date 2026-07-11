@@ -1,8 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
-import { Radio, MapPin, History, Users, BarChart3, ListOrdered, Tv, Stethoscope } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Radio, MapPin, History, Users, BarChart3, ListOrdered, Tv, Stethoscope, Star } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
 import {
   SAUDI_TEAM_ID,
   formatKickoffDay,
@@ -211,6 +213,103 @@ function TrendChart({ trend }: { trend: GcTrend }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+interface MotmBoard {
+  total: number;
+  myPick: { playerId: string; playerName: string } | null;
+  open: boolean;
+  results: { playerId: string; playerName: string; votes: number; percent: number }[];
+}
+
+/**
+ * «رجل المباراة — الجمهور ضد الأرقام»: تصويت جماهيري حي يقارن غلبة الجمهور
+ * بأعلى تقييم بيانات. مرشّحو التصويت من التشكيلة الغنية (أو تقييمات اللاعبين).
+ */
+function ManOfTheMatch({ detail }: { detail: GcMatchDetail }) {
+  const { isAuthenticated } = useAuth();
+  const fixtureId = detail.fixture.id;
+  const { data: board } = useQuery<MotmBoard>({
+    queryKey: [`/api/gulf-cup/motm/${fixtureId}`],
+    refetchInterval: (q) => (q.state.data?.open ? 20_000 : false),
+  });
+
+  const vote = useMutation({
+    mutationFn: (p: { playerId: string; playerName: string }) =>
+      apiRequest(`/api/gulf-cup/motm/${fixtureId}`, { method: "POST", body: JSON.stringify(p) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: [`/api/gulf-cup/motm/${fixtureId}`] }),
+  });
+
+  // مرشّحون: أصحاب التقييمات (بعد المباراة) أو التشكيلة الغنية (أثناءها).
+  const candidates: { id: string; name: string; side: "home" | "away" | null }[] = (() => {
+    const stats = (detail.playerStats ?? []).filter((p) => p.rating != null);
+    if (stats.length > 0) return stats.slice(0, 12).map((p) => ({ id: p.playerId, name: p.name, side: p.side }));
+    const rich = detail.lineupsRich;
+    if (!rich) return [];
+    return [
+      ...rich.home.filter((p) => p.starter).map((p) => ({ id: p.id, name: p.name, side: "home" as const })),
+      ...rich.away.filter((p) => p.starter).map((p) => ({ id: p.id, name: p.name, side: "away" as const })),
+    ];
+  })();
+
+  if (candidates.length === 0 && (board?.total ?? 0) === 0) return null;
+
+  const dataStar = (detail.playerStats ?? []).filter((p) => p.rating != null)[0] ?? null;
+  const crowdTop = board?.results?.[0] ?? null;
+
+  return (
+    <div className="mt-4 rounded-2xl border border-border bg-muted/30 p-3.5">
+      <p className="mb-2 flex items-center gap-1.5 text-sm font-black text-foreground">
+        <Star className="h-4 w-4 text-amber-500" />
+        رجل المباراة — الجمهور ضد الأرقام
+      </p>
+
+      {/* المقارنة عند توفر الطرفين */}
+      {(crowdTop || dataStar) && (
+        <div className="mb-3 grid grid-cols-2 gap-2">
+          <div className="rounded-xl bg-emerald-500/10 px-3 py-2">
+            <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300">اختيار الجمهور</p>
+            <p className="truncate text-sm font-black text-foreground">{crowdTop?.playerName ?? "—"}</p>
+            {crowdTop && <p className="text-[10px] text-muted-foreground">{crowdTop.percent}% من {board?.total ?? 0} صوت</p>}
+          </div>
+          <div className="rounded-xl bg-amber-500/10 px-3 py-2">
+            <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300">بطل الأرقام</p>
+            <p className="truncate text-sm font-black text-foreground">{dataStar?.name ?? "—"}</p>
+            {dataStar?.rating != null && <p className="text-[10px] text-muted-foreground">تقييم {dataStar.rating.toFixed(1)}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* أزرار التصويت */}
+      {board?.open && isAuthenticated && (
+        <div className="flex flex-wrap gap-1.5">
+          {candidates.map((c) => {
+            const picked = board?.myPick?.playerId === c.id;
+            return (
+              <button
+                key={c.id}
+                onClick={() => vote.mutate({ playerId: c.id, playerName: c.name })}
+                disabled={vote.isPending}
+                className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
+                  picked
+                    ? "bg-[#0F8054] text-white"
+                    : "bg-card text-foreground hover:bg-emerald-500/10 border border-border"
+                }`}
+              >
+                {c.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {board?.open && !isAuthenticated && (
+        <p className="text-[11px] text-muted-foreground">سجّل دخولك للتصويت لرجل المباراة</p>
+      )}
+      {board && !board.open && (board.total ?? 0) === 0 && (
+        <p className="text-[11px] text-muted-foreground">يُفتح التصويت من الشوط الثاني</p>
+      )}
     </div>
   );
 }
@@ -639,6 +738,7 @@ export function GcMatchCenterDialog({ fixtureId, onClose }: GcMatchCenterDialogP
                 </p>
               )}
               {detail && <PlayerRatings detail={detail} />}
+              {detail && <ManOfTheMatch detail={detail} />}
               {detail && <RefereeCard detail={detail} />}
             </TabsContent>
 

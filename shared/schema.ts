@@ -2299,6 +2299,24 @@ export const gcMajlisMembers = pgTable("gc_majlis_members", {
 export type GcMajlis = typeof gcMajalis.$inferSelect;
 export type GcMajlisMember = typeof gcMajlisMembers.$inferSelect;
 
+// «رجل المباراة — الجمهور ضد الأرقام»: صوت واحد لكل مستخدم لكل مباراة، يُفتح
+// من الشوط الثاني وحتى 24 ساعة بعد الصافرة، ثم تُقارن غلبة الجمهور بأعلى
+// تقييم بيانات (TheSports) في الواجهة.
+export const gcMotmVotes = pgTable("gc_motm_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fixtureId: varchar("fixture_id").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  // معرّف اللاعب لدى TheSports إن توفّر، وإلا مفتاح الاسم — والاسم للعرض دائمًا.
+  playerId: varchar("player_id").notNull(),
+  playerName: text("player_name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_gc_motm_fixture_user").on(table.fixtureId, table.userId),
+  index("idx_gc_motm_fixture").on(table.fixtureId),
+]);
+
+export type GcMotmVote = typeof gcMotmVotes.$inferSelect;
+
 export type GcPrediction = typeof gcPredictions.$inferSelect;
 export type GcPredictionMatch = typeof gcPredictionMatches.$inferSelect;
 export type GcLongPrediction = typeof gcLongPredictions.$inferSelect;
