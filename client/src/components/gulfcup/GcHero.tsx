@@ -19,13 +19,13 @@ interface GcHeroProps {
 function CountdownUnit({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex flex-col items-center">
-      <div className="relative grid place-items-center rounded-2xl bg-white/[0.07] px-3.5 py-3 sm:px-5 sm:py-4 min-w-[4rem] sm:min-w-[5.25rem] ring-1 ring-emerald-300/20 backdrop-blur-md shadow-xl">
-        <span className="bg-gradient-to-b from-white to-emerald-100 bg-clip-text text-3xl sm:text-5xl font-black tabular-nums text-transparent">
+      <div className="relative grid place-items-center rounded-xl bg-white/[0.07] px-3 py-2 sm:px-4 sm:py-2.5 min-w-[3.25rem] sm:min-w-[4rem] ring-1 ring-emerald-300/20 backdrop-blur-md shadow-lg">
+        <span className="bg-gradient-to-b from-white to-emerald-100 bg-clip-text text-2xl sm:text-3xl font-black tabular-nums text-transparent">
           {String(value).padStart(2, "0")}
         </span>
         <span className="absolute inset-x-2 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/50 to-transparent" />
       </div>
-      <span className="mt-2 text-[11px] sm:text-xs font-semibold text-emerald-100/70">{label}</span>
+      <span className="mt-1.5 text-[10px] sm:text-[11px] font-semibold text-emerald-100/70">{label}</span>
     </div>
   );
 }
@@ -52,11 +52,11 @@ function Countdown({ startsAt }: { startsAt: string | null }) {
   return (
     <div className="flex items-end justify-center gap-2 sm:gap-3" dir="ltr" aria-label="العد التنازلي">
       <CountdownUnit value={c.days} label="يوم" />
-      <span className="pb-7 text-2xl font-black text-emerald-300/40">:</span>
+      <span className="pb-6 text-xl font-black text-emerald-300/40">:</span>
       <CountdownUnit value={c.hours} label="ساعة" />
-      <span className="pb-7 text-2xl font-black text-emerald-300/40">:</span>
+      <span className="pb-6 text-xl font-black text-emerald-300/40">:</span>
       <CountdownUnit value={c.minutes} label="دقيقة" />
-      <span className="pb-7 text-2xl font-black text-emerald-300/40">:</span>
+      <span className="pb-6 text-xl font-black text-emerald-300/40">:</span>
       <CountdownUnit value={c.seconds} label="ثانية" />
     </div>
   );
@@ -67,8 +67,8 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
 
   return (
     <section dir="rtl" className="relative overflow-hidden">
-      {/* خلفية فاخرة: أخضر خليجي عميق + توهّج ذهبي (هوية خليجي 27) */}
-      <div className="absolute inset-0 bg-gradient-to-bl from-[#02160f] via-[#04392a] to-[#021a12]" />
+      {/* خلفية الهوية: تدرج المونديال الزمردي + توهّج ذهبي (خليجي 27 v4) */}
+      <div className="absolute inset-0 bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#08573B]" />
       <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-[120px]" />
       <div className="absolute -bottom-48 -right-24 h-96 w-96 rounded-full bg-amber-400/10 blur-3xl" />
       <div className="absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-teal-400/10 blur-3xl" />
@@ -80,12 +80,12 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
         }}
       />
 
-      <div className="relative container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+      <div className="relative container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-7 sm:py-9">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="flex flex-col items-center text-center gap-5"
+          className="flex flex-col items-center text-center gap-3.5"
         >
           <div className="relative">
             <motion.div
@@ -96,7 +96,7 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
             {/* لوح عاجي خلف الشعار الرسمي — نص الهوية الداكن يبقى واضحًا فوق
                 الهيرو الداكن. المقاس مضبوط على مرجع هيرو المونديال (h-20) */}
             <motion.div
-              className="relative rounded-2xl bg-gradient-to-b from-white to-amber-50/90 px-4 py-3 shadow-2xl ring-1 ring-amber-300/40"
+              className="relative rounded-2xl bg-gradient-to-b from-white to-amber-50/90 px-3 py-2 shadow-2xl ring-1 ring-amber-300/40"
               initial={{ scale: 0.88, rotate: -2 }}
               animate={{ scale: 1, rotate: 0 }}
               transition={{ type: "spring", stiffness: 120, damping: 12 }}
@@ -104,7 +104,7 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
               <img
                 src={gulfCupLogo}
                 alt="شعار خليجي 27 — كأس الخليج العربي في السعودية 2026"
-                className="h-20 w-auto object-contain sm:h-24"
+                className="h-14 w-auto object-contain sm:h-16"
                 loading="eager"
                 decoding="async"
               />
@@ -128,7 +128,7 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
             )}
           </div>
 
-          <h1 className="text-4xl font-black tracking-tight text-white sm:text-6xl">
+          <h1 className="text-3xl font-black tracking-tight text-white sm:text-5xl">
             خليجي{" "}
             <span className="bg-gradient-to-l from-amber-300 via-amber-200 to-emerald-300 bg-clip-text text-transparent">
               27
@@ -145,11 +145,11 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
             </p>
           )}
 
-          <div className="mt-2 w-full">
+          <div className="mt-1 w-full">
             <Countdown startsAt={overview?.startsAt ?? null} />
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-emerald-100/80">
+          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-emerald-100/80">
             {!!overview?.teamsCount && (
               <span className="flex items-center gap-1.5">
                 <Users className="h-4 w-4 text-emerald-300" />
@@ -163,22 +163,22 @@ export function GcHero({ overview, onJump, titleHolder }: GcHeroProps) {
               </span>
             )}
             {overview?.started && (
-              <span className="flex items-center gap-1.5 font-bold text-red-300">
+              <span className="flex items-center gap-1.5 font-bold text-[#FFB4BB]">
                 <Radio className="h-4 w-4 animate-pulse" />
                 البطولة جارية
               </span>
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
             <Button
               onClick={() => onJump("schedule")}
-              className="rounded-full bg-emerald-400 px-6 font-bold text-emerald-950 hover:bg-emerald-300"
+              className="rounded-full bg-white px-6 font-bold text-emerald-900 hover:bg-emerald-50"
             >
               جدول المباريات
             </Button>
             <Link href="/gulf-cup/predictions">
-              <Button className="rounded-full bg-amber-300 px-6 font-black text-emerald-950 hover:bg-amber-200">
+              <Button className="rounded-full bg-gradient-to-b from-[#F5D46B] to-[#E7A93C] px-6 font-black text-emerald-950 hover:from-[#F8DD82] hover:to-[#EDB44E]">
                 <Sparkles className="h-4 w-4" />
                 توقّع واربح
               </Button>

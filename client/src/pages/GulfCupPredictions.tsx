@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
-import { Award, Coins, Crown, Flame, Sparkles, Target, Trophy, Users } from "lucide-react";
+import { Award, ChevronDown, Coins, Crown, Flame, HelpCircle, Sparkles, Target, Trophy, Users } from "lucide-react";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
@@ -154,22 +154,22 @@ export default function GulfCupPredictions() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background" dir="rtl">
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-emerald-50/70 via-background to-background dark:from-emerald-950/20 dark:via-background dark:to-background" dir="rtl">
       <Header user={user || undefined} />
       <NavigationBar />
 
       {celebration && <GcWinCelebration win={celebration} onClose={dismissCelebration} />}
 
       <main className="flex-1">
-        <section className="relative overflow-hidden bg-gradient-to-bl from-green-700 via-green-800 to-emerald-900 text-white">
+        <section className="relative overflow-hidden bg-gradient-to-bl from-[#14905C] via-[#0F8054] to-[#08573B] text-white">
           <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(circle_at_20%_30%,white_1px,transparent_1px)] [background-size:24px_24px]" />
           <div className="relative mx-auto max-w-4xl px-4 py-10 sm:py-12">
-            <div className="flex items-center gap-2 text-green-100">
+            <div className="flex items-center gap-2 text-emerald-100">
               <Trophy className="h-5 w-5" />
               <span className="text-sm font-bold">كأس الخليج العربي 27 · السعودية</span>
             </div>
             <h1 className="mt-2 text-3xl font-black sm:text-4xl">توقّعات خليجي 27</h1>
-            <p className="mt-2 max-w-xl text-green-50/90">
+            <p className="mt-2 max-w-xl text-emerald-50/90">
               توقّع نتيجة كل مباراة وتقاسم <strong>بركة 1000 نقطة ولاء</strong> مع المصيبين — كلّما قلّ عددهم زاد نصيبك.
               يرشدك توقّع سبق الذكي وإجماع الجمهور، والنتيجة الدقيقة تأخذ النصيب الأكبر.
             </p>
@@ -198,7 +198,7 @@ export default function GulfCupPredictions() {
                       <p className="inline-flex items-center gap-1 text-xl font-black tabular-nums">
                         <Flame className="h-4 w-4 text-orange-300" /> {formatNumber(me!.currentStreak)}
                       </p>
-                      <p className="text-[11px] text-green-100">سلسلة حالية</p>
+                      <p className="text-[11px] text-emerald-100">سلسلة حالية</p>
                     </div>
                   </>
                 )}
@@ -212,7 +212,7 @@ export default function GulfCupPredictions() {
             ) : (
               <button
                 onClick={goLogin}
-                className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-green-800 transition hover:bg-green-50"
+                className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#0A6B47] transition hover:bg-emerald-50"
               >
                 <Sparkles className="h-4 w-4" /> سجّل دخولك وابدأ التوقّع
               </button>
@@ -221,7 +221,7 @@ export default function GulfCupPredictions() {
         </section>
 
         <div className="mx-auto max-w-4xl px-4 py-6">
-          <ScoringExplainer />
+          <GcHowToPlay />
 
           <div className="mb-5 flex w-full gap-1 overflow-x-auto rounded-full bg-muted p-1">
             {TABS.map((t) => (
@@ -229,7 +229,7 @@ export default function GulfCupPredictions() {
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={`flex-1 whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition ${
-                  tab === t.key ? "bg-green-700 text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  tab === t.key ? "bg-[#0F8054] text-white shadow-sm" : "text-muted-foreground hover:text-foreground"
                 }`}
                 data-testid={`gc-pred-tab-${t.key}`}
               >
@@ -285,7 +285,7 @@ function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="text-center">
       <p className="text-xl font-black tabular-nums">{value}</p>
-      <p className="text-[11px] text-green-100">{label}</p>
+      <p className="text-[11px] text-emerald-100">{label}</p>
     </div>
   );
 }
@@ -294,25 +294,121 @@ function Divider() {
   return <div className="h-8 w-px bg-white/25" />;
 }
 
-/** شرح آلية البركة المتدرّجة — يميّز المسابقة ويوضّح حماية النتيجة المقلوبة. */
-function ScoringExplainer() {
-  const items = [
-    { icon: <Coins className="h-4 w-4" />, title: "بركة 1000", text: "كل مباراة تُموّل ببركة 1000 نقطة تُقتسم بين المصيبين" },
-    { icon: <Target className="h-4 w-4" />, title: "طبقات 50/30/20", text: "دقيقة 500 · فارق صحيح 300 · نتيجة صحيحة 200" },
-    { icon: <Users className="h-4 w-4" />, title: "كلّما قلّوا زدت", text: "كلّما قلّ عدد المصيبين في طبقتك زاد نصيبك منها" },
-    { icon: <Crown className="h-4 w-4" />, title: "جائزة متراكمة", text: "إن لم يُصب أحد طبقةً تراكمت نقاطها للمباراة التالية" },
+/**
+ * «كيف تلعب وتربح؟» — شرح تسلسلي للمتابع بلغة بسيطة: ثلاث خطوات، طبقات
+ * البركة بأمثلة رقمية، وقاعدتا التميّز. مفتوح افتراضيًا، ومن يطويه تُحفظ
+ * رغبته محليًا فلا يعود يزاحمه.
+ */
+const HOWTO_COLLAPSED_KEY = "gc-howto-collapsed";
+
+function GcHowToPlay() {
+  const [open, setOpen] = useState(() => {
+    try {
+      return localStorage.getItem(HOWTO_COLLAPSED_KEY) !== "1";
+    } catch {
+      return true;
+    }
+  });
+
+  const toggle = () => {
+    setOpen((o) => {
+      try {
+        localStorage.setItem(HOWTO_COLLAPSED_KEY, o ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      return !o;
+    });
+  };
+
+  const steps = [
+    { title: "سجّل دخولك", text: "بحساب سبق نفسه — توقّعاتك ونقاطك تُحفظ عليه وتظهر في لوحة المتصدّرين." },
+    {
+      title: "توقّع قبل صافرة البداية",
+      text: "اختر نتيجة كل مباراة بأزرار + و−. التوقّع يُقفل عند انطلاق المباراة، وتقدر تعدّله في أي وقت قبل ذلك.",
+    },
+    {
+      title: "اجمع نصيبك من البركة",
+      text: "بعد نهاية المباراة تُوزَّع بركة 1000 نقطة ولاء على المصيبين تلقائيًا — تابع نقاطك في «توقّعاتي» وترتيبك في «المتصدّرون».",
+    },
   ];
+
+  const tiers = [
+    { pts: 500, title: "النتيجة الدقيقة", example: "توقّعت 2-1 وانتهت 2-1" },
+    { pts: 300, title: "الفارق الصحيح", example: "توقّعت 3-2 وانتهت 2-1 — الفارق هدف واحد في الحالتين" },
+    { pts: 200, title: "الاتجاه الصحيح", example: "توقّعت فوز الأخضر بأي نتيجة وفاز فعلًا" },
+  ];
+
   return (
-    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {items.map((it) => (
-        <div key={it.title} className="rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-3">
-          <div className="mb-1 flex items-center gap-1.5 font-black text-green-800 dark:text-green-300">
-            {it.icon}
-            <span className="text-sm">{it.title}</span>
+    <div className="mb-5 overflow-hidden rounded-2xl border border-border bg-card">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 px-4 py-3 text-start transition-colors hover:bg-muted/50"
+      >
+        <HelpCircle className="h-5 w-5 shrink-0 text-[#0F8054] dark:text-emerald-400" />
+        <span className="flex-1 text-sm font-black text-foreground">كيف تلعب وتربح؟</span>
+        <span className="hidden text-xs text-muted-foreground sm:block">
+          بركة 1000 نقطة لكل مباراة · ثلاث طبقات إصابة
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div className="border-t border-border px-4 pb-4 pt-3">
+          <div className="grid gap-5 md:grid-cols-2">
+            {/* الخطوات الثلاث */}
+            <ol className="space-y-3">
+              {steps.map((s, i) => (
+                <li key={s.title} className="flex gap-3">
+                  <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-[#0F8054]/10 text-xs font-black text-[#0A6B47] dark:bg-emerald-400/15 dark:text-emerald-300">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <p className="text-sm font-bold text-foreground">{s.title}</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{s.text}</p>
+                  </div>
+                </li>
+              ))}
+            </ol>
+
+            {/* طبقات البركة بمثال */}
+            <div className="space-y-2">
+              {tiers.map((t) => (
+                <div key={t.pts} className="flex items-center gap-3 rounded-xl bg-muted/50 px-3 py-2.5">
+                  <span className="grid h-10 w-14 shrink-0 place-items-center rounded-lg bg-gradient-to-b from-[#F5D46B]/30 to-[#E7A93C]/20 text-sm font-black tabular-nums text-[#96700F] dark:text-amber-300">
+                    {t.pts}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-foreground">{t.title}</p>
+                    <p className="truncate text-[11px] text-muted-foreground">{t.example}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <p className="text-[11px] leading-relaxed text-muted-foreground">{it.text}</p>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#0F8054]/8 px-3 py-1.5 text-[11px] font-bold text-[#0A6B47] dark:bg-emerald-400/10 dark:text-emerald-300">
+              <Users className="h-3.5 w-3.5" />
+              كلّما قلّ المصيبون في طبقتك كبر نصيبك منها
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-3 py-1.5 text-[11px] font-bold text-[#96700F] dark:text-amber-300">
+              <Crown className="h-3.5 w-3.5" />
+              الطبقة التي لا يُصيبها أحد تتراكم جائزةً للمباراة التالية
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
+              <Target className="h-3.5 w-3.5" />
+              يرشدك في كل بطاقة توقّع سبق الذكي وإجماع الجمهور
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1.5 text-[11px] font-bold text-muted-foreground">
+              <Coins className="h-3.5 w-3.5" />
+              النقاط نقاط ولاء سبق تُضاف لحسابك تلقائيًا
+            </span>
+          </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -335,8 +431,8 @@ function TodayTab({
   if (isLoading) {
     return (
       <div className="grid gap-3 sm:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-96 animate-pulse rounded-xl bg-muted/60" />
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="h-56 animate-pulse rounded-xl bg-muted/60" />
         ))}
       </div>
     );
@@ -371,8 +467,8 @@ function TodayTab({
     <div className="space-y-6">
       {groups.map((g) => (
         <section key={g.key}>
-          <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-green-800 dark:text-green-300">
-            <span className="h-4 w-1 rounded-full bg-green-600" />
+          <h2 className="mb-2.5 flex items-center gap-2 text-sm font-black text-[#0A6B47] dark:text-emerald-300">
+            <span className="h-4 w-1 rounded-full bg-[#0F8054]" />
             {g.label}
             <span className="text-xs font-normal text-muted-foreground">({formatNumber(g.items.length)})</span>
           </h2>
@@ -401,7 +497,7 @@ function SignInPrompt({ onLogin }: { onLogin: () => void }) {
       <p className="font-bold">سجّل دخولك لعرض توقّعاتك</p>
       <button
         onClick={onLogin}
-        className="mt-3 inline-flex items-center gap-2 rounded-full bg-green-700 px-5 py-2 text-sm font-bold text-white transition hover:bg-green-800"
+        className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#0F8054] px-5 py-2 text-sm font-bold text-white transition hover:bg-[#0A6B47]"
       >
         تسجيل الدخول
       </button>

@@ -20,12 +20,12 @@ function PodiumCard({ scorer, place }: { scorer: GcScorer; place: 1 | 2 | 3 }) {
   const medal = place === 1 ? "🥇" : place === 2 ? "🥈" : "🥉";
   return (
     <div
-      className={`relative flex flex-col items-center rounded-3xl px-3 pb-4 ring-2 ${ring} ${
-        place === 1 ? "pt-6 sm:-mt-3" : "pt-4"
+      className={`relative flex flex-col items-center rounded-2xl px-3 pb-3 ring-2 ${ring} ${
+        place === 1 ? "pt-5 sm:-mt-2" : "pt-4"
       }`}
     >
-      <span className="absolute -top-3 text-2xl drop-shadow">{medal}</span>
-      <div className="h-16 w-16 overflow-hidden rounded-full bg-white ring-2 ring-white shadow">
+      <span className="absolute -top-3 text-xl drop-shadow">{medal}</span>
+      <div className="h-14 w-14 overflow-hidden rounded-full bg-white ring-2 ring-white shadow">
         {scorer.photo ? (
           <img src={scorer.photo} alt={scorer.name} className="h-full w-full object-cover" loading="lazy" />
         ) : null}
@@ -51,12 +51,14 @@ export function GcScorersSection() {
     staleTime: 5 * 60_000,
   });
 
-  const scorers = Array.isArray(data?.scorers) ? data.scorers : [];
-  const assists = Array.isArray(data?.assists) ? data.assists : [];
+  // صفوف الأصفار ضجيج بصري (تظهر في أرقام الأرشيف) — نعرض المُنتِجين فقط،
+  // وإن خلت قائمة الصنّاع بالكامل يختفي عمودها ويتمدّد الهدّافون.
+  const scorers = (Array.isArray(data?.scorers) ? data.scorers : []).filter((s) => s.goals > 0);
+  const assists = (Array.isArray(data?.assists) ? data.assists : []).filter((s) => s.assists > 0);
   if (scorers.length === 0 && assists.length === 0) return null;
 
   const podium = scorers.slice(0, 3);
-  const rest = scorers.slice(3, 12);
+  const rest = scorers.slice(3, 11);
 
   return (
     <section id="gc-scorers" dir="rtl" className="container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -70,7 +72,7 @@ export function GcScorersSection() {
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className={assists.length > 0 ? "grid gap-6 lg:grid-cols-[1fr_300px]" : ""}>
         {/* الهدّافون: منصة + جدول */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
@@ -79,7 +81,7 @@ export function GcScorersSection() {
           transition={{ duration: 0.4 }}
         >
           {podium.length > 0 && (
-            <div className="mb-5 grid grid-cols-3 items-end gap-3 sm:px-8">
+            <div className="mx-auto mb-4 grid max-w-lg grid-cols-3 items-end gap-3">
               {/* الترتيب البصري: الثاني — الأول (مرتفع) — الثالث */}
               {podium[1] && <PodiumCard scorer={podium[1]} place={2} />}
               {podium[0] && <PodiumCard scorer={podium[0]} place={1} />}
@@ -88,9 +90,12 @@ export function GcScorersSection() {
           )}
 
           {rest.length > 0 && (
-            <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+            <ul className="grid gap-2 sm:grid-cols-2">
               {rest.map((s) => (
-                <li key={`${s.id}-${s.rank}`} className="flex items-center gap-3 px-4 py-2.5">
+                <li
+                  key={`${s.id}-${s.rank}`}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-card px-3.5 py-2"
+                >
                   <span className="w-5 text-center text-sm font-black tabular-nums text-muted-foreground">
                     {s.rank}
                   </span>

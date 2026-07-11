@@ -25,7 +25,7 @@ export function GcHistorySection() {
   return (
     <section id="gc-history" dir="rtl" className="relative overflow-hidden py-12">
       {/* خلفية داكنة فاخرة تميّز قسم التاريخ عن باقي الصفحة */}
-      <div className="absolute inset-0 bg-gradient-to-bl from-[#02160f] via-[#04392a] to-[#021a12]" />
+      <div className="absolute inset-0 bg-gradient-to-bl from-[#052E1F] via-[#08573B] to-[#04241A]" />
       <div className="absolute -top-24 -right-16 h-72 w-72 rounded-full bg-amber-400/10 blur-3xl" />
 
       <div className="relative container max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">

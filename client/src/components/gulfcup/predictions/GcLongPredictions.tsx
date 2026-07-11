@@ -72,6 +72,17 @@ export function GcLongPredictions({
     );
   }
 
+  // فشل الجلب (مثلًا المسابقة غير مفعّلة) — رسالة واضحة بدل فراغ صامت.
+  if (!data) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border py-14 text-center">
+        <Crown className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
+        <p className="font-bold">توقّعات البطل والهدّاف غير متاحة حاليًا</p>
+        <p className="mt-1 text-sm text-muted-foreground">تُفتح هنا قبل انطلاق البطولة — عُد قريبًا.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
       {/* البطل */}
