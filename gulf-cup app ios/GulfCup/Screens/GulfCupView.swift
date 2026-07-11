@@ -86,6 +86,48 @@ final class GcHubStore {
         async let sc: Void = loadScorers(force: force)
         async let hi: Void = loadHistory(force: force)
         _ = await (sc, hi)
+        publishWidgetSnapshot()
+    }
+
+    /// يكتب لقطة الويدجت (المباراة المميّزة + ترتيب مجموعة السعودية) للحاوية
+    /// المشتركة، ويطلب من WidgetKit إعادة التحميل. أفضل جهد.
+    private func publishWidgetSnapshot() {
+        let featured = live.first ?? overview?.nextMatch ?? upcoming.first
+        let widgetMatch: GcWidgetMatch? = featured.map { fx in
+            GcWidgetMatch(
+                home: GcWidgetTeam(name: fx.home.name, code: GcWidgetCode.of(id: fx.home.id, name: fx.home.name)),
+                away: GcWidgetTeam(name: fx.away.name, code: GcWidgetCode.of(id: fx.away.id, name: fx.away.name)),
+                kickoff: TimeInterval(fx.timestamp),
+                round: fx.round,
+                live: fx.status.live,
+                finished: fx.status.finished,
+                elapsed: fx.status.elapsed,
+                homeGoals: fx.goals.home,
+                awayGoals: fx.goals.away
+            )
+        }
+
+        let saudiGroup = overview?.saudi.group.flatMap { name in
+            groups.first(where: { $0.name == name })
+        } ?? groups.first
+        let rows: [GcWidgetStandingRow] = (saudiGroup?.rows.prefix(4) ?? []).map { r in
+            GcWidgetStandingRow(
+                rank: r.rank,
+                name: r.team.name,
+                code: GcWidgetCode.of(id: r.team.id, name: r.team.name),
+                played: r.played,
+                points: r.points,
+                isSaudi: r.team.id == GulfCupConstants.saudiTeamId
+            )
+        }
+
+        GcWidgetStore.write(GcWidgetSnapshot(
+            updatedAt: Date().timeIntervalSince1970,
+            match: widgetMatch,
+            groupName: saudiGroup?.name,
+            rows: rows
+        ))
+        GcWidgetReload.reload()
     }
 
     func loadScorers(force: Bool = false) async {
