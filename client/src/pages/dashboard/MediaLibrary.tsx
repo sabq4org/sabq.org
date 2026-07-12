@@ -4,6 +4,8 @@ import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -47,7 +49,6 @@ import { MediaUploadDialog } from "@/components/dashboard/MediaUploadDialog";
 import { MediaPreviewDialog } from "@/components/dashboard/MediaPreviewDialog";
 import { CreateFolderDialog } from "@/components/dashboard/CreateFolderDialog";
 import { AIImageGeneratorDialog } from "@/components/AIImageGeneratorDialog";
-import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { MediaFile, MediaFolder } from "@shared/schema";
 
@@ -91,8 +92,20 @@ function formatBytes(bytes: number): string {
   if (!bytes) return "0 ب";
   const units = ["ب", "ك.ب", "م.ب", "ج.ب"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${Math.round((bytes / Math.pow(1024, i)) * 10) / 10} ${units[i]}`;
+  const value = Math.round((bytes / Math.pow(1024, i)) * 10) / 10;
+  return `${value.toLocaleString("en-US")} ${units[i]}`;
 }
+
+const LATIN_DATE = "ar-SA-u-ca-gregory-nu-latn";
+
+const STAT_TILE_STYLES = [
+  "rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15",
+  "rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card dark:border-emerald-900/35 dark:from-emerald-950/15",
+  "rounded-2xl border-cyan-200/55 bg-gradient-to-br from-cyan-50/50 via-card to-card dark:border-cyan-900/35 dark:from-cyan-950/15",
+  "rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15",
+  "rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/50 via-card to-card dark:border-amber-900/35 dark:from-amber-950/15",
+  "rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card dark:border-rose-900/35 dark:from-rose-950/15",
+] as const;
 
 export default function MediaLibrary() {
   const { user } = useAuth({ redirectToLogin: true });
@@ -438,7 +451,8 @@ export default function MediaLibrary() {
     const k = 1024;
     const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+    const value = Math.round((bytes / Math.pow(k, i)) * 100) / 100;
+    return `${value.toLocaleString("en-US")} ${sizes[i]}`;
   };
 
   const gridClasses = "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4";
@@ -463,19 +477,13 @@ export default function MediaLibrary() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-5" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-              <ImageIcon className="h-5 w-5 text-primary" />
-            </span>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold" data-testid="heading-media-library">مكتبة الوسائط</h1>
-              <p className="text-sm text-muted-foreground">إدارة الصور والملفات وحقوق استخدامها</p>
-            </div>
-          </div>
-          {canUpload && (
+      <DashboardPageShell contentClassName="space-y-5">
+        <DashboardPageHeader
+          icon={ImageIcon}
+          title="مكتبة الوسائط"
+          description="إدارة الصور والملفات وحقوق استخدامها"
+          titleTestId="heading-media-library"
+          actions={canUpload ? (
             <div className="flex w-full sm:w-auto items-center gap-2">
               <Button variant="outline" onClick={() => setGenerateDialogOpen(true)} className="gap-2 flex-1 sm:flex-none" data-testid="button-generate-ai">
                 <Sparkles className="h-4 w-4 text-primary/80" />
@@ -486,11 +494,11 @@ export default function MediaLibrary() {
                 رفع ملف
               </Button>
             </div>
-          )}
-        </div>
+          ) : undefined}
+        />
 
         {/* Library stats (Phase 6) — collapsible governance dashboard */}
-        <Card className="overflow-hidden border-border/70 shadow-none">
+        <Card className="overflow-hidden rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <button
             type="button"
             onClick={() => setStatsOpen((v) => !v)}
@@ -498,31 +506,35 @@ export default function MediaLibrary() {
             data-testid="button-toggle-stats"
           >
             <span className="flex items-center gap-2 text-sm font-medium">
-              <BarChart3 className="h-4 w-4 text-primary" />
+              <BarChart3 className="h-4 w-4 text-[#078fd1]" />
               إحصائيات المكتبة
             </span>
             <ChevronDown className={cn("h-4 w-4 transition-transform", statsOpen && "rotate-180")} />
           </button>
           {statsOpen && (
-            <div className="px-4 pb-4 pt-1 space-y-4 border-t">
+            <div className="px-4 pb-4 pt-1 space-y-4 border-t border-sky-200/40 dark:border-sky-900/30">
               {!stats ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16" />)}
+                  {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-2xl" />)}
                 </div>
               ) : (
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
                     {[
-                      { label: "إجمالي الصور", value: stats.totalImages, icon: ImageIcon, tone: "text-foreground" },
-                      { label: "حقوق موثّقة", value: stats.rightsVerified, icon: ShieldCheck, tone: "text-emerald-600" },
-                      { label: "مولّدة بالذكاء", value: stats.aiGenerated, icon: Sparkles, tone: "text-primary/80" },
-                      { label: "مفهرسة دلالياً", value: stats.indexed, icon: Search, tone: "text-sky-600" },
-                      { label: "بانتظار التحليل", value: stats.pendingAnalysis, icon: Wand2, tone: "text-amber-600" },
-                      { label: "حجم التخزين", value: formatBytes(stats.totalStorageBytes), icon: HardDrive, tone: "text-foreground" },
-                    ].map((tile) => (
-                      <div key={tile.label} className="rounded-xl border border-border/60 bg-muted/20 p-3" data-testid={`stat-${tile.label}`}>
+                      { label: "إجمالي الصور", value: stats.totalImages, icon: ImageIcon, tone: "text-sky-700 dark:text-sky-300", numeric: true },
+                      { label: "حقوق موثّقة", value: stats.rightsVerified, icon: ShieldCheck, tone: "text-emerald-700 dark:text-emerald-300", numeric: true },
+                      { label: "مولّدة بالذكاء", value: stats.aiGenerated, icon: Sparkles, tone: "text-cyan-700 dark:text-cyan-300", numeric: true },
+                      { label: "مفهرسة دلالياً", value: stats.indexed, icon: Search, tone: "text-sky-600 dark:text-sky-300", numeric: true },
+                      { label: "بانتظار التحليل", value: stats.pendingAnalysis, icon: Wand2, tone: "text-amber-700 dark:text-amber-300", numeric: true },
+                      { label: "حجم التخزين", value: formatBytes(stats.totalStorageBytes), icon: HardDrive, tone: "text-rose-700 dark:text-rose-300", numeric: false },
+                    ].map((tile, index) => (
+                      <div key={tile.label} className={cn("p-3 shadow-sm", STAT_TILE_STYLES[index])} data-testid={`stat-${tile.label}`}>
                         <tile.icon className={cn("h-4 w-4 mb-1", tile.tone)} />
-                        <div className="text-lg font-bold leading-tight">{tile.value}</div>
+                        <div className="text-lg font-bold leading-tight tabular-nums">
+                          {tile.numeric && typeof tile.value === "number"
+                            ? tile.value.toLocaleString("en-US")
+                            : tile.value}
+                        </div>
                         <div className="text-xs text-muted-foreground">{tile.label}</div>
                       </div>
                     ))}
@@ -535,7 +547,7 @@ export default function MediaLibrary() {
                         {stats.byLicense.map((l) => (
                           <Badge key={l.licenseType} variant="outline" className="gap-1 text-xs">
                             {LICENSE_LABELS[l.licenseType] || l.licenseType}
-                            <span className="font-bold">{l.count}</span>
+                            <span className="font-bold tabular-nums">{l.count.toLocaleString("en-US")}</span>
                           </Badge>
                         ))}
                       </div>
@@ -551,7 +563,7 @@ export default function MediaLibrary() {
                             <img src={t.url} alt={t.title || t.originalName} className="h-9 w-9 rounded object-cover" loading="lazy" />
                             <div className="max-w-[120px]">
                               <div className="truncate font-medium">{t.title || t.originalName}</div>
-                              <div className="text-muted-foreground">{t.usage} استخدام</div>
+                              <div className="text-muted-foreground tabular-nums">{t.usage.toLocaleString("en-US")} استخدام</div>
                             </div>
                           </div>
                         ))}
@@ -565,7 +577,7 @@ export default function MediaLibrary() {
         </Card>
 
         {/* Filters Bar */}
-        <Card className="p-4">
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-4 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <div className="flex flex-col md:flex-row items-start md:items-center gap-3">
             <div className="relative flex-1 w-full md:max-w-sm">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -685,7 +697,7 @@ export default function MediaLibrary() {
         {/* Main Content */}
         <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-4">
           {/* Sidebar */}
-          <Card className="p-4 h-fit">
+          <Card className="h-fit rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-4 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-medium text-sm">المجلدات</h3>
@@ -715,9 +727,9 @@ export default function MediaLibrary() {
           <div className="space-y-4">
             {/* Results / selection bar */}
             {selectionMode ? (
-              <Card className="p-3 flex flex-wrap items-center gap-2 sticky top-2 z-20">
-                <span className="text-sm font-medium" data-testid="text-selected-count">
-                  محدد {selectedIds.size}
+              <Card className="sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
+                <span className="text-sm font-medium tabular-nums" data-testid="text-selected-count">
+                  محدد {selectedIds.size.toLocaleString("en-US")}
                 </span>
                 <Separator orientation="vertical" className="h-6" />
                 <Button size="sm" variant="outline" onClick={() => runBulk("favorite")} disabled={bulkMutation.isPending} data-testid="button-bulk-favorite">
@@ -744,10 +756,10 @@ export default function MediaLibrary() {
               </Card>
             ) : (
               <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span data-testid="text-results-count">
+                <span className="tabular-nums" data-testid="text-results-count">
                   {semanticActive
-                    ? `${displayFiles.length} نتيجة دلالية`
-                    : `${totalCount} ${totalCount === 1 ? "ملف" : "ملفات"}`}
+                    ? `${displayFiles.length.toLocaleString("en-US")} نتيجة دلالية`
+                    : `${totalCount.toLocaleString("en-US")} ${totalCount === 1 ? "ملف" : "ملفات"}`}
                 </span>
                 {semanticActive && (
                   <span className="text-xs flex items-center gap-1 text-purple-600 dark:text-purple-400">
@@ -768,7 +780,7 @@ export default function MediaLibrary() {
 
             {/* Empty state */}
             {!isLoading && displayFiles.length === 0 && (
-              <Card className="p-12">
+              <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-12 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
                 <div className="text-center">
                   <ImageIcon className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
                   {semanticActive ? (
@@ -800,7 +812,7 @@ export default function MediaLibrary() {
 
             {/* List view */}
             {viewMode === "list" && displayFiles.length > 0 && (
-              <Card className="overflow-hidden">
+              <Card className="overflow-hidden rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-muted/50 border-b">
@@ -827,8 +839,8 @@ export default function MediaLibrary() {
                             <p className="font-medium text-sm truncate max-w-[200px]">{file.title || file.originalName}</p>
                             {file.category && <Badge variant="outline" className="text-xs mt-1">{file.category}</Badge>}
                           </td>
-                          <td className="py-3 px-4 text-sm">{formatFileSize(file.size)}</td>
-                          <td className="py-3 px-4 text-sm">{format(new Date(file.createdAt), "yyyy/MM/dd")}</td>
+                          <td className="py-3 px-4 text-sm tabular-nums">{formatFileSize(file.size)}</td>
+                          <td className="py-3 px-4 text-sm tabular-nums">{new Date(file.createdAt).toLocaleDateString(LATIN_DATE)}</td>
                           <td className="py-3 px-4 text-sm">{file.folderId ? folders.find((f) => f.id === file.folderId)?.name || "-" : "-"}</td>
                           <td className="py-3 px-4">
                             <div className="flex items-center justify-center gap-1">
@@ -858,7 +870,7 @@ export default function MediaLibrary() {
             )}
           </div>
         </div>
-      </div>
+      </DashboardPageShell>
 
       {/* Dialogs */}
       <MediaUploadDialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen} folders={folders} />

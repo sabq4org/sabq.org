@@ -64,9 +64,9 @@ const announcementSchema = z.object({
 type AnnouncementFormData = z.infer<typeof announcementSchema>;
 
 const SectionHeader = ({ title, color, icon: Icon }: { title: string; color: string; icon?: React.ElementType }) => (
-  <div className="flex items-center gap-3 px-1">
-    <div className={`h-8 w-1 ${color} rounded-full`}></div>
-    {Icon && <Icon className="h-5 w-5 text-muted-foreground" />}
+  <div className="flex items-center gap-3 rounded-xl border border-sky-200/40 bg-gradient-to-l from-sky-50/40 to-transparent px-3 py-2 dark:border-sky-900/30 dark:from-sky-950/15">
+    <div className={`h-7 w-1 ${color} rounded-full`} />
+    {Icon && <Icon className="h-4 w-4 text-sky-700 dark:text-sky-300" />}
     <h3 className="text-lg font-bold text-foreground">{title}</h3>
   </div>
 );
@@ -97,16 +97,16 @@ function FeatureToggleCard({
   bgColor
 }: FeatureToggleCardProps) {
   return (
-    <Card className={`hover-elevate active-elevate-2 transition-all ${bgColor}`}>
+    <Card className={`rounded-2xl border shadow-sm transition-all hover:shadow-md ${bgColor}`}>
       <CardContent className="pt-6">
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className={`p-3 rounded-xl ${enabled ? 'bg-primary/10' : 'bg-muted/50'} transition-colors`}>
-              <Icon className={`h-6 w-6 ${enabled ? iconColorEnabled : iconColorDisabled} ${enabled ? 'animate-pulse' : ''}`} />
+            <div className={`rounded-xl p-2.5 transition-colors ${enabled ? "bg-[#1BADF8]/15" : "bg-muted/50"}`}>
+              <Icon className={`h-5 w-5 ${enabled ? iconColorEnabled : iconColorDisabled}`} />
             </div>
             <div className="space-y-1">
               <p className="font-semibold text-foreground">{title}</p>
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-md">
+              <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
                 {description}
               </p>
             </div>
@@ -189,14 +189,14 @@ function TournamentBlockCard({
   };
 
   return (
-    <Card className={`hover-elevate active-elevate-2 transition-all ${bgColor}`}>
+    <Card className={`rounded-2xl border shadow-sm transition-all hover:shadow-md ${bgColor}`}>
       <CardContent className="pt-6">
         <div className="flex flex-col gap-4">
           {/* الرأس + مفتاح الإظهار */}
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className={`p-3 rounded-xl ${iconBg}`}>
-                <Trophy className={`h-6 w-6 ${iconColor}`} />
+              <div className={`rounded-xl p-2.5 ${iconBg}`}>
+                <Trophy className={`h-5 w-5 ${iconColor}`} />
               </div>
               <div className="space-y-1">
                 <p className="font-semibold text-foreground">{title}</p>
@@ -432,53 +432,58 @@ export default function SystemSettings() {
     );
   }
 
+  const activeFeaturesCount = (celebrationMode?.enabled ? 1 : 0) + (wcBlock.visible ? 1 : 0);
+  const celebrationYears = celebrationMode?.years || 19;
+
   return (
     <DashboardLayout>
-      <div className="space-y-8" dir="rtl">
-        {/* Header Card - matching dashboard welcome style */}
-        <Card className="bg-gradient-to-r from-slate-50 via-blue-50/50 to-slate-50 dark:from-card dark:via-card dark:to-card border-primary/20" data-testid="card-settings-header">
-          <CardContent className="pt-6">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-              <div className="flex-1 space-y-2">
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <Settings className="h-7 w-7 text-primary" data-testid="icon-settings" />
-                    <div className="absolute -inset-1 bg-primary/20 rounded-full blur-md"></div>
-                  </div>
-                  <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-l from-primary to-foreground bg-clip-text text-transparent" data-testid="text-page-title">
-                    إعدادات النظام
-                  </h1>
-                </div>
-                <p className="text-muted-foreground text-base leading-relaxed max-w-2xl">
-                  إدارة إعدادات العرض والمميزات الخاصة والإعلانات الداخلية
-                </p>
+      <div className="relative min-h-full overflow-hidden">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(27,173,248,0.07),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(16,185,129,0.045),_transparent_45%),linear-gradient(180deg,_rgba(240,249,255,0.55)_0%,_transparent_26%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(27,173,248,0.1),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(16,185,129,0.05),_transparent_45%),linear-gradient(180deg,_rgba(8,47,73,0.22)_0%,_transparent_28%)]"
+        />
+        <div className="relative space-y-8" dir="rtl">
+        {/* Header */}
+        <header className="relative overflow-hidden rounded-2xl border border-sky-200/60 bg-gradient-to-l from-sky-50/80 via-background to-emerald-50/40 p-5 shadow-sm dark:border-sky-900/40 dark:from-sky-950/30 dark:via-background dark:to-emerald-950/20 sm:p-6" data-testid="card-settings-header">
+          <div aria-hidden className="pointer-events-none absolute -left-16 -top-20 h-44 w-44 rounded-full bg-[#1BADF8]/10 blur-3xl dark:bg-[#1BADF8]/15" />
+          <div aria-hidden className="pointer-events-none absolute -bottom-16 -right-10 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl" />
+          <div className="relative flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
+            <div className="flex-1 space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="rounded-xl bg-[#1BADF8]/15 p-2.5 text-[#078fd1] dark:text-[#45c0f5]">
+                  <Settings className="h-5 w-5 sm:h-6 sm:w-6" data-testid="icon-settings" />
+                </span>
+                <h1 className="text-2xl font-bold tracking-tight md:text-3xl" data-testid="text-page-title">
+                  إعدادات النظام
+                </h1>
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="gap-1.5">
-                  <ToggleRight className="h-3.5 w-3.5" />
-                  {(celebrationMode?.enabled ? 1 : 0) + (wcBlock.visible ? 1 : 0)} مميزات نشطة
-                </Badge>
-              </div>
+              <p className="max-w-2xl text-base leading-relaxed text-muted-foreground">
+                إدارة إعدادات العرض والمميزات الخاصة والإعلانات الداخلية
+              </p>
             </div>
-          </CardContent>
-        </Card>
+            <Badge variant="outline" className="gap-1.5 border-sky-200/80 bg-background/70 dark:border-sky-900/40">
+              <ToggleRight className="h-3.5 w-3.5 text-sky-600 dark:text-sky-300" />
+              <span className="tabular-nums">{activeFeaturesCount.toLocaleString("en-US")}</span> مميزات نشطة
+            </Badge>
+          </div>
+        </header>
 
         {/* Section: Display Settings */}
         <div className="space-y-4">
-          <SectionHeader title="إعدادات العرض" color="bg-blue-500" icon={Eye} />
+          <SectionHeader title="إعدادات العرض" color="bg-[#1BADF8]" icon={Eye} />
           {/* بلوكات البطولات: مفتاح إظهار + نافذة توقيت + بطل يدوي لكل بطولة.
               المونديال يصل التطبيقات المثبّتة أيضًا (عبر overview الفارغ)؛
               الخليج وآسيا ويب فقط حاليًا (علم blockHidden). */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
             <TournamentBlockCard
               slug="world-cup"
               title="بلوك كأس العالم"
               description="شريط المونديال في واجهة الويب وبانر تطبيقَي iOS وأندرويد — الإطفاء يخفيه عند الجميع فورًا دون رفع تحديث للمتاجر"
               championLabel="بطل المونديال (تلقائي من النهائي أو يدوي)"
               teamsEndpoint="/api/world-cup/teams"
-              iconColor="text-emerald-500"
-              iconBg="bg-emerald-500/10"
-              bgColor="bg-emerald-50 dark:bg-card"
+              iconColor="text-emerald-600 dark:text-emerald-300"
+              iconBg="bg-emerald-100/80 dark:bg-emerald-950/40"
+              bgColor="border-emerald-200/60 bg-gradient-to-br from-emerald-50/70 via-card to-card dark:border-emerald-900/40 dark:from-emerald-950/20"
             />
             <TournamentBlockCard
               slug="gulf-cup"
@@ -486,9 +491,9 @@ export default function SystemSettings() {
               description="شريط كأس الخليج (جدة، 23 سبتمبر – 6 أكتوبر 2026) في واجهة الويب — اضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
               championLabel="بطل خليجي 27 (تلقائي من النهائي أو يدوي)"
               teamsEndpoint="/api/gulf-cup/teams"
-              iconColor="text-violet-500"
-              iconBg="bg-violet-500/10"
-              bgColor="bg-violet-50 dark:bg-card"
+              iconColor="text-teal-600 dark:text-teal-300"
+              iconBg="bg-teal-100/80 dark:bg-teal-950/40"
+              bgColor="border-teal-200/60 bg-gradient-to-br from-teal-50/70 via-card to-card dark:border-teal-900/40 dark:from-teal-950/20"
             />
             <TournamentBlockCard
               slug="asian-cup"
@@ -496,9 +501,9 @@ export default function SystemSettings() {
               description="شريط كأس آسيا (السعودية، يناير 2027) في واجهة الويب — اضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
               championLabel="بطل كأس آسيا (تلقائي من النهائي أو يدوي)"
               teamsEndpoint="/api/asian-cup/teams"
-              iconColor="text-sky-500"
-              iconBg="bg-sky-500/10"
-              bgColor="bg-sky-50 dark:bg-card"
+              iconColor="text-sky-600 dark:text-sky-300"
+              iconBg="bg-sky-100/80 dark:bg-sky-950/40"
+              bgColor="border-sky-200/60 bg-gradient-to-br from-sky-50/70 via-card to-card dark:border-sky-900/40 dark:from-sky-950/20"
             />
             <TournamentBlockCard
               slug="kings-cup"
@@ -506,9 +511,9 @@ export default function SystemSettings() {
               description="شريط كأس الملك (بطولة الأندية السعودية الإقصائية) في واجهة الويب — الإطفاء يخفيه فورًا، واضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
               championLabel="بطل كأس الملك (تلقائي من النهائي أو يدوي)"
               teamsEndpoint="/api/kings-cup/teams"
-              iconColor="text-amber-500"
-              iconBg="bg-amber-500/10"
-              bgColor="bg-amber-50 dark:bg-card"
+              iconColor="text-amber-600 dark:text-amber-300"
+              iconBg="bg-amber-100/80 dark:bg-amber-950/40"
+              bgColor="border-amber-200/60 bg-gradient-to-br from-amber-50/60 via-card to-card dark:border-amber-900/40 dark:from-amber-950/15"
             />
             <TournamentBlockCard
               slug="pro-league"
@@ -516,61 +521,63 @@ export default function SystemSettings() {
               description="شريط دوري روشن في الرئيسية (عدّاد ما قبل الموسم / الجولة / المباراة / البطل) — الإطفاء يخفيه فورًا، واضبط نافذة التوقيت ليظهر ويختفي تلقائيًا"
               championLabel="بطل دوري روشن (تلقائي من ختام الموسم أو يدوي)"
               teamsEndpoint="/api/rsl/teams"
-              iconColor="text-teal-500"
-              iconBg="bg-teal-500/10"
-              bgColor="bg-teal-50 dark:bg-card"
+              iconColor="text-cyan-600 dark:text-cyan-300"
+              iconBg="bg-cyan-100/80 dark:bg-cyan-950/40"
+              bgColor="border-cyan-200/60 bg-gradient-to-br from-cyan-50/70 via-card to-card dark:border-cyan-900/40 dark:from-cyan-950/20"
             />
           </div>
         </div>
 
         {/* Section: Celebration Features */}
         <div className="space-y-4">
-          <SectionHeader title="مميزات الاحتفال" color="bg-amber-500" icon={PartyPopper} />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <SectionHeader title="مميزات الاحتفال" color="bg-amber-400" icon={PartyPopper} />
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <FeatureToggleCard
-              title={`وضع الاحتفال - الذكرى الـ${celebrationMode?.years || 19}`}
+              title={`وضع الاحتفال - الذكرى الـ${celebrationYears.toLocaleString("en-US")}`}
               description="عرض أرقام عائمة في الخلفية احتفالاً بالذكرى السنوية لتأسيس سبق"
               enabled={celebrationMode?.enabled || false}
               onToggle={(checked) => toggleCelebrationMode.mutate(checked)}
               isPending={toggleCelebrationMode.isPending}
               icon={PartyPopper}
-              iconColorEnabled="text-primary"
+              iconColorEnabled="text-amber-600 dark:text-amber-300"
               testId="switch-celebration-mode"
-              bgColor="bg-amber-50 dark:bg-card"
+              bgColor="border-amber-200/60 bg-gradient-to-br from-amber-50/60 via-card to-card dark:border-amber-900/40 dark:from-amber-950/15"
             />
           </div>
         </div>
 
         {/* Section: Announcements */}
         <div className="space-y-4">
-          <SectionHeader title="الإعلانات الداخلية" color="bg-green-500" icon={Megaphone} />
+          <SectionHeader title="الإعلانات الداخلية" color="bg-emerald-500" icon={Megaphone} />
           
           {/* Current Announcement Preview */}
           {announcement?.isActive && announcement?.message && (
-            <Card className="bg-green-50 dark:bg-card border-green-200 dark:border-border">
+            <Card className="rounded-2xl border-emerald-200/70 bg-gradient-to-br from-emerald-50/70 via-card to-card dark:border-emerald-900/40 dark:from-emerald-950/20">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Bell className="h-4 w-4 text-green-600" />
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Bell className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
                     الإعلان النشط حالياً
                   </CardTitle>
-                  <Badge variant="default" className="bg-green-600">نشط</Badge>
+                  <Badge variant="default" className="bg-emerald-600">نشط</Badge>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className={`flex items-start gap-3 p-4 rounded-lg border ${typeConfig[announcement.type].borderColor} ${typeConfig[announcement.type].bgColor}`}>
-                  <TypeIcon className={`h-5 w-5 flex-shrink-0 mt-0.5 ${typeConfig[announcement.type].color}`} />
-                  <p className="text-sm font-medium flex-1">{announcement.message}</p>
+                <div className={`flex items-start gap-3 rounded-xl border p-4 ${typeConfig[announcement.type].borderColor} ${typeConfig[announcement.type].bgColor}`}>
+                  <TypeIcon className={`mt-0.5 h-5 w-5 flex-shrink-0 ${typeConfig[announcement.type].color}`} />
+                  <p className="flex-1 text-sm font-medium">{announcement.message}</p>
                 </div>
               </CardContent>
             </Card>
           )}
 
           {/* Announcement Form */}
-          <Card className="hover-elevate">
+          <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Megaphone className="h-5 w-5" />
+                <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
+                  <Megaphone className="h-4 w-4 text-sky-700 dark:text-sky-300" />
+                </span>
                 إدارة الإعلان الداخلي
               </CardTitle>
               <CardDescription>
@@ -726,7 +733,7 @@ export default function SystemSettings() {
                     control={form.control}
                     name="isActive"
                     render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 bg-muted/30">
+                      <FormItem className="flex flex-row items-center justify-between rounded-xl border border-sky-100/80 bg-sky-50/30 p-4 dark:border-sky-900/30 dark:bg-sky-950/10">
                         <div className="space-y-0.5">
                           <FormLabel className="text-base font-semibold">تفعيل الإعلان</FormLabel>
                           <FormDescription>
@@ -768,6 +775,7 @@ export default function SystemSettings() {
               </Form>
             </CardContent>
           </Card>
+        </div>
         </div>
       </div>
     </DashboardLayout>

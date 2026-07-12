@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { 
   Users, 
   Clock, 
@@ -78,9 +79,9 @@ export default function OpinionAuthorApplications() {
 
   const { data, isLoading, refetch } = useQuery<ApplicationsResponse>({
     queryKey: ["/api/admin/opinion-author-applications", statusFilter, page],
-    queryFn: () => 
-      fetch(`/api/admin/opinion-author-applications?status=${statusFilter}&page=${page}&limit=10`)
-        .then(res => res.json()),
+    queryFn: () =>
+      fetch(apiUrl(`/api/admin/opinion-author-applications?status=${statusFilter}&page=${page}&limit=10`))
+        .then((res) => res.json()),
   });
 
   const approveMutation = useMutation({
@@ -214,7 +215,7 @@ export default function OpinionAuthorApplications() {
 
   return (
     <DashboardLayout>
-    <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+    <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="px-4 pb-10 sm:px-6">
       <DashboardPageHeader
         icon={PenTool}
         title="طلبات كتّاب الرأي"
@@ -227,61 +228,61 @@ export default function OpinionAuthorApplications() {
       />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-muted rounded-lg">
-                <Users className="w-5 h-5" />
+              <div className="rounded-lg bg-sky-100/80 p-2 dark:bg-sky-950/40">
+                <Users className="w-5 h-5 text-sky-700 dark:text-sky-300" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">إجمالي الطلبات</p>
-                <p className="text-2xl font-bold" data-testid="text-total-count">{data?.total || 0}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-total-count">{(data?.total || 0).toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/45 via-card to-card shadow-sm dark:border-amber-900/35 dark:from-amber-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+              <div className="rounded-lg bg-amber-100/80 p-2 dark:bg-amber-950/40">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">قيد المراجعة</p>
-                <p className="text-2xl font-bold" data-testid="text-pending-count">{pendingCount}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-pending-count">{pendingCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm dark:border-emerald-900/35 dark:from-emerald-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <div className="rounded-lg bg-emerald-100/80 p-2 dark:bg-emerald-950/40">
+                <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">مقبولة</p>
-                <p className="text-2xl font-bold" data-testid="text-approved-count">{approvedCount}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-approved-count">{approvedCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card shadow-sm dark:border-rose-900/35 dark:from-rose-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
-                <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              <div className="rounded-lg bg-rose-100/80 p-2 dark:bg-rose-950/40">
+                <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">مرفوضة</p>
-                <p className="text-2xl font-bold" data-testid="text-rejected-count">{rejectedCount}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-rejected-count">{rejectedCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
+      <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
         <CardHeader className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
           <CardTitle>قائمة الطلبات</CardTitle>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ApplicationStatus)}>
@@ -339,8 +340,8 @@ export default function OpinionAuthorApplications() {
                     <TableCell data-testid={`text-specializations-${app.id}`}>
                       {app.specializations || <span className="text-muted-foreground">-</span>}
                     </TableCell>
-                    <TableCell>
-                      {new Date(app.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}
+                    <TableCell className="tabular-nums">
+                      {new Date(app.createdAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn")}
                     </TableCell>
                     <TableCell>{getStatusBadge(app.status)}</TableCell>
                     <TableCell>
@@ -417,8 +418,8 @@ export default function OpinionAuthorApplications() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t flex-wrap gap-2">
-              <div className="text-sm text-muted-foreground">
-                الصفحة {page} من {totalPages} (إجمالي {data?.total || 0} طلب)
+              <div className="text-sm text-muted-foreground tabular-nums">
+                الصفحة {page.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")} (إجمالي {(data?.total || 0).toLocaleString("en-US")} طلب)
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -528,8 +529,8 @@ export default function OpinionAuthorApplications() {
                 </div>
               )}
 
-              <div className="text-sm text-muted-foreground">
-                تاريخ التقديم: {new Date(selectedApplication.createdAt).toLocaleDateString("ar-SA-u-ca-gregory", {
+              <div className="text-sm text-muted-foreground tabular-nums">
+                تاريخ التقديم: {new Date(selectedApplication.createdAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
@@ -670,7 +671,7 @@ export default function OpinionAuthorApplications() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </DashboardPageShell>
     </DashboardLayout>
   );
 }

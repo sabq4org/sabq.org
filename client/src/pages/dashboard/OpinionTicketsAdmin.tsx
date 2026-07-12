@@ -1,8 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import {
   CheckCircle,
   Clock,
@@ -13,6 +11,7 @@ import {
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,7 +49,13 @@ interface WritersResponse {
 
 function formatDate(date: string) {
   try {
-    return format(new Date(date), "d MMMM yyyy - HH:mm", { locale: ar });
+    return new Date(date).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return date;
   }
@@ -62,19 +67,20 @@ interface StatCardProps {
   icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   iconBg: string;
+  cardClassName: string;
 }
 
-function StatCard({ label, value, icon: Icon, iconColor, iconBg }: StatCardProps) {
+function StatCard({ label, value, icon: Icon, iconColor, iconBg, cardClassName }: StatCardProps) {
   return (
-    <Card>
+    <Card className={cn("rounded-2xl shadow-sm", cardClassName)}>
       <CardContent className="p-4">
         <div className="flex items-center gap-3">
-          <div className={cn("p-2 rounded-lg", iconBg)}>
+          <div className={cn("rounded-lg p-2", iconBg)}>
             <Icon className={cn("h-5 w-5", iconColor)} />
           </div>
           <div>
             <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold">{value.toLocaleString("en-US")}</p>
+            <p className="text-2xl font-bold tabular-nums">{value.toLocaleString("en-US")}</p>
           </div>
         </div>
       </CardContent>
@@ -137,7 +143,10 @@ export default function OpinionTicketsAdmin() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+      <DashboardPageShell
+        maxWidthClassName="max-w-[1600px]"
+        contentClassName="px-4 pb-10 sm:px-6"
+      >
         <DashboardPageHeader
           icon={MessageSquare}
           title="استفسارات كتّاب الرأي"
@@ -147,159 +156,169 @@ export default function OpinionTicketsAdmin() {
 
         {/* Stats */}
         {isLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i}>
+              <Card key={i} className="rounded-2xl border-sky-200/55 shadow-sm dark:border-sky-900/35">
                 <CardContent className="p-4">
-                  <Skeleton className="h-4 w-20 mb-2" />
+                  <Skeleton className="mb-2 h-4 w-20" />
                   <Skeleton className="h-8 w-16" />
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <StatCard
               label="إجمالي الاستفسارات"
               value={stats.total}
               icon={Inbox}
-              iconColor="text-primary"
-              iconBg="bg-primary/10"
+              iconColor="text-sky-700 dark:text-sky-300"
+              iconBg="bg-sky-100/80 dark:bg-sky-950/40"
+              cardClassName="border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15"
             />
             <StatCard
               label="مفتوحة"
               value={stats.open}
               icon={Clock}
               iconColor="text-amber-800 dark:text-amber-200"
-              iconBg="bg-amber-100 dark:bg-amber-500/20"
+              iconBg="bg-amber-100/80 dark:bg-amber-950/40"
+              cardClassName="border-amber-200/55 bg-gradient-to-br from-amber-50/50 via-card to-card dark:border-amber-900/35 dark:from-amber-950/15"
             />
             <StatCard
               label="تمت الإجابة"
               value={stats.answered}
               icon={CheckCircle}
               iconColor="text-emerald-800 dark:text-emerald-200"
-              iconBg="bg-emerald-100 dark:bg-emerald-500/20"
+              iconBg="bg-emerald-100/80 dark:bg-emerald-950/40"
+              cardClassName="border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card dark:border-emerald-900/35 dark:from-emerald-950/15"
             />
             <StatCard
               label="مغلقة"
               value={stats.closed}
               icon={Lock}
-              iconColor="text-slate-700 dark:text-slate-200"
-              iconBg="bg-slate-100 dark:bg-slate-500/20"
+              iconColor="text-rose-700 dark:text-rose-300"
+              iconBg="bg-rose-100/80 dark:bg-rose-950/40"
+              cardClassName="border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card dark:border-rose-900/35 dark:from-rose-950/15"
             />
           </div>
         )}
 
         {/* Filters */}
-        <div className="grid gap-3 md:grid-cols-[1fr_200px_220px]">
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="بحث في العنوان أو اسم الكاتب..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pr-10"
-              data-testid="input-search-tickets"
-            />
-          </div>
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-            <SelectTrigger data-testid="select-filter-status">
-              <SelectValue placeholder="جميع الحالات" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">جميع الحالات</SelectItem>
-              {STATUS_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {STATUS_META[s].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={writerFilter} onValueChange={setWriterFilter}>
-            <SelectTrigger data-testid="select-filter-writer">
-              <SelectValue placeholder="جميع الكتّاب" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">جميع الكتّاب</SelectItem>
-              {writers.map((w) => (
-                <SelectItem key={w.id} value={w.id}>
-                  {w.name || w.email || w.id}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
+          <CardContent className="p-4">
+            <div className="grid gap-3 md:grid-cols-[1fr_200px_220px]">
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="بحث في العنوان أو اسم الكاتب..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pr-10"
+                  data-testid="input-search-tickets"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
+                <SelectTrigger data-testid="select-filter-status">
+                  <SelectValue placeholder="جميع الحالات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع الحالات</SelectItem>
+                  {STATUS_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {STATUS_META[s].label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={writerFilter} onValueChange={setWriterFilter}>
+                <SelectTrigger data-testid="select-filter-writer">
+                  <SelectValue placeholder="جميع الكتّاب" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع الكتّاب</SelectItem>
+                  {writers.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name || w.email || w.id}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* List */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold">قائمة الاستفسارات</h2>
-            <p className="text-xs text-muted-foreground">
-              {isLoading ? "جاري التحميل..." : `${filtered.length} استفسار`}
-            </p>
-          </div>
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
+          <CardContent className="p-4 sm:p-6">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">قائمة الاستفسارات</h2>
+              <p className="text-xs tabular-nums text-muted-foreground">
+                {isLoading ? "جاري التحميل..." : `${filtered.length.toLocaleString("en-US")} استفسار`}
+              </p>
+            </div>
 
-          {isLoading ? (
-            <div className="space-y-2">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-20 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="text-center py-12 border rounded-lg bg-muted/20">
-              <Inbox className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-              <p className="text-muted-foreground">لا توجد استفسارات مطابقة</p>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-              {filtered.map((t, idx) => {
-                const meta = STATUS_META[t.status] ?? STATUS_META.open;
-                return (
-                  <div
-                    key={t.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => navigate(`/dashboard/opinion-tickets/${t.id}`)}
-                    onKeyDown={(e) =>
-                      (e.key === "Enter" || e.key === " ") &&
-                      navigate(`/dashboard/opinion-tickets/${t.id}`)
-                    }
-                    className={cn(
-                      "flex items-center gap-3 px-4 py-3.5 cursor-pointer transition-colors hover:bg-muted/50",
-                      idx !== filtered.length - 1 && "border-b border-border/70",
-                      t.hasUnread && "bg-amber-50/70 dark:bg-amber-500/10"
-                    )}
-                    data-testid={`row-admin-ticket-${t.id}`}
-                  >
-                    <div className="h-10 w-10 rounded-xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center shrink-0">
-                      <MessageSquare className="h-4 w-4 text-amber-800 dark:text-amber-200" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="font-semibold text-sm text-foreground line-clamp-1">{t.title}</h3>
-                        {t.hasUnread && (
-                          <span
-                            className="inline-block h-2.5 w-2.5 rounded-full bg-amber-600 ring-2 ring-background"
-                            aria-label="جديد"
-                          />
-                        )}
+            {isLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="rounded-lg border bg-muted/20 py-12 text-center">
+                <Inbox className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
+                <p className="text-muted-foreground">لا توجد استفسارات مطابقة</p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl border border-sky-100/80 bg-card shadow-sm dark:border-sky-900/30">
+                {filtered.map((t, idx) => {
+                  const meta = STATUS_META[t.status] ?? STATUS_META.open;
+                  return (
+                    <div
+                      key={t.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/dashboard/opinion-tickets/${t.id}`)}
+                      onKeyDown={(e) =>
+                        (e.key === "Enter" || e.key === " ") &&
+                        navigate(`/dashboard/opinion-tickets/${t.id}`)
+                      }
+                      className={cn(
+                        "flex cursor-pointer items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/50",
+                        idx !== filtered.length - 1 && "border-b border-border/70",
+                        t.hasUnread && "bg-amber-50/70 dark:bg-amber-500/10"
+                      )}
+                      data-testid={`row-admin-ticket-${t.id}`}
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-500/20">
+                        <MessageSquare className="h-4 w-4 text-amber-800 dark:text-amber-200" />
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                        {t.writerName || t.writerEmail || t.writerId}
-                        <span className="mx-1">·</span>
-                        {formatDate(t.lastMessageAt)}
-                      </p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="line-clamp-1 text-sm font-semibold text-foreground">{t.title}</h3>
+                          {t.hasUnread && (
+                            <span
+                              className="inline-block h-2.5 w-2.5 rounded-full bg-amber-600 ring-2 ring-background"
+                              aria-label="جديد"
+                            />
+                          )}
+                        </div>
+                        <p className="mt-0.5 line-clamp-1 text-xs tabular-nums text-muted-foreground">
+                          {t.writerName || t.writerEmail || t.writerId}
+                          <span className="mx-1">·</span>
+                          {formatDate(t.lastMessageAt)}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className={cn("shrink-0 font-medium", meta.className)}>
+                        {meta.label}
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className={cn("shrink-0 font-medium", meta.className)}>
-                      {meta.label}
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </DashboardPageShell>
     </DashboardLayout>
   );
 }

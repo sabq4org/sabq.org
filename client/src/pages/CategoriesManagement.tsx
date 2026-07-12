@@ -56,6 +56,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import type { Category } from "@shared/schema";
 import { insertCategorySchema } from "@shared/schema";
 import {
@@ -446,7 +447,7 @@ export default function CategoriesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-[1600px] space-y-5 pb-10" dir="rtl">
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="pb-10 space-y-5">
         <DashboardPageHeader
           icon={FolderOpen}
           title="إدارة التصنيفات"
@@ -467,7 +468,7 @@ export default function CategoriesManagement() {
           )}
         />
 
-        <Card className="border-border/70 shadow-none">
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <CardContent className="p-3 sm:p-4">
             <div className="relative w-full sm:max-w-sm">
               <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -482,13 +483,13 @@ export default function CategoriesManagement() {
           </CardContent>
         </Card>
 
-        <Card className="border-border/70 shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/60 pb-4">
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-sky-200/40 pb-4 dark:border-sky-900/30">
             <div>
               <CardTitle className="text-base">ترتيب التصنيفات</CardTitle>
               <p className="mt-1 text-xs text-muted-foreground">اسحب أي تصنيف لتغيير ترتيبه في الصحيفة.</p>
             </div>
-            <Badge variant="secondary" className="font-normal">
+            <Badge variant="secondary" className="font-normal tabular-nums">
               {filteredCategories.length.toLocaleString("en-US")} تصنيف
             </Badge>
           </CardHeader>
@@ -526,7 +527,7 @@ export default function CategoriesManagement() {
             )}
           </CardContent>
         </Card>
-      </div>
+      </DashboardPageShell>
 
       {/* Create/Edit Dialog */}
       <Dialog open={isCreateDialogOpen || !!editingCategory} onOpenChange={(open) => {

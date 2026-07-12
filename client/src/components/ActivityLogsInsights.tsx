@@ -56,7 +56,7 @@ interface ActivityLogsInsightsProps {
 }
 
 function formatNumber(value: number) {
-  return value.toLocaleString("ar-SA");
+  return value.toLocaleString("en-US");
 }
 
 export default function ActivityLogsInsights({ analytics, isLoading }: ActivityLogsInsightsProps) {
@@ -102,7 +102,8 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
       value: formatNumber(summary.totalCount),
       detail: `${formatNumber(summary.averagePerDay)} عملية يومياً في المتوسط`,
       icon: Activity,
-      tone: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+      card: "border-sky-200/60 bg-gradient-to-br from-sky-50/70 via-card to-card dark:border-sky-900/40 dark:from-sky-950/25",
+      tone: "bg-sky-100/90 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
       testId: "stat-total",
     },
     {
@@ -110,7 +111,8 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
       value: formatNumber(summary.activeUsers),
       detail: "مستخدمون نفّذوا عملية واحدة على الأقل",
       icon: Users,
-      tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+      card: "border-teal-200/60 bg-gradient-to-br from-teal-50/70 via-card to-card dark:border-teal-900/40 dark:from-teal-950/20",
+      tone: "bg-teal-100/90 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300",
       testId: "stat-active-users",
     },
     {
@@ -118,7 +120,8 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
       value: formatNumber(summary.affectedEntities),
       detail: "سجلات فريدة طالها تغيير أو إجراء",
       icon: Database,
-      tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+      card: "border-emerald-200/60 bg-gradient-to-br from-emerald-50/70 via-card to-card dark:border-emerald-900/40 dark:from-emerald-950/20",
+      tone: "bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
       testId: "stat-entities",
     },
     {
@@ -126,7 +129,8 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
       value: formatNumber(summary.sensitiveActions),
       detail: "حذف أو حظر أو رفض أو تغيير وصول",
       icon: ShieldAlert,
-      tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+      card: "border-amber-200/60 bg-gradient-to-br from-amber-50/55 via-card to-card dark:border-amber-900/40 dark:from-amber-950/15",
+      tone: "bg-amber-100/90 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300",
       testId: "stat-sensitive",
     },
   ];
@@ -137,11 +141,11 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
         {metricCards.map((metric) => {
           const Icon = metric.icon;
           return (
-            <Card key={metric.title} className="rounded-2xl border-border/70 shadow-sm" data-testid={metric.testId}>
+            <Card key={metric.title} className={`rounded-2xl shadow-sm ${metric.card}`} data-testid={metric.testId}>
               <CardContent className="p-5">
                 <div className="mb-5 flex items-center justify-between">
                   <span className="text-sm font-medium text-muted-foreground">{metric.title}</span>
-                  <span className={`rounded-xl p-2.5 ${metric.tone}`}><Icon className="h-5 w-5" /></span>
+                  <span className={`rounded-xl p-2 ${metric.tone}`}><Icon className="h-4 w-4 sm:h-5 sm:w-5" /></span>
                 </div>
                 <div className="text-3xl font-bold tracking-tight tabular-nums">{metric.value}</div>
                 <p className="mt-2 text-xs leading-5 text-muted-foreground">{metric.detail}</p>
@@ -152,7 +156,7 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
       </div>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="rounded-2xl border-border/70 shadow-sm xl:col-span-2" data-testid="chart-activity-trend">
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 xl:col-span-2" data-testid="chart-activity-trend">
           <CardHeader className="flex-row items-start justify-between space-y-0">
             <div>
               <CardTitle className="text-base">اتجاه النشاط</CardTitle>
@@ -164,7 +168,7 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
               ) : (
                 <div className={`flex items-center gap-1 text-sm font-semibold ${change >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                   {change >= 0 ? <ArrowUpLeft className="h-4 w-4" /> : <ArrowDownLeft className="h-4 w-4" />}
-                  <span dir="ltr">{Math.abs(change).toLocaleString("ar-SA")}%</span>
+                  <span dir="ltr" className="tabular-nums">{Math.abs(change).toLocaleString("en-US")}%</span>
                 </div>
               )}
               <p className="mt-1 text-[11px] text-muted-foreground">مقارنة بالفترة السابقة المماثلة</p>
@@ -175,8 +179,8 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
               <AreaChart data={activityByDay} margin={{ top: 10, right: 4, left: 4, bottom: 0 }}>
                 <defs>
                   <linearGradient id="activityFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.28} />
-                    <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#1BADF8" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#1BADF8" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="4 4" vertical={false} className="stroke-border/70" />
@@ -187,13 +191,13 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
                   formatter={(value: number) => [`${formatNumber(value)} عملية`, "النشاط"]}
                   contentStyle={{ borderRadius: 12, borderColor: "hsl(var(--border))", background: "hsl(var(--popover))" }}
                 />
-                <Area type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={2.5} fill="url(#activityFill)" />
+                <Area type="monotone" dataKey="count" stroke="#1BADF8" strokeWidth={2.5} fill="url(#activityFill)" />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-border/70 shadow-sm" data-testid="chart-top-actions">
+        <Card className="rounded-2xl border-teal-200/55 bg-gradient-to-br from-teal-50/45 via-card to-card shadow-sm dark:border-teal-900/35 dark:from-teal-950/15" data-testid="chart-top-actions">
           <CardHeader>
             <CardTitle className="text-base">أكثر العمليات تكراراً</CardTitle>
             <CardDescription>حصة كل عملية من النشاط الأعلى</CardDescription>
@@ -208,8 +212,8 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
                     <span className="flex items-center gap-2"><Icon className={`h-4 w-4 ${presentation.textColor}`} />{presentation.label}</span>
                     <strong className="tabular-nums">{formatNumber(item.count)}</strong>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-primary/75" style={{ width: `${(item.count / maxAction) * 100}%` }} />
+                  <div className="h-1.5 overflow-hidden rounded-full bg-sky-100/80 dark:bg-sky-950/40">
+                    <div className="h-full rounded-full bg-[#1BADF8]/80" style={{ width: `${(item.count / maxAction) * 100}%` }} />
                   </div>
                 </div>
               );
@@ -219,7 +223,7 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="rounded-2xl border-border/70 shadow-sm" data-testid="chart-top-entities">
+        <Card className="rounded-2xl border-slate-200/70 bg-gradient-to-br from-slate-50/50 via-card to-card shadow-sm dark:border-slate-800/60 dark:from-slate-950/25" data-testid="chart-top-entities">
           <CardHeader>
             <CardTitle className="text-base">النشاط حسب نوع الكيان</CardTitle>
             <CardDescription>أكثر أجزاء النظام تأثراً بالعمليات</CardDescription>
@@ -231,27 +235,27 @@ export default function ActivityLogsInsights({ analytics, isLoading }: ActivityL
                 <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
                 <YAxis type="category" dataKey="label" width={82} tickLine={false} axisLine={false} tick={{ fontSize: 12 }} />
                 <Tooltip formatter={(value: number) => [`${formatNumber(value)} عملية`, "النشاط"]} contentStyle={{ borderRadius: 12, borderColor: "hsl(var(--border))", background: "hsl(var(--popover))" }} />
-                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[6, 6, 6, 6]} barSize={16} />
+                <Bar dataKey="count" fill="#1BADF8" radius={[6, 6, 6, 6]} barSize={16} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        <Card className="rounded-2xl border-border/70 shadow-sm" data-testid="top-users-list">
+        <Card className="rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/45 via-card to-card shadow-sm dark:border-emerald-900/35 dark:from-emerald-950/15" data-testid="top-users-list">
           <CardHeader className="flex-row items-start justify-between space-y-0">
             <div>
               <CardTitle className="text-base">الأكثر نشاطاً</CardTitle>
               <CardDescription className="mt-1">المستخدمون الأعلى تنفيذاً للعمليات</CardDescription>
             </div>
-            <div className="flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
-              <Bot className="h-3.5 w-3.5" />
-              {formatNumber(summary.automatedActions)} آلية
+            <div className="flex items-center gap-1.5 rounded-full border border-emerald-200/70 bg-background/70 px-3 py-1 text-xs text-muted-foreground dark:border-emerald-900/40">
+              <Bot className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-300" />
+              <span className="tabular-nums">{formatNumber(summary.automatedActions)}</span> آلية
             </div>
           </CardHeader>
           <CardContent className="space-y-1">
             {analytics.topUsers.length ? analytics.topUsers.map((user, index) => (
-              <div key={user.userId} className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-muted/60">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted text-xs font-bold tabular-nums">{index + 1}</span>
+              <div key={user.userId} className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100/80 text-xs font-bold tabular-nums text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">{index + 1}</span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{user.userName}</p>
                   <p className="truncate text-xs text-muted-foreground" dir="ltr">{user.email}</p>

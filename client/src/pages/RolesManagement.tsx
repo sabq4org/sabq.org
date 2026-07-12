@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -275,7 +276,7 @@ export default function RolesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="px-4 pb-10 sm:px-6">
         <DashboardPageHeader
           icon={Shield}
           title="إدارة الأدوار والصلاحيات"
@@ -295,7 +296,7 @@ export default function RolesManagement() {
             <p className="text-muted-foreground">جارِ تحميل الأدوار...</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="overflow-x-auto rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -322,13 +323,13 @@ export default function RolesManagement() {
                     <TableCell data-testid={`cell-usercount-${role.id}`}>
                       <div className="flex items-center gap-2">
                         <Users className="w-4 h-4 text-muted-foreground" />
-                        <span>{role.userCount || 0}</span>
+                        <span className="tabular-nums">{(role.userCount || 0).toLocaleString("en-US")}</span>
                       </div>
                     </TableCell>
                     <TableCell data-testid={`cell-permcount-${role.id}`}>
                       <div className="flex items-center gap-2">
                         <Key className="w-4 h-4 text-muted-foreground" />
-                        <span>{role.permissions?.length || 0}</span>
+                        <span className="tabular-nums">{(role.permissions?.length || 0).toLocaleString("en-US")}</span>
                       </div>
                     </TableCell>
                     <TableCell data-testid={`cell-actions-${role.id}`}>
@@ -475,8 +476,8 @@ export default function RolesManagement() {
                           <ModuleIcon module={module} />
                           {moduleNames[module] || module}
                         </h3>
-                        <Badge variant="secondary" data-testid={`badge-count-${module}`}>
-                          {perms.filter(p => selectedPermissions.has(p.id)).length} / {perms.length}
+                        <Badge variant="secondary" className="tabular-nums" data-testid={`badge-count-${module}`}>
+                          {perms.filter(p => selectedPermissions.has(p.id)).length.toLocaleString("en-US")} / {perms.length.toLocaleString("en-US")}
                         </Badge>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pr-2">
@@ -533,7 +534,7 @@ export default function RolesManagement() {
             )}
           </DialogContent>
         </Dialog>
-      </div>
+      </DashboardPageShell>
     </DashboardLayout>
   );
 }
