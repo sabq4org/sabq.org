@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoleProtection } from "@/hooks/useRoleProtection";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
@@ -122,18 +123,14 @@ export default function AdminPublisherAnalytics() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">
-            تحليلات الناشرين
-          </h1>
-          <p className="text-muted-foreground">
-            تقارير وإحصائيات شاملة عن الناشرين والمقالات
-          </p>
-        </div>
-        <div className="w-48">
+      <DashboardPageHeader
+        icon={Activity}
+        title="تحليلات الناشرين"
+        description="تقارير وإحصائيات شاملة عن الناشرين والمقالات."
+        titleTestId="text-page-title"
+        actions={<div className="w-full sm:w-48">
           <Select value={timeRange} onValueChange={(v: any) => setTimeRange(v)}>
             <SelectTrigger data-testid="select-time-range">
               <SelectValue />
@@ -144,8 +141,8 @@ export default function AdminPublisherAnalytics() {
               <SelectItem value="all">جميع الفترات</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-      </div>
+        </div>}
+      />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

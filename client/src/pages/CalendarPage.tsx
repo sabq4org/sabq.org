@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, List, Grid3x3, CalendarDays, Plus, Globe, MapPin, Building2, Star } from "lucide-react";
 import { Link } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 
 interface CalendarEvent {
   id: string;
@@ -111,22 +112,20 @@ export default function CalendarPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold mb-2">تقويم سبق</h1>
-            <p className="text-muted-foreground">
-              تقويم ذكي لإدارة المناسبات والأحداث التحريرية
-            </p>
-          </div>
-
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={CalendarDays}
+          title="تقويم سبق"
+          description="تقويم ذكي لإدارة المناسبات والأحداث التحريرية."
+          actions={
           <Link href="/dashboard/calendar/new">
             <Button data-testid="button-add-event">
               <Plus className="h-4 w-4 ml-2" />
               إضافة مناسبة
             </Button>
           </Link>
-        </div>
+          }
+        />
 
         <Card>
           <CardHeader>
@@ -499,18 +498,11 @@ function StatCard({
   count: number;
   variant: string;
 }) {
-  const variantClasses = {
-    blue: "bg-blue-500/10 text-blue-500",
-    green: "bg-green-500/10 text-green-500",
-    purple: "bg-purple-500/10 text-purple-500",
-    orange: "bg-orange-500/10 text-orange-500",
-  };
-
   return (
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-md ${variantClasses[variant as keyof typeof variantClasses]}`}>
+          <div className="rounded-lg bg-muted p-2 text-muted-foreground">
             {icon}
           </div>
           <div>
@@ -522,4 +514,3 @@ function StatCard({
     </Card>
   );
 }
-

@@ -5,6 +5,8 @@ import AnalyticsMetrics from "@/components/dashboard/AnalyticsMetrics";
 const AnalyticsChart = lazy(() => import("@/components/dashboard/AnalyticsChart"));
 import TopContentTable from "@/components/dashboard/TopContentTable";
 import RecentActivityFeed from "@/components/dashboard/RecentActivityFeed";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { BarChart3 } from "lucide-react";
 
 interface User {
   id: string;
@@ -50,17 +52,13 @@ export default function AnalyticsDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto p-4 md:p-6 lg:p-8 space-y-6" data-testid="analytics-dashboard">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">لوحة التحليلات</h1>
-            <p className="text-muted-foreground mt-2">
-              نظرة شاملة على أداء المنصة والإحصائيات التفصيلية
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-background" dir="rtl">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" data-testid="analytics-dashboard">
+        <DashboardPageHeader
+          icon={BarChart3}
+          title="لوحة التحليلات"
+          description="نظرة شاملة على أداء المنصة والإحصائيات التفصيلية"
+        />
 
         {/* Metrics Cards Row */}
         <AnalyticsMetrics />

@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import {
   Loader2,
   Eye,
@@ -175,16 +176,12 @@ export default function MuqtarabReview() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-6" dir="rtl">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Inbox className="w-6 h-6 text-blue-500" />
-            مواضيع بانتظار المراجعة
-          </h1>
-          <p className="text-muted-foreground">
-            راجع مواضيع كتّاب الزوايا في مُقترب وانشرها أو أعدها للتعديل
-          </p>
-        </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={Inbox}
+          title="مواضيع بانتظار المراجعة"
+          description="راجع مواضيع كتّاب الزوايا في مُقترب وانشرها أو أعدها للتعديل."
+        />
 
         <Card>
           <CardHeader>

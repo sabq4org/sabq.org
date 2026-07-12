@@ -1,8 +1,10 @@
+import { apiUrl } from "@/lib/queryClient";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useRoleProtection } from "@/hooks/useRoleProtection";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,7 +63,7 @@ export default function AdminPublishers() {
         params.append('isActive', isActiveParam);
       }
       
-      const response = await fetch(`/api/publishers?${params.toString()}`);
+      const response = await fetch(apiUrl(`/api/publishers?${params.toString()}`));
       if (!response.ok) {
         throw new Error('Failed to fetch publishers');
       }
@@ -88,14 +90,13 @@ export default function AdminPublishers() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">إدارة الناشرين</h1>
-          <p className="text-muted-foreground">
-            إدارة حسابات الناشرين وباقات الرصيد
-          </p>
-        </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+      <DashboardPageHeader
+        icon={Building2}
+        title="إدارة الناشرين"
+        description="إدارة حسابات الناشرين وباقات الرصيد."
+        titleTestId="text-page-title"
+        actions={
         <Button 
           onClick={() => setShowCreateDialog(true)} 
           data-testid="button-add-publisher"
@@ -103,7 +104,8 @@ export default function AdminPublishers() {
           <Plus className="ml-2 h-4 w-4" />
           إضافة ناشر جديد
         </Button>
-      </div>
+        }
+      />
 
       <Card>
         <CardHeader>

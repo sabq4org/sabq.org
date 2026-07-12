@@ -7,8 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { 
   Users, 
   Clock, 
@@ -74,7 +76,7 @@ export default function CorrespondentApplications() {
   const { data, isLoading, refetch } = useQuery<ApplicationsResponse>({
     queryKey: ["/api/admin/correspondent-applications", statusFilter, page],
     queryFn: () => 
-      fetch(`/api/admin/correspondent-applications?status=${statusFilter}&page=${page}&limit=10`)
+      fetch(apiUrl(`/api/admin/correspondent-applications?status=${statusFilter}&page=${page}&limit=10`))
         .then(res => res.json()),
   });
 
@@ -139,7 +141,7 @@ export default function CorrespondentApplications() {
       case "pending":
         return <Badge variant="secondary" data-testid="badge-status-pending"><Clock className="w-3 h-3 ml-1" />قيد المراجعة</Badge>;
       case "approved":
-        return <Badge className="bg-green-500" data-testid="badge-status-approved"><CheckCircle className="w-3 h-3 ml-1" />مقبول</Badge>;
+        return <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300" data-testid="badge-status-approved"><CheckCircle className="w-3 h-3 ml-1" />مقبول</Badge>;
       case "rejected":
         return <Badge variant="destructive" data-testid="badge-status-rejected"><XCircle className="w-3 h-3 ml-1" />مرفوض</Badge>;
       default:
@@ -164,75 +166,77 @@ export default function CorrespondentApplications() {
 
   return (
     <DashboardLayout>
-    <div className="p-6 space-y-6" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">طلبات المراسلين</h1>
-          <p className="text-muted-foreground" data-testid="text-page-description">إدارة طلبات التسجيل كمراسل صحفي</p>
-        </div>
-        <Button variant="outline" onClick={() => refetch()} data-testid="button-refresh">
-          <RefreshCw className="w-4 h-4 ml-2" />
-          تحديث
-        </Button>
-      </div>
+    <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="pb-10">
+      <DashboardPageHeader
+        icon={Users}
+        title="طلبات المراسلين"
+        description={<span data-testid="text-page-description">إدارة طلبات التسجيل كمراسل صحفي</span>}
+        titleTestId="text-page-title"
+        actions={
+          <Button variant="outline" className="w-full gap-2 sm:w-auto" onClick={() => refetch()} data-testid="button-refresh">
+            <RefreshCw className="w-4 h-4 ml-2" />
+            تحديث
+          </Button>
+        }
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-muted rounded-lg">
-                <Users className="w-5 h-5" />
+              <div className="rounded-lg bg-sky-100/80 p-2 dark:bg-sky-950/40">
+                <Users className="w-5 h-5 text-sky-700 dark:text-sky-300" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">إجمالي الطلبات</p>
-                <p className="text-2xl font-bold" data-testid="text-total-count">{data?.total || 0}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-total-count">{(data?.total || 0).toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/45 via-card to-card shadow-sm dark:border-amber-900/35 dark:from-amber-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 dark:bg-yellow-900 rounded-lg">
-                <Clock className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+              <div className="rounded-lg bg-amber-100/80 p-2 dark:bg-amber-950/40">
+                <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">قيد المراجعة</p>
-                <p className="text-2xl font-bold" data-testid="text-pending-count">{pendingCount}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-pending-count">{pendingCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm dark:border-emerald-900/35 dark:from-emerald-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 dark:bg-green-900 rounded-lg">
-                <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+              <div className="rounded-lg bg-emerald-100/80 p-2 dark:bg-emerald-950/40">
+                <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">مقبولة</p>
-                <p className="text-2xl font-bold" data-testid="text-approved-count">{approvedCount}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-approved-count">{approvedCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card className="rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card shadow-sm dark:border-rose-900/35 dark:from-rose-950/15">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 dark:bg-red-900 rounded-lg">
-                <XCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+              <div className="rounded-lg bg-rose-100/80 p-2 dark:bg-rose-950/40">
+                <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">مرفوضة</p>
-                <p className="text-2xl font-bold" data-testid="text-rejected-count">{rejectedCount}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-rejected-count">{rejectedCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4">
+      <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <CardTitle>قائمة الطلبات</CardTitle>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ApplicationStatus)}>
             <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
@@ -258,7 +262,8 @@ export default function CorrespondentApplications() {
               لا توجد طلبات
             </div>
           ) : (
-            <Table>
+            <div className="overflow-x-auto">
+            <Table className="min-w-[820px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-right">المتقدم</TableHead>
@@ -286,8 +291,8 @@ export default function CorrespondentApplications() {
                     </TableCell>
                     <TableCell data-testid={`text-email-${app.id}`}>{app.email}</TableCell>
                     <TableCell data-testid={`text-city-${app.id}`}>{app.city}</TableCell>
-                    <TableCell>
-                      {new Date(app.createdAt).toLocaleDateString("ar-SA-u-ca-gregory")}
+                    <TableCell className="tabular-nums">
+                      {new Date(app.createdAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn")}
                     </TableCell>
                     <TableCell>{getStatusBadge(app.status)}</TableCell>
                     <TableCell>
@@ -342,13 +347,14 @@ export default function CorrespondentApplications() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
 
           {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t">
-              <div className="text-sm text-muted-foreground">
-                الصفحة {page} من {totalPages} (إجمالي {data?.total || 0} طلب)
+              <div className="text-sm text-muted-foreground tabular-nums">
+                الصفحة {page.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")} (إجمالي {(data?.total || 0).toLocaleString("en-US")} طلب)
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -429,8 +435,8 @@ export default function CorrespondentApplications() {
                 </div>
               )}
 
-              <div className="text-sm text-muted-foreground">
-                تاريخ التقديم: {new Date(selectedApplication.createdAt).toLocaleDateString("ar-SA-u-ca-gregory", {
+              <div className="text-sm text-muted-foreground tabular-nums">
+                تاريخ التقديم: {new Date(selectedApplication.createdAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn", {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
@@ -563,7 +569,7 @@ export default function CorrespondentApplications() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </DashboardPageShell>
     </DashboardLayout>
   );
 }

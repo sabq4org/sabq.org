@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Edit, Trash2, CheckCircle, XCircle, Sparkles, Download, Upload } from "lucide-react";
+import { Palette, Plus, Edit, Trash2, CheckCircle, XCircle, Sparkles, Download, Upload } from "lucide-react";
 import type { Theme } from "@shared/schema";
 import {
   Dialog,
@@ -130,7 +131,7 @@ export default function ThemeManager() {
 
   const exportMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/themes/export", {
+      const response = await fetch(apiUrl("/api/themes/export"), {
         credentials: "include",
       });
       if (!response.ok) {
@@ -291,15 +292,13 @@ export default function ThemeManager() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="heading-theme-manager">إدارة السمات</h1>
-            <p className="text-muted-foreground mt-2">
-              إدارة السمات والهويات البصرية للمنصة
-            </p>
-          </div>
-          <div className="flex gap-2">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Palette}
+          title="إدارة السمات"
+          description="إدارة السمات والهويات البصرية للمنصة"
+          titleTestId="heading-theme-manager"
+          actions={<>
             <Button 
               variant="outline"
               onClick={() => exportMutation.mutate()}
@@ -324,12 +323,12 @@ export default function ThemeManager() {
               <Plus className="h-4 w-4 ml-2" />
               سمة جديدة
             </Button>
-          </div>
-        </div>
+          </>}
+        />
 
         {/* Active Theme Indicator */}
         {activeTheme && (
-          <Card className="border-primary/50 bg-primary/5">
+          <Card className="border-border/70 bg-card">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />
@@ -378,6 +377,7 @@ export default function ThemeManager() {
                 </Button>
               </div>
             ) : (
+              <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -475,6 +475,7 @@ export default function ThemeManager() {
                   })}
                 </TableBody>
               </Table>
+              </div>
             )}
           </CardContent>
         </Card>

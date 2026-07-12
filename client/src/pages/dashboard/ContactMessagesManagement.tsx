@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -62,8 +64,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import type { ContactMessage } from "@shared/schema";
 import { cn } from "@/lib/utils";
 
@@ -92,7 +92,13 @@ const statusIcons: Record<ContactMessageStatus, typeof Clock> = {
 
 function formatDate(date: string | Date | null | undefined): string {
   if (!date) return "-";
-  return format(new Date(date), "d MMMM yyyy - HH:mm", { locale: ar });
+  return new Date(date).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function TableSkeleton() {
@@ -114,13 +120,13 @@ function TableSkeleton() {
 
 function EmptyState() {
   return (
-    <Card>
+    <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
       <CardContent className="flex flex-col items-center justify-center py-16">
-        <div className="rounded-full bg-primary/10 p-6 mb-4">
-          <MessageSquare className="h-12 w-12 text-primary" />
+        <div className="mb-4 rounded-full bg-sky-100/80 p-6 dark:bg-sky-950/40">
+          <MessageSquare className="h-12 w-12 text-sky-700 dark:text-sky-300" />
         </div>
-        <h3 className="text-xl font-semibold mb-2">لا توجد رسائل</h3>
-        <p className="text-muted-foreground text-center max-w-md">
+        <h3 className="mb-2 text-xl font-semibold">لا توجد رسائل</h3>
+        <p className="max-w-md text-center text-muted-foreground">
           لم يتم استلام أي رسائل تواصل بعد
         </p>
       </CardContent>
@@ -349,82 +355,91 @@ export default function ContactMessagesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-4 md:p-6" dir="rtl" data-testid="contact-messages-page">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-emerald-600">
-            <MessageSquare className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">رسائل التواصل</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              إدارة رسائل الزوار والرد عليها
-            </p>
-          </div>
-        </div>
+      <div data-testid="contact-messages-page">
+      <DashboardPageShell
+        maxWidthClassName="max-w-[1600px]"
+        contentClassName="px-4 pb-10 sm:px-6"
+      >
+        <DashboardPageHeader
+          icon={MessageSquare}
+          title="رسائل التواصل"
+          description="إدارة رسائل الزوار والرد عليها"
+        />
 
         {/* Stats overview */}
         {isLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i}>
+              <Card key={i} className="rounded-2xl border-sky-200/55 shadow-sm dark:border-sky-900/35">
                 <CardContent className="p-4">
-                  <Skeleton className="h-4 w-20 mb-2" />
+                  <Skeleton className="mb-2 h-4 w-20" />
                   <Skeleton className="h-8 w-16" />
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card data-testid="card-total-messages">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <Card
+              className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15"
+              data-testid="card-total-messages"
+            >
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10">
-                    <Inbox className="h-5 w-5 text-primary" />
+                  <div className="rounded-lg bg-sky-100/80 p-2 dark:bg-sky-950/40">
+                    <Inbox className="h-5 w-5 text-sky-700 dark:text-sky-300" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">الإجمالي</p>
-                    <p className="text-2xl font-bold">{counts.total.toLocaleString("en-US")}</p>
+                    <p className="text-2xl font-bold tabular-nums">{counts.total.toLocaleString("en-US")}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card data-testid="card-pending-messages">
+            <Card
+              className="rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/50 via-card to-card shadow-sm dark:border-amber-900/35 dark:from-amber-950/15"
+              data-testid="card-pending-messages"
+            >
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-500/20">
+                  <div className="rounded-lg bg-amber-100/80 p-2 dark:bg-amber-950/40">
                     <Clock className="h-5 w-5 text-amber-800 dark:text-amber-200" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">قيد الانتظار</p>
-                    <p className="text-2xl font-bold text-foreground">{counts.pending.toLocaleString("en-US")}</p>
+                    <p className="text-2xl font-bold tabular-nums text-foreground">{counts.pending.toLocaleString("en-US")}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card data-testid="card-read-messages">
+            <Card
+              className="rounded-2xl border-cyan-200/55 bg-gradient-to-br from-cyan-50/50 via-card to-card shadow-sm dark:border-cyan-900/35 dark:from-cyan-950/15"
+              data-testid="card-read-messages"
+            >
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-sky-100 dark:bg-sky-500/20">
-                    <Eye className="h-5 w-5 text-sky-800 dark:text-sky-200" />
+                  <div className="rounded-lg bg-cyan-100/80 p-2 dark:bg-cyan-950/40">
+                    <Eye className="h-5 w-5 text-cyan-800 dark:text-cyan-200" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">تمت القراءة</p>
-                    <p className="text-2xl font-bold text-foreground">{counts.read.toLocaleString("en-US")}</p>
+                    <p className="text-2xl font-bold tabular-nums text-foreground">{counts.read.toLocaleString("en-US")}</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
-            <Card data-testid="card-replied-messages">
+            <Card
+              className="rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm dark:border-emerald-900/35 dark:from-emerald-950/15"
+              data-testid="card-replied-messages"
+            >
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-500/20">
+                  <div className="rounded-lg bg-emerald-100/80 p-2 dark:bg-emerald-950/40">
                     <CheckCheck className="h-5 w-5 text-emerald-800 dark:text-emerald-200" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">تم الرد</p>
-                    <p className="text-2xl font-bold text-foreground">{counts.replied.toLocaleString("en-US")}</p>
+                    <p className="text-2xl font-bold tabular-nums text-foreground">{counts.replied.toLocaleString("en-US")}</p>
                   </div>
                 </div>
               </CardContent>
@@ -433,46 +448,51 @@ export default function ContactMessagesManagement() {
         )}
 
         {/* Filters */}
-        <div className="grid gap-3 md:grid-cols-[1fr_220px]" data-testid="filters-card">
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="بحث بالاسم أو البريد..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
-              className="pr-10"
-              data-testid="input-search"
-            />
-          </div>
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => {
-              setStatusFilter(value);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger data-testid="select-status-filter">
-              <SelectValue placeholder="جميع الحالات" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">جميع الحالات</SelectItem>
-              <SelectItem value="pending">قيد الانتظار</SelectItem>
-              <SelectItem value="read">تم القراءة</SelectItem>
-              <SelectItem value="replied">تم الرد</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
+          <CardContent className="p-4">
+            <div className="grid gap-3 md:grid-cols-[1fr_220px]" data-testid="filters-card">
+              <div className="relative">
+                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="بحث بالاسم أو البريد..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setPage(1);
+                  }}
+                  className="pr-10"
+                  data-testid="input-search"
+                />
+              </div>
+              <Select
+                value={statusFilter}
+                onValueChange={(value) => {
+                  setStatusFilter(value);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger data-testid="select-status-filter">
+                  <SelectValue placeholder="جميع الحالات" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">جميع الحالات</SelectItem>
+                  <SelectItem value="pending">قيد الانتظار</SelectItem>
+                  <SelectItem value="read">تم القراءة</SelectItem>
+                  <SelectItem value="replied">تم الرد</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Table */}
-        <div data-testid="messages-table-card">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15" data-testid="messages-table-card">
+          <CardContent className="p-4 sm:p-6">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold">قائمة الرسائل</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {isLoading ? "جاري التحميل..." : `عرض ${messages.length} من ${total}`}
+              <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                {isLoading ? "جاري التحميل..." : `عرض ${messages.length.toLocaleString("en-US")} من ${total.toLocaleString("en-US")}`}
               </p>
             </div>
             {!isLoading && messages.length > 0 && (
@@ -517,14 +537,13 @@ export default function ContactMessagesManagement() {
               </div>
             )}
           </div>
-          <div>
               {isLoading ? (
                 <TableSkeleton />
               ) : messages.length === 0 ? (
                 <EmptyState />
               ) : (
                 <>
-                  <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm" dir="rtl">
+                  <div className="overflow-x-auto rounded-xl border border-sky-100/80 bg-card dark:border-sky-900/30" dir="rtl">
                     <Table data-testid="messages-table">
                       <TableHeader>
                         <TableRow>
@@ -599,7 +618,7 @@ export default function ContactMessagesManagement() {
                                   {statusLabels[message.status as ContactMessageStatus]}
                                 </Badge>
                               </TableCell>
-                              <TableCell className="text-muted-foreground text-sm">
+                              <TableCell className="text-sm tabular-nums text-muted-foreground">
                                 {formatDate(message.createdAt)}
                               </TableCell>
                               <TableCell>
@@ -641,9 +660,9 @@ export default function ContactMessagesManagement() {
                   </div>
 
                   {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-4" dir="rtl">
-                      <p className="text-sm text-muted-foreground">
-                        صفحة {page} من {totalPages}
+                    <div className="mt-4 flex items-center justify-between" dir="rtl">
+                      <p className="text-sm tabular-nums text-muted-foreground">
+                        صفحة {page.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -671,8 +690,8 @@ export default function ContactMessagesManagement() {
                   )}
                 </>
               )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
           <DialogContent className="max-w-2xl" dir="rtl" data-testid="message-details-dialog">
@@ -923,6 +942,7 @@ export default function ContactMessagesManagement() {
             )}
           </DialogContent>
         </Dialog>
+      </DashboardPageShell>
       </div>
     </DashboardLayout>
   );

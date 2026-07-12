@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/queryClient";
 import { useState, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -16,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { 
   FileAudio, 
   Upload, 
@@ -71,7 +73,7 @@ export default function TranscriptionTool() {
 
   const transcribeMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await fetch("/api/elevenlabs/transcribe", {
+      const response = await fetch(apiUrl("/api/elevenlabs/transcribe"), {
         method: "POST",
         body: formData,
         credentials: "include",
@@ -181,16 +183,12 @@ export default function TranscriptionTool() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <FileAudio className="h-7 w-7 text-primary" />
-            تفريغ المقاطع
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            تحويل الملفات الصوتية والفيديو إلى نص مكتوب
-          </p>
-        </div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={FileAudio}
+          title="تفريغ المقاطع"
+          description="تحويل الملفات الصوتية والفيديو إلى نص مكتوب"
+        />
 
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>

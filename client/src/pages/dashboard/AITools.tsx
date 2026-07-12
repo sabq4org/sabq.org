@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { SmartHeadlineComparison } from "@/components/SmartHeadlineComparison";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,15 +32,14 @@ import { useToast } from "@/hooks/use-toast";
 export default function AITools() {
   return (
     <DashboardLayout>
-      <div dir="rtl" className="space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">مركز الذكاء الاصطناعي للمحتوى</h1>
-          <p className="text-muted-foreground">
-            أدوات ذكية متكاملة لتحسين وإنتاج المحتوى الصحفي باستخدام أحدث نماذج الذكاء الاصطناعي
-          </p>
-        </div>
+      <div dir="rtl" className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6">
+        <DashboardPageHeader
+          icon={Sparkles}
+          title="مركز الذكاء الاصطناعي للمحتوى"
+          description="أدوات ذكية متكاملة لتحسين وإنتاج المحتوى الصحفي باستخدام أحدث نماذج الذكاء الاصطناعي"
+        />
 
-        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 dark:from-transparent dark:to-transparent border-primary/20 dark:border-border">
+        <Card className="border-border/70 bg-card">
           <CardHeader>
             <div className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-primary" />
@@ -52,7 +52,7 @@ export default function AITools() {
         </Card>
 
         <Tabs defaultValue="headlines" className="w-full">
-          <TabsList className="grid w-full grid-cols-7 gap-1" data-testid="tabs-list">
+          <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto p-1" data-testid="tabs-list">
             <TabsTrigger value="headlines" data-testid="tab-headlines">
               <Sparkles className="w-4 h-4 ml-2" />
               العناوين الذكية
@@ -1031,7 +1031,7 @@ function TrendsAnalyzer() {
         {result && (
           <div className="space-y-6 pt-4">
             {/* Overall Insights */}
-            <Card className="bg-gradient-to-br from-primary/5 to-primary/10 dark:from-transparent dark:to-transparent border-primary/20 dark:border-border">
+            <Card className="border-border/70 bg-card">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">الملخص العام</CardTitle>
                 <CardDescription className="text-xs">
@@ -1139,7 +1139,7 @@ function TrendsAnalyzer() {
             {(result?.insights?.recommendations?.length ?? 0) > 0 && (
               <div className="space-y-3">
                 <h3 className="font-semibold text-sm">توصيات استراتيجية المحتوى</h3>
-                <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-card dark:to-card border-blue-200 dark:border-border">
+                <Card className="border-border/70 bg-card">
                   <CardContent className="p-4">
                     <ul className="space-y-2">
                       {result?.insights?.recommendations?.map((rec: string, index: number) => (

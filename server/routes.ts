@@ -6137,7 +6137,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .where(eq(users.emailVerified, true));
       const emailVerified = emailVerifiedResult?.count || 0;
 
-      // Get suspended users count
+      // Get users with a registered phone number
+      const [withPhoneResult] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(and(
+          sql`${users.phoneNumber} is not null`,
+          sql`btrim(${users.phoneNumber}) <> ''`,
+        ));
+      const withPhone = withPhoneResult?.count || 0;
+
+      // Get suspended users count (kept for compatibility)
       const [suspendedResult] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
@@ -6179,19 +6189,29 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ? ((recentVerified.count - previousVerified.count) / previousVerified.count) * 100 
         : recentVerified.count > 0 ? 100 : 0;
 
-      // Suspended trend
-      const [recentSuspended] = await db
+      // Phone registrations trend (new accounts with phone in last 7d vs prior 7d)
+      const [recentWithPhone] = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(users)
         .where(and(
-          eq(users.status, 'suspended'),
-          or(
-            gte(users.suspendedUntil || sql`now()`, sevenDaysAgo),
-            sql`${users.suspendedUntil} IS NULL`
-          )
+          sql`${users.phoneNumber} is not null`,
+          sql`btrim(${users.phoneNumber}) <> ''`,
+          gte(users.createdAt, sevenDaysAgo),
         ));
 
-      const suspendedTrend = suspended > 0 ? 5 : 0; // Mock trend
+      const [previousWithPhone] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(and(
+          sql`${users.phoneNumber} is not null`,
+          sql`btrim(${users.phoneNumber}) <> ''`,
+          gte(users.createdAt, fourteenDaysAgo),
+          sql`${users.createdAt} < ${sevenDaysAgo}`,
+        ));
+
+      const withPhoneTrend = previousWithPhone.count > 0
+        ? ((recentWithPhone.count - previousWithPhone.count) / previousWithPhone.count) * 100
+        : recentWithPhone.count > 0 ? 100 : 0;
 
       // Banned trend
       const [recentBanned] = await db
@@ -6211,8 +6231,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         total,
         emailVerified,
         emailVerifiedTrend: Number(verifiedTrend.toFixed(1)),
+        withPhone,
+        withPhoneTrend: Number(withPhoneTrend.toFixed(1)),
         suspended,
-        suspendedTrend: Number(suspendedTrend.toFixed(1)),
+        suspendedTrend: 0,
         banned,
         bannedTrend: Number(bannedTrend.toFixed(1)),
       });
@@ -17434,6 +17456,8 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         total: kpis.total,
         emailVerified: kpis.emailVerified,
         emailVerifiedTrend: kpis.trends?.emailVerifiedTrend || 0,
+        withPhone: kpis.withPhone,
+        withPhoneTrend: kpis.trends?.withPhoneTrend || 0,
         suspended: kpis.suspended,
         suspendedTrend: kpis.trends?.suspendedTrend || 0,
         banned: kpis.banned,

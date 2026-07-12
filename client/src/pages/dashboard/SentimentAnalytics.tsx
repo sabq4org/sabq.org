@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -71,11 +72,8 @@ const COLORS = {
 function LoadingState() {
   return (
     <DashboardLayout>
-      <div className="space-y-6" data-testid="page-sentiment-analytics">
-        <div className="flex items-center gap-3">
-          <Skeleton className="h-10 w-10 rounded-lg" />
-          <Skeleton className="h-8 w-48" />
-        </div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl" data-testid="page-sentiment-analytics">
+        <DashboardPageHeader icon={Brain} title="تحليل المشاعر" description="تحليل شامل لمشاعر التعليقات والتفاعلات" />
         
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
@@ -96,13 +94,8 @@ function LoadingState() {
 function EmptyState() {
   return (
     <DashboardLayout>
-      <div className="space-y-6" data-testid="page-sentiment-analytics">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Brain className="h-6 w-6 text-primary" />
-          </div>
-          <h1 className="text-3xl font-bold">تحليل المشاعر</h1>
-        </div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl" data-testid="page-sentiment-analytics">
+        <DashboardPageHeader icon={Brain} title="تحليل المشاعر" description="تحليل شامل لمشاعر التعليقات والتفاعلات" />
         
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
@@ -158,19 +151,8 @@ export default function SentimentAnalytics() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl" data-testid="page-sentiment-analytics">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary/10 rounded-lg">
-            <Brain className="h-6 w-6 text-primary" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold">تحليل المشاعر</h1>
-            <p className="text-muted-foreground mt-1">
-              تحليل شامل لمشاعر التعليقات والتفاعلات
-            </p>
-          </div>
-        </div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl" data-testid="page-sentiment-analytics">
+        <DashboardPageHeader icon={Brain} title="تحليل المشاعر" description="تحليل شامل لمشاعر التعليقات والتفاعلات" />
 
         {/* Statistics Summary Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

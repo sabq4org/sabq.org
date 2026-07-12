@@ -155,7 +155,7 @@ function StatCard({
   };
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+    <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-card p-3">
       <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
         <Icon className="h-5 w-5" />
       </div>
@@ -470,20 +470,20 @@ function ArticleDetailPanel({
               <MessageSquare className="h-4 w-4" />
               تفصيل التعليقات
             </h3>
-            <div className="grid grid-cols-4 gap-2">
-              <div className="p-2 rounded-lg bg-emerald-500/10 text-center">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-lg border border-border/60 bg-card p-2 text-center">
                 <p className="text-xs text-muted-foreground">موافق عليها</p>
                 <p className="text-lg font-bold text-emerald-600">{article.commentsBreakdown.approved}</p>
               </div>
-              <div className="p-2 rounded-lg bg-amber-500/10 text-center">
+              <div className="rounded-lg border border-border/60 bg-card p-2 text-center">
                 <p className="text-xs text-muted-foreground">قيد المراجعة</p>
                 <p className="text-lg font-bold text-amber-600">{article.commentsBreakdown.pending}</p>
               </div>
-              <div className="p-2 rounded-lg bg-red-500/10 text-center">
+              <div className="rounded-lg border border-red-500/20 bg-card p-2 text-center">
                 <p className="text-xs text-muted-foreground">مرفوضة</p>
                 <p className="text-lg font-bold text-red-600">{article.commentsBreakdown.rejected}</p>
               </div>
-              <div className="p-2 rounded-lg bg-orange-500/10 text-center">
+              <div className="rounded-lg border border-orange-500/20 bg-card p-2 text-center">
                 <p className="text-xs text-muted-foreground">مُبلغ عنها</p>
                 <p className="text-lg font-bold text-orange-600">{article.commentsBreakdown.flagged}</p>
               </div>
@@ -668,18 +668,16 @@ export default function ArticleAnalyticsDashboard() {
   return (
     <DashboardLayout>
       <div className="min-h-screen bg-background" dir="rtl">
-      <div className="container mx-auto p-4 md:p-6 lg:p-8" data-testid="article-analytics-dashboard">
-        <div className="flex items-center justify-between mb-6">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" data-testid="article-analytics-dashboard">
+        <header className="flex items-center gap-3 border-b border-border/60 pb-5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <BarChart3 className="h-5 w-5" />
+          </span>
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight flex items-center gap-2">
-              <BarChart3 className="h-8 w-8 text-primary" />
-              تحليلات المقالات
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              بحث وتحليل شامل لأداء المقالات
-            </p>
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">تحليلات المقالات</h1>
+            <p className="mt-1 text-sm text-muted-foreground">بحث وتحليل شامل لأداء المقالات</p>
           </div>
-        </div>
+        </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
@@ -691,7 +689,7 @@ export default function ArticleAnalyticsDashboard() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <div className="relative flex-1">
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -709,7 +707,7 @@ export default function ArticleAnalyticsDashboard() {
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                     <SelectTrigger data-testid="select-category">
                       <SelectValue placeholder="التصنيف" />
@@ -872,7 +870,7 @@ export default function ArticleAnalyticsDashboard() {
           </div>
 
           <div className="lg:col-span-1">
-            <Card className="sticky top-4">
+            <Card className="lg:sticky lg:top-4">
               <CardHeader className="pb-4">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <TrendingUp className="h-5 w-5" />

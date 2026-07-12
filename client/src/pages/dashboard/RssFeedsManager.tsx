@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { useAuth, hasRole } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -729,21 +730,15 @@ export default function RssFeedsManager() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 md:p-6 space-y-6" dir="rtl">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary/10 text-primary">
-            <Rss className="h-6 w-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">إدارة RSS</h1>
-            <p className="text-sm text-muted-foreground">
-              توزيع خلاصات سبق لزيادة الانتشار، واستيراد المحتوى من المصادر الخارجية
-            </p>
-          </div>
-        </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Rss}
+          title="إدارة RSS"
+          description="توزيع خلاصات سبق لزيادة الانتشار، واستيراد المحتوى من المصادر الخارجية"
+        />
 
         <Tabs defaultValue="distribution" className="w-full">
-          <TabsList>
+          <TabsList className="h-auto w-full justify-start overflow-x-auto sm:w-auto">
             <TabsTrigger value="distribution" data-testid="tab-distribution">
               <Send className="h-4 w-4 ml-1.5" />
               التوزيع والانتشار

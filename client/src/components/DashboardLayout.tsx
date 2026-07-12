@@ -18,6 +18,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
+import { DirectionProvider } from "@radix-ui/react-direction";
 import {
   Collapsible,
   CollapsibleContent,
@@ -354,6 +355,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   } as React.CSSProperties;
 
   return (
+    <DirectionProvider dir="rtl">
     <SidebarProvider style={sidebarStyle}>
       <div className="flex h-screen w-full" dir="rtl">
         <Sidebar side="right" collapsible="offcanvas" className="border-l-0">
@@ -578,5 +580,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </SidebarInset>
       </div>
     </SidebarProvider>
+    </DirectionProvider>
   );
 }

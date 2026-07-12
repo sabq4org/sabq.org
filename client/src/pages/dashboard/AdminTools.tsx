@@ -4,9 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Search, ArrowLeftRight, Eye, Copy, Check } from "lucide-react";
+import { Loader2, Search, ArrowLeftRight, Eye, Copy, Check, Wrench } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 
 export default function AdminTools() {
   const { toast } = useToast();
@@ -151,13 +152,14 @@ export default function AdminTools() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6" dir="rtl">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-bold">أدوات الإدارة</h1>
-          <p className="text-muted-foreground">أدوات سريعة لإدارة المحتوى والروابط</p>
-        </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Wrench}
+          title="أدوات الإدارة"
+          description="أدوات سريعة لإدارة المحتوى والروابط"
+        />
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {/* Tool 1: Extract Article ID */}
         <Card data-testid="card-extract-id">
           <CardHeader>

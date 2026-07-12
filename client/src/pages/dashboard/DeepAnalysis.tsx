@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { queryClient, apiRequest, getCsrfToken } from "@/lib/queryClient";
+import { queryClient, apiRequest, getCsrfToken, apiUrl } from "@/lib/queryClient";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -105,7 +106,7 @@ export default function DeepAnalysis() {
 
     try {
       const csrfToken = getCsrfToken();
-      const response = await fetch('/api/deep-analysis/generate', {
+      const response = await fetch(apiUrl('/api/deep-analysis/generate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -251,16 +252,12 @@ export default function DeepAnalysis() {
   };
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl" dir="rtl">
-      <div className="mb-8">
-        <div className="flex items-center gap-3 mb-2">
-          <Brain className="w-8 h-8 text-primary" />
-          <h1 className="text-4xl font-bold">التحليل العميق الذكي</h1>
-        </div>
-        <p className="text-muted-foreground text-lg">
-          محرك تحليل متعدد النماذج AI (GPT-5.1 + Gemini 3 + Claude) لتوليد تحليلات استراتيجية شاملة
-        </p>
-      </div>
+    <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+      <DashboardPageHeader
+        icon={Brain}
+        title="التحليل العميق الذكي"
+        description="محرك تحليل متعدد النماذج AI (GPT-5.1 + Gemini 3 + Claude) لتوليد تحليلات استراتيجية شاملة"
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-3 space-y-4">
@@ -493,7 +490,7 @@ export default function DeepAnalysis() {
               </CardHeader>
               <CardContent>
                 <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
-                  <TabsList className="grid w-full grid-cols-6">
+                  <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto p-1">
                     <TabsTrigger value="unified" data-testid="tab-unified">
                       <FileText className="w-4 h-4 ml-2" />
                       موحد

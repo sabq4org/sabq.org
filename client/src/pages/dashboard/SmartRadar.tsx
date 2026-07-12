@@ -8,6 +8,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
@@ -284,20 +285,14 @@ export default function SmartRadar() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-4 md:p-6" dir="rtl">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
         {/* ---------- الترويسة ---------- */}
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="flex items-center gap-2 text-2xl font-bold">
-              <Radar className="h-7 w-7 text-primary" />
-              رادار سبق الذكي
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              رصد المصادر العالمية بأي لغة، فلترة بالقيمة الإخبارية، وتحويل تحريري بمعيار سبق —
-              جاهز للنشر بضغطة زر
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+        <DashboardPageHeader
+          icon={Radar}
+          title="رادار سبق الذكي"
+          description="رصد المصادر العالمية وفلترتها بالقيمة الإخبارية وتحويلها إلى مواد جاهزة للتحرير."
+          actions={
+            <>
             <Button
               variant="outline"
               size="sm"
@@ -309,8 +304,9 @@ export default function SmartRadar() {
             </Button>
             <SourcesSheet sources={sources} categories={categories} />
             <RulesDialog rules={rules} telegramConfigured={stats?.telegramConfigured ?? false} />
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* ---------- مؤشرات سريعة ---------- */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
@@ -332,9 +328,10 @@ export default function SmartRadar() {
         </div>
 
         {/* ---------- التبويبات والفلاتر ---------- */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="w-full overflow-x-auto sm:w-auto">
           <Tabs value={activeTab} onValueChange={(value) => { setActiveTab(value); setLimit(30); }}>
-            <TabsList>
+            <TabsList className="w-max">
               {TABS.map((tab) => (
                 <TabsTrigger key={tab.id} value={tab.id}>
                   {tab.label}
@@ -345,8 +342,9 @@ export default function SmartRadar() {
               ))}
             </TabsList>
           </Tabs>
+          </div>
           <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="w-44">
+            <SelectTrigger className="w-full sm:w-44">
               <SelectValue placeholder="كل المصادر" />
             </SelectTrigger>
             <SelectContent>

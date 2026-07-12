@@ -2,8 +2,6 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth, hasAnyPermission } from "@/hooks/useAuth";
-import { format } from "date-fns";
-import { ar } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -41,6 +39,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
 import { RowActions } from "@/components/admin/RowActions";
@@ -167,10 +167,9 @@ function SortableRow({
 }
 
 // Section Header component matching Dashboard style
-const SectionHeader = ({ title, color }: { title: string; color: string }) => (
-  <div className="flex items-center gap-3 px-1">
-    <div className={`h-8 w-1 ${color} rounded-full`}></div>
-    <h3 className="text-lg font-bold text-foreground">{title}</h3>
+const SectionHeader = ({ title }: { title: string }) => (
+  <div className="px-1">
+    <h2 className="text-base font-semibold text-foreground">{title}</h2>
   </div>
 );
 
@@ -764,32 +763,24 @@ export default function ArticlesManagement() {
     return badges[status as keyof typeof badges] || <Badge>{status}</Badge>;
   };
 
-  const formatScheduledDate = (date: string | Date | null | undefined) => {
+  const formatArticleDate = (date: string | Date | null | undefined) => {
     if (!date) return null;
     try {
-      return format(new Date(date), "d MMMM yyyy - HH:mm", { locale: ar });
+      return new Date(date).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
     } catch {
       return null;
     }
   };
 
-  const formatDraftDate = (date: string | Date | null | undefined) => {
-    if (!date) return null;
-    try {
-      return format(new Date(date), "d MMMM yyyy - HH:mm", { locale: ar });
-    } catch {
-      return null;
-    }
-  };
-
-  const formatPublishedDate = (date: string | Date | null | undefined) => {
-    if (!date) return null;
-    try {
-      return format(new Date(date), "d MMM yyyy - HH:mm");
-    } catch {
-      return null;
-    }
-  };
+  const formatScheduledDate = formatArticleDate;
+  const formatDraftDate = formatArticleDate;
+  const formatPublishedDate = formatArticleDate;
 
   const getTypeBadge = (type: string) => {
     const badges = {
@@ -856,18 +847,14 @@ export default function ArticlesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 md:space-y-6 p-3 md:p-0 overflow-x-hidden">
+      <DashboardPageShell maxWidthClassName="max-w-[1600px]" contentClassName="overflow-x-hidden pb-10 space-y-5 md:space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold" data-testid="heading-title">
-              إدارة الأخبار والمقالات
-            </h1>
-            <p className="text-xs md:text-sm text-muted-foreground">
-              إدارة المحتوى الإخباري والمقالات
-            </p>
-          </div>
-          {canCreateArticle && (
+        <DashboardPageHeader
+          icon={Newspaper}
+          title="إدارة الأخبار والمقالات"
+          description="إدارة المحتوى الإخباري والمقالات من مكان واحد"
+          titleTestId="heading-title"
+          actions={canCreateArticle ? (
             <Button
               onClick={() => setLocation("/dashboard/articles/new")}
               className="gap-2 w-full sm:w-auto"
@@ -877,16 +864,16 @@ export default function ArticlesManagement() {
               <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
               مقال جديد
             </Button>
-          )}
-        </div>
+          ) : undefined}
+        />
 
         {/* Status Cards - Matching Dashboard Style */}
         <div className="space-y-3">
-          <SectionHeader title="إحصائيات المقالات" color="bg-emerald-500" />
+          <SectionHeader title="إحصائيات المقالات" />
         {metricsLoading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {[1, 2, 3, 4].map((i) => (
-              <Card key={i} className="h-24">
+              <Card key={i} className="h-24 rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15">
                 <CardContent className="pt-4">
                   <Skeleton className="h-4 w-16 mb-2" />
                   <Skeleton className="h-8 w-20" />
@@ -899,76 +886,76 @@ export default function ArticlesManagement() {
             {/* Published Card */}
             <Card
               onClick={() => setActiveStatus('published')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card ${
-                activeStatus === 'published' ? 'ring-2 ring-emerald-500' : ''
+              className={`cursor-pointer rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-emerald-900/35 dark:from-emerald-950/15 ${
+                activeStatus === 'published' ? 'ring-1 ring-emerald-200 dark:ring-emerald-800' : ''
               }`}
               data-testid="card-stat-published"
             >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">منشورة</CardTitle>
-                <div className="p-2 rounded-md bg-emerald-500/20">
-                  <Newspaper className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                </div>
+                <span className="rounded-lg bg-emerald-100/80 p-1.5 dark:bg-emerald-950/40">
+                  <Newspaper className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+                </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{metrics.published.toLocaleString('en-US')}</div>
+                <div className="text-2xl font-bold tabular-nums">{metrics.published.toLocaleString("en-US")}</div>
               </CardContent>
             </Card>
 
             {/* Scheduled Card */}
             <Card
               onClick={() => setActiveStatus('scheduled')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-indigo-50 dark:bg-card ${
-                activeStatus === 'scheduled' ? 'ring-2 ring-indigo-500' : ''
+              className={`cursor-pointer rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-sky-900/35 dark:from-sky-950/15 ${
+                activeStatus === 'scheduled' ? 'ring-1 ring-sky-200 dark:ring-sky-800' : ''
               }`}
               data-testid="card-stat-scheduled"
             >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">مجدولة</CardTitle>
-                <div className="p-2 rounded-md bg-indigo-500/20">
-                  <Clock className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
-                </div>
+                <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
+                  <Clock className="h-4 w-4 text-sky-700 dark:text-sky-300" />
+                </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{metrics.scheduled.toLocaleString('en-US')}</div>
+                <div className="text-2xl font-bold tabular-nums">{metrics.scheduled.toLocaleString("en-US")}</div>
               </CardContent>
             </Card>
 
             {/* Draft Card */}
             <Card
               onClick={() => setActiveStatus('draft')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card ${
-                activeStatus === 'draft' ? 'ring-2 ring-amber-500' : ''
+              className={`cursor-pointer rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-amber-900/35 dark:from-amber-950/15 ${
+                activeStatus === 'draft' ? 'ring-1 ring-amber-200 dark:ring-amber-800' : ''
               }`}
               data-testid="card-stat-draft"
             >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">مسودة</CardTitle>
-                <div className="p-2 rounded-md bg-amber-500/20">
-                  <FilePenLine className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                </div>
+                <span className="rounded-lg bg-amber-100/80 p-1.5 dark:bg-amber-950/40">
+                  <FilePenLine className="h-4 w-4 text-amber-700 dark:text-amber-300" />
+                </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{metrics.draft.toLocaleString('en-US')}</div>
+                <div className="text-2xl font-bold tabular-nums">{metrics.draft.toLocaleString("en-US")}</div>
               </CardContent>
             </Card>
 
             {/* Archived Card */}
             <Card
               onClick={() => setActiveStatus('archived')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-slate-50 dark:bg-card ${
-                activeStatus === 'archived' ? 'ring-2 ring-slate-500' : ''
+              className={`cursor-pointer rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-rose-900/35 dark:from-rose-950/15 ${
+                activeStatus === 'archived' ? 'ring-1 ring-rose-200 dark:ring-rose-800' : ''
               }`}
               data-testid="card-stat-archived"
             >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">مؤرشفة</CardTitle>
-                <div className="p-2 rounded-md bg-slate-500/20">
-                  <Archive className="h-4 w-4 text-slate-600 dark:text-slate-400" />
-                </div>
+                <span className="rounded-lg bg-rose-100/80 p-1.5 dark:bg-rose-950/40">
+                  <Archive className="h-4 w-4 text-rose-700 dark:text-rose-300" />
+                </span>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{metrics.archived.toLocaleString('en-US')}</div>
+                <div className="text-2xl font-bold tabular-nums">{metrics.archived.toLocaleString("en-US")}</div>
               </CardContent>
             </Card>
           </div>
@@ -981,8 +968,8 @@ export default function ArticlesManagement() {
 
         {/* Filters - Mobile Optimized */}
         <div className="space-y-3">
-          <SectionHeader title="البحث والفلاتر" color="bg-blue-500" />
-        <div className="bg-card rounded-lg border border-border p-3 md:p-4">
+          <SectionHeader title="البحث والفلاتر" />
+        <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
           <div className="flex flex-col gap-3">
             {/* Search */}
             <div>
@@ -1041,14 +1028,14 @@ export default function ArticlesManagement() {
 
         {/* Articles List Section */}
         <div className="space-y-3">
-          <SectionHeader title="قائمة المقالات" color="bg-indigo-500" />
+          <SectionHeader title="قائمة المقالات" />
 
           {/* Bulk Actions Toolbar */}
           {selectedArticles.size > 0 && (
-            <div className="bg-card rounded-lg border border-border p-3 md:p-4">
+            <div className="rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card p-3 shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:p-4">
               <div className="flex items-center justify-between gap-4">
-                <div className="text-sm text-muted-foreground">
-                  تم تحديد {selectedArticles.size} مقال
+                <div className="text-sm text-muted-foreground tabular-nums">
+                  تم تحديد {selectedArticles.size.toLocaleString("en-US")} مقال
                 </div>
                 <div className="flex items-center gap-2">
                   {activeStatus !== "archived" && (
@@ -1091,7 +1078,7 @@ export default function ArticlesManagement() {
           )}
 
           {/* Articles Table - Desktop View */}
-          <div className="hidden md:block bg-card rounded-lg border border-border overflow-hidden">
+          <div className="hidden overflow-hidden rounded-2xl border border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15 md:block">
             {articlesLoading ? (
               <div className="p-8 text-center text-muted-foreground">
                 جاري التحميل...
@@ -1343,12 +1330,12 @@ export default function ArticlesManagement() {
               articles.map((article) => (
                 <div 
                   key={article.id} 
-                  className={`border rounded-lg p-3 space-y-2 hover-elevate active-elevate-2 transition-all ${
+                  className={`space-y-2 rounded-2xl border p-3 shadow-sm transition-all hover-elevate active-elevate-2 ${
                     isResubmittedAfterRevision(article)
-                      ? "bg-amber-50 dark:bg-card border-amber-300 dark:border-border"
+                      ? "border-amber-300 bg-amber-50 dark:border-border dark:bg-card"
                       : isAwaitingContributorRevision(article)
-                        ? "bg-orange-50 dark:bg-card border-orange-300 dark:border-border"
-                        : "bg-blue-50 dark:bg-card"
+                        ? "border-orange-300 bg-orange-50 dark:border-border dark:bg-card"
+                        : "border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15"
                   }`}
                   data-testid={`card-article-${article.id}`}
                 >
@@ -1606,8 +1593,8 @@ export default function ArticlesManagement() {
                 <ChevronRight className="h-4 w-4 ml-1" />
                 السابق
               </Button>
-              <span className="text-sm text-muted-foreground" data-testid="text-pagination-info">
-                الصفحة {currentPage} من {totalPages}
+              <span className="text-sm tabular-nums text-muted-foreground" data-testid="text-pagination-info">
+                الصفحة {currentPage.toLocaleString("en-US")} من {totalPages.toLocaleString("en-US")}
               </span>
               <Button
                 variant="outline"
@@ -1622,13 +1609,14 @@ export default function ArticlesManagement() {
             </div>
           )}
         </div>
+      </DashboardPageShell>
 
       {/* Bulk Action Bar - Mobile Only */}
       {selectedArticles.size > 0 && (
         <div className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t shadow-lg p-3 z-50">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium">
-              {selectedArticles.size} مقال محدد
+            <span className="text-sm font-medium tabular-nums">
+              {selectedArticles.size.toLocaleString("en-US")} مقال محدد
             </span>
             <Button
               size="sm"
@@ -1668,7 +1656,6 @@ export default function ArticlesManagement() {
           </div>
         </div>
       )}
-        </div>
 
       {/* Archive Confirmation Dialog — captures the reason that's pushed
           back to the author/reporter as a notification body. */}

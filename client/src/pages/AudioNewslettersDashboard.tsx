@@ -45,9 +45,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { useAuth, hasRole } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { formatDistanceToNow, format, isWithinInterval, startOfDay, endOfDay, addDays } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -102,21 +103,18 @@ function AnalyticsCards({ analytics }: { analytics: AnalyticsData }) {
       value: formatNumber(analytics.totalNewsletters),
       icon: Radio,
       description: "النشرات المنشورة",
-      color: "text-blue-600",
     },
     {
       title: "الاستماعات",
       value: formatNumber(analytics.totalListens),
       icon: Headphones,
       description: `معدل الإكمال ${(analytics.averageCompletion || 0).toFixed(1)}%`,
-      color: "text-green-600",
     },
     {
       title: "المستمعون النشطون",
       value: formatNumber(analytics.activeListeners),
       icon: TrendingUp,
       description: `نمو أسبوعي ${(analytics.weeklyGrowth || 0).toFixed(1)}%`,
-      color: "text-purple-600",
       trend: analytics.weeklyGrowth > 0 ? "up" : "down",
     },
     {
@@ -124,7 +122,6 @@ function AnalyticsCards({ analytics }: { analytics: AnalyticsData }) {
       value: formatNumber(analytics.scheduledCount),
       icon: CalendarDays,
       description: `${analytics.publishedToday} منشور اليوم`,
-      color: "text-orange-600",
     },
   ];
 
@@ -134,7 +131,9 @@ function AnalyticsCards({ analytics }: { analytics: AnalyticsData }) {
         <Card key={index}>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
-            <card.icon className={cn("h-4 w-4", card.color)} />
+            <span className="rounded-lg bg-muted p-2 text-muted-foreground">
+              <card.icon className="h-4 w-4" />
+            </span>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{card.value}</div>
@@ -160,7 +159,7 @@ function GenerationProgress({ newsletter }: { newsletter: AudioNewsletter }) {
   const { data: live } = useQuery<{ newsletter?: { status?: string; generationProgress?: number; generationMessage?: string } }>({
     queryKey: ["/api/audio-newsletters/newsletters", newsletter.id],
     queryFn: async () => {
-      const res = await fetch(`/api/audio-newsletters/newsletters/${newsletter.id}`, {
+      const res = await fetch(apiUrl(`/api/audio-newsletters/newsletters/${newsletter.id}`), {
         credentials: "include",
       });
       if (!res.ok) return {};
@@ -499,18 +498,15 @@ export default function AudioNewslettersDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
         {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="heading-dashboard">
-              النشرات الصوتية
-            </h1>
-            <p className="text-muted-foreground mt-2" data-testid="text-subtitle">
-              إدارة النشرات الصوتية الخاصة بالمنصة
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+        <DashboardPageHeader
+          icon={Radio}
+          title="النشرات الصوتية"
+          description={<span data-testid="text-subtitle">إدارة النشرات الصوتية الخاصة بالمنصة.</span>}
+          titleTestId="heading-dashboard"
+          actions={
+            <>
             <Button variant="outline" asChild data-testid="button-templates">
               <Link href="/dashboard/audio-newsletters/templates">
                 <Sparkles className="h-4 w-4 ml-2" />
@@ -529,8 +525,9 @@ export default function AudioNewslettersDashboard() {
                 نشرة جديدة
               </Link>
             </Button>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* Analytics Cards */}
         {analytics && !isAnalyticsLoading && (

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,9 +72,9 @@ function formatNumber(num: number): string {
   return num.toString();
 }
 
-const SectionHeader = ({ title, color }: { title: string; color: string }) => (
+const SectionHeader = ({ title }: { title: string; color: string }) => (
   <div className="flex items-center gap-3 px-1">
-    <div className={`h-8 w-1 ${color} rounded-full`}></div>
+    <div className="h-8 w-1 rounded-full bg-border"></div>
     <h3 className="text-lg font-bold text-foreground">{title}</h3>
   </div>
 );
@@ -125,20 +126,12 @@ export default function StaffProductivity() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-md bg-accent-purple/30">
-              <TrendingUp className="h-6 w-6 text-accent-foreground" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">لوحة إنتاجية الموظفين</h1>
-              <p className="text-sm text-muted-foreground">متابعة الأداء لاتخاذ قرارات الرواتب</p>
-            </div>
-          </div>
-          
-          <div className="flex gap-2 flex-wrap" data-testid="time-range-filter">
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={TrendingUp}
+          title="لوحة إنتاجية الموظفين"
+          description="متابعة الأداء لاتخاذ قرارات الرواتب"
+          actions={<div className="flex flex-wrap gap-2" data-testid="time-range-filter">
             {(Object.keys(rangeLabels) as TimeRange[]).map((range) => (
               <Button
                 key={range}
@@ -150,15 +143,15 @@ export default function StaffProductivity() {
                 {rangeLabels[range]}
               </Button>
             ))}
-          </div>
-        </div>
+          </div>}
+        />
 
         {/* Section: KPI Stats */}
         <div className="space-y-3">
           <SectionHeader title="إحصائيات الفريق" color="bg-blue-500" />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-6">
             {/* Articles Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card" data-testid="card-articles-stats">
+            <Card className="border-border/70" data-testid="card-articles-stats">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي المقالات</CardTitle>
                 <div className="p-2 rounded-md bg-accent-blue/30">
@@ -182,7 +175,7 @@ export default function StaffProductivity() {
             </Card>
 
             {/* Views Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card" data-testid="card-views-stats">
+            <Card className="border-border/70" data-testid="card-views-stats">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي المشاهدات</CardTitle>
                 <div className="p-2 rounded-md bg-accent-blue/30">
@@ -206,7 +199,7 @@ export default function StaffProductivity() {
             </Card>
 
             {/* Reactions Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card" data-testid="card-reactions-stats">
+            <Card className="border-border/70" data-testid="card-reactions-stats">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي التفاعلات</CardTitle>
                 <div className="p-2 rounded-md bg-accent-green/30">
@@ -230,7 +223,7 @@ export default function StaffProductivity() {
             </Card>
 
             {/* Comments Stats */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-violet-50 dark:bg-card" data-testid="card-comments-stats">
+            <Card className="border-border/70" data-testid="card-comments-stats">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">إجمالي التعليقات</CardTitle>
                 <div className="p-2 rounded-md bg-accent-purple/30">
@@ -260,7 +253,7 @@ export default function StaffProductivity() {
           <SectionHeader title="حائط التقدير" color="bg-yellow-500" />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {/* الأبرز - Most Prominent */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-gradient-to-br from-yellow-50 to-amber-50 dark:from-card dark:to-card border-yellow-200 dark:border-border" data-testid="card-top-performers">
+            <Card className="border-border/70" data-testid="card-top-performers">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <div className="p-2 rounded-full bg-yellow-500/20">
@@ -329,7 +322,7 @@ export default function StaffProductivity() {
             </Card>
 
             {/* الأكثر نشاطاً - Most Active */}
-            <Card className="hover-elevate active-elevate-2 transition-all bg-gradient-to-br from-orange-50 to-red-50 dark:from-card dark:to-card border-orange-200 dark:border-border" data-testid="card-most-active">
+            <Card className="border-border/70" data-testid="card-most-active">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <div className="p-2 rounded-full bg-orange-500/20">
@@ -484,7 +477,7 @@ export default function StaffProductivity() {
         {/* Score Formula Info */}
         <div className="space-y-3">
           <SectionHeader title="معادلة الحساب" color="bg-slate-500" />
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
+          <Card className="border-border/70">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
                 <div className="p-2 rounded-md bg-accent-blue/30">

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useRoleProtection } from "@/hooks/useRoleProtection";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -187,17 +188,13 @@ export default function AdminPublisherArticles() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">
-            مراجعة مقالات الناشرين
-          </h1>
-          <p className="text-muted-foreground">
-            راجع ووافق على المقالات المقدمة من الناشرين
-          </p>
-        </div>
-      </div>
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+      <DashboardPageHeader
+        icon={FileText}
+        title="مراجعة مقالات الناشرين"
+        description="راجع المقالات المقدمة من الناشرين واتخذ الإجراء المناسب."
+        titleTestId="text-page-title"
+      />
 
       <Card>
         <CardHeader>

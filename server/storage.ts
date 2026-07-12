@@ -477,11 +477,11 @@ export interface IStorage {
     limit: number;
     totalPages: number;
   }>;
-  
   getUserKPIs(): Promise<{
     total: number;
     emailVerified: number;
     unverified: number;
+    withPhone: number;
     suspended: number;
     banned: number;
     newToday: number;
@@ -490,13 +490,13 @@ export interface IStorage {
     trends: {
       emailVerifiedTrend: number;
       unverifiedTrend: number;
+      withPhoneTrend: number;
       suspendedTrend: number;
       bannedTrend: number;
       newUsersTrend: number;
       activeUsersTrend: number;
     };
   }>;
-  
   suspendUser(userId: string, reason: string, duration?: number): Promise<User>;
   unsuspendUser(userId: string): Promise<User>;
   banUser(userId: string, reason: string, isPermanent: boolean, duration?: number): Promise<User>;
@@ -2855,6 +2855,7 @@ export class DatabaseStorage implements IStorage {
     total: number;
     emailVerified: number;
     unverified: number;
+    withPhone: number;
     suspended: number;
     banned: number;
     newToday: number;
@@ -2863,6 +2864,7 @@ export class DatabaseStorage implements IStorage {
     trends: {
       emailVerifiedTrend: number;
       unverifiedTrend: number;
+      withPhoneTrend: number;
       suspendedTrend: number;
       bannedTrend: number;
       newUsersTrend: number;
@@ -2874,27 +2876,27 @@ export class DatabaseStorage implements IStorage {
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
     const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-
-    // Current stats
+    const hasPhone = sql`${users.phoneNumber} is not null and btrim(${users.phoneNumber}) <> ''`;
     const [stats] = await db
       .select({
         total: sql<number>`count(*)`,
         emailVerified: sql<number>`count(*) filter (where ${users.emailVerified} = true)`,
         unverified: sql<number>`count(*) filter (where ${users.emailVerified} = false)`,
+        withPhone: sql<number>`count(*) filter (where ${hasPhone})`,
         suspended: sql<number>`count(*) filter (where ${users.status} = 'suspended')`,
         banned: sql<number>`count(*) filter (where ${users.status} = 'banned')`,
         newToday: sql<number>`count(*) filter (where ${users.createdAt} >= ${today})`,
         newThisWeek: sql<number>`count(*) filter (where ${users.createdAt} >= ${weekAgo})`,
         active24h: sql<number>`count(*) filter (where ${users.lastActivityAt} >= ${yesterday})`,
+        withPhoneThisWeek: sql<number>`count(*) filter (where ${hasPhone} and ${users.createdAt} >= ${weekAgo})`,
       })
       .from(users)
       .where(isNull(users.deletedAt));
-
-    // Previous week stats for trends
     const [prevWeekStats] = await db
       .select({
         emailVerified: sql<number>`count(*) filter (where ${users.emailVerified} = true)`,
         unverified: sql<number>`count(*) filter (where ${users.emailVerified} = false)`,
+        withPhone: sql<number>`count(*) filter (where ${hasPhone} and ${users.createdAt} >= ${twoWeeksAgo} and ${users.createdAt} < ${weekAgo})`,
         suspended: sql<number>`count(*) filter (where ${users.status} = 'suspended')`,
         banned: sql<number>`count(*) filter (where ${users.status} = 'banned')`,
         newUsers: sql<number>`count(*) filter (where ${users.createdAt} >= ${twoWeeksAgo} and ${users.createdAt} < ${weekAgo})`,
@@ -2902,8 +2904,6 @@ export class DatabaseStorage implements IStorage {
       })
       .from(users)
       .where(isNull(users.deletedAt));
-
-    // Calculate trends (percentage change)
     const calculateTrend = (current: number, previous: number) => {
       if (previous === 0) return current > 0 ? 100 : 0;
       return ((current - previous) / previous) * 100;
@@ -2913,6 +2913,7 @@ export class DatabaseStorage implements IStorage {
       total: Number(stats.total),
       emailVerified: Number(stats.emailVerified),
       unverified: Number(stats.unverified),
+      withPhone: Number(stats.withPhone),
       suspended: Number(stats.suspended),
       banned: Number(stats.banned),
       newToday: Number(stats.newToday),
@@ -2921,6 +2922,7 @@ export class DatabaseStorage implements IStorage {
       trends: {
         emailVerifiedTrend: calculateTrend(Number(stats.emailVerified), Number(prevWeekStats.emailVerified)),
         unverifiedTrend: calculateTrend(Number(stats.unverified), Number(prevWeekStats.unverified)),
+        withPhoneTrend: calculateTrend(Number(stats.withPhoneThisWeek), Number(prevWeekStats.withPhone)),
         suspendedTrend: calculateTrend(Number(stats.suspended), Number(prevWeekStats.suspended)),
         bannedTrend: calculateTrend(Number(stats.banned), Number(prevWeekStats.banned)),
         newUsersTrend: calculateTrend(Number(stats.newThisWeek), Number(prevWeekStats.newUsers)),

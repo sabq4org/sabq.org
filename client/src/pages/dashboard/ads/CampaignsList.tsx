@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -250,29 +251,21 @@ export default function CampaignsList() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6" dir="rtl">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
         {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-end gap-3 mb-2">
-            <div className="text-right">
-              <h1 className="text-3xl font-bold">الحملات الإعلانية</h1>
-              <p className="text-muted-foreground">
-                إدارة ومتابعة حملاتك الإعلانية وإحصائياتها
-              </p>
-            </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600">
-              <TrendingUp className="h-6 w-6 text-white" />
-            </div>
-          </div>
-        </div>
+        <DashboardPageHeader
+          icon={TrendingUp}
+          title="الحملات الإعلانية"
+          description="إدارة ومتابعة حملاتك الإعلانية وإحصائياتها."
+        />
 
         {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-4 mb-6">
-          <Card className="hover-elevate active-elevate-2 transition-all bg-purple-50 dark:bg-card">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي الحملات</CardTitle>
-              <div className="p-2 rounded-md bg-purple-500/20">
-                <TrendingUp className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+                <TrendingUp className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
@@ -282,25 +275,25 @@ export default function CampaignsList() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-green-50 dark:bg-card">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">الحملات النشطة</CardTitle>
-              <div className="p-2 rounded-md bg-green-500/20">
-                <Play className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <div className="rounded-lg bg-muted p-2 text-emerald-600">
+                <Play className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400" data-testid="text-active-campaigns">
+              <div className="text-2xl font-bold" data-testid="text-active-campaigns">
                 {formatNumber(activeCampaigns)}
               </div>
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-blue-50 dark:bg-card">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">الظهورات المستهلكة</CardTitle>
-              <div className="p-2 rounded-md bg-blue-500/20">
-                <Eye className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+                <Eye className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
@@ -310,11 +303,11 @@ export default function CampaignsList() {
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">إجمالي الظهورات</CardTitle>
-              <div className="p-2 rounded-md bg-amber-500/20">
-                <Eye className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <div className="rounded-lg bg-muted p-2 text-muted-foreground">
+                <Eye className="h-4 w-4" />
               </div>
             </CardHeader>
             <CardContent>
@@ -326,7 +319,7 @@ export default function CampaignsList() {
         </div>
 
         {/* Filters and Actions */}
-        <Card className="mb-6">
+        <Card>
           <CardHeader>
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div>
