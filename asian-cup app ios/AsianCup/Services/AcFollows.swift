@@ -19,7 +19,7 @@ private nonisolated struct AcFollowMutation: Encodable {
     let refLogo: String?
 }
 private nonisolated struct AcUnfollowMutation: Encodable { let kind: String; let refId: String }
-private nonisolated struct AcSuccessResponse: Decodable { let success: Bool? }
+nonisolated struct AcSuccessResponse: Decodable { let success: Bool? }
 
 extension APIClient {
     fileprivate func fetchSportsFollows() async throws -> [AcSportsFollow] {
