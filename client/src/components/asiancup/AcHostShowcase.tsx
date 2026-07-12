@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Building2, MapPin } from "lucide-react";
 import type { AcOverview } from "./acTypes";
+import { Link } from "wouter";
 
 export function AcHostShowcase({ overview }: { overview: AcOverview | undefined }) {
   const venues = overview?.venues ?? [];
@@ -14,6 +15,7 @@ export function AcHostShowcase({ overview }: { overview: AcOverview | undefined 
         <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-sm font-bold text-emerald-600 dark:text-emerald-400">
           {venues.length}
         </span>
+        <Link href="/asian-cup/venues" className="mr-auto text-sm font-bold text-emerald-600 hover:underline">عرض الكل</Link>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

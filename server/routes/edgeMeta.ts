@@ -49,6 +49,7 @@ import { TOPIC_HUBS } from "@shared/seo/topicHubs";
 import { MemoryCache, CACHE_TTL } from "../memoryCache";
 import { resolveMuqtarabOgImage } from "../utils/muqtarabShareImage";
 import { getTeamSeoMeta, getMatchSeoMeta } from "../services/saudiLeagueService";
+import { getAcMatchDetail, getAcPlayerCard, getAcTeamProfile } from "../services/asianCupService";
 
 const router = Router();
 
@@ -1849,6 +1850,51 @@ const ROUTE_HANDLERS: RouteHandler[] = [
       };
     },
   },
+  // صفحات كأس آسيا الغنية — ميتا ديناميكية من المصدر نفسه الذي يرسم الواجهة.
+  {
+    pattern: /^\/asian-cup\/match\/(\d+)\/?$/,
+    handle: async (m) => {
+      const id = Number(m[1]);
+      const detail = await getAcMatchDetail(id).catch(() => null);
+      if (!detail) return { title: "المباراة غير متاحة | سبق", description: "تعذّر العثور على المباراة المطلوبة.", image: `${SITE_URL}/branding/asian-cup-og-image.png`, canonical: `${SITE_URL}/asian-cup/match/${id}`, robots: "noindex,follow", type: "website", locale: "ar_SA" };
+      const fx = detail.fixture;
+      const canonical = `${SITE_URL}/asian-cup/match/${id}`;
+      const description = `${fx.home.name} ضد ${fx.away.name} في ${fx.round} من كأس آسيا 2027 — النتيجة والأحداث والإحصاءات والتشكيلات.`;
+      return {
+        title: `${fx.home.name} ضد ${fx.away.name} — مركز المباراة | سبق`, description,
+        image: `${SITE_URL}/branding/asian-cup-og-image.png`, canonical, robots: "index,follow", type: "website", locale: "ar_SA",
+        jsonLd: { "@context": "https://schema.org", "@type": "SportsEvent", name: `${fx.home.name} ضد ${fx.away.name}`, url: canonical, startDate: fx.date, location: { "@type": "StadiumOrArena", name: fx.venue.name, address: fx.venue.city }, competitor: [{ "@type": "SportsTeam", name: fx.home.name, logo: abs(fx.home.logo) }, { "@type": "SportsTeam", name: fx.away.name, logo: abs(fx.away.logo) }] },
+      };
+    },
+  },
+  {
+    pattern: /^\/asian-cup\/team\/(\d+)\/?$/,
+    handle: async (m) => {
+      const id = Number(m[1]); const data = await getAcTeamProfile(id).catch(() => null);
+      if (!data) return null;
+      const canonical = `${SITE_URL}/asian-cup/team/${id}`;
+      const description = `ملف منتخب ${data.team.name} في كأس آسيا 2027: القائمة والمدرب والمباريات والترتيب وطريق التأهل.`;
+      return { title: `${data.team.name} — كأس آسيا 2027 | سبق`, description, image: abs(data.team.logo), canonical, robots: "index,follow", type: "website", locale: "ar_SA", jsonLd: { "@context": "https://schema.org", "@type": "SportsTeam", name: data.team.name, url: canonical, logo: abs(data.team.logo), coach: data.coach ? { "@type": "Person", name: data.coach } : undefined } };
+    },
+  },
+  {
+    pattern: /^\/asian-cup\/player\/(\d+)\/?$/,
+    handle: async (m) => {
+      const id = Number(m[1]); const data = await getAcPlayerCard(id).catch(() => null);
+      if (!data) return null;
+      const canonical = `${SITE_URL}/asian-cup/player/${id}`;
+      const description = `ملف ${data.name}: الإحصاءات والمسيرة والألقاب والانتقالات في تغطية كأس آسيا 2027.`;
+      return { title: `${data.name} — كأس آسيا | سبق`, description, image: data.photo ? abs(data.photo) : `${SITE_URL}/branding/asian-cup-og-image.png`, canonical, robots: "index,follow", type: "profile", locale: "ar_SA", jsonLd: { "@context": "https://schema.org", "@type": "Person", name: data.name, image: data.photo ? abs(data.photo) : undefined, url: canonical, nationality: data.nationality ?? undefined } };
+    },
+  },
+  ...[
+    ["scorers", "هدافو كأس آسيا 2027", "ترتيب هدافي كأس آسيا 2027 وصانعي الأهداف على صحيفة سبق."],
+    ["bracket", "شجرة كأس آسيا 2027", "شجرة الأدوار الإقصائية من دور الـ16 حتى نهائي كأس آسيا 2027."],
+    ["venues", "ملاعب كأس آسيا 2027", "ملاعب ومدن استضافة كأس آسيا 2027 في المملكة العربية السعودية."],
+  ].map(([slug, title, description]) => ({
+    pattern: new RegExp(`^/asian-cup/${slug}/?$`),
+    handle: async () => ({ title: `${title} | سبق`, description, image: `${SITE_URL}/branding/asian-cup-og-image.png`, canonical: `${SITE_URL}/asian-cup/${slug}`, robots: "index,follow", type: "website", locale: "ar_SA" }),
+  })),
   // Asian Cup 2027 (Saudi Arabia) hub landing
   {
     pattern: /^\/asian-cup\/?$/,

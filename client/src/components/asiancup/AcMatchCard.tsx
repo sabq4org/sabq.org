@@ -1,4 +1,5 @@
 import { MapPin, Radio } from "lucide-react";
+import { Link } from "wouter";
 import { SAUDI_TEAM_ID, formatKickoffTime, type AcFixture } from "./acTypes";
 
 function TeamRow({ team, highlight }: { team: AcFixture["home"]; highlight: boolean }) {
@@ -25,7 +26,8 @@ export function AcMatchCard({ fixture }: { fixture: AcFixture }) {
   const involvesSaudi = homeSaudi || awaySaudi;
 
   return (
-    <div
+    <Link
+      href={`/asian-cup/match/${fixture.id}`}
       className={`rounded-2xl border p-3.5 transition-shadow hover:shadow-md ${
         involvesSaudi
           ? "border-emerald-300/50 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-950/20"
@@ -69,6 +71,6 @@ export function AcMatchCard({ fixture }: { fixture: AcFixture }) {
           </span>
         </div>
       )}
-    </div>
+    </Link>
   );
 }

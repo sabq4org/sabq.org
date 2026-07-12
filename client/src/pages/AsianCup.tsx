@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { Link } from "wouter";
+import { Network, Trophy, MapPin } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -66,6 +68,11 @@ export default function AsianCup() {
       <main className="flex-1">
         <AcHero overview={overview} onJump={handleJump} />
         <AcFacts />
+        <div className="mx-auto grid max-w-6xl gap-3 px-4 py-4 sm:grid-cols-3">
+          <Link href="/asian-cup/scorers" className="flex items-center gap-3 rounded-2xl border bg-card p-4 font-black hover-elevate"><Trophy className="h-5 w-5 text-amber-500" />الهدافون</Link>
+          <Link href="/asian-cup/bracket" className="flex items-center gap-3 rounded-2xl border bg-card p-4 font-black hover-elevate"><Network className="h-5 w-5 text-emerald-600" />شجرة البطولة</Link>
+          <Link href="/asian-cup/venues" className="flex items-center gap-3 rounded-2xl border bg-card p-4 font-black hover-elevate"><MapPin className="h-5 w-5 text-sky-600" />الملاعب</Link>
+        </div>
         <AcPredictionsCTA />
         <AcSaudiSpotlight saudi={overview?.saudi} />
         <AcGroups groups={groups} />

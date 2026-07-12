@@ -18,6 +18,7 @@ export const SAUDI_TEAM_ID = 23;
 export interface AcTeam {
   id: number;
   name: string;
+  nameEn?: string;
   logo: string;
 }
 
