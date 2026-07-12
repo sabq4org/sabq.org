@@ -263,5 +263,7 @@
   "auth.apple": "ادامه با Apple",
   "auth.signedIn": "متصل به سبق",
   "auth.signOut": "خروج",
-  "auth.error.apple": "ورود با Apple انجام نشد"
+  "auth.error.apple": "ورود با Apple انجام نشد",
+  "notifications.enable": "فعال‌کردن اعلان بازی‌ها",
+  "notifications.enabled": "اعلان بازی‌ها فعال است"
 }

@@ -226,6 +226,7 @@ final class AcAuthStore {
             await APIClient.shared.setAuthToken(receivedToken)
             if let member = response.member { persist(member) }
             await refreshProfile()
+            await AcPushManager.shared.syncWithSession()
         } catch {
             errorMessage = LError(error)
         }
@@ -247,12 +248,17 @@ final class AcAuthStore {
     }
 
     func signOut() {
+        let shouldUnregisterPush = token != nil
         token = nil
         member = nil
         errorMessage = nil
         AcKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
-        Task { await APIClient.shared.setAuthToken(nil) }
+        Task {
+            if shouldUnregisterPush { await AcPushManager.shared.unregisterCurrentDevice() }
+            guard token == nil else { return }
+            await APIClient.shared.setAuthToken(nil)
+        }
     }
 }
 

@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct AsianCupApp: App {
+    @UIApplicationDelegateAdaptor(AcAppDelegate.self) private var appDelegate
     @State private var auth = AcAuthStore.shared
 
     init() {
@@ -15,7 +16,10 @@ struct AsianCupApp: App {
                 .environment(auth)
                 .asianCupRTL()
                 .preferredColorScheme(.light) // هوية فاتحة باردة محايدة لكل المنتخبات
-                .task { await auth.restore() }
+                .task {
+                    await auth.restore()
+                    await AcPushManager.shared.syncWithSession()
+                }
         }
     }
 }

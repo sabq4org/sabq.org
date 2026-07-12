@@ -25,6 +25,7 @@
 		4A000010 /* AcLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100013 /* AcLocalization.swift */; };
 		4A000011 /* Localization in Resources */ = {isa = PBXBuildFile; fileRef = 4A100014 /* Localization */; };
 		4A000012 /* AcAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100015 /* AcAuth.swift */; };
+		4A000013 /* AcPush.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100016 /* AcPush.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +49,7 @@
 		4A100013 /* AcLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcLocalization.swift; sourceTree = "<group>"; };
 		4A100014 /* Localization */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Localization; sourceTree = "<group>"; };
 		4A100015 /* AcAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcAuth.swift; sourceTree = "<group>"; };
+		4A100016 /* AcPush.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcPush.swift; sourceTree = "<group>"; };
 		4A100020 /* AsianCup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AsianCup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -102,6 +104,7 @@
 				4A100012 /* AcLanguage.swift */,
 				4A100013 /* AcLocalization.swift */,
 				4A100015 /* AcAuth.swift */,
+				4A100016 /* AcPush.swift */,
 				4A100007 /* APIClient.swift */,
 				4A100008 /* FontRegistration.swift */,
 				4A100009 /* URLConstants.swift */,
@@ -224,6 +227,7 @@
 				4A00000F /* AcLanguage.swift in Sources */,
 				4A000010 /* AcLocalization.swift in Sources */,
 				4A000012 /* AcAuth.swift in Sources */,
+				4A000013 /* AcPush.swift in Sources */,
 				4A000007 /* APIClient.swift in Sources */,
 				4A000008 /* FontRegistration.swift in Sources */,
 				4A000009 /* URLConstants.swift in Sources */,

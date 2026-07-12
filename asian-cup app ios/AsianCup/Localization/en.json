@@ -263,5 +263,7 @@
   "auth.apple": "Continue with Apple",
   "auth.signedIn": "Connected to Sabq",
   "auth.signOut": "Sign out",
-  "auth.error.apple": "Could not sign in with Apple"
+  "auth.error.apple": "Could not sign in with Apple",
+  "notifications.enable": "Enable match alerts",
+  "notifications.enabled": "Match alerts enabled"
 }

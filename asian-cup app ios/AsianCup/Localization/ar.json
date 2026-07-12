@@ -263,5 +263,7 @@
   "auth.apple": "المتابعة باستخدام Apple",
   "auth.signedIn": "متصل بحساب سبق",
   "auth.signOut": "تسجيل الخروج",
-  "auth.error.apple": "تعذّر تسجيل الدخول عبر Apple"
+  "auth.error.apple": "تعذّر تسجيل الدخول عبر Apple",
+  "notifications.enable": "تفعيل تنبيهات المباريات",
+  "notifications.enabled": "تنبيهات المباريات مفعّلة"
 }

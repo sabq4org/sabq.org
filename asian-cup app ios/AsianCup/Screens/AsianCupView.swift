@@ -61,6 +61,9 @@ struct AsianCupView: View {
         .toolbarColorScheme(.light, for: .tabBar)
         .task { await loadAll() }
         .onOpenURL(perform: openDeepLink)
+        .onReceive(NotificationCenter.default.publisher(for: .acDeepLink)) { note in
+            if let url = note.object as? URL { openDeepLink(url) }
+        }
         .sheet(item: $deepLink) { link in
             NavigationStack { deepLinkDestination(link) }
                 .asianCupRTL()
@@ -780,6 +783,7 @@ private struct AcMoreScreen: View {
 
 private struct AcAccountCard: View {
     @Environment(AcAuthStore.self) private var auth
+    @State private var push = AcPushManager.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -791,24 +795,48 @@ private struct AcAccountCard: View {
             )
             AcGroupedCard {
                 if auth.isLoggedIn {
-                    HStack(spacing: 12) {
-                        Image(systemName: "checkmark.seal.fill")
-                            .font(.system(size: 25, weight: .bold))
-                            .foregroundStyle(AcTheme.emerald)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(auth.member?.name ?? L("auth.signedIn"))
-                                .font(AsianCupFonts.app(size: 15, weight: .bold))
-                                .foregroundStyle(AcTheme.onDark)
-                            if let email = auth.member?.email {
-                                Text(email)
-                                    .font(AsianCupFonts.app(size: 11))
-                                    .foregroundStyle(AcTheme.onDarkDim)
+                    VStack(spacing: 12) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 25, weight: .bold))
+                                .foregroundStyle(AcTheme.emerald)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(auth.member?.name ?? L("auth.signedIn"))
+                                    .font(AsianCupFonts.app(size: 15, weight: .bold))
+                                    .foregroundStyle(AcTheme.onDark)
+                                if let email = auth.member?.email {
+                                    Text(email)
+                                        .font(AsianCupFonts.app(size: 11))
+                                        .foregroundStyle(AcTheme.onDarkDim)
+                                }
                             }
+                            Spacer()
+                            Button(L("auth.signOut")) { auth.signOut() }
+                                .font(AsianCupFonts.app(size: 12, weight: .bold))
+                                .foregroundStyle(AcTheme.crimson)
                         }
-                        Spacer()
-                        Button(L("auth.signOut")) { auth.signOut() }
-                            .font(AsianCupFonts.app(size: 12, weight: .bold))
-                            .foregroundStyle(AcTheme.crimson)
+                        Button {
+                            Task {
+                                if await push.requestAuthorization() {
+                                    await push.syncWithSession()
+                                }
+                            }
+                        } label: {
+                            Label(
+                                push.isAuthorized ? L("notifications.enabled") : L("notifications.enable"),
+                                systemImage: push.isAuthorized ? "bell.badge.fill" : "bell.badge"
+                            )
+                            .font(AsianCupFonts.app(size: 13, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .foregroundStyle(push.isAuthorized ? AcTheme.emerald : .white)
+                            .background(
+                                RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous)
+                                    .fill(push.isAuthorized ? AcTheme.emerald.opacity(0.12) : AcTheme.gold)
+                            )
+                        }
+                        .disabled(push.isAuthorized)
+                        .buttonStyle(.plain)
                     }
                     .padding(14)
                 } else {
