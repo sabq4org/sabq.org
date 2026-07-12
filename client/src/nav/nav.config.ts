@@ -118,6 +118,14 @@ export const navConfig: NavItem[] = [
     icon: PlusCircle,
     roles: ["opinion_author"],
   },
+  {
+    id: "opinion_author_guide",
+    labelKey: "nav.writer_guide",
+    labelAr: "دليل الكاتب",
+    path: "/dashboard/opinion-author/guide",
+    icon: BookOpen,
+    roles: ["opinion_author"],
+  },
 
   // ===== كاتب الزاوية / Angle Writer (مُقترب) =====
   // قائمة مبسّطة: "زاويتي" فقط. permission-first يُظهرها لمن يملك muqtarab.own.view،
@@ -958,7 +966,7 @@ export const navConfig: NavItem[] = [
         path: "/dashboard/spa-news",
         icon: Newspaper,
         roles: ["admin"],
-        permissions: ["settings.view", "articles.create"],
+        permissions: ["settings.view"],
       },
       {
         id: "sportmonks_news",
@@ -967,7 +975,7 @@ export const navConfig: NavItem[] = [
         path: "/dashboard/sportmonks-news",
         icon: Trophy,
         roles: ["admin"],
-        permissions: ["settings.view", "articles.create"],
+        permissions: ["settings.view"],
       },
       {
         id: "integrations",

@@ -1,7 +1,7 @@
-import { ReactNode, useState, useEffect, useMemo } from "react";
+import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
-import { LogOut, ChevronDown, Globe, User } from "lucide-react";
+import { LogOut, ChevronDown, Globe, User, Search, Star, Plus } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -48,31 +48,65 @@ interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-const STORAGE_KEY = "sabq.sidebar.v1";
+const OPEN_GROUP_STORAGE_KEY = "sabq.sidebar.open-group.v2";
+const FAVORITES_STORAGE_KEY = "sabq.sidebar.favorites.v1";
+const MAX_FAVORITES = 5;
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location, navigate] = useLocation();
   const { user, isLoading } = useAuth({ redirectToLogin: true });
   const { toast } = useToast();
   
-  // Load collapsed state from localStorage
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => {
+  const [openGroupId, setOpenGroupId] = useState<string | null>(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : {};
+      return localStorage.getItem(OPEN_GROUP_STORAGE_KEY);
     } catch {
-      return {};
+      return null;
     }
   });
+  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
+      const parsed = stored ? JSON.parse(stored) : [];
+      return Array.isArray(parsed) ? parsed.slice(0, MAX_FAVORITES) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Save collapsed state to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(collapsedGroups));
+      if (openGroupId) {
+        localStorage.setItem(OPEN_GROUP_STORAGE_KEY, openGroupId);
+      } else {
+        localStorage.removeItem(OPEN_GROUP_STORAGE_KEY);
+      }
     } catch (error) {
       console.error("Failed to save sidebar state:", error);
     }
-  }, [collapsedGroups]);
+  }, [openGroupId]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteIds));
+    } catch (error) {
+      console.error("Failed to save sidebar favorites:", error);
+    }
+  }, [favoriteIds]);
+
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
 
   // Mark moderator offline when closing tab/browser
   // إزالة المشرف من المتصلين عند إغلاق التبويب
@@ -104,7 +138,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     audioSummaries: false,
   }), []);
   
-  const { treeFiltered, activeItem } = useNav({
+  const { treeFiltered, activeItem, parents, flat } = useNav({
     role,
     flags,
     pathname: location,
@@ -115,11 +149,50 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     allRoles: user?.roles && user.roles.length > 0 ? user.roles : (user?.role ? [user.role] : []),
   });
 
-  const toggleGroup = (groupId: string) => {
-    setCollapsedGroups(prev => ({
-      ...prev,
-      [groupId]: !prev[groupId],
-    }));
+  useEffect(() => {
+    const activeGroup = parents.find((parent) => parent.children && parent.children.length > 0);
+    setOpenGroupId(activeGroup?.id || null);
+  }, [location, parents]);
+
+  const navigableItems = useMemo(() => {
+    const seenPaths = new Set<string>();
+    return flat.filter((item) => {
+      if (!item.path || seenPaths.has(item.path)) return false;
+      seenPaths.add(item.path);
+      return true;
+    });
+  }, [flat]);
+
+  const quickCreateItem = navigableItems.find((item) =>
+    item.id === "new_article" || item.id === "opinion_author_new_article"
+  );
+  const favoriteItems = favoriteIds.flatMap((id) => {
+    const item = navigableItems.find((candidate) => candidate.id === id);
+    return item ? [item] : [];
+  });
+  const normalizedSearch = searchQuery.trim().toLocaleLowerCase("ar");
+  const searchResults = normalizedSearch
+    ? navigableItems
+        .filter((item) => (item.labelAr || item.labelKey).toLocaleLowerCase("ar").includes(normalizedSearch))
+        .slice(0, 8)
+    : [];
+
+  const toggleFavorite = (item: NavItem) => {
+    setFavoriteIds((current) => {
+      if (current.includes(item.id)) {
+        return current.filter((id) => id !== item.id);
+      }
+
+      if (current.length >= MAX_FAVORITES) {
+        toast({
+          title: "اكتملت المفضلة",
+          description: `يمكن تثبيت ${MAX_FAVORITES} عناصر كحد أقصى`,
+        });
+        return current;
+      }
+
+      return [...current, item.id];
+    });
   };
 
   // عرض شاشة تحميل أثناء التحقق من المصادقة
@@ -170,13 +243,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     const hasChildren = item.children && item.children.length > 0;
 
     if (hasChildren) {
-      const isOpen = !collapsedGroups[item.id];
+      const isOpen = openGroupId === item.id;
 
       return (
         <Collapsible
           key={item.id}
           open={isOpen}
-          onOpenChange={() => toggleGroup(item.id)}
+          onOpenChange={(nextOpen) => setOpenGroupId(nextOpen ? item.id : null)}
         >
           <SidebarMenuItem>
             <CollapsibleTrigger asChild>
@@ -198,10 +271,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   const isChildActive = activeItem?.id === child.id;
                   
                   return (
-                    <SidebarMenuSubItem key={child.id}>
+                    <SidebarMenuSubItem key={child.id} className="group/nav-favorite relative">
                       <SidebarMenuSubButton
                         asChild
                         isActive={isChildActive}
+                        className="pl-8"
                       >
                         <Link 
                           href={child.path || "#"}
@@ -213,6 +287,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                           </span>
                         </Link>
                       </SidebarMenuSubButton>
+                      <button
+                        type="button"
+                        onClick={() => toggleFavorite(child)}
+                        className="absolute left-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:opacity-100 group-hover/nav-favorite:opacity-100"
+                        aria-label={favoriteIds.includes(child.id) ? `إزالة ${child.labelAr || child.labelKey} من المفضلة` : `إضافة ${child.labelAr || child.labelKey} إلى المفضلة`}
+                        title={favoriteIds.includes(child.id) ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}
+                      >
+                        <Star className={`h-3.5 w-3.5 ${favoriteIds.includes(child.id) ? "fill-current text-amber-500" : ""}`} />
+                      </button>
                     </SidebarMenuSubItem>
                   );
                 })}
@@ -248,7 +331,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const navGroups: NavItem[][] = [];
   let currentGroup: NavItem[] = [];
 
-  treeFiltered.forEach((item) => {
+  const navigationTree = quickCreateItem
+    ? treeFiltered.filter((item) => item.id !== quickCreateItem.id)
+    : treeFiltered;
+
+  navigationTree.forEach((item) => {
     if (item.divider && currentGroup.length > 0) {
       navGroups.push(currentGroup);
       currentGroup = [item];
@@ -286,12 +373,113 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
                 </div>
               </SidebarGroupLabel>
+              <div className="mb-3 space-y-3 px-2">
+                {quickCreateItem && (
+                  <Button asChild className="w-full justify-start gap-2 shadow-sm">
+                    <Link
+                      href={quickCreateItem.path || "/dashboard/articles/new"}
+                      onClick={() => handleNavClick(quickCreateItem)}
+                      data-testid="sidebar-quick-create-article"
+                    >
+                      <Plus className="h-4 w-4" />
+                      <span>{role === "opinion_author" ? "إنشاء مقال جديد" : "إنشاء خبر جديد"}</span>
+                    </Link>
+                  </Button>
+                )}
+
+                <div className="relative">
+                  <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    ref={searchInputRef}
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="ابحث في لوحة التحكم"
+                    className="h-9 w-full rounded-md border border-sidebar-border bg-sidebar-accent/40 pr-9 pl-12 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:bg-background"
+                    aria-label="البحث في لوحة التحكم"
+                    data-testid="sidebar-navigation-search"
+                  />
+                  <kbd className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 rounded border bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                    ⌘K
+                  </kbd>
+                </div>
+
+                {favoriteItems.length > 0 && !normalizedSearch && (
+                  <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/20 p-2">
+                    <div className="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] font-medium text-muted-foreground">
+                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
+                      <span>المفضلة</span>
+                    </div>
+                    <div className="space-y-0.5">
+                      {favoriteItems.map((item) => {
+                        const FavoriteIcon = item.icon;
+                        return (
+                          <div key={item.id} className="group/favorite-item flex items-center rounded-md hover:bg-sidebar-accent">
+                            <Link
+                              href={item.path || "#"}
+                              onClick={() => handleNavClick(item)}
+                              className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-xs"
+                            >
+                              {FavoriteIcon && <FavoriteIcon className="h-3.5 w-3.5 shrink-0" />}
+                              <span className="truncate">{item.labelAr || item.labelKey}</span>
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => toggleFavorite(item)}
+                              className="ml-1 rounded p-1 text-muted-foreground opacity-0 hover:text-foreground focus:opacity-100 group-hover/favorite-item:opacity-100"
+                              aria-label={`إزالة ${item.labelAr || item.labelKey} من المفضلة`}
+                            >
+                              <Star className="h-3 w-3 fill-current" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
               <SidebarGroupContent>
-                {navGroups.map((group, groupIndex) => (
-                  <SidebarMenu key={groupIndex} className={groupIndex > 0 ? "mt-4 pt-4 border-t" : ""}>
-                    {group.map(renderNavItem)}
-                  </SidebarMenu>
-                ))}
+                {normalizedSearch ? (
+                  <div className="px-2">
+                    <p className="mb-2 px-2 text-[11px] font-medium text-muted-foreground">
+                      {searchResults.length > 0 ? `${searchResults.length} نتائج` : "لا توجد نتائج"}
+                    </p>
+                    <div className="space-y-1">
+                      {searchResults.map((item) => {
+                        const ResultIcon = item.icon;
+                        const isFavorite = favoriteIds.includes(item.id);
+                        return (
+                          <div key={item.id} className="group/search-result flex items-center rounded-md border border-transparent hover:border-sidebar-border hover:bg-sidebar-accent">
+                            <Link
+                              href={item.path || "#"}
+                              onClick={() => {
+                                handleNavClick(item);
+                                setSearchQuery("");
+                              }}
+                              className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-sm"
+                            >
+                              {ResultIcon && <ResultIcon className="h-4 w-4 shrink-0" />}
+                              <span className="truncate">{item.labelAr || item.labelKey}</span>
+                            </Link>
+                            <button
+                              type="button"
+                              onClick={() => toggleFavorite(item)}
+                              className="ml-1 rounded p-1.5 text-muted-foreground hover:text-amber-500"
+                              aria-label={isFavorite ? `إزالة ${item.labelAr || item.labelKey} من المفضلة` : `إضافة ${item.labelAr || item.labelKey} إلى المفضلة`}
+                            >
+                              <Star className={`h-3.5 w-3.5 ${isFavorite ? "fill-current text-amber-500" : ""}`} />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  navGroups.map((group, groupIndex) => (
+                    <SidebarMenu key={groupIndex} className={groupIndex > 0 ? "mt-4 pt-4 border-t" : ""}>
+                      {group.map(renderNavItem)}
+                    </SidebarMenu>
+                  ))
+                )}
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>

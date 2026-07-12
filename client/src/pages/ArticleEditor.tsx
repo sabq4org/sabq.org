@@ -1226,11 +1226,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       const safeAlbumImages = albumSource.filter(url => typeof url === 'string' && url.trim().length > 0);
       const normalizedVideoUrl = typeof videoUrl === "string" ? videoUrl.trim() : "";
       const normalizedVideoThumbnailUrl = typeof videoThumbnailUrl === "string" ? videoThumbnailUrl.trim() : "";
+      const effectiveSlug = slug?.trim() || generateSlug(title) || `opinion-${Date.now()}`;
       console.log('[Save Article] Album images count:', safeAlbumImages.length, 'original:', albumImages?.length);
       
       const articleData: any = {
         title,
-        slug,
+        slug: isOpinionAuthor ? effectiveSlug : slug,
         content,
         excerpt,
         categoryId: categoryId || null,
@@ -1293,7 +1294,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         articleData.newsType = "regular";
         articleData.isFeatured = false;
         // Add opinionAuthorId for opinion articles
-        if (opinionAuthorId) {
+        if (!isOpinionAuthor && opinionAuthorId) {
           articleData.opinionAuthorId = opinionAuthorId;
         }
       }
@@ -1652,13 +1653,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     if (!title || typeof title !== 'string' || !title.trim()) {
       missingFields.push("العنوان الرئيسي");
     }
-    if (!slug || typeof slug !== 'string' || !slug.trim()) {
+    if (!isOpinionAuthor && (!slug || typeof slug !== 'string' || !slug.trim())) {
       missingFields.push("رابط المقال (Slug)");
     }
     if (!content || typeof content !== 'string' || !content.trim()) {
       missingFields.push("محتوى المقال");
     }
-    if (!categoryId) {
+    if (!isOpinionAuthor && !categoryId) {
       missingFields.push("التصنيف");
     }
 
@@ -1672,6 +1673,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       return { ok: false };
     }
 
+    let savedArticleIdForReview: string | null = null;
     try {
       console.log('[handleSave] Calling saveArticleMutation.mutateAsync');
       const saved = await saveArticleMutation.mutateAsync({
@@ -1682,19 +1684,39 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       });
       const articleId = saved?.id || id;
       if (!articleId) return { ok: false };
-      if (options?.submitForReview) {
-        setReviewStatus(saved?.reviewStatus ?? "pending_review");
+      savedArticleIdForReview = articleId;
+      if (options?.submitForReview && savedArticleIdForReview) {
+        // Some deployed server versions save the new row successfully but
+        // ignore submitForReview on the create request. Never show a success
+        // toast based on an optimistic client state: confirm the persisted
+        // review status, with the dedicated submit endpoint as a safe fallback.
+        const confirmed = saved?.reviewStatus === "pending_review"
+          ? saved
+          : await apiRequest(`/api/my/articles/${articleId}/submit-review`, { method: "POST" });
+
+        if (confirmed?.reviewStatus !== "pending_review") {
+          throw new Error("لم يؤكد الخادم استلام المقال للمراجعة");
+        }
+
+        setReviewStatus("pending_review");
         markArticleSubmittedInAnalyticsCache(queryClient, {
           id: articleId,
-          reviewStatus: saved?.reviewStatus ?? "pending_review",
-          status: saved?.status,
-          updatedAt: saved?.updatedAt,
+          reviewStatus: "pending_review",
+          status: confirmed?.status ?? saved?.status,
+          updatedAt: confirmed?.updatedAt ?? saved?.updatedAt,
         });
         invalidateContributorAnalytics(queryClient);
       }
       return { ok: true, articleId };
     } catch (err) {
       console.error('[handleSave] Save failed:', err);
+      if (options?.submitForReview && savedArticleIdForReview) {
+        toast({
+          title: "لم يتم الإرسال",
+          description: err instanceof Error ? err.message : "تعذر تأكيد وصول المقال إلى فريق التحرير",
+          variant: "destructive",
+        });
+      }
       return { ok: false };
     }
   };
@@ -2275,7 +2297,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               className="shrink-0"
               data-testid="button-back"
             >
-              <Link href="/dashboard/articles">
+              <Link href={isOpinionAuthor ? "/dashboard/opinion-author" : "/dashboard/articles"}>
                 <a className="gap-2">
                   <ArrowRight className="h-4 w-4" />
                   <span className="hidden sm:inline">العودة</span>
@@ -2290,7 +2312,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 {isNewArticle ? `${contentNoun} جديد` : `تحرير ال${contentNoun}`}
               </h1>
               <p className="hidden sm:block text-xs text-muted-foreground mt-0.5">
-                {isNewArticle ? `اكتب ${contentNounAccusative} جديداً وحدد إعدادات النشر` : `حدّث محتوى ال${contentNoun} وأعدّ نشره`}
+                {isNewArticle
+                  ? isOpinionAuthor
+                    ? "اكتب مقالك واحفظه أو أرسله إلى فريق التحرير"
+                    : `اكتب ${contentNounAccusative} جديداً وحدد إعدادات النشر`
+                  : `حدّث محتوى ال${contentNoun} وأعدّ إرساله`}
               </p>
             </div>
             {/* Auto-save indicator - visible on desktop */}
@@ -2317,7 +2343,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
 
           {/* Actions Row */}
-          <div className="flex items-center justify-between sm:justify-end gap-2">
+          <div className={isOpinionAuthor ? "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end" : "flex items-center justify-between gap-2 sm:justify-end"}>
             {/* Auto-save indicator - visible on mobile only */}
             {(autoSaveStatus === "saving" || autoSaveStatus === "saved") && (
               <div className="flex sm:hidden items-center gap-1.5 text-xs text-muted-foreground" data-testid="autosave-indicator-mobile">
@@ -2339,7 +2365,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 )}
               </div>
             )}
-            <div className="flex items-center gap-2">
+            <div className={isOpinionAuthor ? "grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center" : "flex items-center gap-2"}>
               {!isNewArticle && id && (
                 <Button
                   variant="outline"
@@ -2416,9 +2442,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-6">
+        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6" : "grid grid-cols-1 lg:grid-cols-10 gap-6"}>
           {/* Main Content Area - 70% */}
-          <div className="lg:col-span-7 space-y-6">
+          <div className={isOpinionAuthor ? "space-y-6" : "lg:col-span-7 space-y-6"}>
             {reviewStatus === "needs_changes" && reviewNotes && isContributorRole && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-card dark:border-border p-4 space-y-3">
                 <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
@@ -2433,7 +2459,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </div>
             )}
             {/* Reporter Info Banner - shows actual person who entered content */}
-            {(() => {
+            {!isOpinionAuthor && (() => {
               const sourceMetadata = (article as any)?.sourceMetadata;
               const reporter = (article as any)?.reporter;
               const enteredBy = (article as any)?.enteredBy;
@@ -2509,7 +2535,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     disabled={isLockedByOther}
                     data-testid="input-title"
                   />
-                  <Button
+                  {!isOpinionAuthor && <Button
                     variant="outline"
                     size="icon"
                     onClick={() => proofreadTitleMutation.mutate()}
@@ -2522,8 +2548,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     ) : (
                       <SpellCheck className="h-4 w-4" />
                     )}
-                  </Button>
-                  <Button
+                  </Button>}
+                  {!isOpinionAuthor && <Button
                     variant="outline"
                     size="icon"
                     onClick={handleGenerateTitle}
@@ -2536,15 +2562,15 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     ) : (
                       <Sparkles className="h-4 w-4" />
                     )}
-                  </Button>
+                  </Button>}
                 </div>
-                <InlineHeadlineSuggestions
+                {!isOpinionAuthor && <InlineHeadlineSuggestions
                   language="ar"
                   editorInstance={editorInstance}
                   currentTitle={title}
                   onTitleChange={setTitle}
                   onSlugChange={setSlug}
-                />
+                />}
                 <p className="text-xs text-muted-foreground">
                   {(title || "").length}/200 حرف
                 </p>
@@ -2589,7 +2615,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       عنوان فرعي وملخص مخصص للنشرة الإخبارية
                     </p>
                   </div>
-                  <Button
+                  {!isOpinionAuthor && <Button
                     variant="outline"
                     size="sm"
                     onClick={async () => {
@@ -2637,7 +2663,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       <Sparkles className="h-4 w-4 ml-2" />
                     )}
                     توليد ذكي
-                  </Button>
+                  </Button>}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
@@ -2689,12 +2715,32 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     />
                   </div>
                 )}
+                {imageUrl && isOpinionAuthor && (
+                  <div className="flex justify-end pt-1">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        setImageUrl("");
+                        setIsAiGeneratedImage(false);
+                        setThumbnailUrl("");
+                        setHeroImageMediaId(null);
+                        setImageFocalPoint(null);
+                      }}
+                      className="gap-2"
+                      data-testid="button-delete-image"
+                    >
+                      <X className="h-4 w-4" />
+                      حذف الصورة
+                    </Button>
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     onClick={() => document.getElementById("image-upload")?.click()}
                     disabled={isUploadingImage}
-                    className="gap-2"
+                    className={isOpinionAuthor ? "w-full gap-2 sm:w-auto" : "gap-2"}
                     data-testid="button-upload-image"
                   >
                     {isUploadingImage ? (
@@ -2733,17 +2779,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </Button>
                     </span>
                   )}
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowLogoComposer(true)}
-                    disabled={isUploadingImage}
-                    className="gap-2"
-                    data-testid="button-logo-composer"
-                  >
-                    <Frame className="h-4 w-4" />
-                    أدوات الشعار
-                  </Button>
-                  {canGenerateImages && (
+                  {!isOpinionAuthor && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowLogoComposer(true)}
+                      disabled={isUploadingImage}
+                      className="gap-2"
+                      data-testid="button-logo-composer"
+                    >
+                      <Frame className="h-4 w-4" />
+                      أدوات الشعار
+                    </Button>
+                  )}
+                  {!isOpinionAuthor && canGenerateImages && (
                     <Button
                       variant="outline"
                       onClick={() => setShowAIImageDialog(true)}
@@ -2754,7 +2802,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       توليد بالذكاء الاصطناعي
                     </Button>
                   )}
-                  {canUseInfographics && (
+                  {!isOpinionAuthor && canUseInfographics && (
                     <Button
                       variant="outline"
                       onClick={() => setShowInfographicDialog(true)}
@@ -2765,7 +2813,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       إنفوجرافيك
                     </Button>
                   )}
-                  {canGenerateImages && (
+                  {!isOpinionAuthor && canGenerateImages && (
                     <Button
                       variant="outline"
                       onClick={() => setShowStoryCardsDialog(true)}
@@ -2785,7 +2833,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   />
                 </div>
                 {/* Delete Image Button and AI Label Toggle - Show only when there's an image */}
-                {imageUrl && (
+                {imageUrl && !isOpinionAuthor && (
                   <div className="flex flex-col gap-3 mt-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -2867,7 +2915,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </Card>
 
             {/* Focal Point Picker - Collapsible */}
-            {imageUrl && (
+            {imageUrl && !isOpinionAuthor && (
               <Collapsible open={focalPointOpen} onOpenChange={setFocalPointOpen}>
                 <Card>
                   <CollapsibleTrigger asChild>
@@ -2898,7 +2946,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
             
             {/* Auto Image Generation - Hidden for infographics */}
-            {canGenerateImages && articleType !== "infographic" && (
+            {!isOpinionAuthor && canGenerateImages && articleType !== "infographic" && (
               <AutoImageGenerator
                 articleId={id}
                 title={title}
@@ -2921,7 +2969,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
             
             {/* Thumbnail Generation - Collapsible - Hidden for infographics */}
-            {imageUrl && articleType !== "infographic" && (
+            {imageUrl && !isOpinionAuthor && articleType !== "infographic" && (
               <Collapsible open={thumbnailOpen} onOpenChange={setThumbnailOpen}>
                 <Card>
                   <CollapsibleTrigger asChild>
@@ -3063,7 +3111,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               <CardHeader className="space-y-3">
                 <CardTitle>محتوى المقال</CardTitle>
                 {/* AI Buttons - stacked on mobile, inline on desktop */}
-                {canUseAIGenerate && (
+                {!isOpinionAuthor && canUseAIGenerate && (
                   <div className="space-y-2">
                     <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center sm:justify-end gap-2">
                       {/* Edit + Generate Button - Rewrites content then generates metadata - requires comprehensive_edit permission */}
@@ -3171,7 +3219,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </Card>
 
             {/* Excerpt */}
-            <Card>
+            {!isOpinionAuthor && <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>الملخص</CardTitle>
@@ -3203,10 +3251,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   data-testid="textarea-excerpt"
                 />
               </CardContent>
-            </Card>
+            </Card>}
 
             {/* Poll Editor */}
-            {canUsePolls && (
+            {!isOpinionAuthor && canUsePolls && (
               <PollEditor 
                 poll={pollData} 
                 onChange={setPollData}
@@ -3216,7 +3264,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
             {/* Smart Links Panel - Collapsible - Hidden for infographics */}
-            {canUseSmartLinks && articleType !== "infographic" && (
+            {!isOpinionAuthor && canUseSmartLinks && articleType !== "infographic" && (
               <Collapsible open={smartLinksOpen} onOpenChange={setSmartLinksOpen}>
                 <Card>
                   <CollapsibleTrigger asChild>
@@ -3246,7 +3294,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
             {/* Article Timeline - Collapsible - Only shown when editing existing articles */}
-            {!isNewArticle && id && (
+            {!isOpinionAuthor && !isNewArticle && id && (
               <Collapsible open={timelineOpen} onOpenChange={setTimelineOpen}>
                 <Card>
                   <CollapsibleTrigger asChild>
@@ -3271,7 +3319,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
 
           {/* Settings Sidebar - 30% */}
-          <div className="lg:col-span-3 space-y-6">
+          {!isOpinionAuthor && <div className="lg:col-span-3 space-y-6">
             {/* Article Type - Hidden for opinion authors and users without content type permission */}
             {!isOpinionAuthor && canUseContentTypeSelector && (
               <Card>
@@ -4491,7 +4539,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 </Tabs>
               </CardContent>
             </Card>
-          </div>
+          </div>}
         </div>
        </div>
       </div>

@@ -7003,6 +7003,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         ...parsed.data,
         authorId,
       };
+
+      // Contributor creation can save and submit in one request. Without
+      // this, the client navigates away believing the new article is pending
+      // while the database still has a plain draft.
+      if (req.body?.submitForReview === true) {
+        const isContributor = await userHasAnyRole(req.user.id, ["opinion_author", "reporter"]);
+        if (isContributor) {
+          articleData.reviewStatus = "pending_review";
+          articleData.status = "draft";
+        }
+      }
       
       if (articleData.status === 'published' && !articleData.publishedAt) {
         articleData.publishedAt = new Date();
@@ -11085,7 +11096,9 @@ Respond in valid JSON format only:
       const draftCount = myArticles.filter(a => a.status === 'draft').length;
       const pendingCount = myArticles.filter(a => a.reviewStatus === "pending_review" || a.status === "pending").length;
       const needsChangesCount = myArticles.filter(a => a.reviewStatus === "needs_changes").length;
-      const rejectedCount = myArticles.filter(a => a.status === 'rejected').length;
+      const rejectedCount = myArticles.filter(a =>
+        a.reviewStatus === "rejected" || a.status === "archived" || a.status === "rejected"
+      ).length;
       const totalViews = myArticles.reduce((sum, a) => sum + (a.views || 0), 0);
 
       const [likesResult, commentsResult, bookmarksResult] = await Promise.all([
@@ -11318,6 +11331,7 @@ Respond in valid JSON format only:
           reviewStatus: a.reviewStatus,
           reviewNotes: a.reviewNotes,
           reviewedAt: a.reviewedAt,
+          scheduledAt: a.scheduledAt,
           views: a.views,
           likes: likesMap[a.id] || 0,
           comments: commentsMap[a.id] || 0,

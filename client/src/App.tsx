@@ -396,6 +396,7 @@ const AdminPublisherAnalytics = lazy(() => retryImport(() => import("@/pages/adm
 const CorrespondentRegister = lazy(() => retryImport(() => import("@/pages/correspondent/CorrespondentRegister")));
 const OpinionAuthorRegister = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionAuthorRegister")));
 const OpinionAuthorDashboard = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionAuthorDashboard")));
+const WriterGuidePage = lazy(() => retryImport(() => import("@/pages/opinion-author/WriterGuidePage")));
 const ReporterMyArticlesPage = lazy(() => retryImport(() => import("@/pages/reporter/ReporterMyArticlesPage")));
 const OpinionTicketsList = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionTicketsList")));
 const OpinionTicketDetail = lazy(() => retryImport(() => import("@/pages/opinion-author/OpinionTicketDetail")));
@@ -930,6 +931,7 @@ function Router() {
         <Route path="/dashboard/opinion-author-applications">{() => <LazyRoute component={OpinionAuthorApplications} />}</Route>
         <Route path="/dashboard/reporter/articles">{() => <LazyRoute component={ReporterMyArticlesPage} />}</Route>
         <Route path="/dashboard/opinion-author">{() => <LazyRoute component={OpinionAuthorDashboard} />}</Route>
+        <Route path="/dashboard/opinion-author/guide">{() => <LazyRoute component={WriterGuidePage} />}</Route>
         <Route path="/dashboard/opinion-author/tickets/:id">{() => <LazyRoute component={OpinionTicketDetail} />}</Route>
         <Route path="/dashboard/opinion-author/tickets">{() => <LazyRoute component={OpinionTicketsList} />}</Route>
         <Route path="/dashboard/opinion-tickets/:id">{() => <LazyRoute component={OpinionTicketAdminDetail} />}</Route>
