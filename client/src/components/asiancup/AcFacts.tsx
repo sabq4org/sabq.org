@@ -23,8 +23,8 @@ function FactCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3">
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+    <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-gradient-to-l from-emerald-500/[0.08] to-card px-4 py-3 shadow-sm">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
         {icon}
       </div>
       <div className="min-w-0">
