@@ -235,6 +235,8 @@
   "auth.signedIn": "เชื่อมต่อกับ Sabq",
   "auth.signOut": "ออกจากระบบ",
   "auth.error.apple": "ไม่สามารถลงชื่อเข้าใช้ด้วย Apple",
+  "follow.action": "ติดตาม",
+  "follow.following": "กำลังติดตาม",
   "notifications.enable": "เปิดการแจ้งเตือนการแข่งขัน",
   "notifications.enabled": "เปิดการแจ้งเตือนการแข่งขันแล้ว"
 }

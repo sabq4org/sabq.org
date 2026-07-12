@@ -235,6 +235,8 @@
   "auth.signedIn": "Đã kết nối với Sabq",
   "auth.signOut": "Đăng xuất",
   "auth.error.apple": "Không thể đăng nhập với Apple",
+  "follow.action": "Theo dõi",
+  "follow.following": "Đang theo dõi",
   "notifications.enable": "Bật thông báo trận đấu",
   "notifications.enabled": "Thông báo trận đấu đã được bật"
 }

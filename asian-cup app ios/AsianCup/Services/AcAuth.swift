@@ -226,6 +226,7 @@ final class AcAuthStore {
             await APIClient.shared.setAuthToken(receivedToken)
             if let member = response.member { persist(member) }
             await refreshProfile()
+            await AcFollowsStore.shared.reload()
             await AcPushManager.shared.syncWithSession()
         } catch {
             errorMessage = LError(error)
@@ -254,6 +255,7 @@ final class AcAuthStore {
         errorMessage = nil
         AcKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
+        AcFollowsStore.shared.clear()
         Task {
             if shouldUnregisterPush { await AcPushManager.shared.unregisterCurrentDevice() }
             guard token == nil else { return }
