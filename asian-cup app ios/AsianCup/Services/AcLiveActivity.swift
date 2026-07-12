@@ -120,7 +120,7 @@ final class AcLiveActivityStore {
             homePenaltyScore: nil,
             awayPenaltyScore: nil,
             minute: fixture.status.elapsed.map { "\($0)'" } ?? "",
-            statusLabel: fixture.status.label,
+            statusLabel: LStatus(fixture.status),
             isLive: fixture.status.live,
             isFinished: fixture.status.finished,
             lastEvent: nil,

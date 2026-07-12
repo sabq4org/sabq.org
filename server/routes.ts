@@ -12,7 +12,7 @@ import { deleteMediaBlob } from "./services/mediaStorage";
 import { shouldAutoTag, enqueueAutoTag } from "./services/mediaAutoTagService";
 import { recordArticleView, initArticleViewStats } from "./services/articleViewStatsService";
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
-import { normalizeSaudiPhone, findOrCreatePhoneUser } from "./services/phoneAuth";
+import { normalizePhone, findOrCreatePhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
@@ -144,7 +144,7 @@ const phoneOtpSendLimiter = rateLimit({
   message: { message: "تجاوزت الحد المسموح لإرسال الرموز. حاول بعد قليل." },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => normalizeSaudiPhone(req.body?.phone) || cfKeyGenerator(req),
+  keyGenerator: (req) => normalizePhone(req.body?.phone) || cfKeyGenerator(req),
   validate: cfValidate,
 });
 
@@ -899,10 +899,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // ==========================================
   app.post("/api/auth/phone/send", phoneOtpSendLimiter, async (req, res) => {
     try {
-      const e164 = normalizeSaudiPhone(req.body?.phone);
+      const e164 = normalizePhone(req.body?.phone);
       if (!e164) {
         return res.status(400).json({
-          message: "رقم جوال سعودي غير صحيح. أدخل رقمك بدون صفر (مثال: 5XXXXXXXX).",
+          message: "رقم جوال غير صحيح. أدخل الرقم بصيغة دولية مثل +9665XXXXXXXX.",
         });
       }
       const result = await varaSendOtp(e164);
@@ -915,7 +915,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   app.post("/api/auth/phone/verify", authLimiter, async (req, res) => {
     try {
-      const e164 = normalizeSaudiPhone(req.body?.phone);
+      const e164 = normalizePhone(req.body?.phone);
       const code = String(req.body?.code ?? "").replace(/[^0-9]/g, "");
       if (!e164) return res.status(400).json({ message: "رقم جوال غير صحيح" });
       if (code.length < 4) return res.status(400).json({ message: "رمز التحقق غير صحيح" });

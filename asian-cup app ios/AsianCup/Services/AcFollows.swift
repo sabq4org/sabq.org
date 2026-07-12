@@ -104,6 +104,7 @@ struct AcFollowButton: View {
     var refLogo: String? = nil
     @Environment(AcAuthStore.self) private var auth
     @State private var store = AcFollowsStore.shared
+    @State private var showLogin = false
 
     var body: some View {
         let following = store.isFollowing(kind: kind, refId: refId)
@@ -111,7 +112,7 @@ struct AcFollowButton: View {
             if auth.isLoggedIn {
                 Task { await store.toggle(kind: kind, refId: refId, refName: refName, refLogo: refLogo) }
             } else {
-                auth.startAppleSignIn()
+                showLogin = true
             }
         } label: {
             Label(
@@ -123,5 +124,6 @@ struct AcFollowButton: View {
         .buttonStyle(.borderedProminent)
         .tint(following ? AcTheme.emerald : AcTheme.amberDeep)
         .disabled(store.isLoading(kind: kind, refId: refId))
+        .sheet(isPresented: $showLogin) { AcLoginSheet() }
     }
 }

@@ -12,21 +12,21 @@ struct AcMatchEventNotificationsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                Text("اختر أنواع التنبيهات التي تصلك عن الفرق والمباريات التي تتابعها.")
+                Text(L("notifications.prefs.intro"))
                     .font(AsianCupFonts.app(size: 13))
                     .foregroundStyle(AcTheme.onDarkDim)
                     .padding(.horizontal, 4)
 
                 VStack(spacing: 0) {
-                    toggleRow(title: "انطلاق المباراة", subtitle: "عند صافرة البداية", isOn: $prefs.kickoff)
+                    toggleRow(title: L("notifications.prefs.kickoff"), subtitle: L("notifications.prefs.kickoff.subtitle"), isOn: $prefs.kickoff)
                     Divider().opacity(0.3)
-                    toggleRow(title: "الأهداف", subtitle: "كل هدف فور تسجيله", isOn: $prefs.goals)
+                    toggleRow(title: L("notifications.prefs.goals"), subtitle: L("notifications.prefs.goals.subtitle"), isOn: $prefs.goals)
                     Divider().opacity(0.3)
-                    toggleRow(title: "البطاقات", subtitle: "صفراء وحمراء", isOn: $prefs.cards)
+                    toggleRow(title: L("notifications.prefs.cards"), subtitle: L("notifications.prefs.cards.subtitle"), isOn: $prefs.cards)
                     Divider().opacity(0.3)
-                    toggleRow(title: "حالات الفار (VAR)", subtitle: "إلغاء هدف أو جزاء بعد المراجعة", isOn: $prefs.varReview)
+                    toggleRow(title: L("notifications.prefs.var"), subtitle: L("notifications.prefs.var.subtitle"), isOn: $prefs.varReview)
                     Divider().opacity(0.3)
-                    toggleRow(title: "نهاية المباراة", subtitle: "النتيجة النهائية", isOn: $prefs.fulltime)
+                    toggleRow(title: L("notifications.prefs.fulltime"), subtitle: L("notifications.prefs.fulltime.subtitle"), isOn: $prefs.fulltime)
                 }
                 .padding(.vertical, 4)
                 .background(
@@ -37,7 +37,7 @@ struct AcMatchEventNotificationsView: View {
                 if saving {
                     HStack(spacing: 6) {
                         ProgressView().controlSize(.small)
-                        Text("جاري الحفظ…")
+                        Text(L("notifications.prefs.saving"))
                             .font(AsianCupFonts.app(size: 11))
                             .foregroundStyle(AcTheme.onDarkDim)
                     }
@@ -51,7 +51,7 @@ struct AcMatchEventNotificationsView: View {
             .padding(16)
         }
         .background(AcAmbientBackground())
-        .navigationTitle("تنبيهات المباريات")
+        .navigationTitle(L("notifications.prefs.title"))
         .navigationBarTitleDisplayMode(.inline)
         .asianCupRTL()
         .task {

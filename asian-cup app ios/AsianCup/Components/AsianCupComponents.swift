@@ -143,7 +143,7 @@ struct AcStatusPill: View {
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(AcTheme.crimson))
         } else if fixture.status.finished {
-            Text(fixture.status.label)
+            Text(LStatus(fixture.status))
                 .font(AsianCupFonts.app(size: 11, weight: .semibold))
                 .foregroundStyle(AcTheme.onDarkDim)
                 .padding(.horizontal, 8).padding(.vertical, 3)
@@ -158,7 +158,7 @@ struct AcStatusPill: View {
     }
 
     private var elapsedText: String {
-        guard let e = fixture.status.elapsed else { return fixture.status.label }
+        guard let e = fixture.status.elapsed else { return LStatus(fixture.status) }
         return "\(e)'"
     }
 }
@@ -171,19 +171,20 @@ struct AcSectionHeader: View {
     var tint: Color = AcTheme.emerald
 
     var body: some View {
+        // أصغر من عنوان الصفحة (AcTopBar = 20) حتى لا ينافسه بصريًا.
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(AsianCupFonts.app(size: subtitle == nil ? 14 : 19, weight: .semibold))
+                .font(AsianCupFonts.app(size: 14, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: subtitle == nil ? 28 : 38, height: subtitle == nil ? 28 : 38)
+                .frame(width: 28, height: 28)
                 .background(RoundedRectangle(cornerRadius: AcTheme.chipRadius, style: .continuous).fill(tint.opacity(0.14)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(AsianCupFonts.headline(size: subtitle == nil ? 16 : 20))
+                    .font(AsianCupFonts.headline(size: 15))
                     .foregroundStyle(AcTheme.onDark)
                 if let subtitle {
                     Text(subtitle)
-                        .font(AsianCupFonts.app(size: 12))
+                        .font(AsianCupFonts.app(size: 11.5))
                         .foregroundStyle(AcTheme.onDarkDim)
                 }
             }
@@ -355,14 +356,14 @@ struct AcMatchDetailSheet: View {
         case commentary, events, momentum, pressure, lineups, stats, ratings, prediction
         var title: String {
             switch self {
-            case .commentary: return "التعليق"
-            case .events: return "الأحداث"
-            case .momentum: return "الزخم"
-            case .pressure: return "الضغط"
-            case .lineups: return "التشكيلات"
-            case .stats: return "الإحصائيات"
-            case .ratings: return "التقييمات"
-            case .prediction: return "التوقعات"
+            case .commentary: return L("match.tab.commentary")
+            case .events: return L("match.tab.events")
+            case .momentum: return L("match.tab.momentum")
+            case .pressure: return L("match.tab.pressure")
+            case .lineups: return L("match.tab.lineups")
+            case .stats: return L("match.tab.stats")
+            case .ratings: return L("match.tab.ratings")
+            case .prediction: return L("match.tab.prediction")
             }
         }
     }
@@ -406,7 +407,7 @@ struct AcMatchDetailSheet: View {
             .padding(.top, 4)
         }
         .background(AcAmbientBackground())
-        .navigationTitle("مركز المباراة")
+        .navigationTitle(L("match.center.title"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -460,32 +461,32 @@ struct AcMatchDetailSheet: View {
                 AcEventsTimelineCard(events: d.events, homeId: displayFixture.home.id,
                                      home: displayFixture.home, away: displayFixture.away)
             } else {
-                emptyTab("لا أحداث بعد")
+                emptyTab(L("match.empty.events"))
             }
         case .momentum:
             if let m = momentum, m.available, !m.points.isEmpty {
                 momentumCard(m)
             } else {
-                emptyTab("الزخم يظهر هنا أثناء المباراة")
+                emptyTab(L("match.empty.momentum"))
             }
         case .pressure:
             if let p = pressure, p.available, !p.points.isEmpty {
                 pressureCard(p)
             } else {
-                emptyTab("مؤشّر الضغط يظهر هنا أثناء المباراة")
+                emptyTab(L("match.empty.pressure"))
             }
         case .lineups:
             if let d = detail, !d.lineups.isEmpty {
                 AcLineupsCard(lineups: d.lineups, teamFor: team)
             } else {
-                emptyTab("التشكيلة لم تُعلن بعد")
+                emptyTab(L("match.empty.lineups"))
             }
         case .stats:
             VStack(spacing: 12) {
                 if let d = detail, !d.statistics.isEmpty {
                     AcStatisticsCard(stats: d.statistics, home: displayFixture.home, away: displayFixture.away)
                 } else {
-                    emptyTab("لا إحصائيات بعد")
+                    emptyTab(L("match.empty.stats"))
                 }
                 if let tv = detail?.tv, !tv.isEmpty {
                     AcTvCard(channels: tv)
@@ -507,14 +508,14 @@ struct AcMatchDetailSheet: View {
                 if let p = d.prediction {
                     AcPredictionBarsCard(prediction: p, home: displayFixture.home, away: displayFixture.away)
                 } else {
-                    emptyTab("التوقع غير متاح")
+                    emptyTab(L("match.empty.prediction"))
                 }
                 if !d.headToHead.isEmpty {
                     AcHeadToHeadCard(fixtures: d.headToHead)
                 } else if d.prediction == nil {
                     EmptyView()
                 } else {
-                    Text("أول مواجهة رسمية بين المنتخبين")
+                    Text(L("match.h2h.first"))
                         .font(AsianCupFonts.app(size: 12))
                         .foregroundStyle(AcTheme.onDarkDim)
                         .frame(maxWidth: .infinity)
@@ -543,7 +544,7 @@ struct AcMatchDetailSheet: View {
                                 .foregroundStyle(AcTheme.emerald)
                                 .monospacedDigit()
                                 .frame(width: 28, alignment: .leading)
-                            Text(item.textAr.isEmpty ? item.textEn : item.textAr)
+                            Text(LName(item.textAr, item.textEn))
                                 .font(AsianCupFonts.app(size: 13))
                                 .foregroundStyle(AcTheme.onDark)
                         }
@@ -556,7 +557,7 @@ struct AcMatchDetailSheet: View {
                         .fill(AcTheme.cardFill)
                 )
             } else {
-                emptyTab("التعليق غير متاح لهذه المباراة")
+                emptyTab(L("match.empty.commentary"))
             }
         }
         .task {
@@ -568,23 +569,26 @@ struct AcMatchDetailSheet: View {
 
     private func momentumCard(_ m: AcMomentum) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("الزخم الهجومي")
+            Text(L("match.momentum.title"))
                 .font(AsianCupFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(AcTheme.onDark)
             if let p = m.possession {
                 HStack {
                     Text("\(p.home)%").font(AsianCupFonts.app(size: 12, weight: .bold)).monospacedDigit()
                     Spacer()
-                    Text("الاستحواذ").font(AsianCupFonts.app(size: 11)).foregroundStyle(AcTheme.onDarkDim)
+                    Text(L("match.momentum.possession")).font(AsianCupFonts.app(size: 11)).foregroundStyle(AcTheme.onDarkDim)
                     Spacer()
                     Text("\(p.away)%").font(AsianCupFonts.app(size: 12, weight: .bold)).monospacedDigit()
                 }
             }
-            Text("أعلى: \(LTeam(String(displayFixture.home.id), fallback: displayFixture.home.name)) · أسفل: \(LTeam(String(displayFixture.away.id), fallback: displayFixture.away.name))")
+            Text(L("match.momentum.legend", [
+                "home": LTeam(String(displayFixture.home.id), fallback: displayFixture.home.name),
+                "away": LTeam(String(displayFixture.away.id), fallback: displayFixture.away.name),
+            ]))
                 .font(AsianCupFonts.app(size: 11))
                 .foregroundStyle(AcTheme.onDarkDim)
             Chart(m.points) { pt in
-                BarMark(x: .value("د", pt.minute), y: .value("صافي", pt.net))
+                BarMark(x: .value(L("match.chart.minute"), pt.minute), y: .value(L("match.chart.net"), pt.net))
                     .foregroundStyle(pt.net >= 0 ? AcTheme.emerald : AcTheme.amber)
             }
             .chartYAxis(.hidden)
@@ -598,7 +602,7 @@ struct AcMatchDetailSheet: View {
 
     private func pressureCard(_ p: AcPressure) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("مؤشّر الضغط")
+            Text(L("match.pressure.title"))
                 .font(AsianCupFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(AcTheme.onDark)
             if let latest = p.latest, latest.side != "even" {
@@ -616,7 +620,7 @@ struct AcMatchDetailSheet: View {
                 }
             }
             Chart(p.points) { pt in
-                BarMark(x: .value("د", pt.minute), y: .value("ضغط", pt.net))
+                BarMark(x: .value(L("match.chart.minute"), pt.minute), y: .value(L("match.chart.pressure"), pt.net))
                     .foregroundStyle(pt.net >= 0 ? AcTheme.emerald : AcTheme.crimson)
             }
             .chartYAxis(.hidden)
@@ -756,7 +760,7 @@ struct AcMatchDetailSheet: View {
                 infoRow(icon: "mappin.and.ellipse", label: L("match.city"), value: displayFixture.venue.city)
             }
             divider
-            infoRow(icon: "flag.checkered", label: L("match.status"), value: displayFixture.status.label)
+            infoRow(icon: "flag.checkered", label: L("match.status"), value: LStatus(displayFixture.status))
         }
         .padding(.vertical, 4)
         .background(
@@ -1326,7 +1330,7 @@ private struct AcPitchBlock: View {
             pitch
 
             if !lineup.coach.isEmpty {
-                Text("المدرب: \(lineup.coach)")
+                Text(L("team.coach", ["name": lineup.coach]))
                     .font(AsianCupFonts.app(size: 11))
                     .foregroundStyle(AcTheme.onDarkDim)
             }

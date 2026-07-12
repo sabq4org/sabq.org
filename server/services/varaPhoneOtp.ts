@@ -18,7 +18,7 @@ function getVaraVerifyServiceSid(): string | undefined {
   return process.env.VARA_TWILIO_VERIFY_SERVICE_SID;
 }
 
-/** إرسال رمز تحقّق (SMS) عبر Twilio Verify — للرقم بصيغة E.164 (+9665XXXXXXXX). */
+/** إرسال رمز تحقّق (SMS) عبر Twilio Verify — للرقم بصيغة E.164 الدولية. */
 export async function varaSendOtp(
   phoneE164: string,
 ): Promise<{ success: boolean; message: string }> {
