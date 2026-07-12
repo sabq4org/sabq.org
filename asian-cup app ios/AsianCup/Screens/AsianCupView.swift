@@ -1134,7 +1134,7 @@ private struct AcHeroMetrics: View {
             divider
             metric("\(overview.venues.count)", L("metric.venues"))
         }
-        .padding(.vertical, 12)
+        .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(AcTheme.chipFill)
@@ -1146,13 +1146,13 @@ private struct AcHeroMetrics: View {
     }
 
     private func metric(_ value: String, _ label: String) -> some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 1) {
             Text(value)
-                .font(AsianCupFonts.app(size: 22, weight: .bold))
+                .font(AsianCupFonts.app(size: 17, weight: .bold))
                 .foregroundStyle(AcTheme.goldDeep)
                 .monospacedDigit()
             Text(label)
-                .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                .font(AsianCupFonts.app(size: 9, weight: .semibold))
                 .foregroundStyle(AcTheme.onDarkDim)
         }
         .frame(maxWidth: .infinity)
@@ -1161,7 +1161,7 @@ private struct AcHeroMetrics: View {
     private var divider: some View {
         Rectangle()
             .fill(AcTheme.outline)
-            .frame(width: 1, height: 34)
+            .frame(width: 1, height: 24)
     }
 }
 
@@ -1638,8 +1638,7 @@ struct AcHero: View {
     private var divider: some View { Rectangle().fill(AcTheme.outline).frame(width: 1, height: 28) }
 }
 
-// العدّ التنازلي — تصميم مسطّح عصري: خلايا زجاجية رفيعة + أرقام بتدرّج أبيض↔زمردي،
-// بلا حشوة ذهبية أو خطوط تعطي إحساسًا ثري-دي/قديمًا.
+// العدّ التنازلي — شريط مدمج يحافظ على الأرقام كاملة دون أن يزاحم محتوى الرئيسية.
 struct AcCountdownCard: View {
     let iso: String
 
@@ -1648,29 +1647,33 @@ struct AcCountdownCard: View {
     private static let labelTint  = Color(red: 0.663, green: 0.863, blue: 0.753) // #A9DCC0
 
     var body: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 6) {
+        HStack(spacing: 10) {
+            HStack(spacing: 5) {
                 Image(systemName: "timer").font(.system(size: 11, weight: .semibold))
                 Text(L("countdown.title"))
-                    .font(AsianCupFonts.app(size: 12, weight: .semibold))
-                    .tracking(1)
+                    .font(AsianCupFonts.app(size: 10, weight: .semibold))
             }
             .foregroundStyle(Self.headerTint)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize()
 
             TimelineView(.periodic(from: .now, by: 1)) { _ in
                 let c = AcCountdownMath.to(iso: iso)
-                HStack(spacing: 10) {
+                HStack(spacing: 0) {
                     cell(c.days, L("countdown.days"))
+                    divider
                     cell(c.hours, L("countdown.hours"))
+                    divider
                     cell(c.minutes, L("countdown.minutes"))
+                    divider
                     cell(c.seconds, L("countdown.seconds"))
                 }
+                .frame(maxWidth: .infinity)
                 .environment(\.layoutDirection, .leftToRight)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(
@@ -1681,22 +1684,23 @@ struct AcCountdownCard: View {
     }
 
     private func cell(_ n: Int, _ label: String) -> some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 0) {
             Text(String(format: "%02d", n))
-                .font(AsianCupFonts.app(size: 30, weight: .bold))
+                .font(AsianCupFonts.app(size: 18, weight: .bold))
                 .monospacedDigit()
                 .foregroundStyle(.white)
                 .contentTransition(.numericText(countsDown: true))
             Text(label)
-                .font(AsianCupFonts.app(size: 10))
+                .font(AsianCupFonts.app(size: 8))
                 .foregroundStyle(Self.labelTint)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.12))
-        )
+    }
+
+    private var divider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.18))
+            .frame(width: 1, height: 28)
     }
 }
 
