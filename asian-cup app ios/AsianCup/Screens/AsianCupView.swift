@@ -932,7 +932,7 @@ private struct AcLanguagePicker: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 4)
 
-                    ForEach(AcLanguage.all) { lang in
+                    ForEach(AcLanguage.available) { lang in
                         Button {
                             loc.setLanguage(lang)
                         } label: {
