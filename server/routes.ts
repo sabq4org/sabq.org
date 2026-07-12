@@ -6731,15 +6731,17 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const total = Number(countResult?.count || 0);
 
       // Determine orderBy dynamically based on status so archived/drafts with null publishedAt sort correctly
+      // displayOrder leads every clause (matching the public queries in storage.ts) so drag-and-drop
+      // reordering from the dashboard persists after refetch instead of snapping back to date order
       let orderClauses;
       if (status === "archived") {
-        orderClauses = [desc(articles.updatedAt), desc(articles.createdAt)];
+        orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "draft") {
-        orderClauses = [desc(articles.updatedAt), desc(articles.createdAt)];
+        orderClauses = [desc(articles.displayOrder), desc(articles.updatedAt), desc(articles.createdAt)];
       } else if (status === "scheduled") {
-        orderClauses = [desc(articles.scheduledAt), desc(articles.createdAt)];
+        orderClauses = [desc(articles.displayOrder), desc(articles.scheduledAt), desc(articles.createdAt)];
       } else {
-        orderClauses = [desc(articles.publishedAt), desc(articles.createdAt)];
+        orderClauses = [desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt)];
       }
 
       query = query.orderBy(...orderClauses)
