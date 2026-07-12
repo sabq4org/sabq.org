@@ -1676,8 +1676,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // - Files with gs:// URLs (private) use proxy URL
       // - Keep originalUrl for storage in articles
       const filesWithUrls = deduplicatedItems.map(item => {
-        const displayUrl = item.url.startsWith('https://') 
-          ? item.url 
+        const displayUrl = item.url.startsWith('https://') || item.url.startsWith('/uploads/')
+          ? item.url
           : `/api/media/proxy/${item.id}`;
         
         return {
@@ -1815,38 +1815,62 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           bucketId = parts[0];
         }
 
+        // في التطوير المحلي (بدون Cloudflare Images وبدون GCS يعمل) نحفظ على
+        // القرص — مجلد uploads/ يُقدَّم ثابتاً من نفس السيرفر عبر /uploads.
+        // الإنتاج لا يصل لهذا المسار أبداً (القرص على Railway مؤقت).
+        const isDev = process.env.NODE_ENV !== 'production';
+        const saveToLocalDisk = async (): Promise<string> => {
+          const fsp = await import('fs/promises');
+          const localDir = path.join(process.cwd(), 'uploads', 'media', String(year), month);
+          await fsp.mkdir(localDir, { recursive: true });
+          await fsp.writeFile(path.join(localDir, `${objectId}.${fileExtension}`), req.file.buffer);
+          return `/uploads/media/${year}/${month}/${objectId}.${fileExtension}`;
+        };
+
         if (!bucketId) {
-          return res.status(500).json({
-            message: "خدمة رفع الصور غير متاحة. المتغيرات الخاصة بـ Cloudflare Images أو PRIVATE_OBJECT_DIR غير مضبوطة.",
-          });
-        }
-
-        try {
-          const { objectStorageClient } = await import('./objectStorage');
-          const bucket = objectStorageClient.bucket(bucketId);
-          const file = bucket.file(objectPath);
-
-          await file.save(req.file.buffer, {
-            contentType: req.file.mimetype,
-            metadata: { cacheControl: 'public, max-age=31536000' },
-          });
-
-          let isPublic = false;
-          try {
-            await file.makePublic();
-            isPublic = true;
-          } catch (error) {
-            console.warn("[Media Upload] Could not make file public:", error);
+          if (!isDev) {
+            return res.status(500).json({
+              message: "خدمة رفع الصور غير متاحة. المتغيرات الخاصة بـ Cloudflare Images أو PRIVATE_OBJECT_DIR غير مضبوطة.",
+            });
           }
+          storagePath = await saveToLocalDisk();
+          console.log("[Media Upload] Dev fallback: saved to local disk:", storagePath);
+        } else {
+          try {
+            const { objectStorageClient } = await import('./objectStorage');
+            const bucket = objectStorageClient.bucket(bucketId);
+            const file = bucket.file(objectPath);
 
-          const publicGcsUrl = `https://storage.googleapis.com/${bucketId}/${objectPath}`;
-          const gsPath = `gs://${bucketId}/${objectPath}`;
-          storagePath = isPublic ? publicGcsUrl : gsPath;
-        } catch (gcsError) {
-          console.error("[Media Upload] GCS upload failed and no Cloudflare fallback available:", gcsError);
-          return res.status(502).json({
-            message: "تعذّر رفع الملف. خدمة التخزين السحابي غير متاحة حالياً.",
-          });
+            await file.save(req.file.buffer, {
+              contentType: req.file.mimetype,
+              metadata: { cacheControl: 'public, max-age=31536000' },
+            });
+
+            let isPublic = false;
+            try {
+              await file.makePublic();
+              isPublic = true;
+            } catch (error) {
+              console.warn("[Media Upload] Could not make file public:", error);
+            }
+
+            const publicGcsUrl = `https://storage.googleapis.com/${bucketId}/${objectPath}`;
+            const gsPath = `gs://${bucketId}/${objectPath}`;
+            storagePath = isPublic ? publicGcsUrl : gsPath;
+          } catch (gcsError) {
+            if (!isDev) {
+              console.error("[Media Upload] GCS upload failed and no Cloudflare fallback available:", gcsError);
+              return res.status(502).json({
+                message: "تعذّر رفع الملف. خدمة التخزين السحابي غير متاحة حالياً.",
+              });
+            }
+            console.warn(
+              "[Media Upload] GCS unavailable in dev — saving to local disk:",
+              gcsError instanceof Error ? gcsError.message : gcsError,
+            );
+            storagePath = await saveToLocalDisk();
+            console.log("[Media Upload] Dev fallback: saved to local disk:", storagePath);
+          }
         }
       }
 
@@ -2000,10 +2024,10 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       // Return appropriate URL:
-      // - If public: use stored public URL
+      // - If public (https:// or local-dev /uploads/): use stored URL directly
       // - If not public: use proxy URL
-      const responseUrl = mediaFileWithDetails.url.startsWith('https://') 
-        ? mediaFileWithDetails.url 
+      const responseUrl = mediaFileWithDetails.url.startsWith('https://') || mediaFileWithDetails.url.startsWith('/uploads/')
+        ? mediaFileWithDetails.url
         : `/api/media/proxy/${mediaFile.id}`;
       
       res.json({
@@ -2059,6 +2083,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       
       // Type 2: Public object paths (/public-objects/) - redirect to public route
       if (storagePath.startsWith('/public-objects/')) {
+        return res.redirect(storagePath);
+      }
+
+      // Type 2b: Local dev uploads (/uploads/) — served by the static uploads middleware
+      if (storagePath.startsWith('/uploads/')) {
         return res.redirect(storagePath);
       }
       
