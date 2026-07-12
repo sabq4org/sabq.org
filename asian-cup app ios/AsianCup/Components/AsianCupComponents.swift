@@ -224,10 +224,10 @@ struct AcEmptyState: View {
     }
 }
 
-// بطاقة مباراة أفقية مألوفة ومضغوطة:
-//   الجولة                          17:00
-//   [شعار] السعودية   VS   فلسطين [شعار]
-//   الملعب — المدينة                   ‹
+// بطاقة مباراة أفقية — نمط VARA/الرياضة:
+//   الجولة                          الحالة
+//   السعودية [شعار]  17:00  [شعار] فلسطين
+//   (العلَمان ملاصقان للمنتصف، والاسم نحو الطرف الخارجي)
 struct AcMatchCard: View {
     let fixture: AcFixture
     var embedded: Bool = false
@@ -257,13 +257,15 @@ struct AcMatchCard: View {
                     .foregroundStyle(AcTheme.onDarkDim)
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                AcStatusPill(fixture: fixture)
+                if started {
+                    AcStatusPill(fixture: fixture)
+                }
             }
 
-            HStack(spacing: 8) {
-                teamSide(fixture.home, leading: true)
+            HStack(spacing: 6) {
+                teamSide(fixture.home, home: true)
                 centerScore
-                teamSide(fixture.away, leading: false)
+                teamSide(fixture.away, home: false)
             }
 
             if !fixture.venue.name.isEmpty || !fixture.venue.city.isEmpty {
@@ -300,25 +302,29 @@ struct AcMatchCard: View {
         return "\(fixture.venue.name) — \(fixture.venue.city)"
     }
 
-    private func teamSide(_ team: AcTeam, leading: Bool) -> some View {
-        HStack(spacing: 7) {
-            if leading {
-                AcTeamLogo(logo: team.logo, size: 28)
-                teamName(team, align: .leading)
-            } else {
+    /// نمط VARA: الشعار ملاصق للنتيجة/الوقت في المنتصف، والاسم يمتد للخارج.
+    private func teamSide(_ team: AcTeam, home: Bool) -> some View {
+        HStack(spacing: 6) {
+            if home {
+                Spacer(minLength: 4)
                 teamName(team, align: .trailing)
-                AcTeamLogo(logo: team.logo, size: 28)
+                AcTeamLogo(logo: team.logo, size: 34)
+            } else {
+                AcTeamLogo(logo: team.logo, size: 34)
+                teamName(team, align: .leading)
+                Spacer(minLength: 4)
             }
         }
-        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
+        .frame(maxWidth: .infinity)
     }
 
     private func teamName(_ team: AcTeam, align: TextAlignment) -> some View {
         Text(LTeam(String(team.id), fallback: team.name))
-            .font(AsianCupFonts.app(size: 13, weight: .bold))
+            .font(AsianCupFonts.app(size: 12.5, weight: .bold))
             .foregroundStyle(AcTheme.onDarkStrong)
             .lineLimit(1)
-            .minimumScaleFactor(0.8)
+            .minimumScaleFactor(0.76)
+            .allowsTightening(true)
             .multilineTextAlignment(align)
     }
 
@@ -326,17 +332,19 @@ struct AcMatchCard: View {
         Group {
             if started {
                 Text("\(fixture.goals.home ?? 0) - \(fixture.goals.away ?? 0)")
-                    .font(AsianCupFonts.app(size: 18, weight: .bold))
+                    .font(AsianCupFonts.app(size: 15, weight: .heavy))
                     .foregroundStyle(AcTheme.onDarkStrong)
                     .monospacedDigit()
                     .environment(\.layoutDirection, .leftToRight)
             } else {
-                Text("VS")
-                    .font(AsianCupFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(AcTheme.onDarkFaint)
+                Text(AcFormat.kickoffTime(fixture.date))
+                    .font(AsianCupFonts.app(size: 13, weight: .heavy))
+                    .foregroundStyle(AcTheme.onDarkStrong)
+                    .monospacedDigit()
+                    .environment(\.layoutDirection, .leftToRight)
             }
         }
-        .frame(width: 48)
+        .frame(minWidth: 50)
     }
 }
 

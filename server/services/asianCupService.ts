@@ -425,7 +425,7 @@ export async function getAcStandings(): Promise<AcGroup[]> {
 
 /** نظرة عامة: عدّ تنازلي + المضيف + الملاعب + تركيز السعودية + المباراة القادمة. */
 export async function getAcOverview(): Promise<AcOverview> {
-  return withSWR("ac:overview", OVERVIEW_TTL, OVERVIEW_TTL * 3, async () => {
+  return withSWR("ac:overview:v2", OVERVIEW_TTL, OVERVIEW_TTL * 3, async () => {
     const [fixtures, standings] = await Promise.all([getAcFixtures(), getAcStandings()]);
     const teams = await getAcTeams();
 

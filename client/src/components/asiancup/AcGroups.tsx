@@ -7,15 +7,15 @@ function GroupTable({ group }: { group: AcGroup }) {
   const isLive = group.rows.some((r) => r.live);
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center justify-between bg-gradient-to-l from-emerald-500 to-emerald-600 px-4 py-2.5">
-        <h3 className="text-sm font-black text-white">{group.name || "مجموعة"}</h3>
+      <div className="flex items-center justify-between border-b border-emerald-500/15 bg-emerald-500/[0.07] px-4 py-2.5 dark:bg-emerald-500/10">
+        <h3 className="text-sm font-black text-emerald-800 dark:text-emerald-200">{group.name || "مجموعة"}</h3>
         {isLive ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-red-500/90 px-2 py-0.5 text-[10px] font-bold text-white">
             <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
             مباشر
           </span>
         ) : !started ? (
-          <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold text-emerald-50">
+          <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
             لم تبدأ
           </span>
         ) : null}
