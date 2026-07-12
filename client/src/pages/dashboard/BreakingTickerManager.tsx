@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -132,7 +132,7 @@ function SortableHeadlineRow({
     queryKey: ['/api/articles/search-simple', debouncedSearch],
     queryFn: async () => {
       if (!debouncedSearch || debouncedSearch.length < 2) return [];
-      const res = await fetch(`/api/articles/search-simple?q=${encodeURIComponent(debouncedSearch)}`);
+      const res = await fetch(apiUrl(`/api/articles/search-simple?q=${encodeURIComponent(debouncedSearch)}`));
       if (!res.ok) return [];
       return res.json();
     },

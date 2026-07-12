@@ -66,7 +66,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { worldDayCategories, insertWorldDaySchema } from "@shared/schema";
 import type { WorldDay, WorldDaySuggestion, Category } from "@shared/schema";
@@ -195,7 +195,7 @@ export default function WorldDaysManagement() {
     queryKey: ["/api/world-days", selectedWorldDay?.id, "suggestions"],
     queryFn: async () => {
       if (!selectedWorldDay) return [];
-      const res = await fetch(`/api/world-days/${selectedWorldDay.id}/suggestions`);
+      const res = await fetch(apiUrl(`/api/world-days/${selectedWorldDay.id}/suggestions`));
       if (!res.ok) throw new Error("Failed to fetch suggestions");
       return res.json();
     },

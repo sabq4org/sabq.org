@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/queryClient";
 import { useState, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -72,7 +73,7 @@ export default function TranscriptionTool() {
 
   const transcribeMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await fetch("/api/elevenlabs/transcribe", {
+      const response = await fetch(apiUrl("/api/elevenlabs/transcribe"), {
         method: "POST",
         body: formData,
         credentials: "include",

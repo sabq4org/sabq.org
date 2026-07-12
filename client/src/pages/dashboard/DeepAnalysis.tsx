@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { queryClient, apiRequest, getCsrfToken } from "@/lib/queryClient";
+import { queryClient, apiRequest, getCsrfToken, apiUrl } from "@/lib/queryClient";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -106,7 +106,7 @@ export default function DeepAnalysis() {
 
     try {
       const csrfToken = getCsrfToken();
-      const response = await fetch('/api/deep-analysis/generate', {
+      const response = await fetch(apiUrl('/api/deep-analysis/generate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

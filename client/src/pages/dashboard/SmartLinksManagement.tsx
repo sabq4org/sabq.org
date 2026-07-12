@@ -41,7 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, Trash2, Search, Link2, Database, Tag } from "lucide-react";
 import type { InsertEntityTypeDb, InsertSmartEntityDb, InsertSmartTermDb } from "@shared/schema";
@@ -1065,7 +1065,7 @@ function SmartEntityDialog({
                     formData.append('image', file);
                     
                     try {
-                      const response = await fetch("/api/smart-entities/upload-image", {
+                      const response = await fetch(apiUrl("/api/smart-entities/upload-image"), {
                         method: "POST",
                         body: formData,
                         credentials: "include",

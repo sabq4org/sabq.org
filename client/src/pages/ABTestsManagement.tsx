@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -102,7 +102,7 @@ export default function ABTestsManagement() {
   const { data: experimentsRaw, isLoading } = useQuery({
     queryKey: ["/api/ab-tests", statusFilter, testTypeFilter],
     queryFn: () =>
-      fetch(`/api/ab-tests?status=${statusFilter !== "all" ? statusFilter : ""}&testType=${testTypeFilter !== "all" ? testTypeFilter : ""}`)
+      fetch(apiUrl(`/api/ab-tests?status=${statusFilter !== "all" ? statusFilter : ""}&testType=${testTypeFilter !== "all" ? testTypeFilter : ""}`))
         .then((res) => res.json()),
   });
   const experiments = Array.isArray(experimentsRaw) ? experimentsRaw : [];
@@ -110,7 +110,7 @@ export default function ABTestsManagement() {
   const { data: publishedArticlesRaw } = useQuery({
     queryKey: ["/api/articles", "published"],
     queryFn: () =>
-      fetch("/api/articles?status=published&limit=100")
+      fetch(apiUrl("/api/articles?status=published&limit=100"))
         .then((res) => res.json()),
   });
   const publishedArticles = Array.isArray(publishedArticlesRaw) ? publishedArticlesRaw : [];

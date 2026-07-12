@@ -29,7 +29,7 @@ import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader"
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import {
   BarChart,
   Bar,
@@ -81,7 +81,7 @@ export default function DataStoryGenerator() {
       const formData = new FormData();
       formData.append('file', file);
       
-      const response = await fetch('/api/data-stories/upload', {
+      const response = await fetch(apiUrl('/api/data-stories/upload'), {
         method: 'POST',
         body: formData,
         credentials: 'include',

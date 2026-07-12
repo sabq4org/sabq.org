@@ -39,7 +39,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { 
   Upload, 
@@ -105,7 +105,7 @@ export default function CreativesManagement() {
   const { data: adGroupsRaw, isLoading: isLoadingAdGroups } = useQuery<AdGroup[]>({
     queryKey: ["/api/ads/ad-groups", { campaignId }],
     queryFn: async () => {
-      const res = await fetch(`/api/ads/ad-groups?campaignId=${campaignId}`, {
+      const res = await fetch(apiUrl(`/api/ads/ad-groups?campaignId=${campaignId}`), {
         credentials: "include"
       });
       if (!res.ok) throw new Error("فشل في جلب المجموعات الإعلانية");
@@ -173,7 +173,7 @@ export default function CreativesManagement() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("/api/ads/creatives/upload", {
+      const response = await fetch(apiUrl("/api/ads/creatives/upload"), {
         method: "POST",
         body: formData,
         credentials: "include",

@@ -33,7 +33,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { 
   Brain, 
   Plus, 
@@ -132,7 +132,7 @@ export default function DeepAnalysisList() {
   const { data: statistics } = useQuery<Statistics>({
     queryKey: ['/api/deep-analysis/stats'],
     queryFn: async () => {
-      const res = await fetch('/api/deep-analysis/stats', { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/deep-analysis/stats'), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch statistics');
       return await res.json();
     },
@@ -142,7 +142,7 @@ export default function DeepAnalysisList() {
   const { data: categoriesRaw } = useQuery<Category[]>({
     queryKey: ['/api/categories'],
     queryFn: async () => {
-      const res = await fetch('/api/categories', { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/categories'), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch categories');
       return await res.json();
     },
@@ -161,7 +161,7 @@ export default function DeepAnalysisList() {
       if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
       if (categoryFilter && categoryFilter !== 'all') params.append('categoryId', categoryFilter);
 
-      const res = await fetch(`/api/deep-analysis?${params}`, { credentials: 'include' });
+      const res = await fetch(apiUrl(`/api/deep-analysis?${params}`), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch analyses');
       return await res.json();
     },

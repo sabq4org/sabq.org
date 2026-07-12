@@ -48,7 +48,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { useAuth, hasRole } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { formatDistanceToNow, format, isWithinInterval, startOfDay, endOfDay, addDays } from "date-fns";
 import { arSA } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -159,7 +159,7 @@ function GenerationProgress({ newsletter }: { newsletter: AudioNewsletter }) {
   const { data: live } = useQuery<{ newsletter?: { status?: string; generationProgress?: number; generationMessage?: string } }>({
     queryKey: ["/api/audio-newsletters/newsletters", newsletter.id],
     queryFn: async () => {
-      const res = await fetch(`/api/audio-newsletters/newsletters/${newsletter.id}`, {
+      const res = await fetch(apiUrl(`/api/audio-newsletters/newsletters/${newsletter.id}`), {
         credentials: "include",
       });
       if (!res.ok) return {};

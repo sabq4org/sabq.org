@@ -54,7 +54,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { Blocks, Plus, Edit, Trash2, Eye } from "lucide-react";
 import type { SmartBlock, InsertSmartBlock } from "@shared/schema";
 import { insertSmartBlockSchema } from "@shared/schema";
@@ -96,7 +96,7 @@ export default function SmartBlocksPage() {
   const { data: blocksRaw, isLoading } = useQuery<SmartBlock[]>({
     queryKey: ['/api/smart-blocks'],
     queryFn: async () => {
-      const res = await fetch('/api/smart-blocks', { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/smart-blocks'), { credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch blocks');
       return await res.json();
     },

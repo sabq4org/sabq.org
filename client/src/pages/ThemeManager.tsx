@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
@@ -131,7 +131,7 @@ export default function ThemeManager() {
 
   const exportMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/themes/export", {
+      const response = await fetch(apiUrl("/api/themes/export"), {
         credentials: "include",
       });
       if (!response.ok) {

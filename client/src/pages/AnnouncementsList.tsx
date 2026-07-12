@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
@@ -65,7 +65,7 @@ export default function AnnouncementsList() {
 
   const { data: announcements, isLoading } = useQuery<Announcement[]>({
     queryKey: ['/api/announcements', statusFilter, priorityFilter, channelFilters, search],
-    queryFn: () => fetch(`/api/announcements${buildQueryString()}`).then(r => r.json()),
+    queryFn: () => fetch(apiUrl(`/api/announcements${buildQueryString()}`)).then(r => r.json()),
   });
 
   const deleteMutation = useMutation({

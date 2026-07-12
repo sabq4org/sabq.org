@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/queryClient";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -62,7 +63,7 @@ export default function AdminPublishers() {
         params.append('isActive', isActiveParam);
       }
       
-      const response = await fetch(`/api/publishers?${params.toString()}`);
+      const response = await fetch(apiUrl(`/api/publishers?${params.toString()}`));
       if (!response.ok) {
         throw new Error('Failed to fetch publishers');
       }

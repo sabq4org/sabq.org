@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -70,7 +70,7 @@ export default function VoiceManagement() {
 
   const cloneMutation = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await fetch("/api/elevenlabs/voices/clone", {
+      const response = await fetch(apiUrl("/api/elevenlabs/voices/clone"), {
         method: "POST",
         body: formData,
         credentials: "include",
