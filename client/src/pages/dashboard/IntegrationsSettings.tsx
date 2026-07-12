@@ -1,7 +1,8 @@
 // إعدادات التكاملات — غرفة قيادة الخدمات الخارجية.
-// لوحة داكنة عمداً (بمعزل عن ثيم اللوحة): جدار حالة بمؤشرات نبض حية،
-// قراءات زمن استجابة، وفحص شامل بضغطة. لا تعرض الصفحة أي مفتاح أبداً —
-// حالة التهيئة وأسماء المتغيرات الناقصة ونتائج الفحص فقط.
+// تصميم نهاري يتبع ثيم اللوحة (توكنات الثيم، مع دعم الوضع الليلي على نمط
+// AI Hub): جدار حالة بمؤشرات نبض حية، قراءات زمن استجابة، وفحص شامل بضغطة.
+// لا تعرض الصفحة أي مفتاح أبداً — حالة التهيئة وأسماء المتغيرات الناقصة
+// ونتائج الفحص فقط.
 
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -78,11 +79,38 @@ function toneOf(s: IntegrationStatus): Tone {
   return "standby";
 }
 
-const TONE_STYLES: Record<Tone, { dot: string; ring: string; label: string; text: string }> = {
-  online: { dot: "bg-emerald-400", ring: "bg-emerald-400/60", label: "متصلة", text: "text-emerald-300" },
-  fault: { dot: "bg-red-500", ring: "bg-red-500/60", label: "عطل", text: "text-red-300" },
-  standby: { dot: "bg-amber-400", ring: "", label: "لم تُفحص", text: "text-amber-300" },
-  offline: { dot: "bg-slate-600", ring: "", label: "غير مضبوطة", text: "text-slate-400" },
+const TONE_STYLES: Record<
+  Tone,
+  { dot: string; ring: string; label: string; text: string; tile: string }
+> = {
+  online: {
+    dot: "bg-emerald-500",
+    ring: "bg-emerald-400/70",
+    label: "متصلة",
+    text: "text-emerald-600 dark:text-emerald-300",
+    tile: "border-emerald-300/70 dark:border-emerald-500/25",
+  },
+  fault: {
+    dot: "bg-red-500",
+    ring: "bg-red-400/70",
+    label: "عطل",
+    text: "text-red-600 dark:text-red-300",
+    tile: "border-red-300 dark:border-red-500/40",
+  },
+  standby: {
+    dot: "bg-amber-400",
+    ring: "",
+    label: "لم تُفحص",
+    text: "text-amber-600 dark:text-amber-300",
+    tile: "border-border",
+  },
+  offline: {
+    dot: "bg-slate-300 dark:bg-slate-600",
+    ring: "",
+    label: "غير مضبوطة",
+    text: "text-muted-foreground",
+    tile: "border-border opacity-80",
+  },
 };
 
 function StatusLed({ tone }: { tone: Tone }) {
@@ -112,17 +140,15 @@ function IntegrationTile({
   const style = TONE_STYLES[tone];
   return (
     <div
-      className={`rounded-xl border bg-slate-900/70 p-4 space-y-3 transition-colors ${
-        tone === "fault" ? "border-red-500/40" : tone === "online" ? "border-emerald-500/25" : "border-slate-700/60"
-      }`}
+      className={`rounded-xl border bg-card shadow-sm p-4 space-y-3 transition-colors ${style.tile}`}
       data-testid={`tile-integration-${status.key}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
           <StatusLed tone={tone} />
           <div className="min-w-0">
-            <p className="text-sm font-bold text-slate-100 truncate">{status.name}</p>
-            <p className="text-[11px] font-mono text-slate-500 truncate" dir="ltr">
+            <p className="text-sm font-bold text-foreground truncate">{status.name}</p>
+            <p className="text-[11px] font-mono text-muted-foreground truncate" dir="ltr">
               {status.nameEn}
             </p>
           </div>
@@ -133,9 +159,9 @@ function IntegrationTile({
       </div>
 
       <div className="flex items-center justify-between gap-2 min-h-[28px]">
-        <div className="text-[11px] font-mono text-slate-500" dir="ltr">
+        <div className="text-[11px] font-mono text-muted-foreground" dir="ltr">
           {status.ok === true && typeof status.latencyMs === "number" ? (
-            <span className="text-emerald-400">{status.latencyMs}ms</span>
+            <span className="text-emerald-600 dark:text-emerald-400">{status.latencyMs}ms</span>
           ) : !status.configured && status.missingVars.length > 0 ? (
             <span className="block truncate max-w-[180px]" title={status.missingVars.join(", ")}>
               ناقص: {status.missingVars.join("، ")}
@@ -148,7 +174,7 @@ function IntegrationTile({
           <Button
             size="sm"
             variant="outline"
-            className="h-7 px-3 text-xs bg-transparent border-slate-600 text-slate-200 hover:bg-slate-800 hover:text-white"
+            className="h-7 px-3 text-xs gap-1.5"
             disabled={testing}
             onClick={() => onTest(status.key)}
             data-testid={`button-test-${status.key}`}
@@ -274,17 +300,18 @@ export default function IntegrationsSettingsPage() {
 
   return (
     <DashboardLayout>
-      {/* غرفة قيادة داكنة عمداً بمعزل عن الثيم */}
-      <div dir="rtl" className="rounded-3xl bg-slate-950 text-slate-100 p-5 md:p-7 space-y-6 border border-slate-800 shadow-2xl">
+      <div dir="rtl" className="space-y-6 pb-10">
         {/* شريط القيادة العلوي */}
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-xl bg-indigo-500/15 border border-indigo-400/30 flex items-center justify-center">
-              <Radar className={`h-5 w-5 text-indigo-300 ${sweeping ? "animate-spin" : ""}`} />
+            <div className="h-11 w-11 rounded-xl bg-indigo-50 border border-indigo-200 dark:bg-indigo-500/15 dark:border-indigo-400/30 flex items-center justify-center">
+              <Radar className={`h-5 w-5 text-indigo-600 dark:text-indigo-300 ${sweeping ? "animate-spin" : ""}`} />
             </div>
             <div>
-              <h1 className="text-xl font-extrabold tracking-tight">غرفة قيادة التكاملات</h1>
-              <p className="text-xs text-slate-400 font-mono" dir="ltr">
+              <h1 className="text-xl font-extrabold tracking-tight text-foreground">
+                غرفة قيادة التكاملات
+              </h1>
+              <p className="text-xs text-muted-foreground font-mono" dir="ltr">
                 {lastChecked
                   ? `آخر مسح: ${lastChecked.toLocaleTimeString("ar-SA")}`
                   : "لم يُنفذ أي مسح بعد"}
@@ -303,12 +330,12 @@ export default function IntegrationsSettingsPage() {
             ).map(([tone, count]) => (
               <span
                 key={tone}
-                className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs"
+                className="flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs shadow-sm"
                 data-testid={`chip-summary-${tone}`}
               >
                 <StatusLed tone={tone} />
                 <span className={TONE_STYLES[tone].text}>{TONE_STYLES[tone].label}</span>
-                <span className="font-mono text-slate-300">{count}</span>
+                <span className="font-mono text-foreground">{count}</span>
               </span>
             ))}
             {canManage && (
@@ -329,7 +356,7 @@ export default function IntegrationsSettingsPage() {
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {Array.from({ length: 9 }).map((_, i) => (
-              <Skeleton key={i} className="h-28 rounded-xl bg-slate-800/60" />
+              <Skeleton key={i} className="h-28 rounded-xl" />
             ))}
           </div>
         ) : (
@@ -339,10 +366,10 @@ export default function IntegrationsSettingsPage() {
               const CategoryIcon = meta.icon;
               return (
                 <section key={category} className="space-y-3">
-                  <div className="flex items-center gap-2 text-slate-400">
+                  <div className="flex items-center gap-2 text-muted-foreground">
                     <CategoryIcon className="h-4 w-4" />
                     <h2 className="text-xs font-bold uppercase tracking-widest">{meta.label}</h2>
-                    <div className="flex-1 h-px bg-slate-800" />
+                    <div className="flex-1 h-px bg-border" />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                     {items.map((status) => (
@@ -361,7 +388,7 @@ export default function IntegrationsSettingsPage() {
           </div>
         )}
 
-        <p className="text-[11px] text-slate-500 border-t border-slate-800 pt-4">
+        <p className="text-[11px] text-muted-foreground border-t pt-4">
           المفاتيح تُدار حصراً عبر متغيرات البيئة على Railway ولا تُعرض هنا إطلاقاً. هذه اللوحة
           تعرض حالة التهيئة ونتائج فحوص اتصال قراءة-فقط (لا تُرسل رسائل أو بريداً تجريبياً).
           نتائج الفحص تُخزن مؤقتاً لمدة دقيقة.
