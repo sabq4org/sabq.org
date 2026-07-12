@@ -84,6 +84,11 @@ class MainActivity : ComponentActivity() {
             ?: intent.data?.getQueryParameter("id")
         val kind = intent.getStringExtra(SabqMessagingService.EXTRA_KIND)
             ?: intent.data?.getQueryParameter("kind")
-        pendingPush.set(articleSlug = slug, notificationId = notifId, kind = kind)
+        pendingPush.set(
+            articleSlug = slug,
+            notificationId = notifId,
+            kind = kind,
+            deepLinkPath = intent.data?.path,
+        )
     }
 }

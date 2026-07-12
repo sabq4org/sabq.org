@@ -108,6 +108,7 @@ fun HomeFeedScreen(
     onTrendingAllClick: () -> Unit = {},
     onWorldCupClick: () -> Unit = {},
     onGulfCupClick: () -> Unit = {},
+    onAsianCupClick: () -> Unit = {},
     onCalendarAllClick: () -> Unit = {},
     onGreetingClick: () -> Unit = {},
     onLoyaltyClick: () -> Unit = {},
@@ -156,6 +157,7 @@ fun HomeFeedScreen(
                 onTrendingAllClick = onTrendingAllClick,
                 onWorldCupClick = onWorldCupClick,
                 onGulfCupClick = onGulfCupClick,
+                onAsianCupClick = onAsianCupClick,
                 onCalendarAllClick = onCalendarAllClick,
                 onGreetingClick = onGreetingClick,
                 onLoyaltyClick = onLoyaltyClick,
@@ -197,6 +199,7 @@ private fun LoadedFeed(
     onTrendingAllClick: () -> Unit,
     onWorldCupClick: () -> Unit,
     onGulfCupClick: () -> Unit,
+    onAsianCupClick: () -> Unit,
     onCalendarAllClick: () -> Unit,
     onGreetingClick: () -> Unit,
     onLoyaltyClick: () -> Unit,
@@ -275,6 +278,10 @@ private fun LoadedFeed(
         // (خليجي 27 غير معروض في الرئيسية مطابقةً لتطبيق iOS.)
         item {
             com.sabq.smart.feature.worldcup.WorldCupHomeStrip(onClick = onWorldCupClick)
+        }
+
+        item {
+            com.sabq.smart.feature.asiancup.AsianCupHomeStrip(onClick = onAsianCupClick)
         }
 
         // Stories rail — circular bubbles. Each bubble opens the
