@@ -5,7 +5,7 @@ export const roleMapping: Record<string, UserRole> = {
   'superadmin': 'admin',
   'super_admin': 'admin',
   'admin': 'admin',
-  'content_manager': 'editor',
+  'content_manager': 'content_manager',
   'chief_editor': 'editor',
   'senior_editor': 'editor',
   'publisher': 'editor',

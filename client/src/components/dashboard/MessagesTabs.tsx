@@ -45,18 +45,18 @@ const TONE_STYLES: Record<TabCardProps["tone"], {
   badge: string;
 }> = {
   cyan: {
-    bg: "bg-cyan-50 hover:bg-cyan-100/80 border-cyan-300 dark:bg-card dark:hover:bg-accent/50 dark:border-border",
-    iconBg: "bg-cyan-600",
-    iconColor: "text-white",
-    dot: "bg-cyan-600",
-    badge: "bg-cyan-700 hover:bg-cyan-700 text-white",
+    bg: "bg-card hover:bg-muted/25 border-border/70 hover:border-border",
+    iconBg: "bg-sky-50 dark:bg-sky-950/35",
+    iconColor: "text-sky-700 dark:text-sky-400",
+    dot: "bg-sky-500",
+    badge: "bg-sky-50 hover:bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/35 dark:text-sky-300 dark:border-sky-900",
   },
   amber: {
-    bg: "bg-amber-50 hover:bg-amber-100/80 border-amber-300 dark:bg-card dark:hover:bg-accent/50 dark:border-border",
-    iconBg: "bg-amber-600",
-    iconColor: "text-white",
-    dot: "bg-amber-600",
-    badge: "bg-amber-700 hover:bg-amber-700 text-white",
+    bg: "bg-card hover:bg-muted/25 border-border/70 hover:border-border",
+    iconBg: "bg-amber-50 dark:bg-amber-950/35",
+    iconColor: "text-amber-700 dark:text-amber-400",
+    dot: "bg-amber-500",
+    badge: "bg-amber-50 hover:bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/35 dark:text-amber-300 dark:border-amber-900",
   },
 };
 
@@ -68,7 +68,7 @@ function TabCard({ title, subtitle, href, count, isLoading, icon: Icon, tone, te
     <Link href={href}>
       <a
         className={cn(
-          "block group rounded-2xl border transition-colors relative",
+          "block group rounded-2xl border transition-colors relative shadow-none",
           t.bg
         )}
         data-testid={testId}
@@ -121,7 +121,9 @@ export function MessagesTabs({
   showVisitorMessages = true,
   showWriterTickets = true,
 }: MessagesTabsProps) {
-  // Visitor messages — pending count from the recent batch
+  // Visitor messages — use the filtered endpoint total, not the first page
+  // length. The old implementation capped the dashboard badge at 20 and
+  // disagreed with the full inbox count.
   const visitorQuery = useQuery<ContactMessagesResponse>({
     queryKey: ["/api/admin/contact-messages", "tabs-pending"],
     queryFn: async () => {
@@ -142,7 +144,7 @@ export function MessagesTabs({
     refetchInterval: 60_000,
   });
 
-  const visitorCount = visitorQuery.data?.messages?.filter((m) => m.status === "pending").length ?? 0;
+  const visitorCount = visitorQuery.data?.total ?? visitorQuery.data?.messages?.filter((m) => m.status === "pending").length ?? 0;
   const writerCount = writerQuery.data?.unreadCount ?? 0;
 
   if (!showVisitorMessages && !showWriterTickets) return null;
