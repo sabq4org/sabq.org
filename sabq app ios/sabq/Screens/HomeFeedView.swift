@@ -170,6 +170,9 @@ struct HomeFeedView: View {
                     WorldCupHomeStrip()
                         .animatedAppear(index: 3)
 
+                    AsianCupHomeStrip()
+                        .animatedAppear(index: 3)
+
                     KingsCupHomeStrip()
                         .animatedAppear(index: 3)
 

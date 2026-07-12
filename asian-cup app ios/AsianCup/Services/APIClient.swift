@@ -91,6 +91,21 @@ actor APIClient {
         return try await decode(type, from: session, request: request)
     }
 
+    func put<T: Decodable, B: Encodable>(
+        _ type: T.Type,
+        path: String,
+        body: B,
+        apiRoot: String? = nil
+    ) async throws -> T {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(body)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return try await decode(type, from: session, request: request)
+    }
+
     func delete<T: Decodable, B: Encodable>(
         _ type: T.Type,
         path: String,

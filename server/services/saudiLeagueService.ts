@@ -22,6 +22,7 @@ import {
 } from "./worldCupNames";
 import { resolveNames } from "./worldCupNameTranslator";
 import { getFixtures as getWorldCupMergedFixtures } from "./worldCupService";
+import { getAcFixtures as getAsianCupMergedFixtures, type AcFixture } from "./asianCupService";
 import { getGcFixtures as getGulfCupMergedFixtures, type GcFixture } from "./gulfCupService";
 import { isSyntheticFixtureId } from "./wc2026Bracket";
 import { getPlayerForm as smGetPlayerForm, isSportmonksConfigured } from "./sportmonksService";
@@ -117,6 +118,7 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   // كأس العالم للمنتخبات (id 1) — موسم 2026 (نسخة 48 منتخبًا) بمجموعات متعدّدة،
   // فيُترك hasStandings=false كبقية بطولات المجموعات. المباريات والهدّافون يعملان.
   { id: 1, slug: "world-cup", name: "كأس العالم", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "world" },
+  { id: 7, slug: "asian-cup", name: "كأس آسيا", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2027, category: "world" },
   { id: 17, slug: "afc-champions-league", name: "دوري أبطال آسيا للنخبة", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
   { id: 15, slug: "club-world-cup", name: "كأس العالم للأندية", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "world" },
   // الدوريات الأوروبية الكبرى الخمسة — تغطية كاملة (ترتيب/هدّافون/تشكيلات/أحداث).
@@ -176,6 +178,7 @@ const COMP_NAME_EN: Record<string, string> = {
   "super-cup": "Saudi Super Cup",
   "womens-league": "Saudi Women's Premier League",
   "world-cup": "World Cup",
+  "asian-cup": "Asian Cup",
   "afc-champions-league": "AFC Champions League Elite",
   "club-world-cup": "FIFA Club World Cup",
   "premier-league": "Premier League",
@@ -505,6 +508,21 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
     } catch {
       // تعثّر خليجي لا يُسقط اللوحة الحية.
     }
+    // كأس آسيا: نفس منطق الدمج عبر asianCupService.
+    try {
+      const acLive = (await getAsianCupMergedFixtures()).filter(
+        (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
+      );
+      if (acLive.length) {
+        const acComp = byId.get(7);
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "asian-cup"),
+          ...acLive.map((fx) => acFixtureToBoardItem(fx, acComp ? compDisplayName(acComp) : "كأس آسيا")),
+        ];
+      }
+    } catch {
+      // تعثّر كأس آسيا لا يُسقط اللوحة الحية.
+    }
     return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => a.timestamp - b.timestamp);
   });
 }
@@ -523,6 +541,23 @@ function gcFixtureToBoardItem(fx: GcFixture, competition: string): SplLiveBoardI
     goals: fx.goals,
     competition,
     competitionSlug: "gulf-cup",
+  };
+}
+
+/** تحويل مباراة كأس آسيا إلى عنصر لوحة موحّد. */
+function acFixtureToBoardItem(fx: AcFixture, competition: string): SplLiveBoardItem {
+  return {
+    id: fx.id,
+    date: fx.date,
+    timestamp: fx.timestamp,
+    status: { ...fx.status, extra: null },
+    round: fx.round,
+    venue: fx.venue,
+    home: { ...fx.home, winner: null },
+    away: { ...fx.away, winner: null },
+    goals: fx.goals,
+    competition,
+    competitionSlug: "asian-cup",
   };
 }
 
@@ -587,6 +622,22 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
       }
     } catch {
       // تعثّر خليجي لا يُسقط لوحة اليوم.
+    }
+    // كأس آسيا: استبدال صفوف المزوّد بجدول asianCupService لليوم نفسه.
+    try {
+      const acDay = (await getAsianCupMergedFixtures()).filter(
+        (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
+      );
+      if (acDay.length) {
+        const acComp = byId.get(7);
+        const acName = acComp ? compDisplayName(acComp) : (isEnglishSports() ? "AFC Asian Cup" : "كأس آسيا");
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "asian-cup"),
+          ...acDay.map((fx) => acFixtureToBoardItem(fx, acName)),
+        ];
+      }
+    } catch {
+      // تعثّر كأس آسيا لا يُسقط لوحة اليوم.
     }
     return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => {
       if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;

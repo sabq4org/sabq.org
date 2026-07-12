@@ -12,9 +12,8 @@ struct ContentView: View {
     @State private var revisionsStore = ArticleRevisionsStore()
     @State private var selectedTab: AppTab = .home
     @State private var navigationPath = NavigationPath()
-    /// Match center presented from a sports-alert deep link (sabq://match/:id).
-    /// WorldCupMatchCenter owns its own NavigationStack + dismiss, so it fits a
-    /// sheet (the same way the World Cup hub opens it).
+    /// Match center presented from a sports-alert deep link (sabq://match/:id
+    /// أو sabq://asian-cup/match/:id).
     @State private var deepLinkMatch: DeepLinkMatch?
     /// Singleton owns the latest deep link captured from a notification tap
     /// (cold start, foreground, or background restore). We watch it via the
@@ -93,6 +92,9 @@ struct ContentView: View {
                 }
                 .navigationDestination(for: WorldCupRoute.self) { _ in
                     WorldCupView()
+                }
+                .navigationDestination(for: AsianCupRoute.self) { _ in
+                    AsianCupView()
                 }
                 .navigationDestination(for: KingsCupRoute.self) { _ in
                     KingsCupView()
@@ -207,7 +209,11 @@ struct ContentView: View {
                 }
             }
             .sheet(item: $deepLinkMatch) { sel in
-                WorldCupMatchCenter(fixtureId: sel.id)
+                if sel.competition == "asian-cup" {
+                    AsianCupMatchCenter(fixtureId: sel.id)
+                } else {
+                    WorldCupMatchCenter(fixtureId: sel.id)
+                }
             }
             .onChange(of: scenePhase) { _, newPhase in
                 // When the app returns to the foreground (after being in
@@ -339,14 +345,21 @@ struct ContentView: View {
             navigationPath.append(EditorialNotificationsRoute())
         case .match(let id):
             SabqAnalytics.notificationOpen(type: "match", articleId: String(id))
-            deepLinkMatch = DeepLinkMatch(id: id)
+            deepLinkMatch = DeepLinkMatch(id: id, competition: nil)
+        case .asianCupMatch(let id):
+            SabqAnalytics.notificationOpen(type: "asian-cup-match", articleId: String(id))
+            deepLinkMatch = DeepLinkMatch(id: id, competition: "asian-cup")
         }
     }
 }
 
 /// Identifiable wrapper so a match fixture id can drive a `.sheet(item:)`
 /// presentation of the match center from a sports-alert deep link.
-struct DeepLinkMatch: Identifiable { let id: Int }
+struct DeepLinkMatch: Identifiable {
+    let id: Int
+    /// `"asian-cup"` يفتح مركز كأس آسيا؛ غير ذلك مركز المونديال (الافتراضي).
+    let competition: String?
+}
 
 // MARK: - Notification-driven routes
 

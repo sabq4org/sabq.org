@@ -572,7 +572,7 @@ function buildScorersLine(events: SplMatchEvent[]): string | null {
   return `سجّل: ${entries.join(" • ")}${suffix}`;
 }
 
-/** يُثري إشعارات «انتهت المباراة» لمباريات المونديال بالإحصاءات والهدّافين — أفضل جهد. */
+/** يُثري إشعارات «انتهت المباراة» لمباريات المونديال وكأس آسيا بالإحصاءات والهدّافين — أفضل جهد. */
 async function enrichWorldCupFulltimeAlerts(
   alerts: DetectedAlert[],
   matches: SplLiveBoardItem[],
@@ -581,12 +581,11 @@ async function enrichWorldCupFulltimeAlerts(
   for (const alert of alerts) {
     if (alert.kind !== "fulltime") continue;
     const m = byId.get(alert.fixtureId);
-    if (!m || m.competitionSlug !== "world-cup") continue;
+    if (!m || (m.competitionSlug !== "world-cup" && m.competitionSlug !== "asian-cup")) continue;
 
     const lines = [alert.body];
     const statsLine = buildDigestStatsLine(lastStats.get(alert.fixtureId) ?? null);
     if (statsLine) lines.push(statsLine);
-    // أحداث AF مكاشة (12ث) وأسماؤها معرّبة؛ المعرّفات الاصطناعية تعود فارغة فتُسقط السطر.
     const events = await getMatchEventsOnly(alert.fixtureId).catch(() => [] as SplMatchEvent[]);
     const scorersLine = buildScorersLine(events);
     if (scorersLine) lines.push(scorersLine);

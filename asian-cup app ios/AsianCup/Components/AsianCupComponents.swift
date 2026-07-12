@@ -340,9 +340,43 @@ struct AcMatchDetailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var detail: AcMatchDetail?
     @State private var loading = true
+    @State private var commentary: AcCommentary?
+    @State private var momentum: AcMomentum?
+    @State private var pressure: AcPressure?
+
+    enum Tab: String, CaseIterable {
+        case commentary, events, momentum, pressure, lineups, stats, ratings, prediction
+        var title: String {
+            switch self {
+            case .commentary: return "التعليق"
+            case .events: return "الأحداث"
+            case .momentum: return "الزخم"
+            case .pressure: return "الضغط"
+            case .lineups: return "التشكيلات"
+            case .stats: return "الإحصائيات"
+            case .ratings: return "التقييمات"
+            case .prediction: return "التوقعات"
+            }
+        }
+    }
+    @State private var tab: Tab = .events
 
     private var displayFixture: AcFixture { detail?.fixture ?? fixture }
     private var started: Bool { displayFixture.status.live || displayFixture.status.finished }
+
+    private var tabs: [Tab] {
+        var t: [Tab] = []
+        if started { t.append(.commentary) }
+        t.append(.events)
+        if started {
+            if momentum?.available == true { t.append(.momentum) }
+            if pressure?.available == true { t.append(.pressure) }
+        }
+        t.append(contentsOf: [.lineups, .stats])
+        if let d = detail, !d.ratings.isEmpty { t.append(.ratings) }
+        if detail?.prediction != nil { t.append(.prediction) }
+        return t
+    }
 
     private func team(_ id: Int) -> AcTeam? {
         if id == displayFixture.home.id { return displayFixture.home }
@@ -355,34 +389,11 @@ struct AcMatchDetailSheet: View {
             VStack(spacing: 16) {
                 scoreboardHero
 
-                if let d = detail {
-                    if let p = d.prediction, !displayFixture.status.finished {
-                        AcPredictionBarsCard(prediction: p, home: displayFixture.home, away: displayFixture.away)
-                    }
-                    if let tv = d.tv, !tv.isEmpty {
-                        AcTvCard(channels: tv)
-                    }
-                    if let mom = d.manOfTheMatch {
-                        AcManOfMatchCard(player: mom, team: team(mom.teamId))
-                    }
-                    if !d.events.isEmpty {
-                        AcEventsTimelineCard(events: d.events, homeId: displayFixture.home.id,
-                                             home: displayFixture.home, away: displayFixture.away)
-                    }
-                    if !d.statistics.isEmpty {
-                        AcStatisticsCard(stats: d.statistics, home: displayFixture.home, away: displayFixture.away)
-                    }
-                    if !d.ratings.isEmpty {
-                        AcRatingsCard(ratings: d.ratings, teamFor: team)
-                    }
-                    if !d.lineups.isEmpty {
-                        AcLineupsCard(lineups: d.lineups, teamFor: team)
-                    }
-                    if !d.headToHead.isEmpty {
-                        AcHeadToHeadCard(fixtures: d.headToHead)
-                    }
-                } else if loading {
+                if loading && detail == nil {
                     AcInlineLoading(title: L("match.loading"))
+                } else {
+                    tabBar
+                    tabContent
                 }
 
                 infoCard
@@ -394,12 +405,202 @@ struct AcMatchDetailSheet: View {
         .navigationBarTitleDisplayMode(.inline)
         .asianCupRTL()
         .task { await load() }
+        .task(id: detail?.fixture.id) {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                if Task.isCancelled { return }
+                if displayFixture.status.live { await load(force: true) }
+            }
+        }
     }
 
-    private func load() async {
-        loading = true
-        detail = try? await APIClient.shared.fetchAcMatchDetail(fixture.id)
+    private var tabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(tabs, id: \.self) { t in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.2)) { tab = t }
+                    } label: {
+                        Text(t.title)
+                            .font(AsianCupFonts.app(size: 13, weight: .bold))
+                            .foregroundStyle(tab == t ? .white : AcTheme.onDarkDim)
+                            .padding(.horizontal, 12).padding(.vertical, 7)
+                            .background(Capsule().fill(tab == t ? AcTheme.emerald : AcTheme.chipFill))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .onChange(of: tabs) { _, newTabs in
+            if !newTabs.contains(tab), let first = newTabs.first { tab = first }
+        }
+    }
+
+    @ViewBuilder
+    private var tabContent: some View {
+        switch tab {
+        case .commentary:
+            commentaryBlock
+        case .events:
+            if let d = detail, !d.events.isEmpty {
+                AcEventsTimelineCard(events: d.events, homeId: displayFixture.home.id,
+                                     home: displayFixture.home, away: displayFixture.away)
+            } else {
+                emptyTab("لا أحداث بعد")
+            }
+        case .momentum:
+            if let m = momentum, m.available, !m.points.isEmpty {
+                momentumCard(m)
+            } else {
+                emptyTab("الزخم غير متاح")
+            }
+        case .pressure:
+            if let p = pressure, p.available, !p.points.isEmpty {
+                pressureCard(p)
+            } else {
+                emptyTab("الضغط غير متاح")
+            }
+        case .lineups:
+            if let d = detail, !d.lineups.isEmpty {
+                AcLineupsCard(lineups: d.lineups, teamFor: team)
+            } else {
+                emptyTab("التشكيلة لم تُعلن بعد")
+            }
+        case .stats:
+            VStack(spacing: 12) {
+                if let d = detail, !d.statistics.isEmpty {
+                    AcStatisticsCard(stats: d.statistics, home: displayFixture.home, away: displayFixture.away)
+                } else {
+                    emptyTab("لا إحصائيات بعد")
+                }
+                if let tv = detail?.tv, !tv.isEmpty {
+                    AcTvCard(channels: tv)
+                }
+            }
+        case .ratings:
+            if let d = detail {
+                VStack(spacing: 12) {
+                    if let mom = d.manOfTheMatch {
+                        AcManOfMatchCard(player: mom, team: team(mom.teamId))
+                    }
+                    if !d.ratings.isEmpty {
+                        AcRatingsCard(ratings: d.ratings, teamFor: team)
+                    }
+                }
+            }
+        case .prediction:
+            if let d = detail, let p = d.prediction {
+                AcPredictionBarsCard(prediction: p, home: displayFixture.home, away: displayFixture.away)
+                if !d.headToHead.isEmpty {
+                    AcHeadToHeadCard(fixtures: d.headToHead)
+                }
+            } else {
+                emptyTab("التوقع غير متاح")
+            }
+        }
+    }
+
+    private func emptyTab(_ text: String) -> some View {
+        Text(text)
+            .font(AsianCupFonts.app(size: 13))
+            .foregroundStyle(AcTheme.onDarkDim)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 28)
+    }
+
+    private var commentaryBlock: some View {
+        Group {
+            if let items = commentary?.items, !items.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(items) { item in
+                        HStack(alignment: .top, spacing: 8) {
+                            Text("\(item.minute)'")
+                                .font(AsianCupFonts.app(size: 11, weight: .bold))
+                                .foregroundStyle(AcTheme.emerald)
+                                .monospacedDigit()
+                                .frame(width: 28, alignment: .leading)
+                            Text(item.textAr.isEmpty ? item.textEn : item.textAr)
+                                .font(AsianCupFonts.app(size: 13))
+                                .foregroundStyle(AcTheme.onDark)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous)
+                        .fill(AcTheme.cardFill)
+                )
+            } else {
+                emptyTab("التعليق غير متاح لهذه المباراة")
+            }
+        }
+        .task {
+            if commentary == nil {
+                commentary = try? await APIClient.shared.fetchAcCommentary(fixture.id)
+            }
+        }
+    }
+
+    private func momentumCard(_ m: AcMomentum) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("الزخم")
+                .font(AsianCupFonts.app(size: 14, weight: .bold))
+                .foregroundStyle(AcTheme.onDark)
+            if let p = m.possession {
+                HStack {
+                    Text("\(p.home)%").font(AsianCupFonts.app(size: 12, weight: .bold))
+                    Spacer()
+                    Text("الاستحواذ").font(AsianCupFonts.app(size: 11)).foregroundStyle(AcTheme.onDarkDim)
+                    Spacer()
+                    Text("\(p.away)%").font(AsianCupFonts.app(size: 12, weight: .bold))
+                }
+            }
+            Text("\(m.points.count) نقطة زخم")
+                .font(AsianCupFonts.app(size: 11))
+                .foregroundStyle(AcTheme.onDarkDim)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius).fill(AcTheme.cardFill))
+    }
+
+    private func pressureCard(_ p: AcPressure) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("مؤشّر الضغط")
+                .font(AsianCupFonts.app(size: 14, weight: .bold))
+                .foregroundStyle(AcTheme.onDark)
+            if let latest = p.latest {
+                Text("\(Int(latest.value))")
+                    .font(AsianCupFonts.app(size: 28, weight: .bold))
+                    .foregroundStyle(AcTheme.emerald)
+                    .monospacedDigit()
+            }
+            Text("\(p.points.count) نقطة")
+                .font(AsianCupFonts.app(size: 11))
+                .foregroundStyle(AcTheme.onDarkDim)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius).fill(AcTheme.cardFill))
+    }
+
+    private func load(force: Bool = false) async {
+        if !force { loading = true }
+        detail = try? await APIClient.shared.fetchAcMatchDetail(fixture.id, ignoreCache: force)
         if let updated = detail?.fixture { AcLiveActivityStore.shared.update(updated) }
+        if started {
+            async let c = try? APIClient.shared.fetchAcCommentary(fixture.id, ignoreCache: force)
+            async let m = try? APIClient.shared.fetchAcMomentum(fixture.id, ignoreCache: force)
+            async let p = try? APIClient.shared.fetchAcPressure(fixture.id, ignoreCache: force)
+            let (cR, mR, pR) = await (c, m, p)
+            commentary = cR
+            momentum = mR
+            pressure = pR
+            if started && commentary?.available == true {
+                tab = .commentary
+            }
+        }
         loading = false
     }
 

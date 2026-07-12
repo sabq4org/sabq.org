@@ -22,6 +22,7 @@ enum NotificationDeepLink: Hashable {
     case draft(id: String)
     case feedback(id: String)
     case match(id: Int)
+    case asianCupMatch(id: Int)
 }
 
 /// Coordinator owned by `sabqApp` — exposes the latest APNs device token
@@ -127,7 +128,8 @@ final class NotificationsStore {
         // sabq://opinion/<slug>   — opinion article detail
         // sabq://draft/<id>       — editorial notifications (draft surface)
         // sabq://feedback/<id>    — editorial notifications (feedback surface)
-        // sabq://match/<id>       — match center (sports alerts: goal/kickoff/…)
+        // sabq://match/<id>              — match center (WC / sports alerts)
+        // sabq://asian-cup/match/<id>    — Asian Cup match center
         guard url.scheme == "sabq" else { return nil }
         let host = url.host ?? ""
         let path = url.pathComponents.filter { $0 != "/" }
@@ -139,6 +141,12 @@ final class NotificationsStore {
         case "feedback" where !value.isEmpty: return .feedback(id: value)
         case "match":
             if let id = Int(value) { return .match(id: id) }
+            return nil
+        case "asian-cup":
+            // sabq://asian-cup/match/<id>
+            if path.count >= 2, path[0] == "match", let id = Int(path[1]) {
+                return .asianCupMatch(id: id)
+            }
             return nil
         default: return nil
         }

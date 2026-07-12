@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Award, Goal, Handshake, Trophy } from "lucide-react";
+import { Award, Goal, Handshake, Square, Timer, Trophy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatKickoffDay, formatKickoffTime, type AcFixture, type AcTeam } from "./acTypes";
@@ -25,6 +25,22 @@ interface AcScorer {
   team: AcTeam;
   goals: number;
   assists: number;
+  minutes: number;
+  matches: number;
+}
+
+// لوحة قادة موحّدة (صنّاع الأهداف / البطاقات) — نظير WcLeader على الويب.
+interface AcLeader {
+  rank: number;
+  id: number;
+  name: string;
+  nameEn: string;
+  photo: string;
+  team: AcTeam;
+  goals: number;
+  assists: number;
+  yellow: number;
+  red: number;
   minutes: number;
   matches: number;
 }
@@ -217,26 +233,84 @@ function RaceList({ leaders, mode }: { leaders: AcScorer[]; mode: RaceMode }) {
   );
 }
 
+// صف قائد موحّد (صنّاع الأهداف / البطاقات) — يفتح صفحة اللاعب عند توفّر معرّفه.
+function LeaderRow({ leader, end }: { leader: AcLeader; end: React.ReactNode }) {
+  const clickable = leader.id > 0;
+  const inner = (
+    <>
+      <span className="w-5 text-center text-sm tabular-nums text-muted-foreground">{leader.rank}</span>
+      <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">{leader.photo && <img src={leader.photo} alt="" className="h-full w-full object-cover" loading="lazy" />}</div>
+      <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{leader.name}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><img src={leader.team.logo} alt="" className="h-3.5 w-3.5 object-contain" />{leader.team.name}</p></div>
+      <div className="flex items-center gap-4 shrink-0 text-xs text-muted-foreground">
+        {leader.minutes > 0 && <span className="hidden items-center gap-1 sm:flex"><Timer className="h-3 w-3" />{leader.minutes} د</span>}
+        {end}
+      </div>
+    </>
+  );
+  return clickable ? (
+    <Link href={`/asian-cup/player/${leader.id}`} className="flex items-center gap-3 rounded-xl bg-card px-3.5 py-2.5 hover-elevate">{inner}</Link>
+  ) : (
+    <div className="flex items-center gap-3 rounded-xl bg-card px-3.5 py-2.5">{inner}</div>
+  );
+}
+
+// قائمة قادة من نقطة مخصّصة (assists / cards) — تُخفى مع بطولة لم تبدأ برسالة مناسبة.
+function LeadersList({ endpoint, emptyMessage, render }: { endpoint: string; emptyMessage: string; render: (leader: AcLeader) => React.ReactNode }) {
+  const { data, isLoading } = useQuery<{ leaders: AcLeader[] }>({ queryKey: [endpoint], staleTime: 10 * 60_000 });
+  const leaders = Array.isArray(data?.leaders) ? data.leaders : [];
+  if (isLoading) return <div className="mx-auto max-w-2xl space-y-1.5">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>;
+  if (leaders.length === 0) return <div className="rounded-2xl border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">{emptyMessage}</div>;
+  return <div className="mx-auto max-w-2xl space-y-1.5">{leaders.map((leader) => <LeaderRow key={`${leader.rank}-${leader.name}`} leader={leader} end={render(leader)} />)}</div>;
+}
+
 export function AcTournamentRaces({ tournamentStarted }: { tournamentStarted: boolean }) {
   const { data, isLoading } = useQuery<{ scorers: AcScorer[] }>({ queryKey: ["/api/asian-cup/scorers"], staleTime: 10 * 60_000 });
   const scorers = Array.isArray(data?.scorers) ? data.scorers : [];
   const goals = useMemo(() => sortedLeaders(scorers, "goals"), [scorers]);
-  const assists = useMemo(() => sortedLeaders(scorers.filter((player) => player.assists > 0), "assists"), [scorers]);
 
-  const content = (mode: RaceMode, leaders: AcScorer[]) => {
+  const goalsContent = () => {
     if (isLoading) return <div className="mx-auto grid max-w-xl grid-cols-3 gap-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-44 rounded-xl" />)}</div>;
-    if (leaders.length === 0) return <div className="rounded-2xl border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">{tournamentStarted ? "يظهر الترتيب فور اعتماد المزود لإحصاءات المباريات." : mode === "goals" ? "سباق الهدافين ينطلق مع أول صافرة." : "سباق صنّاع الأهداف ينطلق مع أول صناعة."}</div>;
-    return <>{leaders.length >= 3 && <Podium leaders={leaders.slice(0, 3)} mode={mode} />}<RaceList leaders={leaders.length >= 3 ? leaders.slice(3) : leaders} mode={mode} /></>;
+    if (goals.length === 0) return <div className="rounded-2xl border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">{tournamentStarted ? "يظهر الترتيب فور اعتماد المزود لإحصاءات المباريات." : "سباق الهدافين ينطلق مع أول صافرة."}</div>;
+    return <>{goals.length >= 3 && <Podium leaders={goals.slice(0, 3)} mode="goals" />}<RaceList leaders={goals.length >= 3 ? goals.slice(3) : goals} mode="goals" /></>;
   };
+
+  const pending = "انطلقت البطولة — الترتيب يظهر فور اعتماد المزود لإحصاءات المباريات";
 
   return (
     <section id="ac-races" className="scroll-mt-20 py-10" dir="rtl">
       <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-6 flex items-center gap-3"><div className="rounded-lg bg-amber-500/10 p-2"><Award className="h-6 w-6 text-amber-500" /></div><div><h2 className="text-2xl font-bold">سباقات البطولة</h2><p className="text-sm text-muted-foreground">الهدافون وصنّاع الأهداف في مركز واحد</p></div></div>
+        <div className="mb-6 flex items-center gap-3"><div className="rounded-lg bg-amber-500/10 p-2"><Award className="h-6 w-6 text-amber-500" /></div><div><h2 className="text-2xl font-bold">سباقات البطولة</h2><p className="text-sm text-muted-foreground">الهدافون، صنّاع الأهداف، والبطاقات في مركز واحد</p></div></div>
         <Tabs defaultValue="goals" dir="rtl">
-          <TabsList className="mb-5"><TabsTrigger value="goals" className="gap-1.5"><Goal className="h-4 w-4" />الهدافون</TabsTrigger><TabsTrigger value="assists" className="gap-1.5"><Handshake className="h-4 w-4" />صنّاع الأهداف</TabsTrigger></TabsList>
-          <TabsContent value="goals">{content("goals", goals)}</TabsContent>
-          <TabsContent value="assists">{content("assists", assists)}</TabsContent>
+          <TabsList className="mb-5">
+            <TabsTrigger value="goals" className="gap-1.5"><Goal className="h-4 w-4" />الهدافون</TabsTrigger>
+            <TabsTrigger value="assists" className="gap-1.5"><Handshake className="h-4 w-4" />صنّاع الأهداف</TabsTrigger>
+            <TabsTrigger value="cards" className="gap-1.5"><Square className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />البطاقات</TabsTrigger>
+          </TabsList>
+          <TabsContent value="goals">{goalsContent()}</TabsContent>
+          <TabsContent value="assists">
+            <LeadersList
+              endpoint="/api/asian-cup/assists"
+              emptyMessage={tournamentStarted ? pending : "سباق صنّاع الأهداف ينطلق مع أول صناعة"}
+              render={(leader) => (
+                <>
+                  <span className="hidden sm:inline">{leader.goals} أهداف</span>
+                  <span className="text-lg font-black tabular-nums text-foreground">{leader.assists}</span>
+                </>
+              )}
+            />
+          </TabsContent>
+          <TabsContent value="cards">
+            <LeadersList
+              endpoint="/api/asian-cup/cards"
+              emptyMessage={tournamentStarted ? "البطاقات تُعتمد بعد المباريات بقليل — وعسى ألا تكثر" : "لا بطاقات بعد — وعسى ألا تكثر"}
+              render={(leader) => (
+                <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 font-black tabular-nums"><Square className="h-3 w-3 fill-yellow-400 text-yellow-400" />{leader.yellow}</span>
+                  <span className="flex items-center gap-1 font-black tabular-nums"><Square className="h-3 w-3 fill-red-500 text-red-500" />{leader.red}</span>
+                </span>
+              )}
+            />
+          </TabsContent>
         </Tabs>
       </div>
     </section>
