@@ -55,6 +55,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import type { Category } from "@shared/schema";
 import { insertCategorySchema } from "@shared/schema";
 import {
@@ -113,7 +114,7 @@ function SortableCategoryItem({
     <div
       ref={setNodeRef}
       style={style}
-      className="flex items-center justify-between p-4 border rounded-lg bg-card transition-all"
+      className="flex flex-col justify-between gap-3 border-b border-border/60 bg-card px-4 py-3 transition-colors last:border-b-0 hover:bg-muted/30 sm:flex-row sm:items-center"
       data-testid={`category-row-${category.id}`}
     >
       <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -149,7 +150,8 @@ function SortableCategoryItem({
               {category.slug}
             </Badge>
             <Badge
-              variant={category.status === "visible" || category.status === "active" ? "default" : "secondary"}
+              variant="outline"
+              className={category.status === "visible" || category.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300" : "bg-muted text-muted-foreground"}
               data-testid={`status-${category.id}`}
             >
               {category.status === "visible" ? "ظاهر للزوار" : category.status === "active" ? "نشط (غير ظاهر في /categories)" : "معطل"}
@@ -162,7 +164,7 @@ function SortableCategoryItem({
           </div>
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 self-end sm:self-auto">
         <Button
           variant="ghost"
           size="icon"
@@ -444,42 +446,53 @@ export default function CategoriesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex-1">
-                <CardTitle className="flex items-center gap-2">
-                  <FolderOpen className="h-5 w-5" />
-                  التصنيفات ({filteredCategories.length})
-                </CardTitle>
-              </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="relative">
-                  <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="بحث..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pr-10 w-64"
-                    data-testid="input-search-categories"
-                  />
-                </div>
-                <Button
-                  onClick={() => {
-                    setIsCreateDialogOpen(true);
-                    form.reset();
-                  }}
-                  className="gap-2"
-                  data-testid="button-add-category"
-                >
-                  <PlusCircle className="h-4 w-4" />
-                  تصنيف جديد
-                </Button>
-              </div>
+      <div className="mx-auto max-w-[1600px] space-y-5 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={FolderOpen}
+          title="إدارة التصنيفات"
+          description="تنظيم أقسام الصحيفة وترتيب ظهورها للزوار"
+          titleTestId="heading-categories"
+          actions={(
+            <Button
+            onClick={() => {
+              setIsCreateDialogOpen(true);
+              form.reset();
+            }}
+            className="w-full gap-2 sm:w-auto"
+            data-testid="button-add-category"
+          >
+            <PlusCircle className="h-4 w-4" />
+            تصنيف جديد
+            </Button>
+          )}
+        />
+
+        <Card className="border-border/70 shadow-none">
+          <CardContent className="p-3 sm:p-4">
+            <div className="relative w-full sm:max-w-sm">
+              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="ابحث باسم التصنيف أو المعرّف..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pr-10"
+                data-testid="input-search-categories"
+              />
             </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/70 shadow-none">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 border-b border-border/60 pb-4">
+            <div>
+              <CardTitle className="text-base">ترتيب التصنيفات</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">اسحب أي تصنيف لتغيير ترتيبه في الصحيفة.</p>
+            </div>
+            <Badge variant="secondary" className="font-normal">
+              {filteredCategories.length.toLocaleString("en-US")} تصنيف
+            </Badge>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {isLoading ? (
               <div className="text-center py-12 text-muted-foreground">
                 جاري التحميل...
@@ -494,7 +507,7 @@ export default function CategoriesManagement() {
                   items={filteredCategories.map((cat) => cat.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  <div className="space-y-2">
+                  <div>
                     {filteredCategories.map((category) => (
                       <SortableCategoryItem
                         key={category.id}
@@ -523,7 +536,7 @@ export default function CategoriesManagement() {
           form.reset();
         }
       }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
             <DialogTitle>
               {editingCategory ? "تعديل التصنيف" : "تصنيف جديد"}
@@ -535,7 +548,7 @@ export default function CategoriesManagement() {
 
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="nameAr"
@@ -593,7 +606,7 @@ export default function CategoriesManagement() {
                 )}
               />
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
                   name="icon"

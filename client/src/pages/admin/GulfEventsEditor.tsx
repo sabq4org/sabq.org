@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -250,16 +251,14 @@ export default function GulfEventsEditor() {
 
   return (
     <DashboardLayout>
-    <div className="max-w-6xl mx-auto p-4 md:p-6 space-y-6" dir="rtl">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Shield className="w-8 h-8 text-red-600" />
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-editor-title">لوحة تحكم البث الحي</h1>
-            <p className="text-sm text-muted-foreground">الاعتداءات على دول الخليج</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+      <DashboardPageHeader
+        icon={Shield}
+        title="لوحة تحكم البث الحي"
+        description="إدارة وتحديث البث الحي للأحداث في دول الخليج."
+        titleTestId="text-editor-title"
+        actions={
+          <>
           {stats && (
             <Badge variant="secondary" className="text-sm">
               إجمالي: {stats.totalAttacks || 0} | صد: {stats.intercepted || 0}
@@ -269,8 +268,9 @@ export default function GulfEventsEditor() {
             <Plus className="w-4 h-4 ml-1" />
             حدث جديد
           </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {showForm && (
         <Card>

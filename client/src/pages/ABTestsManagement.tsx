@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -236,19 +237,13 @@ export default function ABTestsManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <FlaskConical className="h-8 w-8 text-primary" data-testid="icon-header" />
-            <div>
-              <h1 className="text-3xl font-bold" data-testid="text-page-title">اختبارات A/B</h1>
-              <p className="text-muted-foreground" data-testid="text-page-description">
-                إدارة ومراقبة اختبارات A/B لتحسين الأداء
-              </p>
-            </div>
-          </div>
-
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={FlaskConical}
+          title="اختبارات A/B"
+          description={<span data-testid="text-page-description">إدارة ومراقبة اختبارات A/B لتحسين الأداء</span>}
+          titleTestId="text-page-title"
+          actions={<Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-create-experiment">
                 <Plus className="ml-2 h-4 w-4" />
@@ -293,7 +288,7 @@ export default function ABTestsManagement() {
                     )}
                   />
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="testType"
@@ -420,7 +415,7 @@ export default function ABTestsManagement() {
                             )}
                           />
 
-                          <div className="grid grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             <FormField
                               control={form.control}
                               name={`variants.${index}.isControl`}
@@ -530,13 +525,13 @@ export default function ABTestsManagement() {
                 </form>
               </Form>
             </DialogContent>
-          </Dialog>
-        </div>
+          </Dialog>}
+        />
 
         <div className="space-y-4">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             <Tabs value={statusFilter} onValueChange={setStatusFilter} className="w-full">
-              <TabsList data-testid="tabs-status-filter">
+              <TabsList className="flex h-auto w-full justify-start overflow-x-auto p-1" data-testid="tabs-status-filter">
                 <TabsTrigger value="all" data-testid="tab-all">الكل</TabsTrigger>
                 <TabsTrigger value="draft" data-testid="tab-draft">مسودات</TabsTrigger>
                 <TabsTrigger value="running" data-testid="tab-running">قيد التشغيل</TabsTrigger>
@@ -546,7 +541,7 @@ export default function ABTestsManagement() {
             </Tabs>
 
             <Select value={testTypeFilter} onValueChange={setTestTypeFilter}>
-              <SelectTrigger className="w-[200px]" data-testid="select-type-filter">
+              <SelectTrigger className="w-full sm:w-[200px]" data-testid="select-type-filter">
                 <SelectValue placeholder="نوع الاختبار" />
               </SelectTrigger>
               <SelectContent>

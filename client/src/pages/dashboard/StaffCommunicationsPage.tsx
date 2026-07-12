@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1381,20 +1382,16 @@ export default function StaffCommunicationsPage() {
   return (
     <DashboardLayout>
       <ErrorBoundary>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6" dir="rtl">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold" data-testid="text-page-title">
-                التواصل مع فريق العمل
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                إرسال رسائل وحملات تواصل لأعضاء الفريق
-              </p>
-            </div>
-          </div>
+        <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+          <DashboardPageHeader
+            icon={Mail}
+            title="التواصل مع فريق العمل"
+            description="إرسال رسائل وحملات تواصل لأعضاء الفريق"
+            titleTestId="text-page-title"
+          />
 
           <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
-            <TabsList className="grid w-full max-w-md grid-cols-3">
+            <TabsList className="grid h-auto w-full grid-cols-3 sm:max-w-md">
               <TabsTrigger value="campaigns" data-testid="tab-campaigns" className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
                 حملات الرسائل

@@ -20,6 +20,7 @@ import {
   Trophy,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -140,7 +141,7 @@ function IntegrationTile({
   const style = TONE_STYLES[tone];
   return (
     <div
-      className={`rounded-xl border bg-card shadow-sm p-4 space-y-3 transition-colors ${style.tile}`}
+      className={`space-y-3 rounded-xl border bg-card p-4 transition-colors ${style.tile}`}
       data-testid={`tile-integration-${status.key}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -300,26 +301,14 @@ export default function IntegrationsSettingsPage() {
 
   return (
     <DashboardLayout>
-      <div dir="rtl" className="space-y-6 pb-10">
-        {/* شريط القيادة العلوي */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="h-11 w-11 rounded-xl bg-indigo-50 border border-indigo-200 dark:bg-indigo-500/15 dark:border-indigo-400/30 flex items-center justify-center">
-              <Radar className={`h-5 w-5 text-indigo-600 dark:text-indigo-300 ${sweeping ? "animate-spin" : ""}`} />
-            </div>
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight text-foreground">
-                غرفة قيادة التكاملات
-              </h1>
-              <p className="text-xs text-muted-foreground font-mono" dir="ltr">
-                {lastChecked
-                  ? `آخر مسح: ${lastChecked.toLocaleTimeString("ar-SA")}`
-                  : "لم يُنفذ أي مسح بعد"}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+      <div dir="rtl" className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6">
+        <DashboardPageHeader
+          icon={Radar}
+          title="غرفة قيادة التكاملات"
+          description={lastChecked
+            ? `آخر مسح: ${lastChecked.toLocaleTimeString("ar-SA")}`
+            : "لم يُنفذ أي مسح بعد"}
+          actions={<>
             {(
               [
                 ["online", summary.online],
@@ -330,7 +319,7 @@ export default function IntegrationsSettingsPage() {
             ).map(([tone, count]) => (
               <span
                 key={tone}
-                className="flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs shadow-sm"
+                className="flex items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs"
                 data-testid={`chip-summary-${tone}`}
               >
                 <StatusLed tone={tone} />
@@ -342,15 +331,15 @@ export default function IntegrationsSettingsPage() {
               <Button
                 onClick={sweepAll}
                 disabled={sweeping}
-                className="gap-2 bg-indigo-600 hover:bg-indigo-500 text-white"
+                className="gap-2"
                 data-testid="button-sweep-all"
               >
                 {sweeping ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radar className="h-4 w-4" />}
                 فحص شامل
               </Button>
             )}
-          </div>
-        </div>
+          </>}
+        />
 
         {/* جدار الحالة */}
         {isLoading ? (

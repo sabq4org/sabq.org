@@ -4,6 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useEffect } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { Loader2, Save, Eye, Trash2, Plus } from "lucide-react";
+import { LayoutGrid, Loader2, Save, Eye, Trash2, Plus } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { categories } from "@shared/schema";
 
@@ -116,7 +117,7 @@ export default function QuadCategoriesBlockSettings() {
   if (settingsLoading || categoriesLoading) {
     return (
       <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
+        <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-4 w-96" />
           <div className="grid gap-6">
@@ -133,19 +134,14 @@ export default function QuadCategoriesBlockSettings() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 max-w-6xl" data-testid="quad-categories-settings-page">
+      <div className="mx-auto w-full max-w-[1600px] px-4 pb-10 sm:px-6" dir="rtl" data-testid="quad-categories-settings-page">
         <div className="space-y-6">
-          {/* Header */}
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="page-title">
-              بلوك التصنيفات الرباعية
-            </h1>
-            <p className="text-muted-foreground mt-2" data-testid="page-description">
-              إعدادات عرض 4 تصنيفات في بلوك واحد على الصفحة الرئيسية
-            </p>
-          </div>
-
-        <Separator />
+          <DashboardPageHeader
+            icon={LayoutGrid}
+            title="بلوك التصنيفات الرباعية"
+            description={<span data-testid="page-description">إعدادات عرض 4 تصنيفات في بلوك واحد على الصفحة الرئيسية</span>}
+            titleTestId="page-title"
+          />
 
         {/* Form */}
         <Form {...form}>

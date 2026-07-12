@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -545,21 +546,19 @@ export default function PushNotifications() {
   return (
     <DashboardLayout>
       <ErrorBoundary>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6" dir="rtl">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold" data-testid="text-page-title">
-                إدارة الإشعارات
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                إدارة حملات الإشعارات والتحليلات
-              </p>
-            </div>
+        <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+          <DashboardPageHeader
+            icon={Bell}
+            title="إدارة الإشعارات"
+            description="أنشئ حملات الإشعارات وتابع وصولها وتفاعل الجمهور معها."
+            titleTestId="text-page-title"
+            actions={
             <Button onClick={handleCreateCampaign} data-testid="button-create-campaign">
               <Plus className="h-4 w-4 ml-2" />
               إنشاء حملة جديدة
             </Button>
-          </div>
+            }
+          />
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>

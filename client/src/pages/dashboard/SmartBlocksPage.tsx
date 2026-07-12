@@ -4,6 +4,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -250,21 +251,13 @@ export default function SmartBlocksPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Blocks className="h-8 w-8 text-primary" />
-              <h1 className="text-3xl font-bold" data-testid="heading-smart-blocks">
-                البلوكات الذكية
-              </h1>
-            </div>
-            <p className="text-muted-foreground mt-2">
-              إدارة البلوكات الذكية لعرض محتوى مخصص في الصفحة الرئيسية
-            </p>
-          </div>
-          <Button
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Blocks}
+          title="البلوكات الذكية"
+          description="إدارة البلوكات الذكية لعرض محتوى مخصص في الصفحة الرئيسية"
+          titleTestId="heading-smart-blocks"
+          actions={<Button
             onClick={() => {
               setEditingBlock(null);
               form.reset({
@@ -283,8 +276,8 @@ export default function SmartBlocksPage() {
           >
             <Plus className="h-4 w-4 ml-2" />
             إنشاء بلوك جديد
-          </Button>
-        </div>
+          </Button>}
+        />
 
         {/* Stats Card */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

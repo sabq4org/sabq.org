@@ -388,11 +388,11 @@ export default function WorldDaysManagement() {
   return (
     <DashboardLayout>
       <div className="space-y-6" dir="rtl">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
           <div className="flex items-center gap-3">
-            <Calendar className="h-8 w-8 text-primary" />
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10"><Calendar className="h-5 w-5 text-primary" /></span>
             <div>
-              <h1 className="text-3xl font-bold" data-testid="text-page-title">
+              <h1 className="text-xl sm:text-2xl font-bold" data-testid="text-page-title">
                 إدارة الأيام العالمية
               </h1>
               <p className="text-muted-foreground mt-1">
@@ -400,19 +400,19 @@ export default function WorldDaysManagement() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button onClick={() => setIsImportDialogOpen(true)} variant="outline" data-testid="button-import-ics">
+          <div className="flex w-full sm:w-auto items-center gap-2">
+            <Button className="flex-1 sm:flex-none" onClick={() => setIsImportDialogOpen(true)} variant="outline" data-testid="button-import-ics">
               <Upload className="h-4 w-4 ml-2" />
               استيراد من تقويم
             </Button>
-            <Button onClick={handleCreate} data-testid="button-create-world-day">
+            <Button className="flex-1 sm:flex-none" onClick={handleCreate} data-testid="button-create-world-day">
               <Plus className="h-4 w-4 ml-2" />
               إضافة يوم جديد
             </Button>
           </div>
         </div>
 
-        <Card data-testid="card-filters">
+        <Card className="border-border/70 shadow-none" data-testid="card-filters">
           <CardHeader className="pb-3">
             <CardTitle className="text-lg flex items-center gap-2">
               <Filter className="h-5 w-5" />
@@ -468,7 +468,7 @@ export default function WorldDaysManagement() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <Card data-testid="card-world-days-table">
+            <Card className="border-border/70 shadow-none" data-testid="card-world-days-table">
               <CardHeader>
                 <CardTitle>الأيام العالمية ({worldDays.length})</CardTitle>
               </CardHeader>
@@ -526,7 +526,7 @@ export default function WorldDaysManagement() {
                             </TableCell>
                             <TableCell data-testid={`badge-status-${worldDay.id}`}>
                               {worldDay.isActive ? (
-                                <Badge className="bg-green-600">نشط</Badge>
+                                <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">نشط</Badge>
                               ) : (
                                 <Badge variant="secondary">غير نشط</Badge>
                               )}
@@ -574,7 +574,7 @@ export default function WorldDaysManagement() {
           </div>
 
           <div className="lg:col-span-1">
-            <Card data-testid="card-suggestions-panel">
+            <Card className="border-border/70 shadow-none" data-testid="card-suggestions-panel">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Sparkles className="h-5 w-5" />

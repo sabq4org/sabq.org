@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -218,22 +219,12 @@ export default function LoyaltyAdminDashboard() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 lg:p-8 space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-md">
-              <Trophy className="h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold">نظام الولاء — لوحة التحكم</h1>
-              <p className="text-sm text-muted-foreground">
-                نظرة شاملة على أداء برنامج النقاط والمستويات
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Trophy}
+          title="نظام الولاء — لوحة التحكم"
+          description="نظرة شاملة على أداء برنامج النقاط والمستويات"
+          actions={<>
             <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
               <SelectTrigger className="w-40" data-testid="select-period">
                 <SelectValue />
@@ -265,8 +256,8 @@ export default function LoyaltyAdminDashboard() {
               <Download className="h-4 w-4 ml-1" />
               تصدير Excel
             </Button>
-          </div>
-        </div>
+          </>}
+        />
 
         {/* KPI cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -406,17 +397,16 @@ function KpiCard({
   loading?: boolean;
 }) {
   const colorMap = {
-    blue: "from-blue-500/10 to-blue-500/5 text-blue-600 dark:text-blue-400",
-    amber: "from-amber-500/10 to-amber-500/5 text-amber-600 dark:text-amber-400",
-    violet: "from-violet-500/10 to-violet-500/5 text-violet-600 dark:text-violet-400",
-    emerald: "from-emerald-500/10 to-emerald-500/5 text-emerald-600 dark:text-emerald-400",
+    blue: "text-primary",
+    amber: "text-primary",
+    violet: "text-primary",
+    emerald: "text-primary",
   };
   return (
-    <Card className="relative overflow-hidden">
-      <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${colorMap[color]} dark:from-transparent dark:to-transparent blur-2xl opacity-50 -z-0`} />
-      <CardContent className="p-5 relative z-10">
+    <Card className="border-border/70">
+      <CardContent className="p-5">
         <div className="flex items-start justify-between mb-3">
-          <div className={`p-2 rounded-lg bg-gradient-to-br ${colorMap[color]}`}>{icon}</div>
+          <div className={`rounded-lg bg-primary/10 p-2 ${colorMap[color]}`}>{icon}</div>
         </div>
         <div className="text-3xl font-bold tabular-nums" data-testid={`kpi-${label}`}>
           {loading ? <Skeleton className="h-9 w-24" /> : formatNumber(value)}
@@ -541,7 +531,7 @@ function ActionBreakdown({ data, loading }: { data: ActionRow[]; loading: boolea
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
-              className="h-full bg-gradient-to-l from-amber-500 to-amber-400 transition-all duration-500"
+              className="h-full bg-primary transition-all duration-500"
               style={{ width: `${max > 0 ? (row.points / max) * 100 : 0}%` }}
             />
           </div>

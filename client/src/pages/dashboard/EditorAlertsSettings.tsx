@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -36,9 +37,9 @@ interface EditorAlertSettings {
   aiCriticalAlertsEnabled?: boolean;
 }
 
-const SectionHeader = ({ title, color }: { title: string; color: string }) => (
+const SectionHeader = ({ title }: { title: string; color: string }) => (
   <div className="flex items-center gap-3 px-1">
-    <div className={`h-8 w-1 ${color} rounded-full`}></div>
+    <div className="h-8 w-1 rounded-full bg-border"></div>
     <h3 className="text-lg font-bold text-foreground">{title}</h3>
   </div>
 );
@@ -231,20 +232,12 @@ export default function EditorAlertsSettings() {
 
   return (
     <DashboardLayout>
-      <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6" dir="rtl">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-amber-100 dark:bg-amber-950/50">
-              <Bell className="h-8 w-8 text-amber-600 dark:text-amber-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-foreground">تنبيهات رئيس التحرير</h1>
-              <p className="text-muted-foreground text-sm mt-1">
-                إرسال إشعارات فورية عند نشر الأخبار الجديدة
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Bell}
+          title="تنبيهات رئيس التحرير"
+          description="إرسال إشعارات فورية عند نشر الأخبار الجديدة"
+          actions={<>
             <Button
               onClick={handleSave}
               disabled={!hasChanges || saveMutation.isPending}
@@ -272,10 +265,10 @@ export default function EditorAlertsSettings() {
               )}
               تجربة
             </Button>
-          </div>
-        </div>
+          </>}
+        />
 
-        <Card className="hover-elevate transition-all bg-slate-50 dark:bg-card">
+        <Card className="border-border/70">
           <CardContent className="p-6">
             <SectionHeader title="الإعدادات العامة" color="bg-amber-500" />
             
@@ -300,7 +293,7 @@ export default function EditorAlertsSettings() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate transition-all bg-blue-50 dark:bg-card">
+        <Card className="border-border/70">
           <CardContent className="p-6">
             <SectionHeader title="قناة البريد الإلكتروني" color="bg-blue-500" />
             
@@ -341,7 +334,7 @@ export default function EditorAlertsSettings() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate transition-all bg-green-50 dark:bg-card">
+        <Card className="border-border/70">
           <CardContent className="p-6">
             <SectionHeader title="قناة واتساب" color="bg-green-500" />
             
@@ -423,7 +416,7 @@ export default function EditorAlertsSettings() {
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate transition-all bg-indigo-50 dark:bg-card">
+        <Card className="border-border/70">
           <CardContent className="p-6">
             <div className="flex items-center justify-between gap-3 px-1">
               <SectionHeader title="تنبيهات الذكاء الاصطناعي الحرجة" color="bg-indigo-500" />

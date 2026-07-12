@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Trash2, Archive, Send, Search } from "lucide-react";
+import { Plus, Edit, Trash2, Archive, Send, Search, Megaphone } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 
@@ -165,10 +166,12 @@ export default function AnnouncementsList() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-3 md:p-6 space-y-4 md:space-y-6" dir="rtl">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <h1 className="text-2xl md:text-3xl font-bold">الإعلانات الداخلية</h1>
-          <Button
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Megaphone}
+          title="الإعلانات الداخلية"
+          description="إدارة إعلانات الفريق ومواعيد نشرها وقنوات وصولها"
+          actions={<Button
             onClick={() => setLocation('/dashboard/announcements/new')}
             data-testid="button-create-announcement"
             size="sm"
@@ -176,8 +179,8 @@ export default function AnnouncementsList() {
           >
             <Plus className="ml-2 h-4 w-4" />
             إنشاء إعلان جديد
-          </Button>
-        </div>
+          </Button>}
+        />
 
         <div className="flex flex-col gap-3 md:gap-4 p-3 md:p-4 bg-card rounded-lg border">
           <div className="flex flex-col md:flex-row gap-3 md:gap-4 md:items-end">

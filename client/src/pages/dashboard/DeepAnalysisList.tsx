@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -198,28 +199,20 @@ export default function DeepAnalysisList() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Brain className="h-8 w-8 text-primary" />
-              <h1 className="text-3xl font-bold" data-testid="heading-deep-analysis">
-                التحليل العميق
-              </h1>
-            </div>
-            <p className="text-muted-foreground mt-2">
-              إدارة ومتابعة التحليلات العميقة بالذكاء الاصطناعي
-            </p>
-          </div>
-          <Button
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Brain}
+          title="التحليل العميق"
+          description="إدارة ومتابعة التحليلات العميقة بالذكاء الاصطناعي"
+          titleTestId="heading-deep-analysis"
+          actions={<Button
             onClick={() => navigate('/dashboard/ai/deep')}
             data-testid="button-create-analysis"
           >
             <Plus className="h-4 w-4 ml-2" />
             تحليل جديد
-          </Button>
-        </div>
+          </Button>}
+        />
 
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -245,7 +238,7 @@ export default function DeepAnalysisList() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600" data-testid="text-stat-views">
+              <div className="text-2xl font-bold" data-testid="text-stat-views">
                 {(statistics?.totalViews ?? formatNumber(0))}
               </div>
             </CardContent>
@@ -259,7 +252,7 @@ export default function DeepAnalysisList() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600" data-testid="text-stat-shares">
+              <div className="text-2xl font-bold" data-testid="text-stat-shares">
                 {(statistics?.totalShares ?? formatNumber(0))}
               </div>
             </CardContent>
@@ -273,7 +266,7 @@ export default function DeepAnalysisList() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-purple-600" data-testid="text-stat-downloads">
+              <div className="text-2xl font-bold" data-testid="text-stat-downloads">
                 {(statistics?.totalDownloads ?? formatNumber(0))}
               </div>
             </CardContent>

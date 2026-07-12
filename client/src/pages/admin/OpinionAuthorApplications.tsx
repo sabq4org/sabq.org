@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { 
   Users, 
   Clock, 
@@ -213,20 +214,17 @@ export default function OpinionAuthorApplications() {
 
   return (
     <DashboardLayout>
-    <div className="p-6 space-y-6" dir="rtl">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-            <PenTool className="w-6 h-6" />
-            طلبات كتّاب الرأي
-          </h1>
-          <p className="text-muted-foreground" data-testid="text-page-description">إدارة طلبات التسجيل ككاتب رأي</p>
-        </div>
-        <Button variant="outline" onClick={() => refetch()} data-testid="button-refresh">
+    <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+      <DashboardPageHeader
+        icon={PenTool}
+        title="طلبات كتّاب الرأي"
+        description={<span data-testid="text-page-description">إدارة طلبات التسجيل ككاتب رأي</span>}
+        titleTestId="text-page-title"
+        actions={<Button variant="outline" onClick={() => refetch()} data-testid="button-refresh">
           <RefreshCw className="w-4 h-4 ml-2" />
           تحديث
-        </Button>
-      </div>
+        </Button>}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
@@ -284,7 +282,7 @@ export default function OpinionAuthorApplications() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4">
+        <CardHeader className="flex flex-col items-stretch justify-between gap-4 sm:flex-row sm:items-center">
           <CardTitle>قائمة الطلبات</CardTitle>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as ApplicationStatus)}>
             <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
@@ -310,6 +308,7 @@ export default function OpinionAuthorApplications() {
               لا توجد طلبات
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -413,6 +412,7 @@ export default function OpinionAuthorApplications() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
 
           {totalPages > 1 && (

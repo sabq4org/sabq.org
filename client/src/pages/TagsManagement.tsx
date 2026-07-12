@@ -58,6 +58,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import type { Tag } from "@shared/schema";
 import { insertTagSchema } from "@shared/schema";
 import { Link } from "wouter";
@@ -255,24 +256,39 @@ export default function TagsManagement() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={TagIcon}
+          title="إدارة الوسوم"
+          description="نظّم الوسوم المستخدمة في ربط المحتوى وتحسين الوصول إليه."
+          actions={
+            <Button
+              onClick={() => {
+                setIsCreateDialogOpen(true);
+                form.reset();
+              }}
+              className="gap-2"
+              data-testid="button-add-tag"
+            >
+              <PlusCircle className="h-4 w-4" />
+              إضافة وسم جديد
+            </Button>
+          }
+        />
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex-1">
-                <CardTitle className="flex items-center gap-2">
-                  <TagIcon className="h-5 w-5" />
-                  إدارة الوسوم ({filteredTags.length})
-                </CardTitle>
+              <div className="min-w-full sm:min-w-0 sm:flex-1">
+                <CardTitle>الوسوم ({filteredTags.length})</CardTitle>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <div className="relative">
+              <div className="flex w-full items-center gap-2 flex-wrap sm:w-auto">
+                <div className="relative flex-1 sm:flex-none">
                   <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     placeholder="بحث..."
                     value={searchQuery}
                     onChange={(e) => handleSearchChange(e.target.value)}
-                    className="pr-10 w-48"
+                    className="w-full pr-10 sm:w-48"
                     data-testid="input-search-tags"
                   />
                 </div>
@@ -286,17 +302,6 @@ export default function TagsManagement() {
                     <SelectItem value="inactive">معطل</SelectItem>
                   </SelectContent>
                 </Select>
-                <Button
-                  onClick={() => {
-                    setIsCreateDialogOpen(true);
-                    form.reset();
-                  }}
-                  className="gap-2"
-                  data-testid="button-add-tag"
-                >
-                  <PlusCircle className="h-4 w-4" />
-                  إضافة وسم جديد
-                </Button>
               </div>
             </div>
           </CardHeader>

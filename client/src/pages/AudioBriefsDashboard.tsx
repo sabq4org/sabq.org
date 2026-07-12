@@ -1,12 +1,13 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
-import { Plus, Edit, Trash2, Upload } from "lucide-react";
+import { Plus, Edit, Trash2, AudioLines } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { type AudioNewsBrief } from "@shared/schema";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 
 export default function AudioBriefsDashboard() {
   const [, setLocation] = useLocation();
@@ -49,9 +50,12 @@ export default function AudioBriefsDashboard() {
   
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6" dir="rtl">
-        <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold">الأخبار الصوتية السريعة</h1>
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={AudioLines}
+          title="الأخبار الصوتية السريعة"
+          description="أنشئ موجزات صوتية قصيرة وتابع جاهزيتها للنشر."
+          actions={
           <Button
             onClick={() => setLocation('/dashboard/audio-briefs/create')}
             data-testid="button-create-audio-brief"
@@ -59,7 +63,8 @@ export default function AudioBriefsDashboard() {
             <Plus className="ml-2 h-4 w-4" />
             إنشاء خبر صوتي جديد
           </Button>
-        </div>
+          }
+        />
         
         {isLoading && <div>جاري التحميل...</div>}
         
@@ -67,9 +72,9 @@ export default function AudioBriefsDashboard() {
           {briefs?.map((brief) => (
             <div
               key={brief.id}
-              className="p-4 border rounded-lg bg-card space-y-3"
+              className="space-y-3 rounded-xl border bg-card p-4 shadow-sm"
             >
-              <div className="flex items-start justify-between">
+              <div className="flex flex-col items-start justify-between gap-3 sm:flex-row">
                 <div className="flex-1">
                   <h3 className="font-semibold text-lg">{brief.title}</h3>
                   <p className="text-sm text-muted-foreground line-clamp-2 mt-1">

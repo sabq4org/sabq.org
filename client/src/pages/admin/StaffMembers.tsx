@@ -14,6 +14,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -556,24 +557,21 @@ export default function StaffMembers() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6" dir="rtl">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Users className="h-8 w-8 text-primary" />
-            <div>
-              <h1 className="text-3xl font-bold" data-testid="heading-staff-title">منسوبي سبق</h1>
-              <p className="text-muted-foreground mt-1">إدارة فريق العمل والموظفين</p>
-            </div>
-          </div>
-          <Button
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Users}
+          title="منسوبي سبق"
+          description="إدارة فريق العمل والموظفين"
+          titleTestId="heading-staff-title"
+          actions={<Button
             onClick={() => setSendCredentialsDialogOpen(true)}
             className="gap-2"
             data-testid="button-send-credentials"
           >
             <Mail className="h-4 w-4" />
             إرسال بيانات الدخول للجميع
-          </Button>
-        </div>
+          </Button>}
+        />
 
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <Card className="hover-elevate cursor-pointer" onClick={() => setRoleFilter("all")} data-testid="card-staff-total">

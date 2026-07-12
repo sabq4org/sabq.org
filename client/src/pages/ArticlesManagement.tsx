@@ -41,6 +41,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, Sparkles, Newspaper, Clock, FilePenLine, Brain, PenLine, MessageCircle, Mail, ChevronLeft, ChevronRight, Camera, BarChart3, Images, Building2, Languages, Loader2, Smartphone } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 import { BreakingSwitch } from "@/components/admin/BreakingSwitch";
 import { RowActions } from "@/components/admin/RowActions";
@@ -167,10 +168,9 @@ function SortableRow({
 }
 
 // Section Header component matching Dashboard style
-const SectionHeader = ({ title, color }: { title: string; color: string }) => (
-  <div className="flex items-center gap-3 px-1">
-    <div className={`h-8 w-1 ${color} rounded-full`}></div>
-    <h3 className="text-lg font-bold text-foreground">{title}</h3>
+const SectionHeader = ({ title }: { title: string }) => (
+  <div className="px-1">
+    <h2 className="text-base font-semibold text-foreground">{title}</h2>
   </div>
 );
 
@@ -856,18 +856,14 @@ export default function ArticlesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4 md:space-y-6 p-3 md:p-0 overflow-x-hidden">
+      <div className="mx-auto max-w-[1600px] space-y-5 overflow-x-hidden pb-10 md:space-y-6" dir="rtl">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl md:text-2xl font-bold" data-testid="heading-title">
-              إدارة الأخبار والمقالات
-            </h1>
-            <p className="text-xs md:text-sm text-muted-foreground">
-              إدارة المحتوى الإخباري والمقالات
-            </p>
-          </div>
-          {canCreateArticle && (
+        <DashboardPageHeader
+          icon={Newspaper}
+          title="إدارة الأخبار والمقالات"
+          description="إدارة المحتوى الإخباري والمقالات من مكان واحد"
+          titleTestId="heading-title"
+          actions={canCreateArticle ? (
             <Button
               onClick={() => setLocation("/dashboard/articles/new")}
               className="gap-2 w-full sm:w-auto"
@@ -877,12 +873,12 @@ export default function ArticlesManagement() {
               <Plus className="h-3.5 w-3.5 md:h-4 md:w-4" />
               مقال جديد
             </Button>
-          )}
-        </div>
+          ) : undefined}
+        />
 
         {/* Status Cards - Matching Dashboard Style */}
         <div className="space-y-3">
-          <SectionHeader title="إحصائيات المقالات" color="bg-emerald-500" />
+          <SectionHeader title="إحصائيات المقالات" />
         {metricsLoading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {[1, 2, 3, 4].map((i) => (
@@ -899,14 +895,14 @@ export default function ArticlesManagement() {
             {/* Published Card */}
             <Card
               onClick={() => setActiveStatus('published')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-emerald-50 dark:bg-card ${
-                activeStatus === 'published' ? 'ring-2 ring-emerald-500' : ''
+              className={`cursor-pointer border-border/70 bg-card transition-all hover:border-emerald-300 hover:shadow-sm ${
+                activeStatus === 'published' ? 'border-emerald-400 ring-1 ring-emerald-200' : ''
               }`}
               data-testid="card-stat-published"
             >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">منشورة</CardTitle>
-                <div className="p-2 rounded-md bg-emerald-500/20">
+                <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
                   <Newspaper className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 </div>
               </CardHeader>
@@ -918,15 +914,15 @@ export default function ArticlesManagement() {
             {/* Scheduled Card */}
             <Card
               onClick={() => setActiveStatus('scheduled')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-indigo-50 dark:bg-card ${
-                activeStatus === 'scheduled' ? 'ring-2 ring-indigo-500' : ''
+              className={`cursor-pointer border-border/70 bg-card transition-all hover:border-blue-300 hover:shadow-sm ${
+                activeStatus === 'scheduled' ? 'border-blue-400 ring-1 ring-blue-200' : ''
               }`}
               data-testid="card-stat-scheduled"
             >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">مجدولة</CardTitle>
-                <div className="p-2 rounded-md bg-indigo-500/20">
-                  <Clock className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-950/30">
+                  <Clock className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 </div>
               </CardHeader>
               <CardContent>
@@ -937,14 +933,14 @@ export default function ArticlesManagement() {
             {/* Draft Card */}
             <Card
               onClick={() => setActiveStatus('draft')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-amber-50 dark:bg-card ${
-                activeStatus === 'draft' ? 'ring-2 ring-amber-500' : ''
+              className={`cursor-pointer border-border/70 bg-card transition-all hover:border-amber-300 hover:shadow-sm ${
+                activeStatus === 'draft' ? 'border-amber-400 ring-1 ring-amber-200' : ''
               }`}
               data-testid="card-stat-draft"
             >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">مسودة</CardTitle>
-                <div className="p-2 rounded-md bg-amber-500/20">
+                <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30">
                   <FilePenLine className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 </div>
               </CardHeader>
@@ -956,14 +952,14 @@ export default function ArticlesManagement() {
             {/* Archived Card */}
             <Card
               onClick={() => setActiveStatus('archived')}
-              className={`cursor-pointer hover-elevate active-elevate-2 transition-all bg-slate-50 dark:bg-card ${
-                activeStatus === 'archived' ? 'ring-2 ring-slate-500' : ''
+              className={`cursor-pointer border-border/70 bg-card transition-all hover:border-slate-300 hover:shadow-sm ${
+                activeStatus === 'archived' ? 'border-slate-400 ring-1 ring-slate-200' : ''
               }`}
               data-testid="card-stat-archived"
             >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">مؤرشفة</CardTitle>
-                <div className="p-2 rounded-md bg-slate-500/20">
+                <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-900/50">
                   <Archive className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                 </div>
               </CardHeader>
@@ -981,7 +977,7 @@ export default function ArticlesManagement() {
 
         {/* Filters - Mobile Optimized */}
         <div className="space-y-3">
-          <SectionHeader title="البحث والفلاتر" color="bg-blue-500" />
+          <SectionHeader title="البحث والفلاتر" />
         <div className="bg-card rounded-lg border border-border p-3 md:p-4">
           <div className="flex flex-col gap-3">
             {/* Search */}
@@ -1041,7 +1037,7 @@ export default function ArticlesManagement() {
 
         {/* Articles List Section */}
         <div className="space-y-3">
-          <SectionHeader title="قائمة المقالات" color="bg-indigo-500" />
+          <SectionHeader title="قائمة المقالات" />
 
           {/* Bulk Actions Toolbar */}
           {selectedArticles.size > 0 && (

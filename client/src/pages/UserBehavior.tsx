@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -84,7 +85,7 @@ export default function UserBehavior() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="container mx-auto p-6 space-y-6">
+        <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
           <div className="flex items-center justify-between mb-6">
             <Skeleton className="h-8 w-64" />
             <Skeleton className="h-10 w-32" />
@@ -101,18 +102,13 @@ export default function UserBehavior() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto p-6 space-y-6" dir="rtl">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="heading-user-behavior">
-              سلوك المستخدمين الذكي
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              تحليلات تفاعلية لحركة المستخدمين داخل المنصة، مدعومة بالذكاء الاصطناعي
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Users}
+          title="سلوك المستخدمين الذكي"
+          description="تحليلات تفاعلية لحركة المستخدمين داخل المنصة، مدعومة بالذكاء الاصطناعي"
+          titleTestId="heading-user-behavior"
+          actions={<>
             <Button
               variant={range === "7d" ? "default" : "outline"}
               size="sm"
@@ -139,8 +135,8 @@ export default function UserBehavior() {
               <RefreshCw className="h-4 w-4" />
               تحديث
             </Button>
-          </div>
-        </div>
+          </>}
+        />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -217,27 +213,27 @@ export default function UserBehavior() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 bg-pink-50 dark:bg-muted/40 rounded-lg">
+                <div className="flex items-center justify-between rounded-lg bg-muted/30 p-3">
                   <div className="flex items-center gap-2">
-                    <Heart className="h-5 w-5 text-pink-500" />
+                    <Heart className="h-5 w-5 text-muted-foreground" />
                     <span className="font-medium">الإعجابات</span>
                   </div>
                   <span className="text-lg font-bold" data-testid="stat-likes">
                     {data?.interactionCounts.likes}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-muted/40 rounded-lg">
+                <div className="flex items-center justify-between rounded-lg bg-muted/30 p-3">
                   <div className="flex items-center gap-2">
-                    <MessageSquare className="h-5 w-5 text-blue-500" />
+                    <MessageSquare className="h-5 w-5 text-muted-foreground" />
                     <span className="font-medium">التعليقات</span>
                   </div>
                   <span className="text-lg font-bold" data-testid="stat-comments">
                     {data?.interactionCounts.comments}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-muted/40 rounded-lg">
+                <div className="flex items-center justify-between rounded-lg bg-muted/30 p-3">
                   <div className="flex items-center gap-2">
-                    <Bookmark className="h-5 w-5 text-green-500" />
+                    <Bookmark className="h-5 w-5 text-muted-foreground" />
                     <span className="font-medium">الحفظ</span>
                   </div>
                   <span className="text-lg font-bold" data-testid="stat-bookmarks">

@@ -25,6 +25,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { RichTextEditor } from "@/components/RichTextEditor";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -380,20 +381,16 @@ export default function DataStoryGenerator() {
 
   return (
     <DashboardLayout>
-      <div dir="rtl" className="max-w-6xl mx-auto p-6 space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="text-page-title">
-              مولد القصص من البيانات
-            </h1>
-            <p className="text-muted-foreground mt-1" data-testid="text-page-description">
-              حول بياناتك إلى قصص إخبارية جذابة باستخدام الذكاء الاصطناعي
-            </p>
-          </div>
-        </div>
+      <div dir="rtl" className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6">
+        <DashboardPageHeader
+          icon={BarChart3}
+          title="مولد القصص من البيانات"
+          description={<span data-testid="text-page-description">حول بياناتك إلى قصص إخبارية جذابة باستخدام الذكاء الاصطناعي</span>}
+          titleTestId="text-page-title"
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4" data-testid="tabs-workflow">
+          <TabsList className="flex h-auto w-full justify-start gap-1 overflow-x-auto p-1" data-testid="tabs-workflow">
             <TabsTrigger value="upload" data-testid="tab-upload">
               <Upload className="h-4 w-4 ml-2" />
               رفع البيانات

@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,9 +19,6 @@ import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   Select,
@@ -154,40 +152,28 @@ export default function SportmonksNewsImporter() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        {/* الترويسة + الحالة */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <Trophy className="h-5 w-5 text-primary" />
-                  أخبار SportMonks (المونديال)
-                </CardTitle>
-                <CardDescription className="mt-1">
-                  معاينات وتقارير المباريات من SportMonks — تُترجم وتُعاد صياغتها بأسلوب سبق وتُحفظ
-                  مسودّات للمراجعة.
-                </CardDescription>
-              </div>
-              {status ? (
-                status.connected ? (
-                  <Badge variant="outline" className="gap-1 border-green-300 text-green-700">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> متصل · {status.prematchCount} معاينة ·{" "}
-                    {status.postmatchCount} تقرير
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="gap-1 border-red-300 text-red-700">
-                    <XCircle className="h-3.5 w-3.5" />
-                    {status.configured ? "تعذّر الاتصال" : "غير مهيأة"}
-                  </Badge>
-                )
-              ) : (
-                <Skeleton className="h-6 w-24" />
-              )}
-            </div>
-          </CardHeader>
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Trophy}
+          title="أخبار SportMonks (المونديال)"
+          description="معاينات وتقارير المباريات، تُترجم وتُعاد صياغتها بأسلوب سبق وتُحفظ مسودّات للمراجعة"
+          actions={status ? (
+            status.connected ? (
+              <Badge variant="outline" className="gap-1 border-emerald-300 text-emerald-700 dark:text-emerald-300">
+                <CheckCircle2 className="h-3.5 w-3.5" /> متصل · {status.prematchCount} معاينة ·{" "}
+                {status.postmatchCount} تقرير
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1 border-destructive/40 text-destructive">
+                <XCircle className="h-3.5 w-3.5" />
+                {status.configured ? "تعذّر الاتصال" : "غير مهيأة"}
+              </Badge>
+            )
+          ) : <Skeleton className="h-6 w-24" />}
+        />
 
-          <CardContent className="space-y-4">
+        <Card>
+          <CardContent className="space-y-4 pt-6">
             <div className="grid gap-4 sm:grid-cols-2">
               {/* النوع: معاينات/تقارير */}
               <div className="space-y-2">

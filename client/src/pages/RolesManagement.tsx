@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -274,35 +275,27 @@ export default function RolesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <Shield className="w-8 h-8 text-primary" data-testid="icon-shield" />
-            <div>
-              <h1 className="text-3xl font-bold" data-testid="heading-title">
-                إدارة الأدوار والصلاحيات
-              </h1>
-              <p className="text-muted-foreground" data-testid="text-description">
-                تحكم في صلاحيات كل دور في النظام
-              </p>
-            </div>
-          </div>
-          <Button 
+      <div className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Shield}
+          title="إدارة الأدوار والصلاحيات"
+          description={<span data-testid="text-description">تحكم في صلاحيات كل دور في النظام</span>}
+          titleTestId="heading-title"
+          actions={<Button
             onClick={() => setIsCreateDialogOpen(true)}
             data-testid="button-create-role"
           >
             <Plus className="w-4 h-4 ml-2" />
             إنشاء دور جديد
-          </Button>
-        </div>
+          </Button>}
+        />
 
         {rolesLoading ? (
           <div className="flex justify-center p-8" data-testid="loading-roles">
             <p className="text-muted-foreground">جارِ تحميل الأدوار...</p>
           </div>
         ) : (
-          <div className="border rounded-lg">
+          <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>

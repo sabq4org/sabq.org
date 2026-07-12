@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -349,19 +350,12 @@ export default function ContactMessagesManagement() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-4 md:p-6" dir="rtl" data-testid="contact-messages-page">
-        {/* Header */}
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-emerald-600">
-            <MessageSquare className="h-5 w-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">رسائل التواصل</h1>
-            <p className="text-muted-foreground text-sm mt-0.5">
-              إدارة رسائل الزوار والرد عليها
-            </p>
-          </div>
-        </div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl" data-testid="contact-messages-page">
+        <DashboardPageHeader
+          icon={MessageSquare}
+          title="رسائل التواصل"
+          description="إدارة رسائل الزوار والرد عليها"
+        />
 
         {/* Stats overview */}
         {isLoading ? (
@@ -524,7 +518,7 @@ export default function ContactMessagesManagement() {
                 <EmptyState />
               ) : (
                 <>
-                  <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm" dir="rtl">
+                  <div className="overflow-x-auto rounded-xl border border-border bg-card" dir="rtl">
                     <Table data-testid="messages-table">
                       <TableHeader>
                         <TableRow>

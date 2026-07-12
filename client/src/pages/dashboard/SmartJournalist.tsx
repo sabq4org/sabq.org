@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -159,18 +160,12 @@ export default function SmartJournalist() {
 
   return (
     <DashboardLayout>
-      <div className="container mx-auto py-6 space-y-6" dir="rtl">
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-3">
-              <Bot className="h-8 w-8 text-primary" />
-              الوكيل الصحفي الذكي
-            </h1>
-            <p className="text-muted-foreground mt-2">
-              اطلب من الوكيل الذكي إنشاء مقالات صحفية كاملة مع البحث والتحليل والوسائط والعناوين
-            </p>
-          </div>
-        </div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={Bot}
+          title="الوكيل الصحفي الذكي"
+          description="اطلب من الوكيل الذكي إنشاء مقالات صحفية كاملة مع البحث والتحليل والوسائط والعناوين"
+        />
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Main Input Panel */}

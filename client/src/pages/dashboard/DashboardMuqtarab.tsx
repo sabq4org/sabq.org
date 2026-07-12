@@ -100,6 +100,7 @@ import { queryClient, apiRequest, getCsrfToken, apiUrl } from "@/lib/queryClient
 import { insertAngleSchema } from "@shared/schema";
 import type { Angle } from "@/lib/muqtarab";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 
 // Form schema - extends insertAngleSchema with validation
 const angleFormSchema = insertAngleSchema.extend({
@@ -661,14 +662,15 @@ export default function DashboardMuqtarab() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
         {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold" data-testid="text-page-title">إدارة مُقترب</h1>
-            <p className="text-muted-foreground mt-1">إدارة الزوايا التحليلية والمواضيع</p>
-          </div>
-          <div className="flex items-center gap-2">
+        <DashboardPageHeader
+          icon={Compass}
+          title="إدارة مُقترب"
+          description="إدارة الزوايا التحليلية وموضوعاتها ومتابعة طلبات الكتّاب."
+          titleTestId="text-page-title"
+          actions={
+            <>
             <Link href="/dashboard/muqtarab/submissions">
               <Button variant="outline" data-testid="button-view-submissions">
                 <FileText className="h-4 w-4 ml-2" />
@@ -683,23 +685,24 @@ export default function DashboardMuqtarab() {
               <Plus className="h-4 w-4 ml-2" />
               زاوية جديدة
             </Button>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         {/* تنبيه: مواضيع بانتظار المراجعة */}
         {totalPendingReview > 0 && (
           <Link href="/dashboard/muqtarab/review">
             <div
-              className="flex items-center justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 cursor-pointer hover:bg-blue-100 transition-colors dark:border-border dark:bg-card dark:hover:bg-muted/50"
+              className="flex items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 cursor-pointer transition-colors hover:bg-muted/50"
               data-testid="banner-pending-review"
             >
-              <div className="flex items-center gap-2 text-blue-800 dark:text-blue-300">
+              <div className="flex items-center gap-2 text-foreground">
                 <FileText className="h-5 w-5" />
                 <span className="font-medium">
                   {totalPendingReview} موضوع بانتظار المراجعة من الكتّاب
                 </span>
               </div>
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-400">
+              <span className="text-sm font-medium text-primary">
                 مراجعة الآن ←
               </span>
             </div>
@@ -788,7 +791,7 @@ export default function DashboardMuqtarab() {
                                   </Link>
                                   {pending > 0 && (
                                     <Badge
-                                      className="bg-blue-500 hover:bg-blue-600 text-white"
+                                      variant="secondary"
                                       data-testid={`badge-pending-${angle.id}`}
                                     >
                                       {pending} بانتظار المراجعة

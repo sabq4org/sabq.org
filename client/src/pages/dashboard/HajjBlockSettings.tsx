@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth, hasRole } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { AlertCircle, Plus, X, Save, Eye } from "lucide-react";
+import { AlertCircle, PanelsTopLeft, Plus, X, Save, Eye } from "lucide-react";
 import { HajjBlock } from "@/components/HajjBlock";
 
 /**
@@ -107,18 +108,12 @@ export default function HajjBlockSettings() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 lg:p-8 space-y-6" dir="rtl">
-        <div className="flex items-center gap-3">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md">
-            <span className="text-2xl">🕋</span>
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">إعدادات بلوك الحج</h1>
-            <p className="text-sm text-muted-foreground">
-              "صدى الحج" — يظهر في الصفحة الرئيسية أثناء موسم الحج
-            </p>
-          </div>
-        </div>
+      <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
+        <DashboardPageHeader
+          icon={PanelsTopLeft}
+          title="إعدادات بلوك الحج"
+          description={'"صدى الحج" — يظهر في الصفحة الرئيسية أثناء موسم الحج'}
+        />
 
         {settings.isLoading ? (
           <Skeleton className="h-96" />

@@ -4,6 +4,7 @@ import { apiUrl } from "@/lib/queryClient";
 import Chart from "react-apexcharts";
 import { ApexOptions } from "apexcharts";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -185,7 +186,6 @@ function KPICard({
   title,
   value,
   subtitle,
-  color = "primary",
   testId,
   delta,
 }: {
@@ -197,17 +197,6 @@ function KPICard({
   testId: string;
   delta?: number;
 }) {
-  const colorClasses: Record<string, string> = {
-    primary: "bg-primary/10 text-primary",
-    blue: "bg-blue-500/10 text-blue-500",
-    green: "bg-emerald-500/10 text-emerald-500",
-    purple: "bg-purple-500/10 text-purple-500",
-    orange: "bg-orange-500/10 text-orange-500",
-    pink: "bg-pink-500/10 text-pink-500",
-    cyan: "bg-cyan-500/10 text-cyan-500",
-    amber: "bg-amber-500/10 text-amber-500",
-  };
-
   const validDelta = delta !== undefined && !isNaN(delta) && isFinite(delta);
   const isPositive = validDelta && delta > 0;
   const isNegative = validDelta && delta < 0;
@@ -219,7 +208,7 @@ function KPICard({
     <Card data-testid={testId}>
       <CardContent className="p-4">
         <div className="flex items-center gap-3">
-          <div className={`p-3 rounded-lg ${colorClasses[color]}`}>
+          <div className="rounded-lg bg-muted p-3 text-muted-foreground">
             <Icon className="h-5 w-5" />
           </div>
           <div className="flex-1 min-w-0">
@@ -371,13 +360,13 @@ function LiveDataCard({
             {isEnabled && liveData && (
               <div className="flex items-center gap-6">
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-blue-500" data-testid="live-impressions">
+                  <p className="text-2xl font-bold" data-testid="live-impressions">
                     {formatNumber(liveData.impressions)}
                   </p>
                   <p className="text-xs text-muted-foreground">المشاهدات اليوم</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-green-500" data-testid="live-clicks">
+                  <p className="text-2xl font-bold" data-testid="live-clicks">
                     {formatNumber(liveData.clicks)}
                   </p>
                   <p className="text-xs text-muted-foreground">النقرات اليوم</p>
@@ -836,15 +825,13 @@ export default function AdAnalyticsPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6" dir="rtl">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">تحليلات الإعلانات</h1>
-            <p className="text-muted-foreground">
-              إحصائيات وتحليلات شاملة لأداء الحملات الإعلانية
-            </p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
+      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+        <DashboardPageHeader
+          icon={BarChart3}
+          title="تحليلات الإعلانات"
+          description="إحصائيات وتحليلات شاملة لأداء الحملات الإعلانية."
+          actions={
+            <>
             <Select
               value={dateRange}
               onValueChange={setDateRange}
@@ -883,8 +870,9 @@ export default function AdAnalyticsPage() {
               <Download className="h-4 w-4 ml-2" />
               تصدير CSV
             </Button>
-          </div>
-        </div>
+            </>
+          }
+        />
 
         <LiveDataCard
           isEnabled={liveEnabled}

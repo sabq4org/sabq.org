@@ -5,6 +5,7 @@
 import { lazy, Suspense, useState } from "react";
 import { BrainCircuit, LayoutDashboard, ListChecks, ScrollText, Server } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -56,38 +57,30 @@ export default function AiHubPage() {
 
   return (
     <DashboardLayout>
-      <div dir="rtl" className="space-y-5 pb-10">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-extrabold flex items-center gap-3">
-              <span className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/25">
-                <BrainCircuit className="w-5 h-5" />
-              </span>
-              مركز التحكم بالذكاء الاصطناعي
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1.5">
-              إدارة موحّدة للنماذج والاستهلاك والتحويل التلقائي — كل استدعاء AI في سبق يمر من هنا
-            </p>
-          </div>
-        </div>
+      <div dir="rtl" className="mx-auto max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6">
+        <DashboardPageHeader
+          icon={BrainCircuit}
+          title="مركز التحكم بالذكاء الاصطناعي"
+          description="إدارة موحّدة للنماذج والاستهلاك والتحويل التلقائي — كل استدعاء AI في سبق يمر من هنا"
+        />
 
         {/* Radix defaults to dir="ltr" on its root regardless of document dir —
             without this prop the whole tabs subtree renders LTR. */}
         <Tabs value={tab} onValueChange={setTab} dir="rtl" className="space-y-4">
-          <TabsList className="bg-card border shadow-sm p-1 h-auto rounded-xl">
-            <TabsTrigger value="overview" className="gap-2 rounded-lg px-4 py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+          <TabsList className="h-auto w-full justify-start overflow-x-auto rounded-xl border bg-card p-1 shadow-sm sm:w-auto">
+            <TabsTrigger value="overview" className="gap-2 rounded-lg px-4 py-2">
               <LayoutDashboard className="w-4 h-4" />
               نظرة عامة
             </TabsTrigger>
-            <TabsTrigger value="features" className="gap-2 rounded-lg px-4 py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+            <TabsTrigger value="features" className="gap-2 rounded-lg px-4 py-2">
               <ListChecks className="w-4 h-4" />
               الميزات
             </TabsTrigger>
-            <TabsTrigger value="models" className="gap-2 rounded-lg px-4 py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+            <TabsTrigger value="models" className="gap-2 rounded-lg px-4 py-2">
               <Server className="w-4 h-4" />
               النماذج والمزودون
             </TabsTrigger>
-            <TabsTrigger value="logs" className="gap-2 rounded-lg px-4 py-2 data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+            <TabsTrigger value="logs" className="gap-2 rounded-lg px-4 py-2">
               <ScrollText className="w-4 h-4" />
               السجل
             </TabsTrigger>

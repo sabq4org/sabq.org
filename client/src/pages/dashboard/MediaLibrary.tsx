@@ -463,20 +463,25 @@ export default function MediaLibrary() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-4">
+      <div className="space-y-5" dir="rtl">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="heading-media-library">مكتبة الوسائط</h1>
-            <p className="text-sm text-muted-foreground">إدارة الصور والملفات</p>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-border/60 pb-5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <ImageIcon className="h-5 w-5 text-primary" />
+            </span>
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold" data-testid="heading-media-library">مكتبة الوسائط</h1>
+              <p className="text-sm text-muted-foreground">إدارة الصور والملفات وحقوق استخدامها</p>
+            </div>
           </div>
           {canUpload && (
-            <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={() => setGenerateDialogOpen(true)} className="gap-2" data-testid="button-generate-ai">
-                <Sparkles className="h-4 w-4 text-purple-500" />
+            <div className="flex w-full sm:w-auto items-center gap-2">
+              <Button variant="outline" onClick={() => setGenerateDialogOpen(true)} className="gap-2 flex-1 sm:flex-none" data-testid="button-generate-ai">
+                <Sparkles className="h-4 w-4 text-primary/80" />
                 توليد بالذكاء
               </Button>
-              <Button onClick={() => setUploadDialogOpen(true)} className="gap-2" data-testid="button-upload">
+              <Button onClick={() => setUploadDialogOpen(true)} className="gap-2 flex-1 sm:flex-none" data-testid="button-upload">
                 <Upload className="h-4 w-4" />
                 رفع ملف
               </Button>
@@ -485,7 +490,7 @@ export default function MediaLibrary() {
         </div>
 
         {/* Library stats (Phase 6) — collapsible governance dashboard */}
-        <Card className="overflow-hidden">
+        <Card className="overflow-hidden border-border/70 shadow-none">
           <button
             type="button"
             onClick={() => setStatsOpen((v) => !v)}
@@ -510,12 +515,12 @@ export default function MediaLibrary() {
                     {[
                       { label: "إجمالي الصور", value: stats.totalImages, icon: ImageIcon, tone: "text-foreground" },
                       { label: "حقوق موثّقة", value: stats.rightsVerified, icon: ShieldCheck, tone: "text-emerald-600" },
-                      { label: "مولّدة بالذكاء", value: stats.aiGenerated, icon: Sparkles, tone: "text-purple-500" },
-                      { label: "مفهرسة دلالياً", value: stats.indexed, icon: Search, tone: "text-blue-500" },
-                      { label: "بانتظار التحليل", value: stats.pendingAnalysis, icon: Wand2, tone: "text-amber-500" },
+                      { label: "مولّدة بالذكاء", value: stats.aiGenerated, icon: Sparkles, tone: "text-primary/80" },
+                      { label: "مفهرسة دلالياً", value: stats.indexed, icon: Search, tone: "text-sky-600" },
+                      { label: "بانتظار التحليل", value: stats.pendingAnalysis, icon: Wand2, tone: "text-amber-600" },
                       { label: "حجم التخزين", value: formatBytes(stats.totalStorageBytes), icon: HardDrive, tone: "text-foreground" },
                     ].map((tile) => (
-                      <div key={tile.label} className="rounded-lg border p-3" data-testid={`stat-${tile.label}`}>
+                      <div key={tile.label} className="rounded-xl border border-border/60 bg-muted/20 p-3" data-testid={`stat-${tile.label}`}>
                         <tile.icon className={cn("h-4 w-4 mb-1", tile.tone)} />
                         <div className="text-lg font-bold leading-tight">{tile.value}</div>
                         <div className="text-xs text-muted-foreground">{tile.label}</div>
