@@ -246,8 +246,8 @@ private struct AcHomeScreen: View {
                 if !liveFixtures.isEmpty {
                     AcLiveNowSection(fixtures: liveFixtures, onOpenMatches: { onSelectTab(.matches) })
                 } else {
-                    if overview?.started != true, let start = overview?.startsAt {
-                        AcCountdownCard(iso: start)
+                    if overview?.started != true {
+                        AcCountdownCard(iso: overview?.startsAt ?? AsianCupConstants.tournamentStartsAt)
                     }
                     if let spotlightFixture {
                         AcSpotlightSection(
@@ -1757,14 +1757,18 @@ private struct AcHomeHero: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.85)
 
-                    if let overview {
-                        Label(AcFormat.dateRange(startIso: overview.startsAt, endIso: overview.endsAt), systemImage: "calendar")
-                            .font(AsianCupFonts.app(size: 12, weight: .semibold))
-                            .foregroundStyle(AcTheme.onDarkDim)
-                            .labelStyle(.titleAndIcon)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
+                    Label(
+                        AcFormat.dateRange(
+                            startIso: AsianCupConstants.tournamentStartsAt,
+                            endIso: AsianCupConstants.tournamentEndsAt
+                        ),
+                        systemImage: "calendar"
+                    )
+                    .font(AsianCupFonts.app(size: 12, weight: .semibold))
+                    .foregroundStyle(AcTheme.onDarkDim)
+                    .labelStyle(.titleAndIcon)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 }
 
                 AcEmblem(height: 72)
@@ -2623,10 +2627,10 @@ struct AcMiniMatchRow: View {
 
     var body: some View {
         Button { showDetail = true } label: {
-            HStack(spacing: 8) {
-                side(fixture.home, leading: true)
+            HStack(spacing: 6) {
+                side(fixture.home, home: true)
                 center
-                side(fixture.away, leading: false)
+                side(fixture.away, home: false)
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
@@ -2644,17 +2648,19 @@ struct AcMiniMatchRow: View {
         }
     }
 
-    private func side(_ team: AcTeam, leading: Bool) -> some View {
+    private func side(_ team: AcTeam, home: Bool) -> some View {
         HStack(spacing: 6) {
-            if leading {
-                AcTeamLogo(logo: team.logo, size: 24)
-                name(team, align: .leading)
-            } else {
+            if home {
+                Spacer(minLength: 4)
                 name(team, align: .trailing)
-                AcTeamLogo(logo: team.logo, size: 24)
+                AcTeamLogo(logo: team.logo, size: 28)
+            } else {
+                AcTeamLogo(logo: team.logo, size: 28)
+                name(team, align: .leading)
+                Spacer(minLength: 4)
             }
         }
-        .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
+        .frame(maxWidth: .infinity)
     }
 
     private func name(_ team: AcTeam, align: TextAlignment) -> some View {

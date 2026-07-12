@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 // الشعار الرسمي (نسخة «الخلفيات الفاتحة» — نصّه أخضر داكن) لذا يُعرض
 // دائمًا فوق لوح فاتح لا فوق خلفية الهيرو الداكنة مباشرة.
 import asianCupLogo from "@assets/asian-cup-2027-logo.png";
-import { countdownFromIso, formatDateRange, type AcOverview } from "./acTypes";
+import { countdownFromIso, formatDateRange, AC_TOURNAMENT_STARTS_AT, AC_TOURNAMENT_ENDS_AT, type AcOverview } from "./acTypes";
 
 interface AcHeroProps {
   overview: AcOverview | undefined;
@@ -60,15 +60,15 @@ function Countdown({ startsAt }: { startsAt: string | null }) {
 }
 
 export function AcHero({ overview, onJump }: AcHeroProps) {
-  const dateRange = formatDateRange(overview?.startsAt ?? null, overview?.endsAt ?? null);
+  const dateRange = formatDateRange(AC_TOURNAMENT_STARTS_AT, AC_TOURNAMENT_ENDS_AT);
 
   return (
     <section dir="rtl" className="relative overflow-hidden">
-      {/* خلفية زمردية أوضح — أقرب لهوية التطبيق، بلا أسود مخضّر */}
-      <div className="absolute inset-0 bg-gradient-to-bl from-[#0c7a4f] via-[#0a9a5c] to-[#087a4a]" />
-      <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-300/30 blur-[120px]" />
-      <div className="absolute -bottom-48 -right-24 h-96 w-96 rounded-full bg-amber-300/15 blur-3xl" />
-      <div className="absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-teal-300/15 blur-3xl" />
+      {/* خلفية فاخرة: أخضر سعودي عميق + توهّج ذهبي */}
+      <div className="absolute inset-0 bg-gradient-to-bl from-[#02160f] via-[#04392a] to-[#021a12]" />
+      <div className="absolute -top-40 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-[120px]" />
+      <div className="absolute -bottom-48 -right-24 h-96 w-96 rounded-full bg-amber-400/10 blur-3xl" />
+      <div className="absolute -bottom-40 -left-24 h-96 w-96 rounded-full bg-teal-400/10 blur-3xl" />
       {/* زخرفة هندسية خفيفة مستوحاة من اللوقو */}
       <div
         className="absolute inset-0 opacity-[0.04]"
@@ -138,7 +138,7 @@ export function AcHero({ overview, onJump }: AcHeroProps) {
 
           {/* العد التنازلي */}
           <div className="mt-2 w-full">
-            <Countdown startsAt={overview?.startsAt ?? null} />
+            <Countdown startsAt={overview?.startsAt ?? AC_TOURNAMENT_STARTS_AT} />
           </div>
 
           {/* مؤشرات سريعة */}

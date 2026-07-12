@@ -25,10 +25,10 @@
 		4A000010 /* AcLocalization.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100013 /* AcLocalization.swift */; };
 		4A000011 /* Localization in Resources */ = {isa = PBXBuildFile; fileRef = 4A100014 /* Localization */; };
 		4A000012 /* AcAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100015 /* AcAuth.swift */; };
-		4A000019 /* AcDialCountries.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100019 /* AcDialCountries.swift */; };
 		4A000013 /* AcPush.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100016 /* AcPush.swift */; };
 		4A000014 /* AcFollows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100017 /* AcFollows.swift */; };
 		4A000018 /* AcMatchEventNotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100018 /* AcMatchEventNotificationsView.swift */; };
+		4A000019 /* AcDialCountries.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100019 /* AcDialCountries.swift */; };
 		4B000001 /* AcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B100001 /* AcMatchActivityAttributes.swift */; };
 		4B000002 /* AcLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B100002 /* AcLiveActivity.swift */; };
 		4B000003 /* AcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B100003 /* AcMatchActivityAttributes.swift */; };
@@ -82,10 +82,10 @@
 		4A100013 /* AcLocalization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcLocalization.swift; sourceTree = "<group>"; };
 		4A100014 /* Localization */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Localization; sourceTree = "<group>"; };
 		4A100015 /* AcAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcAuth.swift; sourceTree = "<group>"; };
-		4A100019 /* AcDialCountries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcDialCountries.swift; sourceTree = "<group>"; };
 		4A100016 /* AcPush.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcPush.swift; sourceTree = "<group>"; };
 		4A100017 /* AcFollows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcFollows.swift; sourceTree = "<group>"; };
 		4A100018 /* AcMatchEventNotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcMatchEventNotificationsView.swift; sourceTree = "<group>"; };
+		4A100019 /* AcDialCountries.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcDialCountries.swift; sourceTree = "<group>"; };
 		4A100020 /* AsianCup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AsianCup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4B100001 /* AcMatchActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcMatchActivityAttributes.swift; sourceTree = "<group>"; };
 		4B100002 /* AcLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcLiveActivity.swift; sourceTree = "<group>"; };
@@ -419,7 +419,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = AsianCup/AsianCup.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
@@ -452,7 +452,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = AsianCup/AsianCup.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_PREVIEWS = YES;
@@ -482,7 +482,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AsianCupWidgets/Info.plist;
@@ -505,7 +505,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AsianCupWidgets/Info.plist;
