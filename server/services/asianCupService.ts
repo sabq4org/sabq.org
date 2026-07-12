@@ -68,6 +68,10 @@ const SEASON = 2027; // كأس آسيا السعودية 2027
 const TIMEZONE = "Asia/Riyadh";
 const MATCH_FETCH_CONCURRENCY = 4;
 
+/** نافذة البطولة الرسمية (AFC): 7 يناير – 5 فبراير 2027. */
+const AC_OFFICIAL_START = "2027-01-07T17:00:00+03:00";
+const AC_OFFICIAL_END = "2027-02-05T21:00:00+03:00";
+
 // البطولة بعد أشهر — بيانات شبه ثابتة. كاش كريم، وتقصّ تلقائيًّا قرب المباريات.
 const TEAMS_TTL = 6 * 60 * 60 * 1000;
 const FIXTURES_TTL = 5 * 60 * 1000;
@@ -426,8 +430,9 @@ export async function getAcOverview(): Promise<AcOverview> {
     const teams = await getAcTeams();
 
     const sorted = [...fixtures].sort((a, b) => a.timestamp - b.timestamp);
-    const startsAt = sorted[0]?.date ?? null;
-    const endsAt = sorted[sorted.length - 1]?.date ?? null;
+    // التواريخ الرسمية ثابتة — لا نعتمد أول/آخر مباراة في المزود (قد يكون الجدول ناقصًا).
+    const startsAt = AC_OFFICIAL_START;
+    const endsAt = AC_OFFICIAL_END;
     const now = Date.now();
     const started = sorted.some((f) => f.status.live || f.status.finished);
 

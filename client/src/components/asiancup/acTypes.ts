@@ -128,19 +128,61 @@ export function groupFixturesByDay(fixtures: AcFixture[]): AcDayGroup[] {
     }));
 }
 
-/** نطاق تواريخ البطولة بصيغة عربية مختصرة (يوم البداية – يوم النهاية). */
+/** نطاق تواريخ البطولة بصيغة مختصرة مع أصفار بادئة (07 - 20 يناير 2027 أو 07 يناير - 05 فبراير 2027). */
 export function formatDateRange(startIso: string | null, endIso: string | null): string {
   if (!startIso) return "";
-  const fmt = new Intl.DateTimeFormat("ar-SA", {
-    timeZone: "Asia/Riyadh",
-    day: "numeric",
+  const tz = "Asia/Riyadh";
+  const start = new Date(startIso);
+  if (Number.isNaN(start.getTime())) return "";
+
+  const day = new Intl.DateTimeFormat("en-GB", { timeZone: tz, day: "2-digit" });
+  const monthYear = new Intl.DateTimeFormat("ar-SA", {
+    timeZone: tz,
     month: "long",
     year: "numeric",
+    numberingSystem: "latn",
   });
-  const start = fmt.format(new Date(startIso));
-  if (!endIso) return start;
-  const end = fmt.format(new Date(endIso));
-  return start === end ? start : `${start} — ${end}`;
+  const dayMonth = new Intl.DateTimeFormat("ar-SA", {
+    timeZone: tz,
+    day: "2-digit",
+    month: "long",
+    numberingSystem: "latn",
+  });
+  const full = new Intl.DateTimeFormat("ar-SA", {
+    timeZone: tz,
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    numberingSystem: "latn",
+  });
+
+  if (!endIso) return full.format(start);
+  const end = new Date(endIso);
+  if (Number.isNaN(end.getTime())) return full.format(start);
+
+  const parts = (d: Date) => {
+    const p = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+    }).formatToParts(d);
+    return {
+      y: p.find((x) => x.type === "year")?.value,
+      m: p.find((x) => x.type === "month")?.value,
+      d: p.find((x) => x.type === "day")?.value,
+    };
+  };
+  const a = parts(start);
+  const b = parts(end);
+
+  if (a.y === b.y && a.m === b.m) {
+    return `${day.format(start)} - ${day.format(end)} ${monthYear.format(end)}`;
+  }
+  if (a.y === b.y) {
+    return `${dayMonth.format(start)} - ${full.format(end)}`;
+  }
+  return `${full.format(start)} - ${full.format(end)}`;
 }
 
 // ===== تفاصيل المباراة (نافذة الويب) — مرآة نحيفة لِـ AcMatchDetail في الخادم =====
