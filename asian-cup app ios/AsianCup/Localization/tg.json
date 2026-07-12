@@ -235,6 +235,8 @@
   "auth.signedIn": "Бо Sabq пайваст шуд",
   "auth.signOut": "Баромадан",
   "auth.error.apple": "Намешавад бо Apple ворид шавед",
+  "follow.action": "Пайгирӣ",
+  "follow.following": "Пайгирӣ мешавад",
   "notifications.enable": "Огоҳиномаҳои мачро фаъол кунед",
   "notifications.enabled": "Огоҳиномаҳои мач фаъол карда шуданд"
 }

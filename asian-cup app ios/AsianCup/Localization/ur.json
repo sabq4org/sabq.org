@@ -235,6 +235,8 @@
   "auth.signedIn": "Sabq سے جڑے ہوئے",
   "auth.signOut": "سائن آؤٹ",
   "auth.error.apple": "Apple کے ساتھ سائن ان نہیں ہو سکا",
+  "follow.action": "فالو کریں",
+  "follow.following": "فالو کر رہے ہیں",
   "notifications.enable": "میچ الرٹس فعال کریں",
   "notifications.enabled": "میچ الرٹس فعال ہو گئے"
 }

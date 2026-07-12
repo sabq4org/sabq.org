@@ -235,6 +235,8 @@
   "auth.signedIn": "已连接到Sabq",
   "auth.signOut": "登出",
   "auth.error.apple": "无法使用Apple登录",
+  "follow.action": "关注",
+  "follow.following": "已关注",
   "notifications.enable": "启用比赛提醒",
   "notifications.enabled": "比赛提醒已启用"
 }

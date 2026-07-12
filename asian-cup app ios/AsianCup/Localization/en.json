@@ -264,6 +264,8 @@
   "auth.signedIn": "Connected to Sabq",
   "auth.signOut": "Sign out",
   "auth.error.apple": "Could not sign in with Apple",
+  "follow.action": "Follow",
+  "follow.following": "Following",
   "notifications.enable": "Enable match alerts",
   "notifications.enabled": "Match alerts enabled"
 }

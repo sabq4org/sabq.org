@@ -26,7 +26,38 @@
 		4A000011 /* Localization in Resources */ = {isa = PBXBuildFile; fileRef = 4A100014 /* Localization */; };
 		4A000012 /* AcAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100015 /* AcAuth.swift */; };
 		4A000013 /* AcPush.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100016 /* AcPush.swift */; };
+		4A000014 /* AcFollows.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A100017 /* AcFollows.swift */; };
+		4B000001 /* AcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B100001 /* AcMatchActivityAttributes.swift */; };
+		4B000002 /* AcLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B100002 /* AcLiveActivity.swift */; };
+		4B000003 /* AcMatchActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B100003 /* AcMatchActivityAttributes.swift */; };
+		4B000004 /* AcMatchLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B100004 /* AcMatchLiveActivity.swift */; };
+		4B000005 /* AsianCupWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B100005 /* AsianCupWidgetsBundle.swift */; };
+		4B000006 /* AsianCupWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4B100008 /* AsianCupWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		4B700001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4A600000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 4B300001;
+			remoteInfo = AsianCupWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		4B400003 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				4B000006 /* AsianCupWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		4A100001 /* AsianCupApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsianCupApp.swift; sourceTree = "<group>"; };
@@ -50,7 +81,15 @@
 		4A100014 /* Localization */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Localization; sourceTree = "<group>"; };
 		4A100015 /* AcAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcAuth.swift; sourceTree = "<group>"; };
 		4A100016 /* AcPush.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcPush.swift; sourceTree = "<group>"; };
+		4A100017 /* AcFollows.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcFollows.swift; sourceTree = "<group>"; };
 		4A100020 /* AsianCup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AsianCup.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4B100001 /* AcMatchActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcMatchActivityAttributes.swift; sourceTree = "<group>"; };
+		4B100002 /* AcLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcLiveActivity.swift; sourceTree = "<group>"; };
+		4B100003 /* AcMatchActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcMatchActivityAttributes.swift; sourceTree = "<group>"; };
+		4B100004 /* AcMatchLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcMatchLiveActivity.swift; sourceTree = "<group>"; };
+		4B100005 /* AsianCupWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AsianCupWidgetsBundle.swift; sourceTree = "<group>"; };
+		4B100006 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4B100008 /* AsianCupWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AsianCupWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -58,6 +97,7 @@
 			isa = PBXGroup;
 			children = (
 				4A200001 /* AsianCup */,
+				4B200009 /* AsianCupWidgets */,
 				4A200006 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -105,6 +145,9 @@
 				4A100013 /* AcLocalization.swift */,
 				4A100015 /* AcAuth.swift */,
 				4A100016 /* AcPush.swift */,
+				4A100017 /* AcFollows.swift */,
+				4B100001 /* AcMatchActivityAttributes.swift */,
+				4B100002 /* AcLiveActivity.swift */,
 				4A100007 /* APIClient.swift */,
 				4A100008 /* FontRegistration.swift */,
 				4A100009 /* URLConstants.swift */,
@@ -124,6 +167,7 @@
 			isa = PBXGroup;
 			children = (
 				4A100020 /* AsianCup.app */,
+				4B100008 /* AsianCupWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -146,6 +190,17 @@
 			path = Fonts;
 			sourceTree = "<group>";
 		};
+		4B200009 /* AsianCupWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				4B100005 /* AsianCupWidgetsBundle.swift */,
+				4B100004 /* AcMatchLiveActivity.swift */,
+				4B100003 /* AcMatchActivityAttributes.swift */,
+				4B100006 /* Info.plist */,
+			);
+			path = AsianCupWidgets;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -155,15 +210,32 @@
 			buildPhases = (
 				4A400001 /* Sources */,
 				4A400002 /* Resources */,
+				4B400003 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				4B800001 /* PBXTargetDependency */,
 			);
 			name = AsianCup;
 			productName = AsianCup;
 			productReference = 4A100020 /* AsianCup.app */;
 			productType = "com.apple.product-type.application";
+		};
+		4B300001 /* AsianCupWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4B500006 /* Build configuration list for PBXNativeTarget "AsianCupWidgets" */;
+			buildPhases = (
+				4B400004 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AsianCupWidgets;
+			productName = AsianCupWidgets;
+			productReference = 4B100008 /* AsianCupWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -175,6 +247,9 @@
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
 					4A300000 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+					4B300001 = {
 						CreatedOnToolsVersion = 15.0;
 					};
 				};
@@ -193,6 +268,7 @@
 			projectRoot = "";
 			targets = (
 				4A300000 /* AsianCup */,
+				4B300001 /* AsianCupWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -228,13 +304,34 @@
 				4A000010 /* AcLocalization.swift in Sources */,
 				4A000012 /* AcAuth.swift in Sources */,
 				4A000013 /* AcPush.swift in Sources */,
+				4A000014 /* AcFollows.swift in Sources */,
+				4B000001 /* AcMatchActivityAttributes.swift in Sources */,
+				4B000002 /* AcLiveActivity.swift in Sources */,
 				4A000007 /* APIClient.swift in Sources */,
 				4A000008 /* FontRegistration.swift in Sources */,
 				4A000009 /* URLConstants.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4B400004 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4B000003 /* AcMatchActivityAttributes.swift in Sources */,
+				4B000004 /* AcMatchLiveActivity.swift in Sources */,
+				4B000005 /* AsianCupWidgetsBundle.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4B800001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 4B300001 /* AsianCupWidgets */;
+			targetProxy = 4B700001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		4A500000 /* Debug */ = {
@@ -369,6 +466,44 @@
 			};
 			name = Release;
 		};
+		4B500007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AsianCupWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.asiancup.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		4B500008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = CBU7MJEC5R;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AsianCupWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks");
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.asiancup.LiveActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -386,6 +521,15 @@
 			buildConfigurations = (
 				4A500000 /* Debug */,
 				4A500002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4B500006 /* Build configuration list for PBXNativeTarget "AsianCupWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4B500007 /* Debug */,
+				4B500008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

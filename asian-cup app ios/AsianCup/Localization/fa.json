@@ -264,6 +264,8 @@
   "auth.signedIn": "متصل به سبق",
   "auth.signOut": "خروج",
   "auth.error.apple": "ورود با Apple انجام نشد",
+  "follow.action": "دنبال کردن",
+  "follow.following": "دنبال می‌کنید",
   "notifications.enable": "فعال‌کردن اعلان بازی‌ها",
   "notifications.enabled": "اعلان بازی‌ها فعال است"
 }

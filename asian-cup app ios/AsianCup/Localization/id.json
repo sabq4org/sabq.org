@@ -235,6 +235,8 @@
   "auth.signedIn": "Terhubung ke Sabq",
   "auth.signOut": "Keluar",
   "auth.error.apple": "Tidak dapat masuk dengan Apple",
+  "follow.action": "Ikuti",
+  "follow.following": "Mengikuti",
   "notifications.enable": "Aktifkan pemberitahuan pertandingan",
   "notifications.enabled": "Pemberitahuan pertandingan diaktifkan"
 }

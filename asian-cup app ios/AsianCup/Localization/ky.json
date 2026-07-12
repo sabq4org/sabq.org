@@ -235,6 +235,8 @@
   "auth.signedIn": "Sabq'га туташты",
   "auth.signOut": "Чыгуу",
   "auth.error.apple": "Apple менен кирүү мүмкүн болбой калды",
+  "follow.action": "Ээрчүү",
+  "follow.following": "Ээрчилүүдө",
   "notifications.enable": "Оюн эскертүүлөрүн иштетүү",
   "notifications.enabled": "Оюн эскертүүлөрү иштетилди"
 }

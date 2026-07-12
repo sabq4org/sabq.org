@@ -235,6 +235,8 @@
   "auth.signedIn": "Sabqに接続されています",
   "auth.signOut": "サインアウト",
   "auth.error.apple": "Appleでサインインできませんでした",
+  "follow.action": "フォロー",
+  "follow.following": "フォロー中",
   "notifications.enable": "試合アラートを有効にする",
   "notifications.enabled": "試合アラートが有効になりました"
 }
