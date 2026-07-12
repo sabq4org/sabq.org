@@ -421,6 +421,7 @@ const IFoxSettings = lazy(() => retryImport(() => import("@/pages/admin/ifox/IFo
 const IFoxAITasks = lazy(() => retryImport(() => import("@/pages/admin/ifox/IFoxAITasks")));
 const AIManagementDashboard = lazy(() => retryImport(() => import("@/pages/admin/ifox/ai-management")));
 const AiHubPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiHub")));
+const IntegrationsSettingsPage = lazy(() => retryImport(() => import("@/pages/dashboard/IntegrationsSettings")));
 const ImageStudio = lazy(() => retryImport(() => import("@/pages/ifox/ImageStudio")));
 const InfographicStudio = lazy(() => retryImport(() => import("@/pages/InfographicStudio")));
 const DataInfographicDemo = lazy(() => retryImport(() => import("@/pages/DataInfographicDemo")));
@@ -948,6 +949,7 @@ function Router() {
         <Route path="/dashboard/admin/ifox/settings">{() => <LazyRoute component={IFoxSettings} />}</Route>
         <Route path="/dashboard/admin/ifox/ai-management">{() => <LazyRoute component={AIManagementDashboard} />}</Route>
         <Route path="/dashboard/ai-hub">{() => <LazyRoute component={AiHubPage} />}</Route>
+        <Route path="/dashboard/integrations">{() => <LazyRoute component={IntegrationsSettingsPage} />}</Route>
         <Route path="/dashboard/admin/ifox/ai-tasks">{() => <LazyRoute component={IFoxAITasks} />}</Route>
         
         {/* Onboarding routes - Arabic */}
