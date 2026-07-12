@@ -88,6 +88,7 @@ import {
   Mail,
   User,
   SpellCheck,
+  Frame,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -148,6 +149,7 @@ import { StoryCardsGenerator } from "@/components/StoryCardsGenerator";
 import { AutoImageGenerator } from "@/components/AutoImageGenerator";
 import { ThumbnailGenerator } from "@/components/ThumbnailGenerator";
 import { ImageUploadDialog } from "@/components/ImageUploadDialog";
+import { LogoComposerDialog } from "@/components/LogoComposerDialog";
 import { Progress } from "@/components/ui/progress";
 import { ArticleTimeline } from "@/components/dashboard/ArticleTimeline";
 import type { Editor } from "@tiptap/react";
@@ -272,6 +274,7 @@ export default function ArticleEditor() {
   } | null>(null);
   const [editorInstance, setEditorInstance] = useState<Editor | null>(null);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [showLogoComposer, setShowLogoComposer] = useState(false);
   const [showAIImageDialog, setShowAIImageDialog] = useState(false);
   const [showInfographicDialog, setShowInfographicDialog] = useState(false);
   const [showStoryCardsDialog, setShowStoryCardsDialog] = useState(false);
@@ -1007,6 +1010,41 @@ export default function ArticleEditor() {
     }
   }, [imageUrl, heroImageMediaId, isNewArticle, saveToMediaLibrary]);
 
+  const uploadFeaturedImageFile = async (file: File): Promise<boolean> => {
+    setIsUploadingImage(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "article");
+      const uploaded = (await apiRequest("/api/media/upload", {
+        method: "POST",
+        body: formData,
+        isFormData: true,
+      })) as { id: string; url: string };
+
+      setImageUrl(uploaded.url);
+      setIsAiGeneratedImage(false);
+      setHeroImageMediaId(uploaded.id);
+
+      toast({
+        title: "تم الرفع بنجاح",
+        description: `الرابط: ${uploaded.url.substring(0, 50)}...`,
+      });
+      return true;
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      toast({
+        title: "خطأ",
+        description: "فشل رفع الصورة",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1029,36 +1067,7 @@ export default function ArticleEditor() {
       return;
     }
 
-    setIsUploadingImage(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("entityType", "article");
-      const uploaded = (await apiRequest("/api/media/upload", {
-        method: "POST",
-        body: formData,
-        isFormData: true,
-      })) as { id: string; url: string };
-
-      setImageUrl(uploaded.url);
-      setIsAiGeneratedImage(false);
-      setHeroImageMediaId(uploaded.id);
-
-      toast({
-        title: "تم الرفع بنجاح",
-        description: `الرابط: ${uploaded.url.substring(0, 50)}...`,
-      });
-    } catch (error) {
-      console.error("Error uploading image:", error);
-      toast({
-        title: "خطأ",
-        description: "فشل رفع الصورة",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUploadingImage(false);
-    }
+    await uploadFeaturedImageFile(file);
   };
 
   // Handler for uploading infographic banner image (horizontal 16:9 for card displays)
@@ -2724,6 +2733,16 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       </Button>
                     </span>
                   )}
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowLogoComposer(true)}
+                    disabled={isUploadingImage}
+                    className="gap-2"
+                    data-testid="button-logo-composer"
+                  >
+                    <Frame className="h-4 w-4" />
+                    أدوات الشعار
+                  </Button>
                   {canGenerateImages && (
                     <Button
                       variant="outline"
@@ -4502,6 +4521,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           currentImageUrl={imageUrl}
         />
       )}
+
+      {/* Logo Composer Dialog - fit/merge logos on white 16:9 canvas */}
+      <LogoComposerDialog
+        open={showLogoComposer}
+        onOpenChange={setShowLogoComposer}
+        onImageReady={uploadFeaturedImageFile}
+      />
 
       {/* AI Image Generator Dialog for Featured Image */}
       <AIImageGeneratorDialog
