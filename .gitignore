@@ -119,3 +119,6 @@ docs/security/تقرير_المراجعة_الأمنية_سبق.json
 # Claude Code personal settings
 .claude/settings.local.json
 .claude/worktrees/
+
+# Local dev media uploads (dev disk fallback in /api/media/upload)
+uploads/
