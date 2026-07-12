@@ -19,6 +19,8 @@ export interface AcTeam {
   id: number;
   name: string;
   logo: string;
+  /** تصنيف فيفا (TheSports عبر جسر الخادم) — اختياري */
+  fifaRank?: number | null;
 }
 
 export interface AcFixture {
@@ -137,4 +139,25 @@ export function formatDateRange(startIso: string | null, endIso: string | null):
   if (!endIso) return start;
   const end = fmt.format(new Date(endIso));
   return start === end ? start : `${start} — ${end}`;
+}
+
+// ===== تفاصيل المباراة (نافذة الويب) — مرآة نحيفة لِـ AcMatchDetail في الخادم =====
+
+export interface AcTvChannel {
+  name: string;
+  country: string | null;
+  logo: string | null;
+}
+
+export interface AcMatchPrediction {
+  home: number;
+  draw: number;
+  away: number;
+}
+
+export interface AcMatchDetailSlim {
+  fixture: AcFixture;
+  prediction: AcMatchPrediction | null;
+  headToHead: AcFixture[];
+  tv: AcTvChannel[];
 }

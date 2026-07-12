@@ -49,10 +49,18 @@ export function AcTeams({ teams, isLoading }: { teams: AcTeam[]; isLoading: bool
                     مضيف
                   </span>
                 )}
-                <div className="h-14 w-14 rounded-full bg-white p-1.5 ring-1 ring-black/5 transition-transform group-hover:scale-110">
+                <div className="relative h-14 w-14 rounded-full bg-white p-1.5 ring-1 ring-black/5 transition-transform group-hover:scale-110">
                   {team.logo ? (
                     <img src={team.logo} alt={team.name} className="h-full w-full object-contain" loading="lazy" />
                   ) : null}
+                  {team.fifaRank != null && (
+                    <span
+                      className="absolute -top-1 -left-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] font-black text-white tabular-nums ring-1 ring-white dark:ring-card"
+                      title={`تصنيف فيفا #${team.fifaRank}`}
+                    >
+                      {team.fifaRank}
+                    </span>
+                  )}
                 </div>
                 <span className="text-center text-xs font-bold text-foreground">{team.name}</span>
               </motion.div>
