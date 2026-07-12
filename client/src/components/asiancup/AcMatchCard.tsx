@@ -84,8 +84,10 @@ export function AcMatchCard({ fixture, onOpen }: AcMatchCardProps) {
   return (
     <Card
       onClick={() => onOpen(fixture.id)}
-      className={`group cursor-pointer overflow-hidden border-0 dark:border dark:border-card-border hover-elevate active-elevate-2 transition-all duration-300 ${
-        involvesSaudi ? "ring-1 ring-emerald-500/40 bg-emerald-50/40 dark:bg-emerald-950/20" : ""
+      className={`group cursor-pointer overflow-hidden border border-emerald-500/15 bg-gradient-to-b from-emerald-500/[0.06] to-card shadow-sm transition-all duration-300 hover-elevate active-elevate-2 dark:border-emerald-500/20 ${
+        involvesSaudi
+          ? "ring-1 ring-emerald-500/40 from-emerald-500/[0.12]"
+          : ""
       }`}
       data-testid={`ac-match-card-${fixture.id}`}
     >
