@@ -434,8 +434,6 @@ const AsianCupPredictions = lazy(() => retryImport(() => import("@/pages/AsianCu
 const AsianCupMatch = lazy(() => retryImport(() => import("@/pages/AsianCupMatch")));
 const AsianCupTeam = lazy(() => retryImport(() => import("@/pages/AsianCupTeam")));
 const AsianCupPlayer = lazy(() => retryImport(() => import("@/pages/AsianCupPlayer")));
-const AsianCupScorers = lazy(() => retryImport(() => import("@/pages/AsianCupScorers")));
-const AsianCupBracket = lazy(() => retryImport(() => import("@/pages/AsianCupBracket")));
 const AsianCupVenues = lazy(() => retryImport(() => import("@/pages/AsianCupVenues")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
 const GulfCupPredictions = lazy(() => retryImport(() => import("@/pages/GulfCupPredictions")));
@@ -976,8 +974,8 @@ function Router() {
         <Route path="/asian-cup/match/:id">{() => <LazyRoute component={AsianCupMatch} />}</Route>
         <Route path="/asian-cup/team/:id">{() => <LazyRoute component={AsianCupTeam} />}</Route>
         <Route path="/asian-cup/player/:id">{() => <LazyRoute component={AsianCupPlayer} />}</Route>
-        <Route path="/asian-cup/scorers">{() => <LazyRoute component={AsianCupScorers} />}</Route>
-        <Route path="/asian-cup/bracket">{() => <LazyRoute component={AsianCupBracket} />}</Route>
+        <Route path="/asian-cup/scorers">{() => <Redirect to="/asian-cup#ac-races" />}</Route>
+        <Route path="/asian-cup/bracket">{() => <Redirect to="/asian-cup#ac-knockout" />}</Route>
         <Route path="/asian-cup/venues">{() => <LazyRoute component={AsianCupVenues} />}</Route>
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         <Route path="/gulf-cup/majlis/:id">{() => <LazyRoute component={GulfCupMajlis} />}</Route>

@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +13,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,7 +51,7 @@ fun AsianCupScreen(
                     AsianCupViewModel.Tab.MATCHES -> AcMatches(state.fixtures, onOpenMatch)
                     AsianCupViewModel.Tab.PREDICTIONS -> AcPredictions(state, onRequireLogin, viewModel::submit)
                     AsianCupViewModel.Tab.GROUPS -> AcGroups(state.groups)
-                    AsianCupViewModel.Tab.MORE -> AcMore(state, onOpenMatch, onOpenTeam)
+                    AsianCupViewModel.Tab.MORE -> AcMore(state, onOpenTeam)
                 }
             }
         }
@@ -97,6 +99,8 @@ fun AsianCupScreen(
         }
         item { AcSection("أقرب المباريات") }
         items(state.fixtures.filter { !it.status.finished }.take(5)) { AcMatchCard(it, openMatch) }
+        item { AcInlineKnockout(state.bracket, openMatch) }
+        item { AcTournamentRaces(state.scorers) }
     }
 }
 
@@ -151,14 +155,98 @@ fun AsianCupScreen(
     }
 }
 
-@Composable private fun AcMore(state: AsianCupViewModel.State, openMatch: (Int) -> Unit, openTeam: (AcTeam) -> Unit) {
+@Composable private fun AcMore(state: AsianCupViewModel.State, openTeam: (AcTeam) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { AcSection("المنتخبات") }
         items(state.teams) { team -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AcColors.card).clickable { openTeam(team) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { AsyncImage(team.logo, null, Modifier.size(38.dp).clip(CircleShape).background(Color.White).padding(4.dp)); Spacer(Modifier.width(10.dp)); Text(team.name, color = AcColors.text, fontFamily = IbmPlexSansArabic) } }
-        item { AcSection("الهدافون") }
-        items(state.scorers.take(10)) { scorer -> Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AcColors.card).padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Text("${scorer.rank}", color = AcColors.gold, modifier = Modifier.width(28.dp)); AsyncImage(scorer.photo, null, Modifier.size(38.dp).clip(CircleShape)); Spacer(Modifier.width(9.dp)); Column(Modifier.weight(1f)) { Text(scorer.name, color = AcColors.text, fontFamily = IbmPlexSansArabic); Text(scorer.team.name, color = AcColors.dim, fontSize = 10.sp, fontFamily = IbmPlexSansArabic) }; Text("${scorer.goals}", color = AcColors.gold, fontSize = 20.sp, fontWeight = FontWeight.Black) } }
-        item { AcSection("طريق النهائي") }
-        state.bracket.rounds.forEach { round -> item { Text(round.round, color = AcColors.mint, fontWeight = FontWeight.Bold, fontFamily = IbmPlexSansArabic) }; items(round.matches) { AcMatchCard(it, openMatch) } }
+    }
+}
+
+@Composable private fun AcInlineKnockout(bracket: AcBracket, openMatch: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(AcColors.card).padding(vertical = 16.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp)) {
+            AcSection("الأدوار الإقصائية")
+            Text("من دور الـ16 حتى النهائي", color = AcColors.dim, fontSize = 11.sp, fontFamily = IbmPlexSansArabic)
+        }
+        Spacer(Modifier.height(12.dp))
+        if (bracket.rounds.all { it.matches.isEmpty() }) {
+            AcEmpty("تظهر شجرة البطولة بعد اكتمال المتأهلين")
+        } else {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+            ) {
+                items(bracket.rounds) { round ->
+                    Column(Modifier.width(250.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(round.round, color = AcColors.mint, fontWeight = FontWeight.Black, fontFamily = IbmPlexSansArabic)
+                        round.matches.forEach { fixture -> AcTreeMatchCard(fixture, openMatch) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable private fun AcTreeMatchCard(fixture: AcFixture, openMatch: (Int) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp)).background(AcColors.cardHi)
+            .clickable { openMatch(fixture.id) }.padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(fixture.home.logo, null, Modifier.size(24.dp).clip(CircleShape).background(Color.White).padding(2.dp))
+            Spacer(Modifier.width(7.dp))
+            Text(fixture.home.name, color = AcColors.text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = IbmPlexSansArabic, modifier = Modifier.weight(1f))
+            Text("${fixture.goals.home ?: "-"}", color = AcColors.gold, fontWeight = FontWeight.Black)
+        }
+        HorizontalDivider(color = AcColors.dim.copy(alpha = .15f))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(fixture.away.logo, null, Modifier.size(24.dp).clip(CircleShape).background(Color.White).padding(2.dp))
+            Spacer(Modifier.width(7.dp))
+            Text(fixture.away.name, color = AcColors.text, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = IbmPlexSansArabic, modifier = Modifier.weight(1f))
+            Text("${fixture.goals.away ?: "-"}", color = AcColors.gold, fontWeight = FontWeight.Black)
+        }
+    }
+}
+
+private enum class AcRace { GOALS, ASSISTS }
+
+@Composable private fun AcTournamentRaces(scorers: List<AcScorer>) {
+    var race by rememberSaveable { mutableStateOf(AcRace.GOALS) }
+    val leaders = remember(scorers, race) {
+        when (race) {
+            AcRace.GOALS -> scorers.sortedWith(compareByDescending<AcScorer> { it.goals }.thenByDescending { it.assists })
+            AcRace.ASSISTS -> scorers.sortedWith(compareByDescending<AcScorer> { it.assists }.thenByDescending { it.goals })
+        }
+    }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(AcColors.card).padding(16.dp)) {
+        AcSection("سباقات البطولة")
+        Text("الهدافون وصناع الأهداف", color = AcColors.dim, fontSize = 11.sp, fontFamily = IbmPlexSansArabic)
+        Spacer(Modifier.height(12.dp))
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+            AcRace.entries.forEachIndexed { index, value ->
+                SegmentedButton(
+                    selected = race == value,
+                    onClick = { race = value },
+                    shape = SegmentedButtonDefaults.itemShape(index, AcRace.entries.size),
+                    colors = SegmentedButtonDefaults.colors(activeContainerColor = AcColors.green, activeContentColor = Color.White, inactiveContainerColor = AcColors.cardHi, inactiveContentColor = AcColors.dim),
+                ) { Text(if (value == AcRace.GOALS) "الهدافون" else "صناع الأهداف", fontFamily = IbmPlexSansArabic) }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        if (leaders.isEmpty()) AcEmpty("تظهر الإحصاءات مع انطلاق البطولة") else leaders.take(10).forEachIndexed { index, scorer ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("${index + 1}", color = if (index < 3) AcColors.gold else AcColors.dim, modifier = Modifier.width(28.dp), fontWeight = FontWeight.Black)
+                AsyncImage(scorer.photo, null, Modifier.size(38.dp).clip(CircleShape).background(AcColors.cardHi))
+                Spacer(Modifier.width(9.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(scorer.name, color = AcColors.text, maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = IbmPlexSansArabic)
+                    Text(scorer.team.name, color = AcColors.dim, fontSize = 10.sp, fontFamily = IbmPlexSansArabic)
+                }
+                Text("${if (race == AcRace.GOALS) scorer.goals else scorer.assists}", color = AcColors.gold, fontSize = 20.sp, fontWeight = FontWeight.Black)
+            }
+            if (index < leaders.take(10).lastIndex) HorizontalDivider(color = AcColors.dim.copy(alpha = .12f))
+        }
     }
 }
 

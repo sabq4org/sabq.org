@@ -9,6 +9,8 @@ struct AsianCupView: View {
     @State private var fixtures: [AcFixture] = []
     @State private var teams: [AcTeam] = []
     @State private var groups: [AcGroup] = []
+    @State private var scorers: [AcScorer] = []
+    @State private var bracket: AcBracket?
     @State private var loading = true
     @State private var loadError: String?
     @State private var selectedTab: AcTab = .home
@@ -22,6 +24,8 @@ struct AsianCupView: View {
                     fixtures: fixtures,
                     teams: teams,
                     groups: groups,
+                    scorers: scorers,
+                    bracket: bracket,
                     loading: loading,
                     loadError: loadError,
                     onSelectTab: { selectedTab = $0 },
@@ -121,12 +125,18 @@ struct AsianCupView: View {
         async let f = APIClient.shared.fetchFixtures(ignoreCache: force)
         async let t = APIClient.shared.fetchTeams(ignoreCache: force)
         async let g = APIClient.shared.fetchStandings(ignoreCache: force)
+        // الإحصاءات والشجرة إضافتان داخل صفحة البطولة؛ فشلهما لا يجب أن يحجب
+        // المباريات والمجموعات الأساسية عن المستخدم.
+        async let s: [AcScorer]? = try? await APIClient.shared.fetchAcScorers(ignoreCache: force)
+        async let b: AcBracket? = try? await APIClient.shared.fetchAcBracket(ignoreCache: force)
         do {
-            let (ov, fx, tm, gr) = try await (o, f, t, g)
+            let (ov, fx, tm, gr, sc, br) = try await (o, f, t, g, s, b)
             self.overview = ov
             self.fixtures = fx
             self.teams = tm
             self.groups = gr
+            self.scorers = sc ?? []
+            self.bracket = br
             self.loadError = nil
         } catch {
             self.loadError = LError(error)
@@ -165,6 +175,8 @@ private struct AcHomeScreen: View {
     let fixtures: [AcFixture]
     let teams: [AcTeam]
     let groups: [AcGroup]
+    let scorers: [AcScorer]
+    let bracket: AcBracket?
     let loading: Bool
     let loadError: String?
     let onSelectTab: (AcTab) -> Void
@@ -203,6 +215,11 @@ private struct AcHomeScreen: View {
                 }
 
                 AcNextFixturesPreview(fixtures: nextFixtures, onOpenMatches: { onSelectTab(.matches) })
+
+                AcInlineKnockoutSection(bracket: bracket)
+                    .padding(.horizontal, -16)
+
+                AcInlineTournamentRaces(scorers: scorers, tournamentStarted: overview?.started == true)
 
                 AcHomeVenuesPreview(overview: overview, onOpenMore: { onSelectTab(.more) })
 
@@ -743,8 +760,6 @@ private struct AcMoreScreen: View {
             VStack(spacing: 18) {
                 AcTopBar(title: L("tab.more"), subtitle: L("more.subtitle"), state: L("brand.sabq"))
 
-                AcMoreHub()
-
                 AcAccountCard()
 
                 AcLanguageRow { showLanguage = true }
@@ -859,26 +874,6 @@ private struct AcAccountCard: View {
                     }
                     .padding(14)
                 }
-            }
-        }
-    }
-}
-
-// شبكة روابط «المزيد»: الهدّافون + شجرة الأدوار (نقاط API-Football الإضافية).
-private struct AcMoreHub: View {
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            AcSectionHeader(icon: "square.grid.2x2.fill", title: L("more.explore.title"), subtitle: L("more.explore.subtitle"), tint: AcTheme.azure)
-            AcGroupedCard {
-                NavigationLink { AcScorersScreen() } label: {
-                    AcNavRow(icon: "soccerball.inverse", tint: AcTheme.gold, title: L("scorers.title"), subtitle: L("scorers.subtitle"))
-                }
-                .buttonStyle(.plain)
-                AcRowDivider()
-                NavigationLink { AcBracketScreen() } label: {
-                    AcNavRow(icon: "trophy.fill", tint: AcTheme.emerald, title: L("bracket.title"), subtitle: L("bracket.subtitle"))
-                }
-                .buttonStyle(.plain)
             }
         }
     }
@@ -2290,7 +2285,262 @@ struct AcHostShowcase: View {
     }
 }
 
-// MARK: - شاشة الهدّافين
+// MARK: - مركز البطولة داخل الرئيسية (الشجرة + سباقات البطولة)
+
+private struct AcInlineKnockoutSection: View {
+    let bracket: AcBracket?
+
+    private var rounds: [AcBracketRound] { bracket?.rounds ?? [] }
+    private var maxMatches: Int { max(rounds.map(\.matches.count).max() ?? 1, 1) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AcSectionHeader(
+                icon: "trophy.fill",
+                title: L("bracket.title"),
+                subtitle: L("bracket.subtitle"),
+                count: rounds.isEmpty ? nil : rounds.count,
+                tint: AcTheme.emerald
+            )
+            .padding(.horizontal, 16)
+
+            if rounds.isEmpty || rounds.allSatisfy({ $0.matches.isEmpty }) {
+                VStack(spacing: 14) {
+                    HStack(spacing: 7) {
+                        ForEach(["round.r16", "round.qf", "round.sf", "round.final"], id: \.self) { key in
+                            Text(L(key))
+                                .font(AsianCupFonts.app(size: 10, weight: .bold))
+                                .foregroundStyle(AcTheme.emeraldDeep)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 5)
+                                .background(Capsule().fill(AcTheme.emerald.opacity(0.10)))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    Text(L("bracket.empty.subtitle"))
+                        .font(AsianCupFonts.app(size: 12))
+                        .foregroundStyle(AcTheme.onDarkDim)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(18)
+                .padding(.horizontal, 16)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 0) {
+                        ForEach(Array(rounds.enumerated()), id: \.element.id) { index, round in
+                            AcBracketColumn(round: round, height: CGFloat(maxMatches) * 104)
+                            if index < rounds.count - 1 {
+                                VStack {
+                                    Spacer()
+                                    Rectangle()
+                                        .fill(AcTheme.emerald.opacity(0.28))
+                                        .frame(width: 30, height: 1)
+                                    Spacer()
+                                }
+                                .frame(height: CGFloat(maxMatches) * 104 + 42)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
+                }
+            }
+        }
+    }
+}
+
+private struct AcBracketColumn: View {
+    let round: AcBracketRound
+    let height: CGFloat
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(LRound(round.roundEn, fallback: round.round))
+                .font(AsianCupFonts.app(size: 12, weight: .bold))
+                .foregroundStyle(AcTheme.emeraldDeep)
+                .frame(height: 26)
+            VStack(spacing: 10) {
+                Spacer(minLength: 0)
+                ForEach(round.matches) { fixture in
+                    AcTreeMatchCard(fixture: fixture)
+                    if fixture.id != round.matches.last?.id { Spacer(minLength: 8) }
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(width: 224, height: max(height, 190))
+        }
+    }
+}
+
+private struct AcTreeMatchCard: View {
+    let fixture: AcFixture
+    @State private var showDetail = false
+
+    private var started: Bool { fixture.status.live || fixture.status.finished }
+    private var winnerId: Int? {
+        guard fixture.status.finished, let home = fixture.goals.home, let away = fixture.goals.away, home != away else { return nil }
+        return home > away ? fixture.home.id : fixture.away.id
+    }
+
+    var body: some View {
+        Button { showDetail = true } label: {
+            VStack(spacing: 4) {
+                teamRow(fixture.home, score: fixture.goals.home)
+                Rectangle().fill(AcTheme.outline).frame(height: 1)
+                teamRow(fixture.away, score: fixture.goals.away)
+                Text(fixture.status.live ? "● \(fixture.status.elapsed ?? 0)' \(L("state.live"))" : fixture.status.label)
+                    .font(AsianCupFonts.app(size: 9, weight: fixture.status.live ? .bold : .regular))
+                    .foregroundStyle(fixture.status.live ? AcTheme.crimson : AcTheme.onDarkFaint)
+            }
+            .padding(10)
+            .frame(width: 224)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(AcTheme.cardFillStrong))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showDetail) {
+            NavigationStack { AcMatchDetailSheet(fixture: fixture) }.asianCupRTL()
+        }
+    }
+
+    private func teamRow(_ team: AcTeam, score: Int?) -> some View {
+        HStack(spacing: 7) {
+            AcTeamLogo(logo: team.logo, size: 22)
+            Text(team.id > 0 ? LTeam(String(team.id), fallback: team.name) : L("bracket.empty.title"))
+                .font(AsianCupFonts.app(size: 11, weight: winnerId == team.id ? .bold : .semibold))
+                .foregroundStyle(winnerId == team.id ? AcTheme.emeraldDeep : AcTheme.onDark)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            if started {
+                Text("\(score ?? 0)").font(AsianCupFonts.app(size: 13, weight: .bold)).monospacedDigit()
+            }
+        }
+    }
+}
+
+private enum AcRaceSegment: String, CaseIterable, Identifiable {
+    case goals
+    case assists
+    var id: String { rawValue }
+    var title: String { self == .goals ? L("scorers.title") : L("scorers.assists") }
+}
+
+private struct AcInlineTournamentRaces: View {
+    let scorers: [AcScorer]
+    let tournamentStarted: Bool
+    @State private var segment: AcRaceSegment = .goals
+
+    private var leaders: [AcScorer] {
+        scorers
+            .filter { segment == .goals || $0.assists > 0 }
+            .sorted {
+                let lhs = segment == .goals ? $0.goals : $0.assists
+                let rhs = segment == .goals ? $1.goals : $1.assists
+                if lhs != rhs { return lhs > rhs }
+                return segment == .goals ? $0.assists > $1.assists : $0.goals > $1.goals
+            }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            AcSectionHeader(
+                icon: "medal.fill",
+                title: L("scorers.subtitle"),
+                subtitle: L("scorers.title") + " · " + L("scorers.assists"),
+                tint: AcTheme.gold
+            )
+
+            Picker(L("scorers.subtitle"), selection: $segment) {
+                ForEach(AcRaceSegment.allCases) { race in Text(race.title).tag(race) }
+            }
+            .pickerStyle(.segmented)
+
+            if leaders.isEmpty {
+                AcEmptyState(
+                    icon: segment == .goals ? "soccerball" : "figure.soccer",
+                    title: segment == .goals ? L("scorers.empty.title") : L("scorers.assists"),
+                    subtitle: tournamentStarted ? L("scorers.empty.subtitle") : L("scorers.empty.subtitle")
+                )
+            } else {
+                if leaders.count >= 3 { AcRacePodium(leaders: Array(leaders.prefix(3)), segment: segment) }
+                VStack(spacing: 8) {
+                    ForEach(Array((leaders.count >= 3 ? leaders.dropFirst(3) : leaders[...]).prefix(8).enumerated()), id: \.element.id) { offset, player in
+                        NavigationLink {
+                            AcPlayerProfileScreen(
+                                playerId: player.id,
+                                fallbackName: LName(player.name, player.nameEn),
+                                fallbackPhoto: player.photo,
+                                fallbackSubtitle: LTeam(String(player.team.id), fallback: player.team.name),
+                                fallbackTeam: player.team
+                            )
+                        } label: {
+                            AcRaceRow(player: player, rank: (leaders.count >= 3 ? 4 : 1) + offset, segment: segment)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct AcRacePodium: View {
+    let leaders: [AcScorer]
+    let segment: AcRaceSegment
+    private var display: [AcScorer] { [leaders[1], leaders[0], leaders[2]] }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 6) {
+            ForEach(display, id: \.id) { player in
+                let rank = (leaders.firstIndex(where: { $0.id == player.id }) ?? 0) + 1
+                NavigationLink {
+                    AcPlayerProfileScreen(playerId: player.id, fallbackName: LName(player.name, player.nameEn), fallbackPhoto: player.photo, fallbackSubtitle: player.team.name, fallbackTeam: player.team)
+                } label: {
+                    VStack(spacing: 6) {
+                        ZStack(alignment: .bottomTrailing) {
+                            Circle().fill(AcTheme.chipFill)
+                            AcRemoteImage(url: player.photo, contentMode: .fill).clipShape(Circle())
+                            Text("\(rank)").font(AsianCupFonts.app(size: 10, weight: .bold)).foregroundStyle(.white).frame(width: 22, height: 22).background(Circle().fill(rank == 1 ? AcTheme.gold : AcTheme.emerald))
+                        }
+                        .frame(width: rank == 1 ? 78 : 62, height: rank == 1 ? 78 : 62)
+                        Text(LName(player.name, player.nameEn)).font(AsianCupFonts.app(size: 11, weight: .bold)).foregroundStyle(AcTheme.onDark).lineLimit(1)
+                        Text("\(segment == .goals ? player.goals : player.assists)").font(AsianCupFonts.app(size: rank == 1 ? 24 : 20, weight: .bold)).foregroundStyle(rank == 1 ? AcTheme.goldDeep : AcTheme.onDarkStrong).monospacedDigit()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, rank == 1 ? 0 : 18)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+private struct AcRaceRow: View {
+    let player: AcScorer
+    let rank: Int
+    let segment: AcRaceSegment
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text("\(rank)").font(AsianCupFonts.app(size: 12, weight: .bold)).foregroundStyle(AcTheme.onDarkDim).frame(width: 22)
+            ZStack { Circle().fill(AcTheme.chipFill); AcRemoteImage(url: player.photo, contentMode: .fill).clipShape(Circle()) }.frame(width: 40, height: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(LName(player.name, player.nameEn)).font(AsianCupFonts.app(size: 13, weight: .bold)).foregroundStyle(AcTheme.onDark).lineLimit(1)
+                Text(LTeam(String(player.team.id), fallback: player.team.name)).font(AsianCupFonts.app(size: 10)).foregroundStyle(AcTheme.onDarkDim).lineLimit(1)
+            }
+            Spacer()
+            VStack(spacing: 1) {
+                Text("\(segment == .goals ? player.goals : player.assists)").font(AsianCupFonts.app(size: 19, weight: .bold)).foregroundStyle(AcTheme.emeraldDeep).monospacedDigit()
+                Text(segment == .goals ? "\(player.assists) \(L("scorers.assists"))" : "\(player.goals) \(L("scorers.goals"))").font(AsianCupFonts.app(size: 9)).foregroundStyle(AcTheme.onDarkFaint)
+            }
+        }
+        .padding(11)
+        .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(AcTheme.cardFillStrong))
+        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+    }
+}
+
+// MARK: - شاشة الهدّافين (توافق روابط قديمة فقط؛ العرض الرئيسي أصبح مضمّنًا أعلاه)
 struct AcScorersScreen: View {
     @State private var scorers: [AcScorer] = []
     @State private var loading = true
