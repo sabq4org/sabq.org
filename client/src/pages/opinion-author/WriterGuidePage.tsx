@@ -187,21 +187,21 @@ function Step({ number, title, text }: { number: string; title: string; text: st
 }
 
 function IdeaTool({ icon: Icon, title, description, use }: (typeof ideaTools)[number]) {
-  return <Card className="shadow-none"><CardContent className="p-5 sm:p-6"><div className="flex items-start gap-3"><span className="rounded-xl bg-sky-50 p-2.5 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300"><Icon className="h-5 w-5" /></span><div><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 text-base leading-8 text-muted-foreground">{description}</p></div></div><div className="mt-4 rounded-xl bg-muted/45 p-3 text-sm leading-7"><strong>كيف تستخدمها؟ </strong>{use}</div></CardContent></Card>;
+  return <Card className="shadow-none"><CardContent className="p-5 sm:p-6"><div className="flex items-start gap-3"><span className="rounded-lg bg-sky-50 p-1.5 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 sm:rounded-xl sm:p-2.5"><Icon className="h-4 w-4 sm:h-5 sm:w-5" /></span><div><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 text-base leading-8 text-muted-foreground">{description}</p></div></div><div className="mt-4 rounded-xl bg-muted/45 p-3 text-sm leading-7"><strong>كيف تستخدمها؟ </strong>{use}</div></CardContent></Card>;
 }
 
 function SoftNote({ icon: Icon, title, children }: { icon: typeof Feather; title: string; children: ReactNode }) {
-  return <div className="rounded-2xl border border-sky-200/70 bg-sky-50/45 p-4 dark:border-sky-900/40 dark:bg-sky-950/10 sm:p-5"><div className="flex items-start gap-3"><Icon className="mt-1 h-5 w-5 shrink-0 text-sky-700 dark:text-sky-300" /><div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm leading-7 text-foreground/70 sm:text-base sm:leading-8">{children}</p></div></div></div>;
+  return <div className="rounded-2xl border border-sky-200/70 bg-sky-50/45 p-4 dark:border-sky-900/40 dark:bg-sky-950/10 sm:p-5"><div className="flex items-start gap-3"><Icon className="mt-1 h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300 sm:h-5 sm:w-5" /><div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm leading-7 text-foreground/70 sm:text-base sm:leading-8">{children}</p></div></div></div>;
 }
 
 function ReadingCard({ title, icon: Icon, items }: { title: string; icon: typeof Feather; items: string[] }) {
-  return <Card className="shadow-none"><CardContent className="p-5 sm:p-6"><h3 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-5 w-5 text-sky-700 dark:text-sky-300" />{title}</h3><ul className="mt-4 space-y-3">{items.map((item) => <li key={item} className="flex items-start gap-2 text-sm leading-7 text-muted-foreground sm:text-base"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />{item}</li>)}</ul></CardContent></Card>;
+  return <Card className="shadow-none"><CardContent className="p-5 sm:p-6"><h3 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-4 w-4 text-sky-700 dark:text-sky-300 sm:h-5 sm:w-5" />{title}</h3><ul className="mt-4 space-y-3">{items.map((item) => <li key={item} className="flex items-start gap-2 text-sm leading-7 text-muted-foreground sm:text-base"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />{item}</li>)}</ul></CardContent></Card>;
 }
 
 function JourneyStep({ icon: Icon, title, text }: { icon: typeof Feather; title: string; text: string }) {
-  return <div className="relative rounded-xl border bg-card p-4"><Icon className="h-5 w-5 text-sky-700 dark:text-sky-300" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></div>;
+  return <div className="relative rounded-xl border bg-card p-4"><Icon className="h-4 w-4 text-sky-700 dark:text-sky-300 sm:h-5 sm:w-5" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></div>;
 }
 
 function Principle({ title, text }: { title: string; text: string }) {
-  return <div className="rounded-xl border bg-card p-5"><Sparkles className="h-5 w-5 text-sky-700 dark:text-sky-300" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-2 text-sm leading-7 text-muted-foreground sm:text-base">{text}</p></div>;
+  return <div className="rounded-xl border bg-card p-5"><Sparkles className="h-4 w-4 text-sky-700 dark:text-sky-300 sm:h-5 sm:w-5" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-2 text-sm leading-7 text-muted-foreground sm:text-base">{text}</p></div>;
 }

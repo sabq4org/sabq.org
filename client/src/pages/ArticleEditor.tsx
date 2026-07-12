@@ -126,6 +126,10 @@ import { RichTextEditor } from "@/components/RichTextEditor";
 import { TagInput } from "@/components/TagInput";
 import { ReporterSelect } from "@/components/ReporterSelect";
 import { OpinionAuthorSelect } from "@/components/OpinionAuthorSelect";
+import {
+  WriterEditorialNoticesAside,
+  WriterEditorialNoticesMobile,
+} from "@/components/WriterEditorialNotices";
 import { ImageFocalPointPicker } from "@/components/ImageFocalPointPicker";
 import { SmartLinksPanel } from "@/components/SmartLinksPanel";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
@@ -2442,9 +2446,14 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </div>
           </div>
         </div>
-        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6" : "grid grid-cols-1 lg:grid-cols-10 gap-6"}>
+        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "grid grid-cols-1 lg:grid-cols-10 gap-6"}>
           {/* Main Content Area - 70% */}
-          <div className={isOpinionAuthor ? "space-y-6" : "lg:col-span-7 space-y-6"}>
+          <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-6" : "lg:col-span-7 space-y-6"}>
+            {isOpinionAuthor && (
+              <div className="lg:hidden">
+                <WriterEditorialNoticesMobile />
+              </div>
+            )}
             {reviewStatus === "needs_changes" && reviewNotes && isContributorRole && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-card dark:border-border p-4 space-y-3">
                 <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
@@ -3317,6 +3326,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Collapsible>
             )}
           </div>
+
+          {isOpinionAuthor && <WriterEditorialNoticesAside />}
 
           {/* Settings Sidebar - 30% */}
           {!isOpinionAuthor && <div className="lg:col-span-3 space-y-6">

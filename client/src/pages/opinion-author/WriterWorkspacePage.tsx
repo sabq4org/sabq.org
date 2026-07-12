@@ -283,12 +283,31 @@ export default function WriterWorkspacePage() {
 
   return (
     <DashboardLayout>
-      <div className="mt-4 min-h-full w-full bg-background text-right" dir="rtl" style={{ direction: "rtl" }}>
+      <div
+        className="relative mt-4 min-h-full w-full overflow-hidden text-right"
+        dir="rtl"
+        style={{ direction: "rtl" }}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,_rgba(27,173,248,0.08),_transparent_55%),radial-gradient(ellipse_at_bottom_left,_rgba(16,185,129,0.05),_transparent_45%),linear-gradient(180deg,_rgba(240,249,255,0.65)_0%,_transparent_28%)] dark:bg-[radial-gradient(ellipse_at_top,_rgba(27,173,248,0.12),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(16,185,129,0.06),_transparent_45%),linear-gradient(180deg,_rgba(8,47,73,0.25)_0%,_transparent_30%)]"
+        />
         <div className="w-full space-y-5" dir="rtl">
-          <section className="border-b border-border pb-5 md:pb-6" dir="rtl">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <section
+            className="relative overflow-hidden rounded-2xl border border-sky-200/60 bg-gradient-to-l from-sky-50/80 via-background to-emerald-50/40 p-5 shadow-sm dark:border-sky-900/40 dark:from-sky-950/30 dark:via-background dark:to-emerald-950/20 md:p-6"
+            dir="rtl"
+          >
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -left-16 -top-20 h-44 w-44 rounded-full bg-[#1BADF8]/10 blur-3xl dark:bg-[#1BADF8]/15"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -bottom-16 -right-10 h-40 w-40 rounded-full bg-emerald-400/10 blur-3xl"
+            />
+            <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-3">
-                <Badge variant="outline" className="gap-1.5 border-[#1BADF8]/30 bg-[#1BADF8]/5 px-3 py-1 text-[#078fd1] dark:text-[#45c0f5]">
+                <Badge variant="outline" className="gap-1.5 border-[#1BADF8]/30 bg-background/70 px-3 py-1 text-[#078fd1] backdrop-blur-sm dark:text-[#45c0f5]">
                   <Sparkles className="h-3.5 w-3.5" />
                   مساحة الكاتب الذكية
                 </Badge>
@@ -301,21 +320,21 @@ export default function WriterWorkspacePage() {
                   </p>
                 </div>
                 {workspace?.desk?.[0] && (
-                  <p className="flex items-center gap-2 text-sm text-foreground/75">
+                  <p className="inline-flex items-center gap-2 rounded-lg border border-sky-200/70 bg-background/60 px-3 py-1.5 text-sm text-foreground/80 backdrop-blur-sm dark:border-sky-900/40">
                     <Clock3 className="h-4 w-4 text-[#1BADF8]" />
                     أقرب خطوة: {workspace.desk[0].nextAction} في «{workspace.desk[0].title}»
                   </p>
                 )}
               </div>
               <div className="flex flex-wrap gap-2 lg:pb-1">
-                <Button variant="outline" className="gap-2" onClick={() => navigate("/dashboard/opinion-author/guide")}>
-                  <BookOpen className="h-4 w-4" /> دليل الكاتب
+                <Button variant="outline" className="gap-2 border-sky-200/80 bg-background/70 backdrop-blur-sm dark:border-sky-900/40" onClick={() => navigate("/dashboard/opinion-author/guide")}>
+                  <BookOpen className="h-4 w-4 text-sky-600 dark:text-sky-300" /> دليل الكاتب
                 </Button>
                 <WriterInquiriesButton />
-                <Button variant="outline" className="gap-2" onClick={() => setActiveTab("ideas")}>
-                  <Lightbulb className="h-4 w-4" /> ساعدني في اختيار فكرة
+                <Button variant="outline" className="gap-2 border-amber-200/80 bg-background/70 backdrop-blur-sm dark:border-amber-900/40" onClick={() => setActiveTab("ideas")}>
+                  <Lightbulb className="h-4 w-4 text-amber-600 dark:text-amber-300" /> ساعدني في اختيار فكرة
                 </Button>
-                <Button className="gap-2" onClick={() => navigate("/dashboard/articles/new")}>
+                <Button className="gap-2 bg-[#1BADF8] text-white hover:bg-[#0a9ce6]" onClick={() => navigate("/dashboard/articles/new")}>
                   <PenLine className="h-4 w-4" /> ابدأ الكتابة
                 </Button>
               </div>
@@ -323,7 +342,7 @@ export default function WriterWorkspacePage() {
           </section>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
-            <TabsList dir="rtl" className="grid h-auto w-full grid-cols-4 rounded-xl border bg-card p-1 shadow-sm md:w-fit md:min-w-[520px]">
+            <TabsList dir="rtl" className="grid h-auto w-full grid-cols-4 rounded-xl border border-sky-200/50 bg-sky-50/40 p-1 shadow-sm dark:border-sky-900/40 dark:bg-sky-950/20 md:w-fit md:min-w-[520px]">
               <TabsTrigger value="today" className="px-1 text-xs data-[state=active]:bg-[#1BADF8] data-[state=active]:text-white sm:px-3 sm:text-sm">اليوم</TabsTrigger>
               <TabsTrigger value="ideas" className="px-1 text-xs data-[state=active]:bg-[#1BADF8] data-[state=active]:text-white sm:px-3 sm:text-sm">أفكاري</TabsTrigger>
               <TabsTrigger value="articles" className="px-1 text-xs data-[state=active]:bg-[#1BADF8] data-[state=active]:text-white sm:px-3 sm:text-sm"><span className="flex items-center gap-1.5">مقالاتي{unreadNotificationsCount > 0 && <span className="flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white ring-2 ring-background data-[state=active]:ring-[#1BADF8]">{unreadNotificationsCount > 99 ? "+99" : unreadNotificationsCount}</span>}</span></TabsTrigger>
@@ -333,10 +352,10 @@ export default function WriterWorkspacePage() {
             <TabsContent value="today" className="mt-5 space-y-5">
               {unreadNotifications.length > 0 && <EditorialAlertsPanel notifications={unreadNotifications} onOpen={openEditorialNotification} onMarkAll={() => markAllNotificationsReadMutation.mutate()} markingAll={markAllNotificationsReadMutation.isPending} />}
               <div className="grid gap-5 lg:grid-cols-3">
-                <Card className="border-primary/15 shadow-sm lg:col-span-2">
+                <Card className="border-sky-200/60 bg-gradient-to-br from-sky-50/70 via-card to-card shadow-sm dark:border-sky-900/40 dark:from-sky-950/25 lg:col-span-2">
                   <CardHeader>
                     <div className="flex items-center gap-3">
-                      <div className="rounded-xl bg-primary/10 p-2 text-primary"><BrainCircuit className="h-5 w-5" /></div>
+                      <div className="rounded-lg bg-[#1BADF8]/15 p-1.5 text-[#078fd1] dark:text-[#45c0f5] sm:rounded-xl sm:p-2"><BrainCircuit className="h-4 w-4 sm:h-5 sm:w-5" /></div>
                       <div>
                         <CardTitle>ما الذي يشغلك اليوم؟</CardTitle>
                         <CardDescription>اكتب بذرة الفكرة، وسنساعدك بالأسئلة والخريطة دون كتابة المقال بدلًا عنك.</CardDescription>
@@ -344,9 +363,9 @@ export default function WriterWorkspacePage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <Textarea value={ideaInput} onChange={(event) => setIdeaInput(event.target.value)} placeholder="مثال: أفكر في الكتابة عن أثر التقنية على علاقتنا بالوقت…" className="min-h-28 resize-none bg-muted/20" />
+                    <Textarea value={ideaInput} onChange={(event) => setIdeaInput(event.target.value)} placeholder="مثال: أفكر في الكتابة عن أثر التقنية على علاقتنا بالوقت…" className="min-h-28 resize-none border-sky-100/80 bg-background/70 dark:border-sky-900/30" />
                     <div className="flex flex-wrap gap-2">
-                      <Button disabled={ideaInput.trim().length < 12 || coachMutation.isPending} onClick={() => coachMutation.mutate()} className="gap-2">
+                      <Button disabled={ideaInput.trim().length < 12 || coachMutation.isPending} onClick={() => coachMutation.mutate()} className="gap-2 bg-[#1BADF8] text-white hover:bg-[#0a9ce6]">
                         {coachMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <WandSparkles className="h-4 w-4" />}
                         تحدث مع فكرتك
                       </Button>
@@ -356,71 +375,74 @@ export default function WriterWorkspacePage() {
                   </CardContent>
                 </Card>
 
-                <Card className="border-[#1BADF8]/20 bg-card shadow-sm">
+                <Card className="border-emerald-200/60 bg-gradient-to-br from-emerald-50/70 via-card to-card shadow-sm dark:border-emerald-900/40 dark:from-emerald-950/20">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2"><BookOpen className="h-5 w-5 text-[#1BADF8]" /> موجزك هذا الشهر</CardTitle>
+                    <CardTitle className="flex items-center gap-2"><BookOpen className="h-4 w-4 text-emerald-600 dark:text-emerald-300 sm:h-5 sm:w-5" /> موجزك هذا الشهر</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex gap-6">
-                      <Metric value={workspace?.monthlyBrief?.publishedCount ?? 0} label="مقال منشور" />
-                      <Metric value={(workspace?.monthlyBrief?.views ?? 0).toLocaleString()} label="قراءة" />
+                      <Metric value={workspace?.monthlyBrief?.publishedCount ?? 0} label="مقال منشور" accent="emerald" />
+                      <Metric value={(workspace?.monthlyBrief?.views ?? 0).toLocaleString()} label="قراءة" accent="sky" />
                     </div>
-                    <p className="text-sm leading-7 text-muted-foreground">{workspace?.monthlyBrief?.message || "نجهز موجزك الإبداعي…"}</p>
+                    <p className="rounded-lg border border-emerald-100/80 bg-background/50 p-3 text-sm leading-7 text-muted-foreground dark:border-emerald-900/30">{workspace?.monthlyBrief?.message || "نجهز موجزك الإبداعي…"}</p>
                   </CardContent>
                 </Card>
               </div>
 
-              <section className="space-y-3">
+              <section className="space-y-3 rounded-2xl border border-amber-200/50 bg-gradient-to-l from-amber-50/40 to-transparent p-4 dark:border-amber-900/30 dark:from-amber-950/15 md:p-5">
                 <div className="flex items-center justify-between">
-                  <div><h2 className="text-xl font-semibold">بوصلة الأفكار</h2><p className="text-sm text-muted-foreground">ثلاث فرص منتقاة لك، وليست قائمة أخبار عامة.</p></div>
-                  <Button variant="ghost" size="sm" onClick={() => ideasQuery.refetch()} disabled={ideasQuery.isFetching} className="gap-1.5"><RefreshCw className={`h-4 w-4 ${ideasQuery.isFetching ? "animate-spin" : ""}`} /> تحديث</Button>
+                  <div>
+                    <h2 className="text-xl font-semibold">بوصلة الأفكار</h2>
+                    <p className="text-sm text-muted-foreground">ثلاث فرص منتقاة لك، وليست قائمة أخبار عامة.</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => ideasQuery.refetch()} disabled={ideasQuery.isFetching} className="gap-1.5 text-amber-800 hover:bg-amber-100/60 dark:text-amber-200 dark:hover:bg-amber-950/30"><RefreshCw className={`h-4 w-4 ${ideasQuery.isFetching ? "animate-spin" : ""}`} /> تحديث</Button>
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
-                  {ideasQuery.isLoading ? [0, 1, 2].map((item) => <div key={item} className="h-64 animate-pulse rounded-2xl bg-muted" />) : ideas.map((idea) => <IdeaCard key={idea.id} idea={idea} onStart={() => startFromIdea(idea)} />)}
+                  {ideasQuery.isLoading ? [0, 1, 2].map((item) => <div key={item} className="h-64 animate-pulse rounded-2xl bg-amber-100/50 dark:bg-amber-950/20" />) : ideas.map((idea) => <IdeaCard key={idea.id} idea={idea} onStart={() => startFromIdea(idea)} />)}
                 </div>
               </section>
 
               <div className="grid gap-5 lg:grid-cols-2">
-                <Card>
-                  <CardHeader><CardTitle className="flex items-center gap-2"><Feather className="h-5 w-5 text-primary" /> على مكتبك الآن</CardTitle><CardDescription>الأهم أولًا، بلا ازدحام.</CardDescription></CardHeader>
+                <Card className="border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card dark:border-sky-900/35 dark:from-sky-950/20">
+                  <CardHeader><CardTitle className="flex items-center gap-2"><span className="rounded-md bg-sky-100/80 p-1 dark:bg-sky-950/40 sm:rounded-lg sm:p-1.5"><Feather className="h-4 w-4 text-sky-600 dark:text-sky-300 sm:h-5 sm:w-5" /></span> على مكتبك الآن</CardTitle><CardDescription>الأهم أولًا، بلا ازدحام.</CardDescription></CardHeader>
                   <CardContent className="space-y-3">
-                    {workspaceQuery.isLoading ? <div className="h-32 animate-pulse rounded-xl bg-muted" /> : workspace?.desk?.length ? workspace.desk.map((item) => (
-                      <button key={item.id} onClick={() => navigate(`/dashboard/articles/${item.id}/edit`)} className="flex w-full items-start justify-between gap-3 rounded-xl border bg-background p-3 text-right transition-colors hover:border-primary/30 hover:bg-primary/[0.03]">
+                    {workspaceQuery.isLoading ? <div className="h-32 animate-pulse rounded-xl bg-sky-100/60 dark:bg-sky-950/30" /> : workspace?.desk?.length ? workspace.desk.map((item) => (
+                      <button key={item.id} onClick={() => navigate(`/dashboard/articles/${item.id}/edit`)} className="flex w-full items-start justify-between gap-3 rounded-xl border border-sky-100/80 bg-background/80 p-3 text-right transition-colors hover:border-sky-300/70 hover:bg-sky-50/60 dark:border-sky-900/30 dark:hover:bg-sky-950/30">
                         <div className="min-w-0"><p className="line-clamp-1 font-medium">{item.title}</p><p className="mt-1 text-xs text-muted-foreground">{item.nextAction}</p></div>
-                        <ArrowLeft className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <ArrowLeft className="mt-1 h-4 w-4 shrink-0 text-sky-500/70" />
                       </button>
-                    )) : <EmptyState icon={CheckCircle2} title="مكتبك مرتب" text="لا توجد مسودات أو ملاحظات تنتظر إجراءك." />}
+                    )) : <EmptyState icon={CheckCircle2} title="مكتبك مرتب" text="لا توجد مسودات أو ملاحظات تنتظر إجراءك." tone="sky" />}
                   </CardContent>
                 </Card>
 
-                <Card>
-                  <CardHeader><CardTitle className="flex items-center gap-2"><Users className="h-5 w-5 text-primary" /> نبض قرائك</CardTitle><CardDescription>{workspace?.readerPulse?.message}</CardDescription></CardHeader>
+                <Card className="border-teal-200/55 bg-gradient-to-br from-teal-50/50 via-card to-card dark:border-teal-900/35 dark:from-teal-950/20">
+                  <CardHeader><CardTitle className="flex items-center gap-2"><span className="rounded-md bg-teal-100/80 p-1 dark:bg-teal-950/40 sm:rounded-lg sm:p-1.5"><Users className="h-4 w-4 text-teal-600 dark:text-teal-300 sm:h-5 sm:w-5" /></span> نبض قرائك</CardTitle><CardDescription>{workspace?.readerPulse?.message}</CardDescription></CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-3"><Metric value={workspace?.readerPulse?.commentsCount ?? 0} label="تعليق حديث" /><Metric value={`${workspace?.readerPulse?.positiveShare ?? 0}%`} label="نبض إيجابي" /></div>
-                    {workspace?.readerPulse?.highlightedComment && <blockquote className="rounded-xl border-r-4 border-primary bg-muted/40 p-4 text-sm leading-7"><p>«{workspace.readerPulse.highlightedComment.content}»</p><footer className="mt-2 text-xs text-muted-foreground">حول: {workspace.readerPulse.highlightedComment.articleTitle}</footer></blockquote>}
+                    <div className="grid grid-cols-2 gap-3"><Metric value={workspace?.readerPulse?.commentsCount ?? 0} label="تعليق حديث" accent="teal" /><Metric value={`${workspace?.readerPulse?.positiveShare ?? 0}%`} label="نبض إيجابي" accent="emerald" /></div>
+                    {workspace?.readerPulse?.highlightedComment && <blockquote className="rounded-xl border-r-4 border-teal-400 bg-teal-50/50 p-4 text-sm leading-7 dark:bg-teal-950/20"><p>«{workspace.readerPulse.highlightedComment.content}»</p><footer className="mt-2 text-xs text-muted-foreground">حول: {workspace.readerPulse.highlightedComment.articleTitle}</footer></blockquote>}
                   </CardContent>
                 </Card>
               </div>
 
               <div className="grid gap-5 lg:grid-cols-2">
-                <Card className="border-primary/15">
-                  <CardHeader><CardTitle className="flex items-center gap-2"><Target className="h-5 w-5 text-primary" /> فرصة متابعة</CardTitle></CardHeader>
-                  <CardContent>{workspace?.followUp ? <div className="space-y-3"><p className="font-medium">{workspace.followUp.title}</p><p className="text-sm leading-7 text-muted-foreground">{workspace.followUp.prompt}</p><Button variant="outline" size="sm" onClick={() => { setIdeaInput(workspace.followUp?.prompt || ""); setActiveTab("ideas"); }}>طوّر المتابعة</Button></div> : <EmptyState icon={Target} title="ستظهر هنا فرصة المتابعة" text="بعد نشر مقالك الأول وبدء تفاعل القراء." />}</CardContent>
+                <Card className="border-amber-200/55 bg-gradient-to-br from-amber-50/45 via-card to-card dark:border-amber-900/35 dark:from-amber-950/15">
+                  <CardHeader><CardTitle className="flex items-center gap-2"><span className="rounded-md bg-amber-100/80 p-1 dark:bg-amber-950/40 sm:rounded-lg sm:p-1.5"><Target className="h-4 w-4 text-amber-600 dark:text-amber-300 sm:h-5 sm:w-5" /></span> فرصة متابعة</CardTitle></CardHeader>
+                  <CardContent>{workspace?.followUp ? <div className="space-y-3"><p className="font-medium">{workspace.followUp.title}</p><p className="text-sm leading-7 text-muted-foreground">{workspace.followUp.prompt}</p><Button variant="outline" size="sm" className="border-amber-200 dark:border-amber-900/40" onClick={() => { setIdeaInput(workspace.followUp?.prompt || ""); setActiveTab("ideas"); }}>طوّر المتابعة</Button></div> : <EmptyState icon={Target} title="ستظهر هنا فرصة المتابعة" text="بعد نشر مقالك الأول وبدء تفاعل القراء." tone="amber" />}</CardContent>
                 </Card>
-                <Card>
-                  <CardHeader><CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5 text-primary" /> تقويم الإلهام</CardTitle></CardHeader>
-                  <CardContent className="space-y-3">{workspace?.calendar?.map((item) => <div key={item.id} className="flex items-center justify-between rounded-lg border-b py-2 last:border-0"><span className="text-sm font-medium">{item.name}</span><span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(item.date), { addSuffix: true, locale: ar })}</span></div>)}</CardContent>
+                <Card className="border-slate-200/70 bg-gradient-to-br from-slate-50/60 via-card to-card dark:border-slate-800/60 dark:from-slate-950/30">
+                  <CardHeader><CardTitle className="flex items-center gap-2"><span className="rounded-md bg-slate-100/80 p-1 dark:bg-slate-800/60 sm:rounded-lg sm:p-1.5"><CalendarDays className="h-4 w-4 text-slate-600 dark:text-slate-300 sm:h-5 sm:w-5" /></span> تقويم الإلهام</CardTitle></CardHeader>
+                  <CardContent className="space-y-3">{workspace?.calendar?.map((item) => <div key={item.id} className="flex items-center justify-between rounded-lg border-b border-slate-100 py-2 last:border-0 dark:border-slate-800/60"><span className="text-sm font-medium">{item.name}</span><span className="rounded-md bg-slate-100/80 px-2 py-0.5 text-xs text-muted-foreground dark:bg-slate-800/50">{formatDistanceToNow(new Date(item.date), { addSuffix: true, locale: ar })}</span></div>)}</CardContent>
                 </Card>
               </div>
             </TabsContent>
 
             <TabsContent value="ideas" className="mt-5 space-y-5">
               <div className="grid gap-5 lg:grid-cols-3">
-                <Card className="lg:col-span-2">
-                  <CardHeader><CardTitle className="flex items-center gap-2"><BrainCircuit className="h-5 w-5 text-primary" /> استوديو الفكرة</CardTitle><CardDescription>فكّر بصوت مرتفع. المساعد يسأل ويرتب، وأنت صاحب الموقف والنص.</CardDescription></CardHeader>
+                <Card className="border-sky-200/55 bg-gradient-to-br from-sky-50/55 via-card to-card dark:border-sky-900/35 dark:from-sky-950/20 lg:col-span-2">
+                  <CardHeader><CardTitle className="flex items-center gap-2"><span className="rounded-md bg-[#1BADF8]/15 p-1 sm:rounded-lg sm:p-1.5"><BrainCircuit className="h-4 w-4 text-[#078fd1] dark:text-[#45c0f5] sm:h-5 sm:w-5" /></span> استوديو الفكرة</CardTitle><CardDescription>فكّر بصوت مرتفع. المساعد يسأل ويرتب، وأنت صاحب الموقف والنص.</CardDescription></CardHeader>
                   <CardContent className="space-y-4">
-                    <Textarea value={ideaInput} onChange={(event) => setIdeaInput(event.target.value)} className="min-h-36" placeholder="اكتب الفكرة أو السؤال أو الموقف الذي تريد اختباره…" />
-                    <Button onClick={() => coachMutation.mutate()} disabled={ideaInput.trim().length < 12 || coachMutation.isPending} className="gap-2"><WandSparkles className="h-4 w-4" /> ابنِ خريطة الفكرة</Button>
+                    <Textarea value={ideaInput} onChange={(event) => setIdeaInput(event.target.value)} className="min-h-36 border-sky-100/80 bg-background/70 dark:border-sky-900/30" placeholder="اكتب الفكرة أو السؤال أو الموقف الذي تريد اختباره…" />
+                    <Button onClick={() => coachMutation.mutate()} disabled={ideaInput.trim().length < 12 || coachMutation.isPending} className="gap-2 bg-[#1BADF8] text-white hover:bg-[#0a9ce6]"><WandSparkles className="h-4 w-4" /> ابنِ خريطة الفكرة</Button>
                     {coachResult && <CoachResultView result={coachResult} />}
                   </CardContent>
                 </Card>
@@ -431,7 +453,7 @@ export default function WriterWorkspacePage() {
 
             <TabsContent value="articles" className="mt-5 space-y-5">
               {unreadNotifications.length > 0 && <EditorialAlertsPanel notifications={unreadNotifications} onOpen={openEditorialNotification} onMarkAll={() => markAllNotificationsReadMutation.mutate()} markingAll={markAllNotificationsReadMutation.isPending} />}
-              <div>
+              <div className="rounded-2xl border border-sky-200/45 bg-gradient-to-l from-sky-50/50 to-transparent p-4 dark:border-sky-900/30 dark:from-sky-950/15 md:p-5">
                 <h2 className="text-2xl font-bold">متابعة مقالاتي</h2>
                 <p className="mt-1 text-sm text-muted-foreground">كل قرار تحريري وسببه وموعده في مكان واحد. تتحدث اللوحة تلقائيًا.</p>
               </div>
@@ -445,12 +467,15 @@ export default function WriterWorkspacePage() {
               {needsChanges.length > 0 && <Card className="border-amber-300 bg-amber-50/70 dark:bg-amber-950/10"><CardHeader><CardTitle className="text-amber-900 dark:text-amber-100">مقالات تحتاج لمستك ({needsChanges.length})</CardTitle><CardDescription>ملاحظات التحرير ظاهرة أسفل كل مقال ويمكنك العودة للتعديل مباشرة.</CardDescription></CardHeader></Card>}
               <div className="space-y-3">
                 {workspaceQuery.isLoading ? [0, 1, 2].map((item) => <div key={item} className="h-36 animate-pulse rounded-2xl bg-muted" />) : trackedArticles.map((article) => <WriterTrackingCard key={article.id} article={article} onEdit={() => navigate(`/dashboard/articles/${article.id}/edit`)} onView={() => navigate(`/article/${article.id}`)} onReview={() => reviewMutation.mutate(article)} reviewPending={reviewMutation.isPending} submitPending={submitReviewMutation.isPending} onSubmit={(id) => submitReviewMutation.mutate(id)} />)}
-                {!workspaceQuery.isLoading && trackedArticles.length === 0 && <EmptyState icon={Feather} title="هنا تبدأ الحكاية" text="أنشئ مقالك الأول، وسنرافقك من الفكرة حتى النشر." />}
+                {!workspaceQuery.isLoading && trackedArticles.length === 0 && <EmptyState icon={Feather} title="هنا تبدأ الحكاية" text="أنشئ مقالك الأول، وسنرافقك من الفكرة حتى النشر." tone="sky" />}
               </div>
             </TabsContent>
 
             <TabsContent value="performance" className="mt-5 space-y-5">
-              <div><h2 className="text-2xl font-bold">أثر كتابتك</h2><p className="text-muted-foreground">أرقام مفهومة تساعدك على القرار، لا مجرد لوحة مؤشرات.</p></div>
+              <div className="rounded-2xl border border-emerald-200/45 bg-gradient-to-l from-emerald-50/45 to-transparent p-4 dark:border-emerald-900/30 dark:from-emerald-950/15 md:p-5">
+                <h2 className="text-2xl font-bold">أثر كتابتك</h2>
+                <p className="text-muted-foreground">أرقام مفهومة تساعدك على القرار، لا مجرد لوحة مؤشرات.</p>
+              </div>
               <ContributorStatsRow totalViews={analytics?.totalViews ?? 0} totalLikes={analytics?.totalLikes ?? 0} totalComments={analytics?.totalComments ?? 0} totalBookmarks={analytics?.totalBookmarks ?? 0} comparison={analytics?.comparison} loading={analyticsQuery.isLoading} />
               <div className="grid gap-4 md:grid-cols-3"><ArticleStatusBreakdown published={analytics?.publishedArticles ?? 0} draft={analytics?.draftArticles ?? 0} pending={analytics?.pendingArticles ?? 0} needsChanges={analytics?.needsChangesArticles ?? 0} rejected={analytics?.rejectedArticles ?? 0} loading={analyticsQuery.isLoading} /><MonthComparisonCard comparison={analytics?.comparison ?? EMPTY_COMPARISON} loading={analyticsQuery.isLoading} /><BestArticleCard article={analytics?.bestArticleThisWeek ?? null} loading={analyticsQuery.isLoading} onNavigate={(id) => navigate(`/article/${id}`)} /></div>
               <PerformanceChart dailyStats={analytics?.dailyStats ?? []} loading={analyticsQuery.isLoading} />
@@ -463,7 +488,7 @@ export default function WriterWorkspacePage() {
 
       <Dialog open={Boolean(reviewResult)} onOpenChange={(open) => !open && setReviewResult(null)}>
         <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto" dir="rtl">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><BrainCircuit className="h-5 w-5 text-primary" /> قارئ سبق الأول</DialogTitle><DialogDescription>{reviewTitle} — الملاحظات اقتراحات اختيارية، وأنت صاحب النص النهائي.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><BrainCircuit className="h-4 w-4 text-primary sm:h-5 sm:w-5" /> قارئ سبق الأول</DialogTitle><DialogDescription>{reviewTitle} — الملاحظات اقتراحات اختيارية، وأنت صاحب النص النهائي.</DialogDescription></DialogHeader>
           {reviewResult && <ReviewResultView result={reviewResult} />}
         </DialogContent>
       </Dialog>
@@ -471,23 +496,59 @@ export default function WriterWorkspacePage() {
   );
 }
 
-function Metric({ value, label }: { value: string | number; label: string }) {
-  return <div><p className="text-2xl font-bold tabular-nums">{value}</p><p className="text-xs text-muted-foreground">{label}</p></div>;
+function Metric({ value, label, accent = "default" }: { value: string | number; label: string; accent?: "default" | "sky" | "emerald" | "teal" | "amber" }) {
+  const accents = {
+    default: "text-foreground",
+    sky: "text-sky-700 dark:text-sky-300",
+    emerald: "text-emerald-700 dark:text-emerald-300",
+    teal: "text-teal-700 dark:text-teal-300",
+    amber: "text-amber-700 dark:text-amber-300",
+  };
+  return (
+    <div className="rounded-xl border border-border/60 bg-background/60 px-3 py-2">
+      <p className={`text-2xl font-bold tabular-nums ${accents[accent]}`}>{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
+    </div>
+  );
 }
 
-function EmptyState({ icon: Icon, title, text }: { icon: typeof Feather; title: string; text: string }) {
-  return <div className="rounded-xl border border-dashed p-6 text-center"><Icon className="mx-auto mb-2 h-6 w-6 text-muted-foreground" /><p className="font-medium">{title}</p><p className="mt-1 text-sm text-muted-foreground">{text}</p></div>;
+function EmptyState({ icon: Icon, title, text, tone = "default" }: { icon: typeof Feather; title: string; text: string; tone?: "default" | "sky" | "amber" }) {
+  const tones = {
+    default: "border-border bg-muted/20",
+    sky: "border-sky-200/70 bg-sky-50/40 dark:border-sky-900/40 dark:bg-sky-950/15",
+    amber: "border-amber-200/70 bg-amber-50/40 dark:border-amber-900/40 dark:bg-amber-950/15",
+  };
+  const iconTones = {
+    default: "text-muted-foreground",
+    sky: "text-sky-500 dark:text-sky-300",
+    amber: "text-amber-500 dark:text-amber-300",
+  };
+  return (
+    <div className={`rounded-xl border border-dashed p-6 text-center ${tones[tone]}`}>
+      <Icon className={`mx-auto mb-2 h-5 w-5 sm:h-6 sm:w-6 ${iconTones[tone]}`} />
+      <p className="font-medium">{title}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+    </div>
+  );
 }
 
 function TrackingMetric({ icon: Icon, label, value, tone = "default" }: { icon: typeof Feather; label: string; value: number; tone?: "default" | "warning" | "info" | "success" | "danger" }) {
   const tones = {
-    default: "bg-muted/40 text-foreground",
-    warning: "bg-amber-50 text-amber-900 dark:bg-amber-950/20 dark:text-amber-100",
-    info: "bg-sky-50 text-sky-900 dark:bg-sky-950/20 dark:text-sky-100",
-    success: "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-100",
-    danger: "bg-red-50 text-red-900 dark:bg-red-950/20 dark:text-red-100",
+    default: "border-sky-200/60 bg-sky-50/50 text-sky-950 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100",
+    warning: "border-amber-200/70 bg-amber-50/70 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
+    info: "border-sky-200/70 bg-sky-50/70 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100",
+    success: "border-emerald-200/70 bg-emerald-50/70 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100",
+    danger: "border-red-200/70 bg-red-50/70 text-red-900 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-100",
   };
-  return <div className={`rounded-xl border p-3 ${tones[tone]}`}><div className="flex items-center justify-between gap-3"><Icon className="h-4 w-4 opacity-70" /><span className="text-2xl font-bold tabular-nums">{value}</span></div><p className="mt-2 text-xs font-medium opacity-80">{label}</p></div>;
+  return (
+    <div className={`rounded-xl border p-3 shadow-sm ${tones[tone]}`}>
+      <div className="flex items-center justify-between gap-3">
+        <Icon className="h-3.5 w-3.5 opacity-70 sm:h-4 sm:w-4" />
+        <span className="text-2xl font-bold tabular-nums">{value}</span>
+      </div>
+      <p className="mt-2 text-xs font-medium opacity-80">{label}</p>
+    </div>
+  );
 }
 
 function editorialNotificationStyle(type: EditorialNotification["type"]) {
@@ -498,7 +559,7 @@ function editorialNotificationStyle(type: EditorialNotification["type"]) {
 }
 
 function EditorialAlertsPanel({ notifications, onOpen, onMarkAll, markingAll }: { notifications: EditorialNotification[]; onOpen: (notification: EditorialNotification) => void; onMarkAll: () => void; markingAll: boolean }) {
-  return <Card className="border-red-200/80 shadow-sm dark:border-red-900/40"><CardHeader className="pb-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="flex items-center gap-2 text-lg"><span className="relative"><BellRing className="h-5 w-5 text-red-600" /><span className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-red-600 ring-2 ring-background" /></span>لديك تحديثات على مقالاتك</CardTitle><CardDescription className="mt-1">افتح التنبيه لعرض المقال والتفاصيل، ولن يختفي قبل قراءته.</CardDescription></div><Button variant="ghost" size="sm" onClick={onMarkAll} disabled={markingAll} className="w-full gap-1.5 sm:w-auto"><CheckCheck className="h-4 w-4" /> تحديد الكل كمقروء</Button></div></CardHeader><CardContent className="grid gap-2 md:grid-cols-2">{notifications.slice(0, 4).map((notification) => { const style = editorialNotificationStyle(notification.type); const Icon = style.icon; return <button key={notification.id} type="button" onClick={() => onOpen(notification)} className={`w-full rounded-xl border p-3 text-right transition-transform hover:-translate-y-0.5 ${style.item}`}><div className="flex items-start gap-3"><span className="mt-0.5 rounded-lg bg-background/80 p-2"><Icon className={`h-4 w-4 ${style.iconClass}`} /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold">{style.label}</span><span className="text-[11px] text-muted-foreground">{formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true, locale: ar })}</span></div><p className="mt-1 line-clamp-1 text-sm font-medium">{notification.articleTitle || notification.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{notification.reviewerNote || notification.body}</p></div><ArrowLeft className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" /></div></button>; })}</CardContent></Card>;
+  return <Card className="border-red-200/80 shadow-sm dark:border-red-900/40"><CardHeader className="pb-3"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="flex items-center gap-2 text-lg"><span className="relative"><BellRing className="h-4 w-4 text-red-600 sm:h-5 sm:w-5" /><span className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-red-600 ring-2 ring-background" /></span>لديك تحديثات على مقالاتك</CardTitle><CardDescription className="mt-1">افتح التنبيه لعرض المقال والتفاصيل، ولن يختفي قبل قراءته.</CardDescription></div><Button variant="ghost" size="sm" onClick={onMarkAll} disabled={markingAll} className="w-full gap-1.5 sm:w-auto"><CheckCheck className="h-4 w-4" /> تحديد الكل كمقروء</Button></div></CardHeader><CardContent className="grid gap-2 md:grid-cols-2">{notifications.slice(0, 4).map((notification) => { const style = editorialNotificationStyle(notification.type); const Icon = style.icon; return <button key={notification.id} type="button" onClick={() => onOpen(notification)} className={`w-full rounded-xl border p-3 text-right transition-transform hover:-translate-y-0.5 ${style.item}`}><div className="flex items-start gap-3"><span className="mt-0.5 rounded-md bg-background/80 p-1.5 sm:rounded-lg sm:p-2"><Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${style.iconClass}`} /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold">{style.label}</span><span className="text-[11px] text-muted-foreground">{formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true, locale: ar })}</span></div><p className="mt-1 line-clamp-1 text-sm font-medium">{notification.articleTitle || notification.title}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{notification.reviewerNote || notification.body}</p></div><ArrowLeft className="mt-2 h-4 w-4 shrink-0 text-muted-foreground" /></div></button>; })}</CardContent></Card>;
 }
 
 function trackingState(article: TrackingArticle) {
@@ -537,7 +598,42 @@ function WriterTrackingCard({ article, onEdit, onView, onReview, reviewPending, 
 
 function IdeaCard({ idea, onStart }: { idea: WriterIdea; onStart: () => void }) {
   const labels = { specialty: "قريب من صوتك", follow_up: "فرصة متابعة", timely: "توقيت مناسب" };
-  return <Card className="group overflow-hidden border-border bg-card transition-all hover:border-[#1BADF8]/40 hover:shadow-sm"><div className="h-1 bg-[#1BADF8]" /><CardHeader><Badge variant="outline" className="w-fit border-[#1BADF8]/25 bg-[#1BADF8]/5 text-[#078fd1] dark:text-[#45c0f5]">{labels[idea.kind]}</Badge><CardTitle className="text-lg leading-7">{idea.title}</CardTitle><CardDescription className="leading-6">{idea.angle}</CardDescription></CardHeader><CardContent className="space-y-3"><div className="rounded-lg bg-muted/50 p-3 text-sm"><span className="font-medium">لماذا الآن؟ </span>{idea.whyNow}</div><p className="text-xs text-muted-foreground">الجمهور المتوقع: {idea.audience}</p><Button variant="outline" className="w-full gap-2 group-hover:border-[#1BADF8]/50" onClick={onStart}>طوّر هذه الفكرة <ArrowLeft className="h-4 w-4" /></Button></CardContent></Card>;
+  const kindStyles = {
+    specialty: {
+      card: "border-sky-200/60 hover:border-sky-300/80 dark:border-sky-900/40",
+      bar: "bg-[#1BADF8]",
+      badge: "border-[#1BADF8]/25 bg-[#1BADF8]/5 text-[#078fd1] dark:text-[#45c0f5]",
+      why: "bg-sky-50/70 dark:bg-sky-950/20",
+    },
+    follow_up: {
+      card: "border-teal-200/60 hover:border-teal-300/80 dark:border-teal-900/40",
+      bar: "bg-teal-500",
+      badge: "border-teal-300/50 bg-teal-50 text-teal-800 dark:border-teal-800 dark:bg-teal-950/30 dark:text-teal-200",
+      why: "bg-teal-50/70 dark:bg-teal-950/20",
+    },
+    timely: {
+      card: "border-amber-200/60 hover:border-amber-300/80 dark:border-amber-900/40",
+      bar: "bg-amber-400",
+      badge: "border-amber-300/50 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200",
+      why: "bg-amber-50/70 dark:bg-amber-950/20",
+    },
+  } as const;
+  const style = kindStyles[idea.kind];
+  return (
+    <Card className={`group overflow-hidden bg-card/90 transition-all hover:shadow-sm ${style.card}`}>
+      <div className={`h-1 ${style.bar}`} />
+      <CardHeader>
+        <Badge variant="outline" className={`w-fit ${style.badge}`}>{labels[idea.kind]}</Badge>
+        <CardTitle className="text-lg leading-7">{idea.title}</CardTitle>
+        <CardDescription className="leading-6">{idea.angle}</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className={`rounded-lg p-3 text-sm ${style.why}`}><span className="font-medium">لماذا الآن؟ </span>{idea.whyNow}</div>
+        <p className="text-xs text-muted-foreground">الجمهور المتوقع: {idea.audience}</p>
+        <Button variant="outline" className="w-full gap-2" onClick={onStart}>طوّر هذه الفكرة <ArrowLeft className="h-4 w-4" /></Button>
+      </CardContent>
+    </Card>
+  );
 }
 
 function CoachResultView({ result, compact = false }: { result: CoachResult; compact?: boolean }) {
@@ -556,7 +652,36 @@ function EditorialChecklist({ notes }: { notes: string }) {
 function StyleProfileCard({ profile, loading }: { profile?: Record<string, unknown>; loading: boolean }) {
   const traits = Array.isArray(profile?.traits) ? profile.traits.filter((item): item is string => typeof item === "string") : [];
   const guidance = Array.isArray(profile?.guidance) ? profile.guidance.filter((item): item is string => typeof item === "string") : [];
-  return <Card className="border-[#1BADF8]/20 bg-card"><CardHeader><CardTitle className="flex items-center gap-2"><Feather className="h-5 w-5 text-[#1BADF8]" /> بصمتك الكتابية</CardTitle><CardDescription>ذاكرة تحترم صوتك ولا تستنسخه.</CardDescription></CardHeader><CardContent className="space-y-4">{loading ? <div className="h-32 animate-pulse rounded-xl bg-muted" /> : profile?.ready === false ? <p className="text-sm text-muted-foreground">{String(profile.message || "تُبنى بعد نشر أول مقال.")}</p> : <><p className="text-sm leading-7">{String(profile?.signature || "صوتك يتضح أكثر مع كل مقال.")}</p><div className="flex flex-wrap gap-2">{traits.map((trait) => <Badge key={trait} variant="outline">{trait}</Badge>)}</div><ResultList title="إشارات تحافظ على صوتك" items={guidance} /></>}</CardContent></Card>;
+  return (
+    <Card className="border-teal-200/55 bg-gradient-to-br from-teal-50/55 via-card to-card dark:border-teal-900/35 dark:from-teal-950/20">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <span className="rounded-md bg-teal-100/80 p-1 dark:bg-teal-950/40 sm:rounded-lg sm:p-1.5">
+            <Feather className="h-4 w-4 text-teal-600 dark:text-teal-300 sm:h-5 sm:w-5" />
+          </span>
+          بصمتك الكتابية
+        </CardTitle>
+        <CardDescription>ذاكرة تحترم صوتك ولا تستنسخه.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {loading ? (
+          <div className="h-32 animate-pulse rounded-xl bg-teal-100/50 dark:bg-teal-950/30" />
+        ) : profile?.ready === false ? (
+          <p className="text-sm text-muted-foreground">{String(profile.message || "تُبنى بعد نشر أول مقال.")}</p>
+        ) : (
+          <>
+            <p className="text-sm leading-7">{String(profile?.signature || "صوتك يتضح أكثر مع كل مقال.")}</p>
+            <div className="flex flex-wrap gap-2">
+              {traits.map((trait) => (
+                <Badge key={trait} variant="outline" className="border-teal-200/70 bg-background/70 dark:border-teal-800">{trait}</Badge>
+              ))}
+            </div>
+            <ResultList title="إشارات تحافظ على صوتك" items={guidance} />
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 function ReviewResultView({ result }: { result: ReviewResult }) {
