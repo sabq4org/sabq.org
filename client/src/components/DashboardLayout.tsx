@@ -258,10 +258,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 className="w-full"
               >
                 <span className="flex items-center gap-3 flex-1">
-                  {Icon && <Icon className="h-5 w-5" />}
+                  {Icon && <Icon className="h-4 w-4" />}
                   <span>{item.labelAr || item.labelKey}</span>
                 </span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-3.5 w-3.5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
               </SidebarMenuButton>
             </CollapsibleTrigger>
             <CollapsibleContent>
@@ -318,7 +318,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             onClick={() => handleNavClick(item)}
           >
             <span className="flex items-center gap-3">
-              {Icon && <Icon className="h-5 w-5" />}
+              {Icon && <Icon className="h-4 w-4" />}
               <span>{item.labelAr || item.labelKey}</span>
             </span>
           </Link>

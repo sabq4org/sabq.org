@@ -1564,6 +1564,17 @@ input, select, textarea {
       min-width: 44px;
       min-height: 44px;
     }
+
+    /* Icon-only buttons: keep glyph at 16px while the touch target stays ≥44px */
+    button.h-7 > svg,
+    button.h-8 > svg,
+    button.h-9 > svg,
+    button.w-7 > svg,
+    button.w-8 > svg,
+    button.w-9 > svg {
+      width: 1rem !important;
+      height: 1rem !important;
+    }
     
     /* Exception for icon buttons - use padding to meet target size */
     button[data-testid*="icon"]:not(.no-min-touch-size),
