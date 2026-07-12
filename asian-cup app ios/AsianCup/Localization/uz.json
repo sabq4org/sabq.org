@@ -235,6 +235,8 @@
   "auth.signedIn": "Sabq bilan bog'langan",
   "auth.signOut": "Chiqish",
   "auth.error.apple": "Apple bilan kirmoqda muammo yuz berdi",
+  "follow.action": "Kuzatish",
+  "follow.following": "Kuzatilmoqda",
   "notifications.enable": "O'yin ogohlantirishlarini yoqing",
   "notifications.enabled": "O'yin ogohlantirishlari yoqilgan"
 }

@@ -235,6 +235,8 @@
   "auth.signedIn": "Sabq에 연결됨",
   "auth.signOut": "로그아웃",
   "auth.error.apple": "Apple로 로그인할 수 없습니다",
+  "follow.action": "팔로우",
+  "follow.following": "팔로우 중",
   "notifications.enable": "경기 알림 활성화",
   "notifications.enabled": "경기 알림 활성화됨"
 }

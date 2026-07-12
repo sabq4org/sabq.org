@@ -465,6 +465,12 @@ struct AcMatchDetailSheet: View {
                 centerScore
                 bigTeam(displayFixture.away, saudi: false)
             }
+
+            AcFollowButton(
+                kind: "match",
+                refId: String(displayFixture.id),
+                refName: "\(displayFixture.home.name) - \(displayFixture.away.name)"
+            )
         }
         .padding(20)
         .frame(maxWidth: .infinity)

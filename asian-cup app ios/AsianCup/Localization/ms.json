@@ -235,6 +235,8 @@
   "auth.signedIn": "Sambung ke Sabq",
   "auth.signOut": "Log keluar",
   "auth.error.apple": "Tidak dapat log masuk dengan Apple",
+  "follow.action": "Ikuti",
+  "follow.following": "Mengikuti",
   "notifications.enable": "Aktifkan amaran perlawanan",
   "notifications.enabled": "Amaran perlawanan diaktifkan"
 }

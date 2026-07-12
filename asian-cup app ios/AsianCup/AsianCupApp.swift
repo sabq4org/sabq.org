@@ -18,6 +18,7 @@ struct AsianCupApp: App {
                 .preferredColorScheme(.light) // هوية فاتحة باردة محايدة لكل المنتخبات
                 .task {
                     await auth.restore()
+                    await AcFollowsStore.shared.reload()
                     await AcPushManager.shared.syncWithSession()
                 }
         }

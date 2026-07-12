@@ -2707,6 +2707,13 @@ private struct AcTeamHero: View {
                 Spacer(minLength: 0)
             }
 
+            AcFollowButton(
+                kind: "team",
+                refId: String(teamId),
+                refName: team.name,
+                refLogo: team.logo
+            )
+
             if teamId == AsianCupConstants.saudiTeamId || (coach.map { !$0.isEmpty } ?? false) {
                 HStack(spacing: 8) {
                     if teamId == AsianCupConstants.saudiTeamId {

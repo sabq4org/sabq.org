@@ -235,6 +235,8 @@
   "auth.signedIn": "Sabq এর সাথে সংযুক্ত",
   "auth.signOut": "সাইন আউট",
   "auth.error.apple": "Apple এর সাথে সাইন ইন করা যায়নি",
+  "follow.action": "অনুসরণ করুন",
+  "follow.following": "অনুসরণ করছেন",
   "notifications.enable": "ম্যাচের সতর্কতা সক্ষম করুন",
   "notifications.enabled": "ম্যাচের সতর্কতা সক্ষম করা হয়েছে"
 }
