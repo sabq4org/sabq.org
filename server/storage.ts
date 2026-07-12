@@ -1301,7 +1301,19 @@ export interface IStorage {
     } | null;
   } | undefined>;
 
-  getActivityLogsAnalytics(): Promise<{
+  getActivityLogsAnalytics(days?: number): Promise<{
+    periodDays: number;
+    summary: {
+      totalCount: number;
+      previousCount: number;
+      changePercent: number | null;
+      activeUsers: number;
+      affectedEntities: number;
+      sensitiveActions: number;
+      automatedActions: number;
+      averagePerDay: number;
+      lastActivityAt: Date | null;
+    };
     topUsers: Array<{
       userId: string;
       userName: string;
@@ -1313,16 +1325,7 @@ export interface IStorage {
       action: string;
       count: number;
     }>;
-    peakHours: Array<{
-      hour: number;
-      count: number;
-    }>;
-    successFailureRate: {
-      successCount: number;
-      failureCount: number;
-      warningCount: number;
-      totalCount: number;
-    };
+    topEntities: Array<{ entityType: string; count: number }>;
     recentActivity: Array<{
       date: string;
       count: number;
@@ -12131,7 +12134,19 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getActivityLogsAnalytics(): Promise<{
+  async getActivityLogsAnalytics(days = 30): Promise<{
+    periodDays: number;
+    summary: {
+      totalCount: number;
+      previousCount: number;
+      changePercent: number | null;
+      activeUsers: number;
+      affectedEntities: number;
+      sensitiveActions: number;
+      automatedActions: number;
+      averagePerDay: number;
+      lastActivityAt: Date | null;
+    };
     topUsers: Array<{
       userId: string;
       userName: string;
@@ -12143,22 +12158,34 @@ export class DatabaseStorage implements IStorage {
       action: string;
       count: number;
     }>;
-    peakHours: Array<{
-      hour: number;
-      count: number;
-    }>;
-    successFailureRate: {
-      successCount: number;
-      failureCount: number;
-      warningCount: number;
-      totalCount: number;
-    };
+    topEntities: Array<{ entityType: string; count: number }>;
     recentActivity: Array<{
       date: string;
       count: number;
     }>;
   }> {
-    // Get top 5 most active users
+    const periodDays = [7, 30, 90].includes(days) ? days : 30;
+    const periodStart = sql`NOW() - ${periodDays} * INTERVAL '1 day'`;
+    const previousPeriodStart = sql`NOW() - ${periodDays * 2} * INTERVAL '1 day'`;
+
+    const [summaryRow] = await db
+      .select({
+        totalCount: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
+        previousCount: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${previousPeriodStart} AND ${activityLogs.createdAt} < ${periodStart})::int`,
+        activeUsers: sql<number>`count(DISTINCT ${activityLogs.userId}) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND ${activityLogs.userId} IS NOT NULL)::int`,
+        affectedEntities: sql<number>`count(DISTINCT (${activityLogs.entityType}, ${activityLogs.entityId})) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})::int`,
+        sensitiveActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND lower(${activityLogs.action}) IN ('delete', 'ban', 'reject', 'assign_role', 'remove_role', 'update_role_permissions', 'reset_password'))::int`,
+        automatedActions: sql<number>`count(*) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart} AND ${activityLogs.userId} IS NULL)::int`,
+        lastActivityAt: sql<Date | null>`max(${activityLogs.createdAt}) FILTER (WHERE ${activityLogs.createdAt} >= ${periodStart})`,
+      })
+      .from(activityLogs);
+
+    const totalCount = summaryRow?.totalCount || 0;
+    const previousCount = summaryRow?.previousCount || 0;
+    const changePercent = previousCount > 0
+      ? Math.round(((totalCount - previousCount) / previousCount) * 1000) / 10
+      : null;
+
     const topUsersQuery = await db
       .select({
         userId: activityLogs.userId,
@@ -12170,6 +12197,7 @@ export class DatabaseStorage implements IStorage {
       })
       .from(activityLogs)
       .innerJoin(users, eq(activityLogs.userId, users.id))
+      .where(gte(activityLogs.createdAt, periodStart))
       .groupBy(
         activityLogs.userId,
         users.firstName,
@@ -12188,73 +12216,40 @@ export class DatabaseStorage implements IStorage {
       profileImageUrl: user.profileImageUrl,
     }));
 
-    // Get top actions
     const topActionsQuery = await db
       .select({
         action: activityLogs.action,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
+      .where(gte(activityLogs.createdAt, periodStart))
       .groupBy(activityLogs.action)
       .orderBy(desc(sql`count(*)`))
-      .limit(10);
+      .limit(6);
 
     const topActions = topActionsQuery.map((item) => ({
       action: item.action,
       count: item.count,
     }));
 
-    // Get peak hours (activity by hour of day)
-    const peakHoursQuery = await db
+    const topEntitiesQuery = await db
       .select({
-        hour: sql<number>`EXTRACT(HOUR FROM ${activityLogs.createdAt})::int`,
+        entityType: activityLogs.entityType,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
-      .groupBy(sql`EXTRACT(HOUR FROM ${activityLogs.createdAt})`)
-      .orderBy(sql`EXTRACT(HOUR FROM ${activityLogs.createdAt})`);
+      .where(gte(activityLogs.createdAt, periodStart))
+      .groupBy(activityLogs.entityType)
+      .orderBy(desc(sql`count(*)`))
+      .limit(6);
 
-    const peakHours = peakHoursQuery.map((item) => ({
-      hour: item.hour,
-      count: item.count,
-    }));
-
-    // Get success/failure/warning rate (based on action naming convention)
-    const actionsQuery = await db
-      .select({
-        action: activityLogs.action,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(activityLogs)
-      .groupBy(activityLogs.action);
-
-    let successCount = 0;
-    let failureCount = 0;
-    let warningCount = 0;
-    let totalCount = 0;
-
-    actionsQuery.forEach((item) => {
-      totalCount += item.count;
-      const action = item.action.toLowerCase();
-      if (action.includes('success') || action.includes('create') || action.includes('update')) {
-        successCount += item.count;
-      } else if (action.includes('fail') || action.includes('error') || action.includes('delete') || action.includes('ban')) {
-        failureCount += item.count;
-      } else if (action.includes('warn') || action.includes('suspend')) {
-        warningCount += item.count;
-      } else {
-        successCount += item.count; // Default to success
-      }
-    });
-
-    // Get recent activity (last 7 days)
     const recentActivityQuery = await db
       .select({
         date: sql<string>`DATE(${activityLogs.createdAt})::text`,
         count: sql<number>`count(*)::int`,
       })
       .from(activityLogs)
-      .where(gte(activityLogs.createdAt, sql`NOW() - INTERVAL '7 days'`))
+      .where(gte(activityLogs.createdAt, periodStart))
       .groupBy(sql`DATE(${activityLogs.createdAt})`)
       .orderBy(sql`DATE(${activityLogs.createdAt})`);
 
@@ -12264,15 +12259,24 @@ export class DatabaseStorage implements IStorage {
     }));
 
     return {
+      periodDays,
+      summary: {
+        totalCount,
+        previousCount,
+        changePercent,
+        activeUsers: summaryRow?.activeUsers || 0,
+        affectedEntities: summaryRow?.affectedEntities || 0,
+        sensitiveActions: summaryRow?.sensitiveActions || 0,
+        automatedActions: summaryRow?.automatedActions || 0,
+        averagePerDay: Math.round((totalCount / periodDays) * 10) / 10,
+        lastActivityAt: summaryRow?.lastActivityAt || null,
+      },
       topUsers,
       topActions,
-      peakHours,
-      successFailureRate: {
-        successCount,
-        failureCount,
-        warningCount,
-        totalCount,
-      },
+      topEntities: topEntitiesQuery.map((item) => ({
+        entityType: item.entityType,
+        count: item.count,
+      })),
       recentActivity,
     };
   }

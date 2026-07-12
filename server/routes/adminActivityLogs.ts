@@ -56,7 +56,9 @@ router.get("/api/admin/activity-logs", requireAuth, requirePermission("system.vi
 // Get activity logs analytics (admin/system_admin only)
 router.get("/api/admin/activity-logs/analytics", requireAuth, requirePermission("system.view_audit"), async (req: any, res) => {
   try {
-    const analytics = await storage.getActivityLogsAnalytics();
+    const requestedDays = Number.parseInt(String(req.query.days || "30"), 10);
+    const days = [7, 30, 90].includes(requestedDays) ? requestedDays : 30;
+    const analytics = await storage.getActivityLogsAnalytics(days);
     res.json(analytics);
   } catch (error) {
     console.error("Error fetching activity logs analytics:", error);
