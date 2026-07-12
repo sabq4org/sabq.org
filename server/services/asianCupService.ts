@@ -32,6 +32,12 @@ import {
   getTheSportsFastScore,
   getTheSportsMatchLive,
   getTsCompetitionExtra,
+  getTsCompetitionMatchPairs,
+  getTsFifaRanking,
+  getTsMatchTv,
+  getTsPlayerMarketHistory,
+  getTsSeasonTeamStats,
+  getTsTeamSquad,
   resolveTsNames,
   type TsEvent,
   type TsLiveStats,
@@ -65,6 +71,8 @@ export interface AcTeam {
   /** الاسم القانوني من المزوّد، لاستخدام اللغات غير العربية. */
   nameEn: string;
   logo: string;
+  /** تصنيف فيفا (TheSports عبر الجسر) — يظهر فقط في قائمة /teams المُثراة */
+  fifaRank?: number | null;
 }
 
 export interface AcFixture {
@@ -664,6 +672,29 @@ export interface AcTeamProfile {
   nextMatch: AcFixture | null;
   fixtures: AcFixture[];
   squad: AcSquadPlayer[];
+  /** تصنيف فيفا (TheSports عبر الجسر) — null إن تعذّر الربط */
+  fifaRank: AcFifaRank | null;
+  /** إحصاء المنتخب في البطولة (TheSports season/recent/team/stat) */
+  seasonStats: AcTeamSeasonStats | null;
+}
+
+export interface AcFifaRank {
+  rank: number;
+  points: number | null;
+  /** المراكز المتغيّرة منذ التحديث السابق (موجب = صعد) — null إن تعذّر */
+  change: number | null;
+}
+
+export interface AcSeasonStatItem {
+  label: string;
+  value: number;
+  percent?: boolean;
+}
+
+export interface AcTeamSeasonStats {
+  available: boolean;
+  matches: number;
+  items: AcSeasonStatItem[];
 }
 
 export interface AcQualificationTimelineItem {
@@ -843,6 +874,12 @@ export async function getAcTeamProfile(teamId: number): Promise<AcTeamProfile | 
     console.warn(`[AsianCup] coach ${teamId} failed:`, error);
   }
 
+  // إثراء TheSports (تصنيف فيفا + إحصاء البطولة) — أفضل جهد: غيابه لا يعطّل الملف.
+  const [fifaRank, seasonStats] = await Promise.all([
+    getAcTeamFifaRank(teamId).catch(() => null),
+    getAcTeamSeasonStats(teamId).catch(() => null),
+  ]);
+
   return {
     team,
     isSaudi: teamId === SAUDI_TEAM_ID,
@@ -864,6 +901,8 @@ export async function getAcTeamProfile(teamId: number): Promise<AcTeamProfile | 
     nextMatch,
     fixtures: teamFixtures,
     squad: squad?.players ?? [],
+    fifaRank,
+    seasonStats,
   };
 }
 
@@ -1226,6 +1265,14 @@ export async function getAcPlayerCard(playerId: number): Promise<AcPlayerCard | 
     const translatedFull = officialFull ? tr(officialFull) : "";
     const injuryReason: string | null = injuryRows[0]?.player?.reason ?? null;
 
+    // قيمة السوق (TheSports): جسر المنتخب → قائمة TheSports → مطابقة اسم/رقم →
+    // آخر نقطة في player/market/list. أفضل جهد — أي غياب يبقيها غير متاحة.
+    const market = await getAcPlayerMarket(
+      st?.team?.id ?? 0,
+      p.name ?? officialFull,
+      p.number ?? null,
+    ).catch(() => ({ available: false, value: null, currency: "€", source: "thesports" as const, history: [] }));
+
     return {
       id: p.id,
       name: displayName,
@@ -1246,8 +1293,8 @@ export async function getAcPlayerCard(playerId: number): Promise<AcPlayerCard | 
       transfers,
       stats,
       injury: injuryReason ? { reason: injuryReason } : null,
-      market: { available: false, value: null, currency: "€", source: "thesports", history: [] },
-      sources: { apiFootball: true, theSports: false },
+      market,
+      sources: { apiFootball: true, theSports: market.available },
     };
   });
 }
@@ -1324,6 +1371,14 @@ export interface AcMatchDetail {
   manOfTheMatch: AcPlayerRating | null;
   prediction: AcPrediction | null;
   headToHead: AcFixture[];
+  /** قنوات بثّ المباراة حول العالم (TheSports) — [] إن تعذّر الجسر */
+  tv: AcTvChannel[];
+}
+
+export interface AcTvChannel {
+  name: string;
+  country: string | null;
+  logo: string | null;
 }
 
 const TS_EVENT_LABEL: Record<TsEvent["type"], string> = {
@@ -1596,7 +1651,9 @@ export async function getAcMatchDetail(fixtureId: number): Promise<AcMatchDetail
   const manOfTheMatch =
     detail.fixture.status.finished && detail.ratings.length > 0 ? detail.ratings[0] : null;
 
-  return overlayAcLiveDetail({ ...detail, prediction, headToHead, manOfTheMatch });
+  const tv = await getAcMatchTv(detail.fixture).catch(() => [] as AcTvChannel[]);
+
+  return overlayAcLiveDetail({ ...detail, prediction, headToHead, manOfTheMatch, tv });
 }
 
 // ---------- حقائق البطولة (TheSports competition/additional) ----------
@@ -1639,4 +1696,225 @@ export async function getAcFacts(): Promise<AcCompetitionFacts> {
     mostTitles: mostNames.length ? { names: mostNames, titles: extra.mostTitlesCount } : null,
     host: AC_HOST_2027,
   };
+}
+
+// ---------- جسر TheSports لكأس آسيا (فيفا/البث/الإحصاء الموسمي/قيمة السوق) ----------
+// نفس منهج جسر المونديال: نطابق مباريات API-Football بمباريات TheSports عبر وقت
+// البداية (تطابق فريد ±دقيقتين فقط) ونصوّت عبر كل المباريات فيغلب المعرّف الصحيح.
+// أفضل جهد بالكامل: غياب TheSports → خرائط فارغة → لا إثراء ولا عطل.
+
+const AC_BRIDGE_TTL = 6 * 60 * 60 * 1000;
+let acTeamBridge: { at: number; map: Map<number, string> } | null = null;
+
+export async function getAcTeamBridge(): Promise<Map<number, string>> {
+  if (acTeamBridge && Date.now() - acTeamBridge.at < AC_BRIDGE_TTL) return acTeamBridge.map;
+  const map = new Map<number, string>();
+  try {
+    const comp = await getTsCompetitionExtra(TS_COMPETITION_IDS["asian-cup"]);
+    const [fixtures, pairs] = await Promise.all([
+      getAcFixtures(),
+      getTsCompetitionMatchPairs(TS_COMPETITION_IDS["asian-cup"], comp?.curSeasonId ?? null),
+    ]);
+    if (pairs.length > 0) {
+      const votes = new Map<number, Map<string, number>>();
+      const vote = (apiId: number, uuid: string) => {
+        if (!apiId || !uuid) return;
+        const m = votes.get(apiId) ?? new Map<string, number>();
+        m.set(uuid, (m.get(uuid) ?? 0) + 1);
+        votes.set(apiId, m);
+      };
+      for (const fx of fixtures) {
+        if (!fx.home.id || !fx.away.id || !fx.timestamp) continue;
+        const hits = pairs.filter((p) => Math.abs(p.time - fx.timestamp) <= 120);
+        if (hits.length !== 1) continue; // تطابق فريد فقط → اتجاه آمن
+        vote(fx.home.id, hits[0].home);
+        vote(fx.away.id, hits[0].away);
+      }
+      for (const [apiId, m] of votes) {
+        let best = "";
+        let bestN = 0;
+        for (const [uuid, n] of m) if (n > bestN) ((best = uuid), (bestN = n));
+        if (best) map.set(apiId, best);
+      }
+    }
+  } catch (error) {
+    console.warn("[AsianCup] TheSports team bridge failed:", error);
+  }
+  acTeamBridge = { at: Date.now(), map };
+  return map;
+}
+
+/** تصنيف فيفا لمنتخب عبر الجسر — null إن تعذّر. */
+export async function getAcTeamFifaRank(teamId: number): Promise<AcFifaRank | null> {
+  const [bridge, ranking] = await Promise.all([getAcTeamBridge(), getTsFifaRanking()]);
+  const uuid = bridge.get(teamId);
+  if (!uuid) return null;
+  const r = ranking.get(uuid);
+  if (!r) return null;
+  return { rank: r.rank, points: r.points ?? null, change: r.change ?? null };
+}
+
+// كاش مشترك لإحصاء كل المنتخبات للموسم — نداء واحد يخدم كل صفحات المنتخبات.
+const AC_SEASON_STATS_TTL = 30 * 60 * 1000;
+let acSeasonTeamStats: { at: number; map: Map<string, Record<string, number>> } | null = null;
+
+async function getAcSeasonTeamStatsMap(): Promise<Map<string, Record<string, number>>> {
+  if (acSeasonTeamStats && Date.now() - acSeasonTeamStats.at < AC_SEASON_STATS_TTL)
+    return acSeasonTeamStats.map;
+  const map = new Map<string, Record<string, number>>();
+  try {
+    const comp = await getTsCompetitionExtra(TS_COMPETITION_IDS["asian-cup"]);
+    const season = comp?.curSeasonId ?? null;
+    if (season) {
+      const rows = await getTsSeasonTeamStats(season);
+      for (const r of rows) map.set(r.teamId, r.values);
+    }
+  } catch {
+    /* أفضل جهد */
+  }
+  acSeasonTeamStats = { at: Date.now(), map };
+  return map;
+}
+
+/** إحصاء المنتخب في البطولة عبر الجسر — مُعرَّب ومُنتقى للعرض المباشر. */
+export async function getAcTeamSeasonStats(teamId: number): Promise<AcTeamSeasonStats> {
+  const empty: AcTeamSeasonStats = { available: false, matches: 0, items: [] };
+  try {
+    const bridge = await getAcTeamBridge();
+    const uuid = bridge.get(teamId);
+    if (!uuid) return empty;
+    const map = await getAcSeasonTeamStatsMap();
+    const v = map.get(uuid);
+    if (!v) return empty;
+
+    const items: AcSeasonStatItem[] = [];
+    const push = (label: string, val: number | null | undefined, percent = false) => {
+      if (val == null) return;
+      items.push({ label, value: val, percent });
+    };
+    push("الأهداف المسجَّلة", v.goals);
+    push("الأهداف المستقبَلة", v.goals_against);
+    push("متوسّط الاستحواذ", v.ball_possession, true);
+    push("التسديدات", v.shots);
+    push("التسديدات على المرمى", v.shots_on_target);
+    push("الركنيات", v.corner_kicks);
+    push("البطاقات الصفراء", v.yellow_cards);
+    push("البطاقات الحمراء", v.red_cards);
+    return { available: items.length > 0, matches: v.matches ?? 0, items };
+  } catch {
+    return empty;
+  }
+}
+
+// جسر معرّف المباراة (fixtureId ↔ TheSports uuid) عبر زوج فريقَي المباراة.
+const acMatchIdBridge = new Map<number, string>();
+
+async function getAcMatchTsId(fx: AcFixture): Promise<string | null> {
+  const cached = acMatchIdBridge.get(fx.id);
+  if (cached) return cached;
+  if (!fx.home.id || !fx.away.id) return null;
+  const [bridge, comp] = await Promise.all([
+    getAcTeamBridge(),
+    getTsCompetitionExtra(TS_COMPETITION_IDS["asian-cup"]),
+  ]);
+  const homeUuid = bridge.get(fx.home.id);
+  const awayUuid = bridge.get(fx.away.id);
+  if (!homeUuid || !awayUuid) return null;
+  const pairs = await getTsCompetitionMatchPairs(
+    TS_COMPETITION_IDS["asian-cup"],
+    comp?.curSeasonId ?? null,
+  );
+  const matches = pairs.filter(
+    (p) =>
+      p.id &&
+      ((p.home === homeUuid && p.away === awayUuid) || (p.home === awayUuid && p.away === homeUuid)),
+  );
+  if (matches.length === 0) return null;
+  const best = matches.reduce((a, b) =>
+    Math.abs(b.time - fx.timestamp) < Math.abs(a.time - fx.timestamp) ? b : a,
+  );
+  if (!best.id) return null;
+  acMatchIdBridge.set(fx.id, best.id);
+  return best.id;
+}
+
+/** قنوات بثّ المباراة عبر جسر المباراة — [] إن تعذّر. */
+export async function getAcMatchTv(fx: AcFixture): Promise<AcTvChannel[]> {
+  const uuid = await getAcMatchTsId(fx).catch(() => null);
+  if (!uuid) return [];
+  const channels = await getTsMatchTv(uuid).catch(() => []);
+  return channels.map((c) => ({ name: c.name, country: c.country, logo: c.logo }));
+}
+
+// ---------- قيمة السوق للاعب (TheSports player/market/list) ----------
+
+function acNormNameKey(name: string): string {
+  return (name ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function getAcPlayerMarket(
+  teamId: number,
+  enName: string,
+  number: number | null,
+): Promise<AcPlayerMarket> {
+  const empty: AcPlayerMarket = { available: false, value: null, currency: "€", source: "thesports", history: [] };
+  if (!teamId || !enName) return empty;
+
+  const bridge = await getAcTeamBridge();
+  const tsTeam = bridge.get(teamId);
+  if (!tsTeam) return empty;
+
+  const tsSquad = await getTsTeamSquad(tsTeam);
+  if (tsSquad.length === 0) return empty;
+
+  // مطابقة: الاسم الكامل → رقم القميص → اسم العائلة الفريد.
+  const key = acNormNameKey(enName);
+  let hit = tsSquad.find((sq) => acNormNameKey(sq.name) === key) ?? null;
+  if (!hit && number != null) {
+    hit = tsSquad.find((sq) => sq.shirtNumber === number) ?? null;
+  }
+  if (!hit) {
+    const last = key.split(" ").pop() ?? "";
+    const sameLast = last
+      ? tsSquad.filter((sq) => acNormNameKey(sq.name).split(" ").pop() === last)
+      : [];
+    if (sameLast.length === 1) hit = sameLast[0];
+  }
+  if (!hit) return empty;
+
+  const history = await getTsPlayerMarketHistory(hit.id).catch(() => []);
+  if (history.length === 0) return empty;
+  const lastPoint = history[history.length - 1];
+  return {
+    available: lastPoint.value > 0,
+    value: lastPoint.value > 0 ? lastPoint.value : null,
+    currency: lastPoint.currency || "€",
+    source: "thesports",
+    history: history.slice(-12).map((h) => ({ time: h.time, value: h.value })),
+  };
+}
+
+/**
+ * قائمة المنتخبات مُثراة بتصنيف فيفا عبر الجسر — أفضل جهد: غياب TheSports →
+ * القائمة كما هي. لا نلوّث كاش getAcTeams لأن الترتيب يتغيّر شهريًّا.
+ */
+export async function getAcTeamsRanked(): Promise<AcTeam[]> {
+  const teams = await getAcTeams();
+  try {
+    const [bridge, ranking] = await Promise.all([getAcTeamBridge(), getTsFifaRanking()]);
+    if (ranking.size === 0) return teams;
+    return teams.map((t) => {
+      const uuid = bridge.get(t.id);
+      const r = uuid ? ranking.get(uuid) : null;
+      return r ? { ...t, fifaRank: r.rank } : t;
+    });
+  } catch {
+    return teams;
+  }
 }

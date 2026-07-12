@@ -121,7 +121,7 @@ struct AcFollowButton: View {
             .font(AsianCupFonts.app(size: 12, weight: .bold))
         }
         .buttonStyle(.borderedProminent)
-        .tint(following ? AcTheme.emerald : AcTheme.goldDeep)
+        .tint(following ? AcTheme.emerald : AcTheme.amberDeep)
         .disabled(store.isLoading(kind: kind, refId: refId))
     }
 }

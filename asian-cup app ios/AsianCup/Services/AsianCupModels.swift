@@ -230,6 +230,35 @@ nonisolated struct AcTeamProfile: Decodable, Hashable {
     let nextMatch: AcFixture?
     let fixtures: [AcFixture]
     let squad: [AcSquadPlayer]
+    let fifaRank: AcFifaRank?
+    let seasonStats: AcTeamSeasonStats?
+}
+
+// تصنيف فيفا (TheSports عبر جسر الخادم).
+nonisolated struct AcFifaRank: Decodable, Hashable {
+    let rank: Int
+    let points: Double?
+    let change: Int?
+}
+
+nonisolated struct AcSeasonStatItem: Decodable, Hashable {
+    let label: String
+    let value: Double
+    let percent: Bool?
+}
+
+nonisolated struct AcTeamSeasonStats: Decodable, Hashable {
+    let available: Bool
+    let matches: Int
+    let items: [AcSeasonStatItem]
+}
+
+// قناة بثّ (TheSports) — تُعرض في تفاصيل المباراة.
+nonisolated struct AcTvChannel: Decodable, Hashable, Identifiable {
+    let name: String
+    let country: String?
+    let logo: String?
+    var id: String { name + (country ?? "") }
 }
 
 nonisolated struct AcQualificationGoals: Decodable, Hashable {
@@ -451,6 +480,7 @@ nonisolated struct AcMatchDetail: Decodable, Hashable {
     let manOfTheMatch: AcPlayerRating?
     let prediction: AcMatchPrediction?
     let headToHead: [AcFixture]
+    let tv: [AcTvChannel]?
 }
 
 // تجميع المباريات حسب اليوم (لعرض الجدول). نوع مُسمّى (لا tuple) لتجنّب
@@ -631,4 +661,26 @@ extension APIClient {
         try await get(AcMatchDetail.self, path: "/asian-cup/match/\(fixtureId)",
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
+
+    func fetchAcFacts(ignoreCache: Bool = false) async throws -> AcFacts {
+        try await get(AcFacts.self, path: "/asian-cup/facts",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+}
+
+// حقائق البطولة (مصدر TheSports عبر الخادم): حامل اللقب، الأكثر تتويجًا، المضيف.
+nonisolated struct AcFacts: Decodable {
+    struct TitleHolder: Decodable {
+        let name: String
+        let titles: Int?
+    }
+    struct MostTitles: Decodable {
+        let names: [String]
+        let titles: Int?
+    }
+
+    let available: Bool
+    let titleHolder: TitleHolder?
+    let mostTitles: MostTitles?
+    let host: String?
 }

@@ -3,11 +3,13 @@ import SwiftUI
 // مكوّنات UI أساسية لكأس آسيا — مُعاد تصميمها من WorldCupComponents لكن بألوان
 // AcTheme. كلها تُستعمل عبر الشاشات.
 
-// MARK: - أجواء الخلفية (توهّجات دقيقة + نقشة هندسية اختيارية)
+// MARK: - خلفية ونقشة هندسية (مسطّحة رسمية — بلا توهّج ولا ظل)
 
 // نقشة هندسية مائلة خفيفة مستوحاة من زخرفة اللوقو — تُرسم بـ Canvas لأداء عالٍ.
 struct AcLatticePattern: View {
     var spacing: CGFloat = 26
+    // حبر ديناميكي (داكن على الفاتح، أبيض على الداكن) — الأبيض الثابت كان غير مرئي في الوضع الفاتح.
+    var color: Color = AcTheme.onDark
     var body: some View {
         Canvas { ctx, size in
             var path = Path()
@@ -17,82 +19,31 @@ struct AcLatticePattern: View {
                 path.addLine(to: CGPoint(x: x + size.height, y: size.height))
                 x += spacing
             }
-            ctx.stroke(path, with: .color(.white), lineWidth: 1)
+            ctx.stroke(path, with: .color(color), lineWidth: 1)
         }
         .allowsHitTesting(false)
     }
 }
 
-// خلفية التطبيق الكاملة. محايدة حتى لا تبتلع الهوية؛ النقشة تُستخدم داخل
-// البطاقات/الهيرو فقط، لا على كامل التطبيق.
+// خلفية التطبيق — تدرّج مسطّح فقط، بلا أوراب ضبابية.
 struct AcAmbientBackground: View {
     var animated: Bool = true
-    @State private var drift = false
 
     var body: some View {
-        ZStack {
-            AcTheme.screenGradient
-
-            Circle()
-                .fill(AcTheme.azure.opacity(0.10))
-                .frame(width: 420, height: 420)
-                .blur(radius: 130)
-                .offset(x: drift ? 44 : -36, y: -315)
-
-            Circle()
-                .fill(AcTheme.gold.opacity(0.06))
-                .frame(width: 330, height: 330)
-                .blur(radius: 125)
-                .offset(x: 155, y: 345)
-
-            Circle()
-                .fill(AcTheme.teal.opacity(0.08))
-                .frame(width: 320, height: 320)
-                .blur(radius: 125)
-                .offset(x: -170, y: 430)
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            guard animated else { return }
-            withAnimation(.easeInOut(duration: 10).repeatForever(autoreverses: true)) {
-                drift = true
-            }
-        }
+        AcTheme.screenGradient
+            .ignoresSafeArea()
     }
 }
 
-// MARK: - شعار البطولة (هالة نابضة + دخول زنبركي)
+// MARK: - شعار البطولة (مسطّح — بلا هالة ولا ظل)
 struct AcEmblem: View {
     var height: CGFloat = 134
-    @State private var pulse = false
-    @State private var entered = false
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [AcTheme.gold.opacity(0.38), .clear],
-                        center: .center, startRadius: 4, endRadius: height * 0.7
-                    )
-                )
-                .frame(width: height * 1.25, height: height * 1.25)
-                .blur(radius: 30)
-                .scaleEffect(pulse ? 1.12 : 0.9)
-                .opacity(pulse ? 0.9 : 0.5)
-
-            Image("Emblem")
-                .resizable()
-                .scaledToFit()
-                .frame(height: height)
-                .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
-                .scaleEffect(entered ? 1 : 0.82)
-                .rotationEffect(.degrees(entered ? 0 : -4))
-        }
-        .onAppear {
-            withAnimation(.spring(response: 0.75, dampingFraction: 0.6)) { entered = true }
-            withAnimation(.easeInOut(duration: 4).repeatForever(autoreverses: true)) { pulse = true }
-        }
+        Image("Emblem")
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
     }
 }
 
@@ -100,7 +51,7 @@ struct AcEmblem: View {
 struct AcHeroBadge: View {
     let icon: String
     let text: String
-    var tint: Color = AcTheme.gold
+    var tint: Color = AcTheme.emerald
 
     var body: some View {
         HStack(spacing: 6) {
@@ -110,21 +61,21 @@ struct AcHeroBadge: View {
         .foregroundStyle(tint)
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(Capsule().fill(tint.opacity(0.12)))
-        .overlay(Capsule().stroke(tint.opacity(0.30), lineWidth: 1))
+        .background(Capsule().fill(tint.opacity(0.10)))
+        .overlay(Capsule().stroke(tint.opacity(0.22), lineWidth: AcTheme.borderWidth))
     }
 }
 
 // عنوان «كأس آسيا 2027» بتدرّج ذهبي على «2027» (مطابق لهيرو الويب).
 struct AcTournamentTitle: View {
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Text(L("app.title"))
                 .foregroundStyle(AcTheme.onDark)
             Text("2027")
-                .foregroundStyle(AcTheme.goldTitleGradient)
+                .foregroundStyle(AcTheme.titleGradient)
         }
-        .font(AsianCupFonts.app(size: 32, weight: .bold))
+        .font(AsianCupFonts.app(size: 24, weight: .bold))
     }
 }
 
@@ -199,9 +150,9 @@ struct AcStatusPill: View {
         } else {
             Text(AcFormat.kickoffTime(fixture.date))
                 .font(AsianCupFonts.app(size: 11, weight: .bold))
-                .foregroundStyle(AcTheme.goldDeep)
+                .foregroundStyle(AcTheme.amberDeep)
                 .padding(.horizontal, 8).padding(.vertical, 3)
-                .background(Capsule().fill(AcTheme.gold.opacity(0.16)))
+                .background(Capsule().fill(AcTheme.amber.opacity(0.16)))
         }
     }
 
@@ -216,18 +167,18 @@ struct AcSectionHeader: View {
     let title: String
     var subtitle: String? = nil
     var count: Int? = nil
-    var tint: Color = AcTheme.gold
+    var tint: Color = AcTheme.emerald
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(AsianCupFonts.app(size: 19, weight: .semibold))
+                .font(AsianCupFonts.app(size: subtitle == nil ? 14 : 19, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 38, height: 38)
-                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(tint.opacity(0.14)))
+                .frame(width: subtitle == nil ? 28 : 38, height: subtitle == nil ? 28 : 38)
+                .background(RoundedRectangle(cornerRadius: AcTheme.chipRadius, style: .continuous).fill(tint.opacity(0.14)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(AsianCupFonts.headline(size: 20))
+                    .font(AsianCupFonts.headline(size: subtitle == nil ? 16 : 20))
                     .foregroundStyle(AcTheme.onDark)
                 if let subtitle {
                     Text(subtitle)
@@ -257,7 +208,7 @@ struct AcEmptyState: View {
         VStack(spacing: 8) {
             Image(systemName: icon)
                 .font(AsianCupFonts.app(size: 30))
-                .foregroundStyle(AcTheme.gold)
+                .foregroundStyle(AcTheme.emerald)
             Text(title)
                 .font(AsianCupFonts.subhead(size: 15))
                 .foregroundStyle(AcTheme.onDark)
@@ -271,16 +222,13 @@ struct AcEmptyState: View {
     }
 }
 
-struct AcLoading: View {
-    var body: some View {
-        HStack { Spacer(); ProgressView().tint(AcTheme.gold); Spacer() }
-            .padding(.vertical, 32)
-    }
-}
-
-// بطاقة مباراة واحدة — تُستعمل في الجدول واليوم. الضغط يفتح ورقة التفاصيل.
+// بطاقة مباراة أفقية مألوفة ومضغوطة:
+//   الجولة                          17:00
+//   [شعار] السعودية   VS   فلسطين [شعار]
+//   الملعب — المدينة                   ‹
 struct AcMatchCard: View {
     let fixture: AcFixture
+    var embedded: Bool = false
 
     private var started: Bool { fixture.status.live || fixture.status.finished }
 
@@ -290,93 +238,97 @@ struct AcMatchCard: View {
         } label: {
             cardLabel
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AcPressableStyle())
     }
 
     private var cardLabel: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 6) {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
                 Text(LRound(fixture.roundEn, fallback: fixture.round))
-                    .font(AsianCupFonts.app(size: 11))
+                    .font(AsianCupFonts.app(size: 11, weight: .semibold))
                     .foregroundStyle(AcTheme.onDarkDim)
                     .lineLimit(1)
-                Spacer(minLength: 6)
+                Spacer(minLength: 4)
                 AcStatusPill(fixture: fixture)
             }
 
             HStack(spacing: 8) {
-                teamSide(fixture.home, highlight: false, leading: true)
-                scoreBox
-                teamSide(fixture.away, highlight: false, leading: false)
+                teamSide(fixture.home, leading: true)
+                centerScore
+                teamSide(fixture.away, leading: false)
             }
 
-            if !fixture.venue.name.isEmpty {
+            if !fixture.venue.name.isEmpty || !fixture.venue.city.isEmpty {
                 HStack(spacing: 4) {
                     Image(systemName: "mappin.and.ellipse")
-                        .font(.system(size: 10))
+                        .font(.system(size: 10, weight: .semibold))
                     Text(venueText)
                         .font(AsianCupFonts.app(size: 11))
                         .lineLimit(1)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.left")
+                    Image(systemName: "chevron.forward")
                         .font(.system(size: 10, weight: .semibold))
                 }
                 .foregroundStyle(AcTheme.onDarkFaint)
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous)
-                .fill(AcTheme.cardFill)
-                .overlay(
-                    RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous)
-                        .stroke(AcTheme.outline, lineWidth: 1)
-                )
-        )
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background {
+            if !embedded {
+                RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous)
+                    .fill(AcTheme.cardFillStrong)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous)
+                            .stroke(AcTheme.outline, lineWidth: AcTheme.borderWidth)
+                    )
+            }
+        }
     }
 
     private var venueText: String {
-        fixture.venue.city.isEmpty ? fixture.venue.name : "\(fixture.venue.name) — \(fixture.venue.city)"
+        if fixture.venue.name.isEmpty { return fixture.venue.city }
+        if fixture.venue.city.isEmpty { return fixture.venue.name }
+        return "\(fixture.venue.name) — \(fixture.venue.city)"
     }
 
-    // صفّ منتخب أفقي (شعار + اسم) — مطابق لـ TeamRow في الويب، مُرايا للجهتين.
-    private func teamSide(_ team: AcTeam, highlight: Bool, leading: Bool) -> some View {
-        HStack(spacing: 8) {
+    private func teamSide(_ team: AcTeam, leading: Bool) -> some View {
+        HStack(spacing: 7) {
             if leading {
-                AcTeamLogo(logo: team.logo, size: 30)
-                teamName(team, highlight: highlight, align: .leading)
+                AcTeamLogo(logo: team.logo, size: 28)
+                teamName(team, align: .leading)
             } else {
-                teamName(team, highlight: highlight, align: .trailing)
-                AcTeamLogo(logo: team.logo, size: 30)
+                teamName(team, align: .trailing)
+                AcTeamLogo(logo: team.logo, size: 28)
             }
         }
         .frame(maxWidth: .infinity, alignment: leading ? .leading : .trailing)
     }
 
-    private func teamName(_ team: AcTeam, highlight: Bool, align: TextAlignment) -> some View {
+    private func teamName(_ team: AcTeam, align: TextAlignment) -> some View {
         Text(LTeam(String(team.id), fallback: team.name))
-            .font(AsianCupFonts.app(size: 13, weight: highlight ? .bold : .semibold))
-            .foregroundStyle(highlight ? AcTheme.gold : AcTheme.onDark)
+            .font(AsianCupFonts.app(size: 13, weight: .bold))
+            .foregroundStyle(AcTheme.onDarkStrong)
             .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .minimumScaleFactor(0.8)
             .multilineTextAlignment(align)
     }
 
-    private var scoreBox: some View {
+    private var centerScore: some View {
         Group {
             if started {
                 Text("\(fixture.goals.home ?? 0) - \(fixture.goals.away ?? 0)")
-                    .font(AsianCupFonts.app(size: 20, weight: .bold))
-                    .foregroundStyle(AcTheme.onDark)
+                    .font(AsianCupFonts.app(size: 18, weight: .bold))
+                    .foregroundStyle(AcTheme.onDarkStrong)
                     .monospacedDigit()
                     .environment(\.layoutDirection, .leftToRight)
             } else {
                 Text("VS")
-                    .font(AsianCupFonts.app(size: 12, weight: .bold))
+                    .font(AsianCupFonts.app(size: 11, weight: .bold))
                     .foregroundStyle(AcTheme.onDarkFaint)
             }
         }
-        .frame(minWidth: 52)
+        .frame(width: 48)
     }
 }
 
@@ -406,6 +358,9 @@ struct AcMatchDetailSheet: View {
                 if let d = detail {
                     if let p = d.prediction, !displayFixture.status.finished {
                         AcPredictionBarsCard(prediction: p, home: displayFixture.home, away: displayFixture.away)
+                    }
+                    if let tv = d.tv, !tv.isEmpty {
+                        AcTvCard(channels: tv)
                     }
                     if let mom = d.manOfTheMatch {
                         AcManOfMatchCard(player: mom, team: team(mom.teamId))
@@ -477,7 +432,7 @@ struct AcMatchDetailSheet: View {
         .padding(20)
         .frame(maxWidth: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [AcTheme.heroTop, AcTheme.heroBottom],
@@ -485,15 +440,10 @@ struct AcMatchDetailSheet: View {
                     )
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .stroke(AcTheme.gold.opacity(0.0), lineWidth: 1.5)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous)
                         .stroke(AcTheme.outline, lineWidth: 1)
                 )
         )
-        .shadow(color: .black.opacity(0.10), radius: 16, y: 8)
     }
 
     private var centerScore: some View {
@@ -507,9 +457,9 @@ struct AcMatchDetailSheet: View {
             } else {
                 Text(AcFormat.kickoffTime(displayFixture.date))
                     .font(AsianCupFonts.app(size: 30, weight: .bold))
-                    .foregroundStyle(AcTheme.goldDeep)
+                    .foregroundStyle(AcTheme.amberDeep)
                 Text(L("match.riyadhTime"))
-                    .font(AsianCupFonts.app(size: 10))
+                    .font(AsianCupFonts.app(size: 11))
                     .foregroundStyle(AcTheme.onDarkFaint)
             }
         }
@@ -528,7 +478,7 @@ struct AcMatchDetailSheet: View {
                                 .font(.system(size: 12))
                                 .foregroundStyle(.white)
                                 .padding(4)
-                                .background(Circle().fill(AcTheme.gold))
+                                .background(Circle().fill(AcTheme.amber))
                                 .offset(x: 4, y: -4)
                         }
                     }
@@ -539,12 +489,12 @@ struct AcMatchDetailSheet: View {
                     .multilineTextAlignment(.center)
                     .frame(height: 38)
                 Text(L("team.profile.eyebrow"))
-                    .font(AsianCupFonts.app(size: 10, weight: .semibold))
-                    .foregroundStyle(AcTheme.goldDeep)
+                    .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                    .foregroundStyle(AcTheme.emeraldInk)
             }
             .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AcPressableStyle())
     }
 
     private var infoCard: some View {
@@ -578,7 +528,7 @@ struct AcMatchDetailSheet: View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 14))
-                .foregroundStyle(AcTheme.gold)
+                .foregroundStyle(AcTheme.emerald)
                 .frame(width: 22)
             Text(label)
                 .font(AsianCupFonts.app(size: 13))
@@ -605,7 +555,7 @@ struct AcInlineLoading: View {
     let title: String
     var body: some View {
         HStack(spacing: 10) {
-            ProgressView().tint(AcTheme.gold)
+            ProgressView().tint(AcTheme.emerald)
             Text(title)
                 .font(AsianCupFonts.app(size: 13, weight: .semibold))
                 .foregroundStyle(AcTheme.onDarkDim)
@@ -619,7 +569,7 @@ struct AcInlineLoading: View {
 struct AcDetailSectionTitle: View {
     let icon: String
     let title: String
-    var tint: Color = AcTheme.gold
+    var tint: Color = AcTheme.emerald
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
@@ -638,10 +588,10 @@ struct AcDetailCard<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
         VStack(alignment: .leading, spacing: 12) { content }
-            .padding(15)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(AcTheme.cardFill))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).fill(AcTheme.cardFill))
+            .overlay(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
     }
 }
 
@@ -653,12 +603,12 @@ struct AcPredictionBarsCard: View {
 
     var body: some View {
         AcDetailCard {
-            AcDetailSectionTitle(icon: "sparkles", title: L("match.prediction"), tint: AcTheme.azure)
+            AcDetailSectionTitle(icon: "sparkles", title: L("match.prediction"), tint: AcTheme.emerald)
             bar(LTeam(String(home.id), fallback: home.name), prediction.home, AcTheme.emerald)
-            bar(L("predictions.draw"), prediction.draw, AcTheme.neutralAccent)
+            bar(L("predictions.draw"), prediction.draw, AcTheme.amber)
             bar(LTeam(String(away.id), fallback: away.name), prediction.away, AcTheme.emeraldSoft)
             Text(L("match.prediction.note"))
-                .font(AsianCupFonts.app(size: 10))
+                .font(AsianCupFonts.app(size: 11))
                 .foregroundStyle(AcTheme.onDarkFaint)
         }
     }
@@ -688,6 +638,42 @@ struct AcPredictionBarsCard: View {
     }
 }
 
+// «أين تشاهد المباراة» — قنوات البث حول العالم (TheSports) — ذهبية للجمهور الأجنبي.
+struct AcTvCard: View {
+    let channels: [AcTvChannel]
+
+    var body: some View {
+        AcDetailCard {
+            AcDetailSectionTitle(icon: "tv.fill", title: L("match.tv"))
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2), spacing: 8) {
+                ForEach(channels.prefix(12)) { channel in
+                    HStack(spacing: 6) {
+                        Image(systemName: "antenna.radiowaves.left.and.right")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(AcTheme.emerald)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(channel.name)
+                                .font(AsianCupFonts.app(size: 12, weight: .bold))
+                                .foregroundStyle(AcTheme.onDark)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            if let country = channel.country, !country.isEmpty {
+                                Text(country)
+                                    .font(AsianCupFonts.app(size: 11))
+                                    .foregroundStyle(AcTheme.onDarkFaint)
+                                    .lineLimit(1)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: AcTheme.chipRadius, style: .continuous).fill(AcTheme.chipFill))
+                }
+            }
+        }
+    }
+}
+
 // بطاقة «أفضل لاعب» — تظهر للمباريات المنتهية فقط.
 struct AcManOfMatchCard: View {
     let player: AcPlayerRating
@@ -704,7 +690,7 @@ struct AcManOfMatchCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L("match.mom"))
                     .font(AsianCupFonts.app(size: 11, weight: .bold))
-                    .foregroundStyle(AcTheme.goldDeep)
+                    .foregroundStyle(AcTheme.amberDeep)
                 Text(LName(player.name, player.nameEn))
                     .font(AsianCupFonts.app(size: 17, weight: .bold))
                     .foregroundStyle(AcTheme.onDark)
@@ -722,16 +708,16 @@ struct AcManOfMatchCard: View {
                     .foregroundStyle(AcTheme.onDark)
                     .monospacedDigit()
                 Text(L("match.rating"))
-                    .font(AsianCupFonts.app(size: 9))
+                    .font(AsianCupFonts.app(size: 11))
                     .foregroundStyle(AcTheme.onDarkFaint)
             }
             .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(AcTheme.gold.opacity(0.14)))
+            .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).fill(AcTheme.amber.opacity(0.14)))
         }
-        .padding(15)
+        .padding(16)
         .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(AcTheme.cardFillStrong))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(AcTheme.gold.opacity(0.3), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).fill(AcTheme.cardFillStrong))
+        .overlay(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).stroke(AcTheme.amber.opacity(0.3), lineWidth: 1))
     }
 }
 
@@ -744,7 +730,7 @@ struct AcEventsTimelineCard: View {
 
     var body: some View {
         AcDetailCard {
-            AcDetailSectionTitle(icon: "clock.fill", title: L("match.events"), tint: AcTheme.gold)
+            AcDetailSectionTitle(icon: "clock.fill", title: L("match.events"))
             VStack(spacing: 0) {
                 ForEach(Array(events.enumerated()), id: \.offset) { idx, ev in
                     AcEventRow(event: ev, team: ev.teamId == homeId ? home : away)
@@ -780,10 +766,10 @@ private struct AcEventRow: View {
         switch event.type {
         case "goal": return AcTheme.emeraldSoft
         case "missed-penalty": return AcTheme.crimson
-        case "yellow-card": return AcTheme.gold
+        case "yellow-card": return AcTheme.amber
         case "red-card": return AcTheme.crimson
-        case "substitution": return AcTheme.teal
-        default: return AcTheme.azure
+        case "substitution": return AcTheme.emerald
+        default: return AcTheme.emerald
         }
     }
 
@@ -806,7 +792,7 @@ private struct AcEventRow: View {
                     .foregroundStyle(AcTheme.onDark)
                     .lineLimit(1).minimumScaleFactor(0.75)
                 Text(secondary)
-                    .font(AsianCupFonts.app(size: 10))
+                    .font(AsianCupFonts.app(size: 11))
                     .foregroundStyle(AcTheme.onDarkFaint)
                     .lineLimit(1)
             }
@@ -832,7 +818,7 @@ struct AcStatisticsCard: View {
 
     var body: some View {
         AcDetailCard {
-            AcDetailSectionTitle(icon: "chart.bar.fill", title: L("match.stats"), tint: AcTheme.teal)
+            AcDetailSectionTitle(icon: "chart.bar.fill", title: L("match.stats"), tint: AcTheme.emerald)
             HStack {
                 AcTeamLogo(logo: home.logo, size: 24)
                 Spacer()
@@ -873,10 +859,10 @@ private struct AcStatRow: View {
             GeometryReader { proxy in
                 HStack(spacing: 3) {
                     HStack { Spacer(minLength: 0)
-                        Capsule().fill(AcTheme.gold).frame(width: max(0, (proxy.size.width / 2 - 2) * hFrac))
+                        Capsule().fill(AcTheme.amber).frame(width: max(0, (proxy.size.width / 2 - 2) * hFrac))
                     }
                     HStack {
-                        Capsule().fill(AcTheme.teal).frame(width: max(0, (proxy.size.width / 2 - 2) * (1 - hFrac)))
+                        Capsule().fill(AcTheme.emerald).frame(width: max(0, (proxy.size.width / 2 - 2) * (1 - hFrac)))
                         Spacer(minLength: 0)
                     }
                 }
@@ -894,7 +880,7 @@ struct AcRatingsCard: View {
 
     var body: some View {
         AcDetailCard {
-            AcDetailSectionTitle(icon: "star.leadinghalf.filled", title: L("match.ratings"), tint: AcTheme.gold)
+            AcDetailSectionTitle(icon: "star.leadinghalf.filled", title: L("match.ratings"))
             VStack(spacing: 8) {
                 ForEach(Array(ratings.prefix(8).enumerated()), id: \.offset) { _, r in
                     AcRatingRow(rating: r, team: teamFor(r.teamId))
@@ -910,7 +896,7 @@ private struct AcRatingRow: View {
 
     private var tint: Color {
         if rating.rating >= 7.5 { return AcTheme.emeraldSoft }
-        if rating.rating >= 6.5 { return AcTheme.gold }
+        if rating.rating >= 6.5 { return AcTheme.amber }
         return AcTheme.onDarkFaint
     }
 
@@ -921,7 +907,7 @@ private struct AcRatingRow: View {
                 .foregroundStyle(.white)
                 .monospacedDigit()
                 .frame(width: 42, height: 26)
-                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(tint))
+                .background(RoundedRectangle(cornerRadius: AcTheme.chipRadius, style: .continuous).fill(tint))
             VStack(alignment: .leading, spacing: 2) {
                 Text(LName(rating.name, rating.nameEn))
                     .font(AsianCupFonts.app(size: 13, weight: .semibold))
@@ -929,7 +915,7 @@ private struct AcRatingRow: View {
                     .lineLimit(1).minimumScaleFactor(0.75)
                 if !rating.position.isEmpty {
                     Text(rating.position)
-                        .font(AsianCupFonts.app(size: 10))
+                        .font(AsianCupFonts.app(size: 11))
                         .foregroundStyle(AcTheme.onDarkFaint)
                 }
             }
@@ -980,10 +966,10 @@ private struct AcLineupBlock: View {
                 if let formation = lineup.formation, !formation.isEmpty {
                     Text(formation)
                         .font(AsianCupFonts.app(size: 11, weight: .bold))
-                        .foregroundStyle(AcTheme.teal)
+                        .foregroundStyle(AcTheme.emerald)
                         .monospacedDigit()
                         .padding(.horizontal, 9).padding(.vertical, 4)
-                        .background(Capsule().fill(AcTheme.teal.opacity(0.14)))
+                        .background(Capsule().fill(AcTheme.emerald.opacity(0.14)))
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
@@ -1022,10 +1008,128 @@ private struct AcLineupPlayerRow: View {
             Spacer(minLength: 0)
             if let pos = player.position, !pos.isEmpty {
                 Text(pos)
-                    .font(AsianCupFonts.app(size: 9, weight: .bold))
+                    .font(AsianCupFonts.app(size: 11, weight: .bold))
                     .foregroundStyle(AcTheme.onDarkFaint)
             }
         }
+    }
+}
+
+// MARK: - نظام الإحصاءات الموحّد
+// بديل واحد عن ست بلاطات شبه متطابقة كانت متناثرة عبر الشاشات — إيقاع بصري واحد.
+
+/// بلاطة «رقم فوق تسمية» بثلاثة أحجام. اللون الافتراضي حبر قوي؛ يُمرَّر tint دلالي عند الحاجة.
+struct AcStatTile: View {
+    enum Size {
+        case small, medium, large
+        var valueSize: CGFloat {
+            switch self {
+            case .small: return 17
+            case .medium: return 20
+            case .large: return 23
+            }
+        }
+        var vPad: CGFloat {
+            switch self {
+            case .small: return 10
+            case .medium: return 11
+            case .large: return 13
+            }
+        }
+    }
+
+    let value: String
+    let label: String
+    var tint: Color = AcTheme.onDarkStrong
+    var size: Size = .medium
+
+    var body: some View {
+        VStack(spacing: 3) {
+            Text(value)
+                .font(AsianCupFonts.app(size: size.valueSize, weight: .bold))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                .foregroundStyle(AcTheme.onDarkDim)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, size.vPad)
+        .background(RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous).fill(AcTheme.chipFill))
+        .overlay(RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+    }
+}
+
+/// كبسولة «رقم + تسمية» أفقية مضغوطة — للسجلات الثانوية داخل البطاقات.
+struct AcStatPill: View {
+    let value: String
+    let label: String
+    var tint: Color = AcTheme.onDarkStrong
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(value)
+                .font(AsianCupFonts.app(size: 13, weight: .bold))
+                .foregroundStyle(tint)
+                .monospacedDigit()
+            Text(label)
+                .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                .foregroundStyle(AcTheme.onDarkDim)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous).fill(AcTheme.cardFill))
+        .overlay(RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+    }
+}
+
+/// إحصاء بأيقونة جانبية — لأشرطة الملخّص (مباريات/منتهية/مباشر…).
+struct AcIconStat: View {
+    let icon: String
+    let value: String
+    let label: String
+    var tint: Color = AcTheme.emerald
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(tint)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(AsianCupFonts.app(size: 17, weight: .bold))
+                    .foregroundStyle(AcTheme.onDark)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                Text(label)
+                    .font(AsianCupFonts.app(size: 11))
+                    .foregroundStyle(AcTheme.onDarkFaint)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous).fill(AcTheme.cardFill))
+        .overlay(RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+    }
+}
+
+// MARK: - استجابة الضغط الموحّدة
+// كل عنصر قابل للنقر ينكمش ويخفت قليلًا — الإحساس «الأصيل» الذي كان غائبًا مع .plain.
+struct AcPressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
@@ -1035,12 +1139,12 @@ struct AcHeadToHeadCard: View {
 
     var body: some View {
         AcDetailCard {
-            AcDetailSectionTitle(icon: "arrow.left.arrow.right.circle.fill", title: L("match.h2h"), tint: AcTheme.azure)
+            AcDetailSectionTitle(icon: "arrow.left.arrow.right.circle.fill", title: L("match.h2h"), tint: AcTheme.emerald)
             VStack(spacing: 8) {
                 ForEach(fixtures.prefix(6)) { f in
                     HStack(spacing: 10) {
                         Text(AcFormat.kickoffDay(f.date))
-                            .font(AsianCupFonts.app(size: 10))
+                            .font(AsianCupFonts.app(size: 11))
                             .foregroundStyle(AcTheme.onDarkFaint)
                             .frame(width: 80, alignment: .leading)
                             .lineLimit(1)

@@ -8,15 +8,33 @@ enum AsianCupFonts {
     static let semibold = "IBMPlexSansArabic-SemiBold"
     static let bold     = "IBMPlexSansArabic-Bold"
 
-    /// موحّد: يربط أوزان SwiftUI الثلاثة بالخط المُجمَّع.
+    /// موحّد: يربط أوزان SwiftUI الثلاثة بالخط المُجمَّع، مع دعم Dynamic Type —
+    /// كل مقاس يرتبط بدور نصي نظامي فيتمدّد مع إعداد حجم الخط عند المستخدم.
     static func app(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        let name: String
         if weight == .bold || weight == .heavy || weight == .black {
-            return .custom(bold, size: size)
+            name = bold
+        } else if weight == .semibold || weight == .medium {
+            name = semibold
+        } else {
+            name = regular
         }
-        if weight == .semibold || weight == .medium {
-            return .custom(semibold, size: size)
+        return .custom(name, size: size, relativeTo: textStyle(for: size))
+    }
+
+    /// سلّم الأدوار: 11 تسمية دقيقة · 12 ثانوي · 13-14 متن · 15-16 عنوان بطاقة ·
+    /// 17-19 عنوان بارز · 20-25 عنوان قسم · 26-31 عنوان شاشة · 32+ أرقام العرض.
+    private static func textStyle(for size: CGFloat) -> Font.TextStyle {
+        switch size {
+        case ..<12: return .caption2
+        case ..<13: return .caption
+        case ..<15: return .subheadline
+        case ..<17: return .body
+        case ..<20: return .headline
+        case ..<26: return .title3
+        case ..<32: return .title
+        default: return .largeTitle
         }
-        return .custom(regular, size: size)
     }
 
     static func headline(size: CGFloat) -> Font { app(size: size, weight: .bold) }
