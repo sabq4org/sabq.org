@@ -12,6 +12,7 @@ struct AsianCupView: View {
     @State private var loading = true
     @State private var loadError: String?
     @State private var selectedTab: AcTab = .home
+    @State private var deepLink: AcDeepLink?
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -59,6 +60,56 @@ struct AsianCupView: View {
         .toolbarBackground(.visible, for: .tabBar)
         .toolbarColorScheme(.light, for: .tabBar)
         .task { await loadAll() }
+        .onOpenURL(perform: openDeepLink)
+        .sheet(item: $deepLink) { link in
+            NavigationStack { deepLinkDestination(link) }
+                .asianCupRTL()
+        }
+    }
+
+    @ViewBuilder
+    private func deepLinkDestination(_ link: AcDeepLink) -> some View {
+        switch link {
+        case .match(let id):
+            if let fixture = fixtures.first(where: { $0.id == id }) {
+                AcMatchDetailSheet(fixture: fixture)
+            } else {
+                AcEmptyState(icon: "calendar.badge.exclamationmark", title: L("error.notFound"), subtitle: L("error.generic"))
+                    .padding()
+            }
+        case .team(let id):
+            let fallback = teams.first(where: { $0.id == id })
+                ?? AcTeam(id: id, name: "", nameEn: nil, logo: "")
+            AcTeamProfileScreen(teamId: id, fallback: fallback)
+        case .player(let id):
+            AcPlayerProfileScreen(
+                playerId: id,
+                fallbackName: "",
+                fallbackPhoto: "",
+                fallbackSubtitle: L("player.profile")
+            )
+        case .predictions:
+            AcPredictionsScreen(refreshMainData: { await loadAll(force: true) })
+        }
+    }
+
+    private func openDeepLink(_ url: URL) {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard let cupIndex = parts.firstIndex(of: "asian-cup") else { return }
+        let tail = Array(parts.dropFirst(cupIndex + 1))
+        if tail.first == "predictions" {
+            selectedTab = .predictions
+            deepLink = .predictions
+        } else if tail.count >= 2, let id = Int(tail[1]) {
+            switch tail[0] {
+            case "match": deepLink = .match(id)
+            case "team": deepLink = .team(id)
+            case "player": deepLink = .player(id)
+            default: break
+            }
+        } else {
+            selectedTab = .home
+        }
     }
 
     private func loadAll(force: Bool = false) async {
@@ -87,6 +138,22 @@ enum AcTab: Hashable {
     case predictions
     case groups
     case more
+}
+
+private enum AcDeepLink: Identifiable {
+    case match(Int)
+    case team(Int)
+    case player(Int)
+    case predictions
+
+    var id: String {
+        switch self {
+        case .match(let id): return "match-\(id)"
+        case .team(let id): return "team-\(id)"
+        case .player(let id): return "player-\(id)"
+        case .predictions: return "predictions"
+        }
+    }
 }
 
 // MARK: - New App Shell
