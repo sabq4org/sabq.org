@@ -12,6 +12,7 @@ import {
   Sparkles,
   AudioLines,
   Brain,
+  Satellite,
   Type,
   ShieldCheck,
   KeyRound,
@@ -560,6 +561,17 @@ export const navConfig: NavItem[] = [
     icon: Brain,
     roles: ["admin", "system_admin"],
     permissions: ["ai_hub.view"],
+  },
+
+  // ===== إعدادات التكاملات / Integrations (admin) =====
+  {
+    id: "integrations",
+    labelKey: "nav.integrations",
+    labelAr: "إعدادات التكاملات",
+    path: "/dashboard/integrations",
+    icon: Satellite,
+    roles: ["admin", "system_admin"],
+    permissions: ["integrations.view"],
   },
 
   // ===== الأدوات الذكية / Smart Tools =====
