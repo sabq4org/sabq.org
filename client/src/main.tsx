@@ -12,6 +12,12 @@ import { startBuildVersionPolling } from "./lib/buildVersion";
 // يتيح التبديل. denyUrls يطابق فلسفة كاتم أخطاء الطرف الثالث أدناه —
 // سكربتات الإعلانات وإضافات المتصفح ليست أخطاءنا. أخطاء الـchunks المفقودة
 // تمرّ عمدًا: هي إنذار «الشاشة البيضاء بعد النشر».
+// «من أصولنا»: حزمة الويب (sabq.org بما فيها cdn، ومعاينات Pages)، عمّال
+// blob: أنشأناها نحن، وأغلفة كاباسيتور (capacitor://localhost على iOS
+// وhttps://localhost داخل تطبيق أندرويد).
+const FIRST_PARTY_FRAME =
+  /^(?:blob:|capacitor:)|(?:sabq\.org|\.pages\.dev|\/\/localhost(?::\d+)?)\/(?:assets|src)\//;
+
 if (import.meta.env.PROD) {
   Sentry.init({
     dsn:
@@ -47,7 +53,35 @@ if (import.meta.env.PROD) {
       // GPT غير محمّل (مانع إعلانات) وسكربت خارجي يستدعيه بلا حارس —
       // كودنا (DmsAdSlot) يفحص window.googletag.pubads قبل أي استدعاء
       /googletag\.pubads is not a function/,
+      // ماسح روابط Outlook (SafeLinks) يرفض Promise بكائن ليس Error —
+      // نمط عالمي معروف، يصل بلا إطارات فلا يسقطه beforeSend أدناه
+      "Object Not Found Matching Id",
+      // إضافة «تعبئة تلقائية» في متصفحات أندرويد تستدعي دالة غير معرّفة
+      "xbrowser is not defined",
+      // fetch محجوب (مانع إعلانات) نحو نطاقات إعلانات/تحليلات خارجية —
+      // منذ SDK v8 تُلحق الرسالة بمضيف الطلب الفاشل فنطابق عليه. طلباتنا
+      // نحو cdn.sabq.org تمرّ عمدًا: فشلها إنذار CDN حقيقي.
+      /(?:Failed to fetch|Load failed|NetworkError)[^(]*\([^)]*(?:googlesyndication|doubleclick|googletagmanager|google-analytics|analytics\.google|adservice|spadsync)/i,
     ],
+    // allowUrls لا يكفي وحده: غلاف Sentry (browserApiErrors) يلفّ callbacks
+    // setInterval/addEventListener حتى للسكربتات المحقونة (إضافات متصفح،
+    // WebView داخل التطبيقات، أكواد إعلانات)، فيظهر إطار الغلاف — وهو من
+    // حزمتنا — أسفل المكدس ويمرّر الحدث رغم أن موضع الرمي الفعلي
+    // <anonymous>. هذا وحده ضخّ ~288 ألف حدث في 9 أيام (JAVASCRIPT-REACT-K).
+    // الحسم هنا بموضع الرمي: أعلى إطار ذي ملف يجب أن يكون من أصولنا وإلا
+    // أُسقط الحدث قبل الإرسال — فلا يستهلك من الحصة أصلًا.
+    beforeSend(event) {
+      const frames = event.exception?.values?.[0]?.stacktrace?.frames;
+      // بلا مكدس (captureMessage/رفض غير-Error): تكفيه ignoreErrors أعلاه
+      if (!frames?.length) return event;
+      for (let i = frames.length - 1; i >= 0; i--) {
+        const filename = frames[i]?.filename;
+        if (!filename || filename === "[native code]" || filename === "[wasm code]") continue;
+        return FIRST_PARTY_FRAME.test(filename) ? event : null;
+      }
+      // كل الإطارات مجهولة الملف — callback خارجي ملفوف بغلاف Sentry
+      return null;
+    },
   });
 }
 
