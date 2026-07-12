@@ -11,7 +11,7 @@ nonisolated enum URLConstants {
     /// standings) بلا مصادقة. نفس جذر الويب.
     static let publicAPI = "\(apiOrigin)/api"
 
-    /// `https://api.sabq.org/api/v1` — محجوز لاحقًا للتوقعات/المصادقة (Apple Sign-In
-    /// + Bearer) في PR-B3. النسخة الأولى من التطبيق بلا تسجيل دخول.
+    /// `https://api.sabq.org/api/v1` — المصادقة والتوقعات والمتابعات للموبايل
+    /// بجلسة Bearer، مستقلة عن Passport الخاص بالويب.
     static let mobileAPI = "\(apiOrigin)/api/v1"
 }

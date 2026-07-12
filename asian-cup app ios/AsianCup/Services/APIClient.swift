@@ -76,6 +76,36 @@ actor APIClient {
         return try await perform(request, as: type)
     }
 
+    func post<T: Decodable, B: Encodable>(
+        _ type: T.Type,
+        path: String,
+        body: B,
+        apiRoot: String? = nil
+    ) async throws -> T {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(body)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return try await decode(type, from: session, request: request)
+    }
+
+    func delete<T: Decodable, B: Encodable>(
+        _ type: T.Type,
+        path: String,
+        body: B,
+        apiRoot: String? = nil
+    ) async throws -> T {
+        let url = try buildURL(path: path, apiRoot: apiRoot)
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        applyHeaders(&request)
+        request.httpBody = try JSONEncoder().encode(body)
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return try await decode(type, from: session, request: request)
+    }
+
     // MARK: - Internals
 
     private func buildURL(path: String, query: [String: String] = [:], apiRoot: String? = nil) throws -> URL {
@@ -94,6 +124,8 @@ actor APIClient {
     }
 
     private func applyHeaders(_ request: inout URLRequest) {
+        let language = UserDefaults.standard.string(forKey: "ac.language.code") ?? "ar"
+        request.setValue(language, forHTTPHeaderField: "Accept-Language")
         if let token = authToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

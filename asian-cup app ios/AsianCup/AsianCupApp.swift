@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct AsianCupApp: App {
+    @UIApplicationDelegateAdaptor(AcAppDelegate.self) private var appDelegate
+    @State private var auth = AcAuthStore.shared
+
     init() {
         // سجّل خط IBM Plex Sans Arabic قبل أي واجهة تستعمله.
         FontRegistration.registerAll()
@@ -10,8 +13,13 @@ struct AsianCupApp: App {
     var body: some Scene {
         WindowGroup {
             AsianCupView()
+                .environment(auth)
                 .asianCupRTL()
                 .preferredColorScheme(.light) // هوية فاتحة باردة محايدة لكل المنتخبات
+                .task {
+                    await auth.restore()
+                    await AcPushManager.shared.syncWithSession()
+                }
         }
     }
 }

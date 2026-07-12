@@ -67,6 +67,9 @@
   "predictions.locked": "مغلق",
   "predictions.locked.note": "انتهى وقت التوقع",
   "predictions.login.note": "الحفظ يتطلب تسجيل الدخول داخل التطبيق",
+  "predictions.save": "حفظ التوقع",
+  "predictions.saving": "جارٍ الحفظ…",
+  "predictions.saved": "تم حفظ التوقع",
   "predictions.unavailable": "نظام التوقعات غير متاح الآن",
   "leaderboard.empty.title": "لم يبدأ الترتيب بعد",
   "leaderboard.empty.subtitle": "سيظهر المتصدرون بعد أول جولة توقعات",
@@ -254,5 +257,13 @@
   "position.defender": "المدافعون",
   "position.midfielder": "لاعبو الوسط",
   "position.attacker": "المهاجمون",
-  "position.other": "أخرى"
+  "position.other": "أخرى",
+  "auth.title": "حساب سبق",
+  "auth.subtitle": "سجّل الدخول لتوحيد توقعاتك ومتابعاتك مع الويب",
+  "auth.apple": "المتابعة باستخدام Apple",
+  "auth.signedIn": "متصل بحساب سبق",
+  "auth.signOut": "تسجيل الخروج",
+  "auth.error.apple": "تعذّر تسجيل الدخول عبر Apple",
+  "notifications.enable": "تفعيل تنبيهات المباريات",
+  "notifications.enabled": "تنبيهات المباريات مفعّلة"
 }
