@@ -75,7 +75,7 @@ export const navConfig: NavItem[] = [
     labelAr: "نظرة عامة",
     path: "/dashboard",
     icon: LayoutDashboard,
-    roles: ["admin", "editor", "author", "reviewer", "analyst", "reporter", "comments_moderator", "guest", "opinion_author"],
+    roles: ["admin", "editor", "content_manager", "author", "reviewer", "analyst", "reporter", "comments_moderator", "guest", "opinion_author"],
     // No permissions - all authenticated users can access the dashboard overview
     meta: { exact: true },
   },
@@ -241,7 +241,7 @@ export const navConfig: NavItem[] = [
         labelAr: "رادار سبق الذكي",
         path: "/dashboard/radar",
         icon: Radar,
-        roles: ["admin", "editor"],
+        roles: ["admin", "editor", "content_manager"],
         permissions: ["articles.create"], // أداة تحريرية — نفس صلاحية إنشاء المقالات
       },
       {
@@ -357,7 +357,7 @@ export const navConfig: NavItem[] = [
         labelAr: "الأيام العالمية",
         path: "/dashboard/world-days",
         icon: Globe,
-        roles: ["admin", "editor"],
+        roles: ["admin", "editor", "content_manager"],
       },
       {
         id: "media_library",

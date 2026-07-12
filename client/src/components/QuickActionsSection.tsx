@@ -80,7 +80,7 @@ export function QuickActionsSection() {
   }
 
   return (
-    <Card className="h-full overflow-visible border-primary/20 dark:border-border bg-gradient-to-br from-primary/5 via-transparent to-transparent dark:from-transparent" data-testid="section-quick-actions">
+    <Card className="h-full overflow-visible border-border/70 bg-card shadow-none" data-testid="section-quick-actions">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">

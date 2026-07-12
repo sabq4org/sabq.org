@@ -103,7 +103,7 @@ export function OnlineModeratorsWidget() {
 
   return (
     <Card 
-      className="h-full bg-gradient-to-br from-blue-500/5 via-transparent to-transparent dark:from-transparent border-blue-200/50 dark:border-border"
+      className="h-full border-border/70 bg-card shadow-none"
       data-testid="card-online-moderators"
     >
       <CardHeader className="pb-3">
@@ -116,7 +116,7 @@ export function OnlineModeratorsWidget() {
           </div>
           {onlineModerators.length > 0 && (
             <Badge 
-              className="bg-green-500 hover:bg-green-600 text-white text-xs px-2"
+              className="border border-emerald-200 bg-emerald-50 px-2 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/35 dark:text-emerald-300"
               data-testid="badge-online-count"
             >
               <Circle className="h-2 w-2 fill-current ml-1 animate-pulse" />
