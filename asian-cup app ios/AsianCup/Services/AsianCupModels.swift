@@ -196,6 +196,85 @@ nonisolated struct AcScorer: Decodable, Hashable {
 }
 private nonisolated struct AcScorersResponse: Decodable { let scorers: [AcScorer] }
 
+/// قادة الصناعات/البطاقات — نفس شكل المونديال.
+nonisolated struct AcLeader: Decodable, Hashable, Identifiable {
+    let rank: Int
+    let id: Int
+    let name: String
+    let nameEn: String?
+    let photo: String
+    let team: AcTeam
+    let goals: Int
+    let assists: Int
+    let yellow: Int
+    let red: Int
+    let minutes: Int
+    let matches: Int
+}
+private nonisolated struct AcLeadersResponse: Decodable { let leaders: [AcLeader] }
+
+nonisolated struct AcMomentumPoint: Decodable, Hashable, Identifiable {
+    let label: String
+    let minute: Int
+    let home: Double
+    let away: Double
+    let net: Double
+    var id: Int { minute }
+}
+nonisolated struct AcMomentum: Decodable, Hashable {
+    let available: Bool
+    let live: Bool
+    let possession: AcPossession?
+    let points: [AcMomentumPoint]
+}
+nonisolated struct AcPossession: Decodable, Hashable {
+    let home: Int
+    let away: Int
+}
+nonisolated struct AcPressureLatest: Decodable, Hashable {
+    let side: String
+    let value: Double
+}
+nonisolated struct AcPressure: Decodable, Hashable {
+    let available: Bool
+    let live: Bool
+    let latest: AcPressureLatest?
+    let points: [AcMomentumPoint]
+}
+nonisolated struct AcCommentaryItem: Decodable, Hashable, Identifiable {
+    let minute: Int
+    let extraMinute: Int?
+    let goal: Bool
+    let important: Bool
+    let textAr: String
+    let textEn: String
+    let order: Int
+    var id: String { "\(order)-\(minute)" }
+}
+nonisolated struct AcCommentary: Decodable, Hashable {
+    let available: Bool
+    let live: Bool
+    let items: [AcCommentaryItem]
+}
+
+nonisolated struct AcAlertPreferences: Codable, Hashable {
+    var kickoff: Bool
+    var goals: Bool
+    var cards: Bool
+    var varReview: Bool
+    var fulltime: Bool
+
+    static let allOn = AcAlertPreferences(kickoff: true, goals: true, cards: true, varReview: true, fulltime: true)
+}
+private nonisolated struct AcAlertPrefsResponse: Decodable { let preferences: AcAlertPreferences }
+private nonisolated struct AcAlertPrefsBody: Encodable {
+    let kickoff: Bool
+    let goals: Bool
+    let cards: Bool
+    let varReview: Bool
+    let fulltime: Bool
+}
+
 // MARK: - شجرة الأدوار الإقصائية
 
 nonisolated struct AcBracketRound: Decodable, Identifiable, Hashable {
@@ -635,6 +714,49 @@ extension APIClient {
         let r = try await get(AcScorersResponse.self, path: "/asian-cup/scorers",
                               ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
         return r.scorers
+    }
+
+    func fetchAcAssists(ignoreCache: Bool = false) async throws -> [AcLeader] {
+        try await get(AcLeadersResponse.self, path: "/asian-cup/assists",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).leaders
+    }
+
+    func fetchAcCards(ignoreCache: Bool = false) async throws -> [AcLeader] {
+        try await get(AcLeadersResponse.self, path: "/asian-cup/cards",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI).leaders
+    }
+
+    func fetchAcMomentum(_ fixtureId: Int, ignoreCache: Bool = false) async throws -> AcMomentum {
+        try await get(AcMomentum.self, path: "/asian-cup/momentum/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchAcPressure(_ fixtureId: Int, ignoreCache: Bool = false) async throws -> AcPressure {
+        try await get(AcPressure.self, path: "/asian-cup/pressure/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchAcCommentary(_ fixtureId: Int, ignoreCache: Bool = false) async throws -> AcCommentary {
+        try await get(AcCommentary.self, path: "/asian-cup/commentary/\(fixtureId)",
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+    }
+
+    func fetchAcAlertPreferences() async throws -> AcAlertPreferences {
+        try await get(AcAlertPrefsResponse.self, path: "/sports/alert-prefs",
+                      ignoreCache: true, apiRoot: URLConstants.mobileAPI).preferences
+    }
+
+    func updateAcAlertPreferences(_ prefs: AcAlertPreferences) async throws {
+        struct Ok: Decodable { let success: Bool? }
+        _ = try await put(
+            Ok.self,
+            path: "/sports/alert-prefs",
+            body: AcAlertPrefsBody(
+                kickoff: prefs.kickoff, goals: prefs.goals, cards: prefs.cards,
+                varReview: prefs.varReview, fulltime: prefs.fulltime
+            ),
+            apiRoot: URLConstants.mobileAPI
+        )
     }
 
     func fetchAcBracket(ignoreCache: Bool = false) async throws -> AcBracket {

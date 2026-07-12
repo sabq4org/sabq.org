@@ -6,18 +6,28 @@
 import type { Express, NextFunction, Request, Response } from "express";
 import {
   getAcOverview,
-  getAcTeams,
   getAcTeamsRanked,
   getAcFixtures,
+  getAcLiveFixtures,
   getAcStandings,
   getAcTopScorers,
+  getAcTopAssists,
+  getAcTopCards,
   getAcBracket,
   getAcTeamProfile,
   getAcQualificationJourney,
   getAcPlayerCard,
+  getAcPlayerForm,
+  getAcPlayerMarketPublic,
   getAcMatchDetail,
+  getAcMatchPlayerStats,
+  getAcMatchTvById,
   getAcMomentum,
   getAcPressure,
+  getAcCommentary,
+  getAcMatchFacts,
+  getAcXg,
+  getAcForecast,
   getAcFacts,
   isAsianCupConfigured,
 } from "../services/asianCupService";
@@ -50,9 +60,6 @@ export function registerAsianCupRoutes(app: Express) {
   app.get("/api/asian-cup/overview", async (_req, res) => {
     if (!guard(res)) return;
     try {
-      // إعدادات بلوك الرئيسية من اللوحة: blockHidden يخفي بلوك الواجهة فقط —
-      // لا نفرّغ الحمولة لأن صفحة /asian-cup نفسها تستهلك overview هذا.
-      // champion يُكشف تلقائيًا من النهائي، واليدوي من اللوحة يتقدّم عليه.
       const [ov, fixtures, settings] = await Promise.all([
         getAcOverview(),
         getAcFixtures().catch(() => []),
@@ -62,7 +69,6 @@ export function registerAsianCupRoutes(app: Express) {
       if (settings.manualChampionTeamId && champion?.team.id !== settings.manualChampionTeamId) {
         champion = manualCupChampion(fixtures, settings.manualChampionTeamId) ?? champion;
       }
-      // كاش أقصر من السابق (كان 60/120) كي يصل تبديل المفتاح خلال ≤دقيقة
       res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=300");
       res.json({ ...ov, blockHidden: isBlockHidden(settings), champion });
     } catch (error) {
@@ -82,8 +88,6 @@ export function registerAsianCupRoutes(app: Express) {
     }
   });
 
-  // حقائق البطولة (TheSports) — حامل اللقب/الأكثر تتويجًا/المضيف. مستقلة عن
-  // مفتاح API-Football (أفضل جهد: تغيب بهدوء عند تعذّر TheSports).
   app.get("/api/asian-cup/facts", async (_req, res) => {
     try {
       res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=86400");
@@ -102,6 +106,17 @@ export function registerAsianCupRoutes(app: Express) {
     } catch (error) {
       console.error("[AsianCup] fixtures failed:", error);
       res.status(502).json({ message: "تعذر جلب جدول المباريات حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/live", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=0, s-maxage=5, stale-while-revalidate=15");
+      res.json({ fixtures: await getAcLiveFixtures() });
+    } catch (error) {
+      console.error("[AsianCup] live failed:", error);
+      res.status(502).json({ message: "تعذر جلب المباريات المباشرة حاليًا" });
     }
   });
 
@@ -131,6 +146,28 @@ export function registerAsianCupRoutes(app: Express) {
     } catch (error) {
       console.error("[AsianCup] scorers failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة الهدّافين حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/assists", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json({ leaders: await getAcTopAssists() });
+    } catch (error) {
+      console.error("[AsianCup] assists failed:", error);
+      res.status(502).json({ message: "تعذر جلب قائمة صناع الأهداف حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/cards", async (_req, res) => {
+    if (!guard(res)) return;
+    try {
+      res.set("Cache-Control", "public, max-age=300, s-maxage=900, stale-while-revalidate=1800");
+      res.json({ leaders: await getAcTopCards() });
+    } catch (error) {
+      console.error("[AsianCup] cards failed:", error);
+      res.status(502).json({ message: "تعذر جلب قائمة البطاقات حاليًا" });
     }
   });
 
@@ -208,7 +245,38 @@ export function registerAsianCupRoutes(app: Express) {
     }
   });
 
-  // الزخم اللحظي (TheSports عبر الجسر) — كاش قصير أثناء البث.
+  app.get("/api/asian-cup/player/:id/form", async (req, res) => {
+    const playerId = Number(req.params.id);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      res.status(400).json({ message: "معرّف لاعب غير صالح" });
+      return;
+    }
+    try {
+      const data = await getAcPlayerForm(playerId);
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error(`[AsianCup] player form ${playerId} failed:`, error);
+      res.status(502).json({ available: false, matches: [] });
+    }
+  });
+
+  app.get("/api/asian-cup/player/:id/market", async (req, res) => {
+    const playerId = Number(req.params.id);
+    if (!Number.isInteger(playerId) || playerId <= 0) {
+      res.status(400).json({ message: "معرّف لاعب غير صالح" });
+      return;
+    }
+    try {
+      const data = await getAcPlayerMarketPublic(playerId);
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=21600, stale-while-revalidate=43200");
+      res.json(data);
+    } catch (error) {
+      console.error(`[AsianCup] player market ${playerId} failed:`, error);
+      res.status(502).json({ available: false, marketValue: null, currency: "€", history: [] });
+    }
+  });
+
   app.get("/api/asian-cup/momentum/:id", async (req, res) => {
     if (!guard(res)) return;
     const fixtureId = Number(req.params.id);
@@ -226,7 +294,6 @@ export function registerAsianCupRoutes(app: Express) {
     }
   });
 
-  // مؤشّر الضغط اللحظي.
   app.get("/api/asian-cup/pressure/:id", async (req, res) => {
     if (!guard(res)) return;
     const fixtureId = Number(req.params.id);
@@ -244,6 +311,79 @@ export function registerAsianCupRoutes(app: Express) {
     }
   });
 
+  app.get("/api/asian-cup/commentary/:id", async (req, res) => {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    const directSmId = Number(req.query.smId) || undefined;
+    try {
+      const data = await getAcCommentary(fixtureId, { directSmId });
+      res.set(
+        "Cache-Control",
+        data.live
+          ? "public, max-age=8, s-maxage=10, stale-while-revalidate=30"
+          : "public, max-age=120, s-maxage=300, stale-while-revalidate=600",
+      );
+      res.json(data);
+    } catch (error) {
+      console.error(`[AsianCup] commentary ${fixtureId} failed:`, error);
+      res.status(502).json({ available: false, live: false, items: [] });
+    }
+  });
+
+  app.get("/api/asian-cup/match-facts/:id", async (req, res) => {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    const directSmId = Number(req.query.smId) || undefined;
+    try {
+      const data = await getAcMatchFacts(fixtureId, { directSmId });
+      res.set("Cache-Control", "public, max-age=30, s-maxage=120, stale-while-revalidate=300");
+      res.json(data);
+    } catch (error) {
+      console.error(`[AsianCup] match-facts ${fixtureId} failed:`, error);
+      res.status(502).json({ available: false, statistics: [], weather: null, absentees: [] });
+    }
+  });
+
+  app.get("/api/asian-cup/xg/:id", async (req, res) => {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    const directSmId = Number(req.query.smId) || undefined;
+    try {
+      const data = await getAcXg(fixtureId, { directSmId });
+      res.set("Cache-Control", "public, max-age=30, s-maxage=120, stale-while-revalidate=300");
+      res.json(data);
+    } catch (error) {
+      console.error(`[AsianCup] xg ${fixtureId} failed:`, error);
+      res.status(502).json({ available: false });
+    }
+  });
+
+  app.get("/api/asian-cup/forecast/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    try {
+      const data = await getAcForecast(fixtureId);
+      res.set("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=600");
+      res.json(data ?? { available: false, home: 0, draw: 0, away: 0 });
+    } catch (error) {
+      console.error(`[AsianCup] forecast ${fixtureId} failed:`, error);
+      res.status(502).json({ available: false, home: 0, draw: 0, away: 0 });
+    }
+  });
+
   app.get("/api/asian-cup/match/:id", async (req, res) => {
     if (!guard(res)) return;
     const fixtureId = Number(req.params.id);
@@ -257,13 +397,46 @@ export function registerAsianCupRoutes(app: Express) {
         res.status(404).json({ message: "المباراة غير موجودة" });
         return;
       }
-      // كاش قصير للمباريات الحيّة، أطول للمنتهية/القادمة
       const ttl = detail.fixture.status.live ? 15 : detail.fixture.status.finished ? 600 : 60;
       res.set("Cache-Control", `public, max-age=${ttl}, s-maxage=${ttl * 2}, stale-while-revalidate=${ttl * 4}`);
       res.json(detail);
     } catch (error) {
       console.error(`[AsianCup] match ${fixtureId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب تفاصيل المباراة حاليًا" });
+    }
+  });
+
+  app.get("/api/asian-cup/match/:id/player-stats", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    try {
+      const data = await getAcMatchPlayerStats(fixtureId);
+      res.set("Cache-Control", "public, max-age=30, s-maxage=60, stale-while-revalidate=180");
+      res.json(data);
+    } catch (error) {
+      console.error(`[AsianCup] player-stats ${fixtureId} failed:`, error);
+      res.status(502).json({ available: false, home: null, away: null });
+    }
+  });
+
+  app.get("/api/asian-cup/match/:id/tv", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    try {
+      const data = await getAcMatchTvById(fixtureId);
+      res.set("Cache-Control", "public, max-age=300, s-maxage=1800, stale-while-revalidate=3600");
+      res.json(data);
+    } catch (error) {
+      console.error(`[AsianCup] tv ${fixtureId} failed:`, error);
+      res.status(502).json({ available: false, channels: [] });
     }
   });
 }

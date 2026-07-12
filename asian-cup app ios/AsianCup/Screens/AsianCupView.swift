@@ -865,6 +865,21 @@ private struct AcAccountCard: View {
                         }
                         .disabled(push.isAuthorized)
                         .buttonStyle(AcPressableStyle())
+
+                        NavigationLink {
+                            AcMatchEventNotificationsView()
+                        } label: {
+                            Label("نوع تنبيهات المباريات", systemImage: "slider.horizontal.3")
+                                .font(AsianCupFonts.app(size: 13, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 11)
+                                .foregroundStyle(AcTheme.emeraldInk)
+                                .background(
+                                    RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous)
+                                        .fill(AcTheme.emerald.opacity(0.12))
+                                )
+                        }
+                        .buttonStyle(AcPressableStyle())
                     }
                     .padding(14)
                 } else {
@@ -934,6 +949,19 @@ private struct AcControlHub: View {
                 )
                 AcRowDivider()
                 remindersRow
+                AcRowDivider()
+                NavigationLink {
+                    AcMatchEventNotificationsView()
+                } label: {
+                    controlRow(
+                        icon: "bell.badge.fill",
+                        title: "تنبيهات المباريات",
+                        subtitle: "أهداف · بطاقات · فار · نهاية"
+                    ) {
+                        chevron
+                    }
+                }
+                .buttonStyle(AcPressableStyle())
                 AcRowDivider()
                 NavigationLink {
                     AcFavoriteTeamPicker(teams: teams).asianCupRTL()
@@ -2926,9 +2954,18 @@ struct AcHostShowcase: View {
     }
 }
 
-// MARK: - شاشة الهدّافين
+// MARK: - شاشة السباقات (هدافون / صنّاع / بطاقات)
 struct AcScorersScreen: View {
+    enum RaceTab: String, CaseIterable {
+        case scorers = "الهدّافون"
+        case assists = "الصنّاع"
+        case cards = "البطاقات"
+    }
+
+    @State private var tab: RaceTab = .scorers
     @State private var scorers: [AcScorer] = []
+    @State private var assists: [AcLeader] = []
+    @State private var cards: [AcLeader] = []
     @State private var loading = true
     @State private var errorMessage: String?
     @Environment(\.dismiss) private var dismiss
@@ -2936,46 +2973,152 @@ struct AcScorersScreen: View {
     var body: some View {
         AcScreenScaffold(onBack: { dismiss() }) {
             VStack(spacing: 16) {
-                AcTopBar(title: L("scorers.title"), subtitle: L("scorers.subtitle"), state: scorers.isEmpty ? "—" : "\(scorers.count)")
+                AcTopBar(title: "سباقات البطولة", subtitle: "أهداف · صناعات · بطاقات", state: "—")
+
+                HStack(spacing: 8) {
+                    ForEach(RaceTab.allCases, id: \.self) { t in
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) { tab = t }
+                            Task { await loadTabIfNeeded(t) }
+                        } label: {
+                            Text(t.rawValue)
+                                .font(AsianCupFonts.app(size: 13, weight: .bold))
+                                .foregroundStyle(tab == t ? .white : AcTheme.onDarkDim)
+                                .padding(.horizontal, 12).padding(.vertical, 8)
+                                .background(Capsule().fill(tab == t ? AcTheme.emerald : AcTheme.chipFill))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
 
                 if let errorMessage {
                     AcEmptyState(icon: "wifi.exclamationmark", title: L("scorers.empty.title"), subtitle: errorMessage)
                 } else if loading {
                     AcLoadingPanel(title: L("loading.scorers"))
-                } else if scorers.isEmpty {
-                    AcEmptyState(icon: "soccerball", title: L("scorers.empty.title"), subtitle: L("scorers.empty.subtitle"))
                 } else {
-                    VStack(spacing: 10) {
-                        ForEach(scorers, id: \.rank) { s in
-                            NavigationLink {
-                                AcPlayerProfileScreen(
-                                    playerId: s.id,
-                                    fallbackName: LName(s.name, s.nameEn),
-                                    fallbackPhoto: s.photo,
-                                    fallbackSubtitle: LTeam(String(s.team.id), fallback: s.team.name),
-                                    fallbackTeam: s.team
-                                )
-                            } label: {
-                                AcScorerRow(scorer: s)
-                            }
-                            .buttonStyle(AcPressableStyle())
-                        }
+                    switch tab {
+                    case .scorers:
+                        scorersList
+                    case .assists:
+                        leadersList(assists, value: { "\($0.assists)" }, label: "صناعة")
+                    case .cards:
+                        leadersList(cards, value: { $0.red > 0 ? "\($0.red)" : "\($0.yellow)" },
+                                    label: { $0.red > 0 ? "حمراء" : "صفراء" })
                     }
                 }
             }
         }
         .navigationBarHidden(true)
-        .task { await load() }
+        .task { await load(force: false) }
         .refreshable { await load(force: true) }
         .navigationDestination(for: AcTeam.self) { team in
             AcTeamProfileScreen(teamId: team.id, fallback: team)
         }
     }
 
+    @ViewBuilder private var scorersList: some View {
+        if scorers.isEmpty {
+            AcEmptyState(icon: "soccerball", title: L("scorers.empty.title"), subtitle: L("scorers.empty.subtitle"))
+        } else {
+            VStack(spacing: 10) {
+                ForEach(scorers, id: \.rank) { s in
+                    NavigationLink {
+                        AcPlayerProfileScreen(
+                            playerId: s.id,
+                            fallbackName: LName(s.name, s.nameEn),
+                            fallbackPhoto: s.photo,
+                            fallbackSubtitle: LTeam(String(s.team.id), fallback: s.team.name),
+                            fallbackTeam: s.team
+                        )
+                    } label: {
+                        AcScorerRow(scorer: s)
+                    }
+                    .buttonStyle(AcPressableStyle())
+                }
+            }
+        }
+    }
+
+    private func leadersList(
+        _ leaders: [AcLeader],
+        value: @escaping (AcLeader) -> String,
+        label: @escaping (AcLeader) -> String
+    ) -> some View {
+        Group {
+            if leaders.isEmpty {
+                AcEmptyState(icon: "list.number", title: "لا بيانات بعد", subtitle: "يظهر الترتيب مع انطلاق المباريات")
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(leaders) { l in
+                        NavigationLink {
+                            AcPlayerProfileScreen(
+                                playerId: l.id,
+                                fallbackName: LName(l.name, l.nameEn),
+                                fallbackPhoto: l.photo,
+                                fallbackSubtitle: LTeam(String(l.team.id), fallback: l.team.name),
+                                fallbackTeam: l.team
+                            )
+                        } label: {
+                            HStack(spacing: 12) {
+                                Text("\(l.rank)")
+                                    .font(AsianCupFonts.app(size: 14, weight: .bold))
+                                    .foregroundStyle(AcTheme.onDarkDim)
+                                    .frame(width: 30)
+                                ZStack {
+                                    Circle().fill(AcTheme.chipFill)
+                                    AcRemoteImage(url: l.photo).clipShape(Circle())
+                                }
+                                .frame(width: 42, height: 42)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(LName(l.name, l.nameEn))
+                                        .font(AsianCupFonts.app(size: 14, weight: .bold))
+                                        .foregroundStyle(AcTheme.onDark)
+                                        .lineLimit(1)
+                                    Text(LTeam(String(l.team.id), fallback: l.team.name))
+                                        .font(AsianCupFonts.app(size: 11))
+                                        .foregroundStyle(AcTheme.onDarkDim)
+                                }
+                                Spacer()
+                                VStack(spacing: 0) {
+                                    Text(value(l))
+                                        .font(AsianCupFonts.app(size: 17, weight: .bold))
+                                        .foregroundStyle(AcTheme.emerald)
+                                    Text(label(l))
+                                        .font(AsianCupFonts.app(size: 9))
+                                        .foregroundStyle(AcTheme.onDarkDim)
+                                }
+                            }
+                            .padding(12)
+                            .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius).fill(AcTheme.cardFill))
+                        }
+                        .buttonStyle(AcPressableStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    private func leadersList(_ leaders: [AcLeader], value: @escaping (AcLeader) -> String, label: String) -> some View {
+        leadersList(leaders, value: value, label: { _ in label })
+    }
+
+    private func loadTabIfNeeded(_ t: RaceTab) async {
+        switch t {
+        case .scorers: if scorers.isEmpty { await load(force: false) }
+        case .assists: if assists.isEmpty { assists = (try? await APIClient.shared.fetchAcAssists()) ?? [] }
+        case .cards: if cards.isEmpty { cards = (try? await APIClient.shared.fetchAcCards()) ?? [] }
+        }
+    }
+
     private func load(force: Bool = false) async {
         loading = true
         do {
-            scorers = try await APIClient.shared.fetchAcScorers(ignoreCache: force)
+            async let s = APIClient.shared.fetchAcScorers(ignoreCache: force)
+            async let a = APIClient.shared.fetchAcAssists(ignoreCache: force)
+            async let c = APIClient.shared.fetchAcCards(ignoreCache: force)
+            scorers = try await s
+            assists = try await a
+            cards = try await c
             errorMessage = nil
         } catch {
             errorMessage = LError(error)
