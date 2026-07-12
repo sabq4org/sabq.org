@@ -69,13 +69,20 @@ function BracketTeam({ team, score, winner }: { team: AcTeam; score: number | nu
   );
 }
 
-function BracketMatch({ fixture }: { fixture: AcFixture }) {
+function BracketMatch({
+  fixture,
+  onOpenMatch,
+}: {
+  fixture: AcFixture;
+  onOpenMatch: (id: number) => void;
+}) {
   const started = fixture.status.live || fixture.status.finished;
   const winner = winnerId(fixture);
   return (
-    <Link
-      href={`/asian-cup/match/${fixture.id}`}
-      className="relative block rounded-xl border border-border bg-card px-3 py-2 shadow-sm transition-colors hover:border-emerald-500/60"
+    <button
+      type="button"
+      onClick={() => onOpenMatch(fixture.id)}
+      className="relative block w-full rounded-xl border border-border bg-card px-3 py-2 text-right shadow-sm transition-colors hover:border-emerald-500/60"
       data-testid={`ac-tree-match-${fixture.id}`}
     >
       <div className="divide-y divide-border/60">
@@ -89,11 +96,17 @@ function BracketMatch({ fixture }: { fixture: AcFixture }) {
             ? fixture.status.label
             : `${formatKickoffDay(fixture.date)} · ${formatKickoffTime(fixture.date)}`}
       </p>
-    </Link>
+    </button>
   );
 }
 
-function MobileBracket({ rounds }: { rounds: AcBracketRound[] }) {
+function MobileBracket({
+  rounds,
+  onOpenMatch,
+}: {
+  rounds: AcBracketRound[];
+  onOpenMatch: (id: number) => void;
+}) {
   const liveRound = rounds.find((round) => round.matches.some((fixture) => fixture.status.live));
   const pendingRound = rounds.find((round) => round.matches.some((fixture) => !fixture.status.finished));
   const defaultRound = (liveRound ?? pendingRound ?? rounds[rounds.length - 1])?.roundEn;
@@ -111,14 +124,22 @@ function MobileBracket({ rounds }: { rounds: AcBracketRound[] }) {
       </TabsList>
       {rounds.map((round) => (
         <TabsContent key={round.roundEn} value={round.roundEn} className="mt-0 space-y-2">
-          {round.matches.map((fixture) => <BracketMatch key={fixture.id} fixture={fixture} />)}
+          {round.matches.map((fixture) => (
+            <BracketMatch key={fixture.id} fixture={fixture} onOpenMatch={onOpenMatch} />
+          ))}
         </TabsContent>
       ))}
     </Tabs>
   );
 }
 
-function DesktopBracket({ rounds }: { rounds: AcBracketRound[] }) {
+function DesktopBracket({
+  rounds,
+  onOpenMatch,
+}: {
+  rounds: AcBracketRound[];
+  onOpenMatch: (id: number) => void;
+}) {
   const maxMatches = Math.max(...rounds.map((round) => round.matches.length), 1);
   return (
     <div className="hidden overflow-x-auto pb-4 md:block" dir="rtl">
@@ -134,7 +155,7 @@ function DesktopBracket({ rounds }: { rounds: AcBracketRound[] }) {
             >
               {round.matches.map((fixture) => (
                 <div key={fixture.id} className="relative">
-                  <BracketMatch fixture={fixture} />
+                  <BracketMatch fixture={fixture} onOpenMatch={onOpenMatch} />
                   {roundIndex < rounds.length - 1 && (
                     <span className="pointer-events-none absolute left-[-3rem] top-1/2 h-px w-12 bg-emerald-500/35" aria-hidden="true" />
                   )}
@@ -148,7 +169,7 @@ function DesktopBracket({ rounds }: { rounds: AcBracketRound[] }) {
   );
 }
 
-export function AcKnockoutSection() {
+export function AcKnockoutSection({ onOpenMatch }: { onOpenMatch: (id: number) => void }) {
   const { data, isLoading } = useQuery<AcBracketResponse>({
     queryKey: ["/api/asian-cup/bracket"],
     refetchInterval: (query) =>
@@ -178,7 +199,10 @@ export function AcKnockoutSection() {
             <p className="text-sm text-muted-foreground">تظهر المواجهات داخل الشجرة فور اكتمال دور المجموعات واعتماد المتأهلين.</p>
           </div>
         ) : (
-          <><MobileBracket rounds={rounds} /><DesktopBracket rounds={rounds} /></>
+          <>
+            <MobileBracket rounds={rounds} onOpenMatch={onOpenMatch} />
+            <DesktopBracket rounds={rounds} onOpenMatch={onOpenMatch} />
+          </>
         )}
       </div>
     </section>
@@ -195,7 +219,15 @@ function sortedLeaders(scorers: AcScorer[], mode: RaceMode): AcScorer[] {
   );
 }
 
-function Podium({ leaders, mode }: { leaders: AcScorer[]; mode: RaceMode }) {
+function Podium({
+  leaders,
+  mode,
+  onOpenPlayer,
+}: {
+  leaders: AcScorer[];
+  mode: RaceMode;
+  onOpenPlayer?: (id: number) => void;
+}) {
   const ordered = [leaders[1], leaders[0], leaders[2]].filter(Boolean);
   return (
     <div className="mx-auto mb-7 grid max-w-xl grid-cols-3 items-start gap-2 sm:gap-4">
@@ -203,14 +235,27 @@ function Podium({ leaders, mode }: { leaders: AcScorer[]; mode: RaceMode }) {
         const rank = leaders.indexOf(player) + 1;
         const first = rank === 1;
         const value = mode === "goals" ? player.goals : player.assists;
-        return (
-          <Link key={`${mode}-${player.id}`} href={`/asian-cup/player/${player.id}`} className={`flex flex-col items-center gap-2 rounded-2xl p-2 text-center hover-elevate ${first ? "" : "mt-7"}`}>
+        const body = (
+          <>
             <div className={`relative overflow-hidden rounded-full bg-muted ring-4 ${rank === 1 ? "h-24 w-24 ring-amber-400" : rank === 2 ? "h-[72px] w-[72px] ring-zinc-300" : "h-[72px] w-[72px] ring-orange-700/70"}`}>
               {player.photo ? <img src={player.photo} alt={player.name} className="h-full w-full object-cover" loading="lazy" /> : <span className="grid h-full place-items-center font-black">{player.name.slice(0, 2)}</span>}
             </div>
             <b className="line-clamp-1 text-sm sm:text-base">{player.name}</b>
             <span className="flex items-center gap-1 text-[11px] text-muted-foreground"><img src={player.team.logo} alt="" className="h-4 w-4 object-contain" />{player.team.name}</span>
             <span className={`font-black tabular-nums ${first ? "text-3xl text-amber-500" : "text-2xl"}`}>{value}</span>
+          </>
+        );
+        const className = `flex flex-col items-center gap-2 rounded-2xl p-2 text-center hover-elevate ${first ? "" : "mt-7"}`;
+        if (onOpenPlayer && player.id > 0) {
+          return (
+            <button key={`${mode}-${player.id}`} type="button" onClick={() => onOpenPlayer(player.id)} className={className}>
+              {body}
+            </button>
+          );
+        }
+        return (
+          <Link key={`${mode}-${player.id}`} href={`/asian-cup/player/${player.id}`} className={className}>
+            {body}
           </Link>
         );
       })}
@@ -218,23 +263,53 @@ function Podium({ leaders, mode }: { leaders: AcScorer[]; mode: RaceMode }) {
   );
 }
 
-function RaceList({ leaders, mode }: { leaders: AcScorer[]; mode: RaceMode }) {
+function RaceList({
+  leaders,
+  mode,
+  onOpenPlayer,
+}: {
+  leaders: AcScorer[];
+  mode: RaceMode;
+  onOpenPlayer?: (id: number) => void;
+}) {
   return (
     <div className="mx-auto max-w-2xl space-y-1.5">
-      {leaders.map((player, index) => (
-        <Link key={`${mode}-${player.id}-${index}`} href={`/asian-cup/player/${player.id}`} className="flex items-center gap-3 rounded-xl bg-card px-3.5 py-2.5 hover-elevate">
-          <span className="w-5 text-center text-sm tabular-nums text-muted-foreground">{index + 1}</span>
-          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">{player.photo && <img src={player.photo} alt="" className="h-full w-full object-cover" loading="lazy" />}</div>
-          <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{player.name}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><img src={player.team.logo} alt="" className="h-3.5 w-3.5 object-contain" />{player.team.name}</p></div>
-          <div className="text-left"><b className="text-xl tabular-nums text-emerald-700">{mode === "goals" ? player.goals : player.assists}</b><p className="text-[10px] text-muted-foreground">{mode === "goals" ? `${player.assists} صناعة` : `${player.goals} أهداف`}</p></div>
-        </Link>
-      ))}
+      {leaders.map((player, index) => {
+        const inner = (
+          <>
+            <span className="w-5 text-center text-sm tabular-nums text-muted-foreground">{index + 1}</span>
+            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-muted">{player.photo && <img src={player.photo} alt="" className="h-full w-full object-cover" loading="lazy" />}</div>
+            <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold">{player.name}</p><p className="flex items-center gap-1 text-[11px] text-muted-foreground"><img src={player.team.logo} alt="" className="h-3.5 w-3.5 object-contain" />{player.team.name}</p></div>
+            <div className="text-left"><b className="text-xl tabular-nums text-emerald-700">{mode === "goals" ? player.goals : player.assists}</b><p className="text-[10px] text-muted-foreground">{mode === "goals" ? `${player.assists} صناعة` : `${player.goals} أهداف`}</p></div>
+          </>
+        );
+        const className = "flex w-full items-center gap-3 rounded-xl bg-card px-3.5 py-2.5 hover-elevate text-right";
+        if (onOpenPlayer && player.id > 0) {
+          return (
+            <button key={`${mode}-${player.id}-${index}`} type="button" onClick={() => onOpenPlayer(player.id)} className={className}>
+              {inner}
+            </button>
+          );
+        }
+        return (
+          <Link key={`${mode}-${player.id}-${index}`} href={`/asian-cup/player/${player.id}`} className={className}>
+            {inner}
+          </Link>
+        );
+      })}
     </div>
   );
 }
 
-// صف قائد موحّد (صنّاع الأهداف / البطاقات) — يفتح صفحة اللاعب عند توفّر معرّفه.
-function LeaderRow({ leader, end }: { leader: AcLeader; end: React.ReactNode }) {
+function LeaderRow({
+  leader,
+  end,
+  onOpenPlayer,
+}: {
+  leader: AcLeader;
+  end: React.ReactNode;
+  onOpenPlayer?: (id: number) => void;
+}) {
   const clickable = leader.id > 0;
   const inner = (
     <>
@@ -247,23 +322,48 @@ function LeaderRow({ leader, end }: { leader: AcLeader; end: React.ReactNode }) 
       </div>
     </>
   );
-  return clickable ? (
-    <Link href={`/asian-cup/player/${leader.id}`} className="flex items-center gap-3 rounded-xl bg-card px-3.5 py-2.5 hover-elevate">{inner}</Link>
-  ) : (
-    <div className="flex items-center gap-3 rounded-xl bg-card px-3.5 py-2.5">{inner}</div>
+  if (!clickable) {
+    return <div className="flex items-center gap-3 rounded-xl bg-card px-3.5 py-2.5">{inner}</div>;
+  }
+  if (onOpenPlayer) {
+    return (
+      <button type="button" onClick={() => onOpenPlayer(leader.id)} className="flex w-full items-center gap-3 rounded-xl bg-card px-3.5 py-2.5 hover-elevate text-right">
+        {inner}
+      </button>
+    );
+  }
+  return (
+    <Link href={`/asian-cup/player/${leader.id}`} className="flex items-center gap-3 rounded-xl bg-card px-3.5 py-2.5 hover-elevate">
+      {inner}
+    </Link>
   );
 }
 
-// قائمة قادة من نقطة مخصّصة (assists / cards) — تُخفى مع بطولة لم تبدأ برسالة مناسبة.
-function LeadersList({ endpoint, emptyMessage, render }: { endpoint: string; emptyMessage: string; render: (leader: AcLeader) => React.ReactNode }) {
+function LeadersList({
+  endpoint,
+  emptyMessage,
+  render,
+  onOpenPlayer,
+}: {
+  endpoint: string;
+  emptyMessage: string;
+  render: (leader: AcLeader) => React.ReactNode;
+  onOpenPlayer?: (id: number) => void;
+}) {
   const { data, isLoading } = useQuery<{ leaders: AcLeader[] }>({ queryKey: [endpoint], staleTime: 10 * 60_000 });
   const leaders = Array.isArray(data?.leaders) ? data.leaders : [];
   if (isLoading) return <div className="mx-auto max-w-2xl space-y-1.5">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>;
   if (leaders.length === 0) return <div className="rounded-2xl border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">{emptyMessage}</div>;
-  return <div className="mx-auto max-w-2xl space-y-1.5">{leaders.map((leader) => <LeaderRow key={`${leader.rank}-${leader.name}`} leader={leader} end={render(leader)} />)}</div>;
+  return <div className="mx-auto max-w-2xl space-y-1.5">{leaders.map((leader) => <LeaderRow key={`${leader.rank}-${leader.name}`} leader={leader} end={render(leader)} onOpenPlayer={onOpenPlayer} />)}</div>;
 }
 
-export function AcTournamentRaces({ tournamentStarted }: { tournamentStarted: boolean }) {
+export function AcTournamentRaces({
+  tournamentStarted,
+  onOpenPlayer,
+}: {
+  tournamentStarted: boolean;
+  onOpenPlayer?: (id: number) => void;
+}) {
   const { data, isLoading } = useQuery<{ scorers: AcScorer[] }>({ queryKey: ["/api/asian-cup/scorers"], staleTime: 10 * 60_000 });
   const scorers = Array.isArray(data?.scorers) ? data.scorers : [];
   const goals = useMemo(() => sortedLeaders(scorers, "goals"), [scorers]);
@@ -271,7 +371,12 @@ export function AcTournamentRaces({ tournamentStarted }: { tournamentStarted: bo
   const goalsContent = () => {
     if (isLoading) return <div className="mx-auto grid max-w-xl grid-cols-3 gap-4">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-44 rounded-xl" />)}</div>;
     if (goals.length === 0) return <div className="rounded-2xl border border-dashed bg-muted/30 p-8 text-center text-sm text-muted-foreground">{tournamentStarted ? "يظهر الترتيب فور اعتماد المزود لإحصاءات المباريات." : "سباق الهدافين ينطلق مع أول صافرة."}</div>;
-    return <>{goals.length >= 3 && <Podium leaders={goals.slice(0, 3)} mode="goals" />}<RaceList leaders={goals.length >= 3 ? goals.slice(3) : goals} mode="goals" /></>;
+    return (
+      <>
+        {goals.length >= 3 && <Podium leaders={goals.slice(0, 3)} mode="goals" onOpenPlayer={onOpenPlayer} />}
+        <RaceList leaders={goals.length >= 3 ? goals.slice(3) : goals} mode="goals" onOpenPlayer={onOpenPlayer} />
+      </>
+    );
   };
 
   const pending = "انطلقت البطولة — الترتيب يظهر فور اعتماد المزود لإحصاءات المباريات";
@@ -291,6 +396,7 @@ export function AcTournamentRaces({ tournamentStarted }: { tournamentStarted: bo
             <LeadersList
               endpoint="/api/asian-cup/assists"
               emptyMessage={tournamentStarted ? pending : "سباق صنّاع الأهداف ينطلق مع أول صناعة"}
+              onOpenPlayer={onOpenPlayer}
               render={(leader) => (
                 <>
                   <span className="hidden sm:inline">{leader.goals} أهداف</span>
@@ -303,6 +409,7 @@ export function AcTournamentRaces({ tournamentStarted }: { tournamentStarted: bo
             <LeadersList
               endpoint="/api/asian-cup/cards"
               emptyMessage={tournamentStarted ? "البطاقات تُعتمد بعد المباريات بقليل — وعسى ألا تكثر" : "لا بطاقات بعد — وعسى ألا تكثر"}
+              onOpenPlayer={onOpenPlayer}
               render={(leader) => (
                 <span className="flex items-center gap-2">
                   <span className="flex items-center gap-1 font-black tabular-nums"><Square className="h-3 w-3 fill-yellow-400 text-yellow-400" />{leader.yellow}</span>

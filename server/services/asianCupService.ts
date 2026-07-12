@@ -39,9 +39,13 @@ import {
   getTsMatchTeamStats,
   getTsMatchTrend,
   getTsMatchTv,
+  getTsCoach,
   getTsPlayerMarketHistory,
   getTsSeasonTeamStats,
+  getTsTeamExtra,
+  getTsTeamInjuries,
   getTsTeamSquad,
+  getTsVenue,
   isTheSportsConfigured,
   resolveTsNames,
   type TsEvent,
@@ -984,6 +988,35 @@ export async function getAcCoach(teamId: number): Promise<string | null> {
   });
 }
 
+export interface AcTeamExtra {
+  marketValue: number | null;
+  marketValueCurrency: string;
+  foundation: number | null;
+  squadSize: number | null;
+}
+
+export interface AcCoachInfo {
+  name: string;
+  photo: string;
+  formation: string | null;
+  age: number | null;
+  nationality: string | null;
+}
+
+export interface AcVenueInfo {
+  name: string;
+  capacity: number | null;
+  city: string;
+  country: string | null;
+}
+
+export interface AcInjury {
+  player: string;
+  reason: string | null;
+  status: string | null;
+  until: string | null;
+}
+
 export interface AcTeamProfile {
   team: AcTeam;
   isSaudi: boolean;
@@ -1010,6 +1043,14 @@ export interface AcTeamProfile {
   fifaRank: AcFifaRank | null;
   /** إحصاء المنتخب في البطولة (TheSports season/recent/team/stat) */
   seasonStats: AcTeamSeasonStats | null;
+  /** قيمة سوقية / تأسيس / حجم القائمة — null إن تعذّر */
+  extra: AcTeamExtra | null;
+  /** إصابات وغيابات — [] إن تعذّر */
+  injuries: AcInjury[];
+  /** المدرّب (صورة/خطة) من TheSports — null إن تعذّر */
+  coachInfo: AcCoachInfo | null;
+  /** ملعب المنتخب من TheSports — null إن تعذّر */
+  venue: AcVenueInfo | null;
 }
 
 export interface AcFifaRank {
@@ -1151,11 +1192,17 @@ function resultForTeam(fixture: AcFixture, teamId: number): "W" | "D" | "L" | nu
 
 /** صفحة المنتخب المتكاملة: الهوية + المجموعة + كل مبارياته + القائمة + المدرّب. */
 export async function getAcTeamProfile(teamId: number): Promise<AcTeamProfile | null> {
-  const [fixtures, squad, standings, teams] = await Promise.all([
+  const [fixtures, squad, standings, teams, extra, injuries, basics] = await Promise.all([
     getAcFixtures(),
     getAcSquad(teamId).catch(() => null),
     getAcStandings().catch(() => [] as AcGroup[]),
     getAcTeams().catch(() => [] as AcTeam[]),
+    getAcTeamExtra(teamId).catch(() => null),
+    getAcTeamInjuries(teamId).catch(() => [] as AcInjury[]),
+    getAcTeamBasics(teamId).catch(() => ({ coach: null, venue: null }) as {
+      coach: AcCoachInfo | null;
+      venue: AcVenueInfo | null;
+    }),
   ]);
 
   const teamFixtures = fixtures
@@ -1201,11 +1248,13 @@ export async function getAcTeamProfile(teamId: number): Promise<AcTeamProfile | 
     .slice(0, 5);
   const nextMatch = teamFixtures.find((f) => !f.status.finished) ?? null;
 
-  let coach: string | null = null;
-  try {
-    coach = await getAcCoach(teamId);
-  } catch (error) {
-    console.warn(`[AsianCup] coach ${teamId} failed:`, error);
+  let coach: string | null = basics.coach?.name ?? null;
+  if (!coach) {
+    try {
+      coach = await getAcCoach(teamId);
+    } catch (error) {
+      console.warn(`[AsianCup] coach ${teamId} failed:`, error);
+    }
   }
 
   // إثراء TheSports (تصنيف فيفا + إحصاء البطولة) — أفضل جهد: غيابه لا يعطّل الملف.
@@ -1237,6 +1286,10 @@ export async function getAcTeamProfile(teamId: number): Promise<AcTeamProfile | 
     squad: squad?.players ?? [],
     fifaRank,
     seasonStats,
+    extra,
+    injuries,
+    coachInfo: basics.coach,
+    venue: basics.venue,
   };
 }
 
@@ -2095,6 +2148,147 @@ export async function getAcTeamFifaRank(teamId: number): Promise<AcFifaRank | nu
   const r = ranking.get(uuid);
   if (!r) return null;
   return { rank: r.rank, points: r.points ?? null, change: r.change ?? null };
+}
+
+/** قيمة سوقية / تأسيس / حجم القائمة عبر جسر TheSports. */
+export async function getAcTeamExtra(teamId: number): Promise<AcTeamExtra | null> {
+  const bridge = await getAcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return null;
+  const x = await getTsTeamExtra(uuid);
+  if (!x) return null;
+  if (x.marketValue == null && x.foundation == null && x.totalPlayers == null) return null;
+  return {
+    marketValue: x.marketValue,
+    marketValueCurrency: x.marketValueCurrency,
+    foundation: x.foundation,
+    squadSize: x.totalPlayers,
+  };
+}
+
+/** المدرّب (صورة/خطة) وملعب المنتخب من TheSports عبر الجسر. */
+export async function getAcTeamBasics(
+  teamId: number,
+): Promise<{ coach: AcCoachInfo | null; venue: AcVenueInfo | null }> {
+  const empty = { coach: null, venue: null };
+  const bridge = await getAcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return empty;
+  const x = await getTsTeamExtra(uuid).catch(() => null);
+  if (!x) return empty;
+
+  const [tsCoach, tsVenue] = await Promise.all([
+    x.coachId ? getTsCoach(x.coachId).catch(() => null) : Promise.resolve(null),
+    x.venueId ? getTsVenue(x.venueId).catch(() => null) : Promise.resolve(null),
+  ]);
+
+  const countryIds = [tsCoach?.countryId, tsVenue?.countryId].filter((c): c is string => !!c);
+  const countryAr =
+    countryIds.length > 0
+      ? await resolveTsNames(TS_I18N_TYPE.country, countryIds).catch(
+          () => (_: string | null | undefined) => null as string | null,
+        )
+      : (_: string | null | undefined) => null as string | null;
+
+  const coach: AcCoachInfo | null = tsCoach
+    ? {
+        name: tsCoach.name,
+        photo: tsCoach.logo,
+        formation: tsCoach.preferredFormation,
+        age: tsCoach.age,
+        nationality: countryAr(tsCoach.countryId),
+      }
+    : null;
+
+  const venue: AcVenueInfo | null = tsVenue
+    ? {
+        name: tsVenue.name,
+        capacity: tsVenue.capacity,
+        city: tsVenue.city,
+        country: countryAr(tsVenue.countryId) ?? tsVenue.country,
+      }
+    : null;
+
+  return { coach, venue };
+}
+
+const AC_INJURY_PART_AR: Record<string, string> = {
+  knee: "الركبة",
+  ankle: "الكاحل",
+  hamstring: "أوتار الفخذ",
+  thigh: "الفخذ",
+  calf: "ربلة الساق",
+  foot: "القدم",
+  groin: "أعلى الفخذ",
+  shoulder: "الكتف",
+  back: "الظهر",
+  head: "الرأس",
+  hip: "الورك",
+  muscle: "العضلة",
+};
+
+const AC_INJURY_WHOLE_AR: Record<string, string> = {
+  suspended: "إيقاف",
+  suspension: "إيقاف",
+  ban: "إيقاف",
+  illness: "مرض",
+  ill: "مرض",
+  knock: "رضّة",
+  fatigue: "إجهاد",
+  "unknown injury": "إصابة غير محدّدة",
+  "knee injury": "إصابة في الركبة",
+};
+
+function translateAcInjuryReason(en: string | null): string | null {
+  if (!en) return null;
+  const low = en.toLowerCase().trim();
+  if (AC_INJURY_WHOLE_AR[low]) return AC_INJURY_WHOLE_AR[low];
+  const m = low.match(/^(.+?)\s+(injury|problem|strain|knock|surgery)$/);
+  if (m && AC_INJURY_PART_AR[m[1]]) return `إصابة في ${AC_INJURY_PART_AR[m[1]]}`;
+  if (AC_INJURY_PART_AR[low]) return `إصابة في ${AC_INJURY_PART_AR[low]}`;
+  return en;
+}
+
+function fmtAcInjuryDate(ts: number | null): string | null {
+  if (!ts || ts <= 0) return null;
+  try {
+    return new Intl.DateTimeFormat("ar", {
+      day: "numeric",
+      month: "long",
+      calendar: "gregory",
+      timeZone: "Asia/Riyadh",
+    }).format(new Date(ts * 1000));
+  } catch {
+    return null;
+  }
+}
+
+/** إصابات/غيابات منتخب عبر جسر TheSports — [] إن تعذّر. */
+export async function getAcTeamInjuries(teamId: number): Promise<AcInjury[]> {
+  const bridge = await getAcTeamBridge();
+  const uuid = bridge.get(teamId);
+  if (!uuid) return [];
+  const raw = await getTsTeamInjuries(uuid).catch(() => []);
+  if (raw.length === 0) return [];
+
+  const noop = (_: string | null | undefined): string | null => null;
+  const nameOf = await resolveTsNames(
+    TS_I18N_TYPE.player,
+    raw.map((r) => r.playerId),
+  ).catch(() => noop);
+
+  const out: AcInjury[] = [];
+  for (const r of raw) {
+    const player = r.playerId ? nameOf(r.playerId) : null;
+    if (!player) continue;
+    out.push({
+      player,
+      reason: translateAcInjuryReason(r.reason),
+      status: null,
+      until: fmtAcInjuryDate(r.endTime),
+    });
+  }
+  return out;
 }
 
 // كاش مشترك لإحصاء كل المنتخبات للموسم — نداء واحد يخدم كل صفحات المنتخبات.

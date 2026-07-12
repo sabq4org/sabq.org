@@ -6,6 +6,7 @@ export {
   countdownTo,
   formatKickoffDay,
   formatKickoffTime,
+  formatMarketValue,
   riyadhDayKey,
   todayRiyadhKey,
   type WcCountdown as AcCountdown,
@@ -162,3 +163,94 @@ export interface AcMatchDetailSlim {
   headToHead: AcFixture[];
   tv: AcTvChannel[];
 }
+
+/** لاعب في قائمة المنتخب */
+export interface AcSquadPlayer {
+  id: number;
+  name: string;
+  nameEn: string;
+  number: number | null;
+  position: string;
+  positionEn: string;
+  age: number | null;
+  photo: string;
+}
+
+export interface AcFifaRank {
+  rank: number;
+  points: number | null;
+  change: number | null;
+}
+
+export interface AcSeasonStatItem {
+  label: string;
+  value: number;
+  percent?: boolean;
+}
+
+export interface AcTeamSeasonStats {
+  available: boolean;
+  matches: number;
+  items: AcSeasonStatItem[];
+}
+
+/** ملف المنتخب المتكامل من `/api/asian-cup/team/:id` */
+export interface AcTeamExtra {
+  marketValue: number | null;
+  marketValueCurrency: string;
+  foundation: number | null;
+  squadSize: number | null;
+}
+
+export interface AcCoachInfo {
+  name: string;
+  photo: string;
+  formation: string | null;
+  age: number | null;
+  nationality: string | null;
+}
+
+export interface AcVenueInfo {
+  name: string;
+  capacity: number | null;
+  city: string;
+  country: string | null;
+}
+
+export interface AcInjury {
+  player: string;
+  reason: string | null;
+  status: string | null;
+  until: string | null;
+}
+
+export interface AcTeamProfile {
+  team: AcTeam;
+  isSaudi: boolean;
+  coach: string | null;
+  /** مجموعة المنتخب — null قبل اعتماد القرعة/الجداول */
+  group: AcGroup | null;
+  stats: {
+    groupName: string | null;
+    rank: number | null;
+    played: number;
+    win: number;
+    draw: number;
+    lose: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    goalsDiff: number;
+    points: number;
+    form: ("W" | "D" | "L")[];
+  };
+  nextMatch: AcFixture | null;
+  fixtures: AcFixture[];
+  squad: AcSquadPlayer[];
+  fifaRank: AcFifaRank | null;
+  seasonStats: AcTeamSeasonStats | null;
+  extra?: AcTeamExtra | null;
+  injuries?: AcInjury[];
+  coachInfo?: AcCoachInfo | null;
+  venue?: AcVenueInfo | null;
+}
+

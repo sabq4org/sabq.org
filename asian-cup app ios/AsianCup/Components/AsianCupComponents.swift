@@ -1,4 +1,5 @@
 import SwiftUI
+import Charts
 
 // مكوّنات UI أساسية لكأس آسيا — مُعاد تصميمها من WorldCupComponents لكن بألوان
 // AcTheme. كلها تُستعمل عبر الشاشات.
@@ -229,16 +230,22 @@ struct AcEmptyState: View {
 struct AcMatchCard: View {
     let fixture: AcFixture
     var embedded: Bool = false
+    @State private var showDetail = false
 
     private var started: Bool { fixture.status.live || fixture.status.finished }
 
     var body: some View {
-        NavigationLink {
-            AcMatchDetailSheet(fixture: fixture)
-        } label: {
+        Button { showDetail = true } label: {
             cardLabel
         }
         .buttonStyle(AcPressableStyle())
+        .sheet(isPresented: $showDetail) {
+            NavigationStack {
+                AcMatchDetailSheet(fixture: fixture)
+            }
+            .presentationDetents([.large])
+            .asianCupRTL()
+        }
     }
 
     private var cardLabel: some View {
@@ -332,9 +339,8 @@ struct AcMatchCard: View {
     }
 }
 
-// MARK: - ورقة تفاصيل المباراة (تُفتح بالضغط على أي بطاقة مباراة)
-// تجلب التفاصيل الكاملة (أحداث/تشكيلات/إحصاءات/تقييمات/توقّع/مواجهات) من الخادم،
-// وتعرض ما توفّر منها فقط — قبل البطولة تظهر النتيجة + التوقّع + معلومات المباراة.
+// MARK: - ورقة تفاصيل المباراة (sheet — تكافؤ WorldCupMatchCenter)
+// تبويبات: تعليق / أحداث (شريط زمني) / زخم / ضغط / تشكيلات 2D / إحصائيات / تقييمات / توقعات.
 struct AcMatchDetailSheet: View {
     let fixture: AcFixture
     @Environment(\.dismiss) private var dismiss
@@ -343,6 +349,7 @@ struct AcMatchDetailSheet: View {
     @State private var commentary: AcCommentary?
     @State private var momentum: AcMomentum?
     @State private var pressure: AcPressure?
+    @State private var didPickDefaultTab = false
 
     enum Tab: String, CaseIterable {
         case commentary, events, momentum, pressure, lineups, stats, ratings, prediction
@@ -368,13 +375,10 @@ struct AcMatchDetailSheet: View {
         var t: [Tab] = []
         if started { t.append(.commentary) }
         t.append(.events)
-        if started {
-            if momentum?.available == true { t.append(.momentum) }
-            if pressure?.available == true { t.append(.pressure) }
-        }
+        if started { t.append(contentsOf: [.momentum, .pressure]) }
         t.append(contentsOf: [.lineups, .stats])
         if let d = detail, !d.ratings.isEmpty { t.append(.ratings) }
-        if detail?.prediction != nil { t.append(.prediction) }
+        t.append(.prediction)
         return t
     }
 
@@ -402,7 +406,16 @@ struct AcMatchDetailSheet: View {
             .padding(.top, 4)
         }
         .background(AcAmbientBackground())
+        .navigationTitle("مركز المباراة")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .foregroundStyle(AcTheme.onDark)
+                }
+            }
+        }
         .asianCupRTL()
         .task { await load() }
         .task(id: detail?.fixture.id) {
@@ -412,6 +425,7 @@ struct AcMatchDetailSheet: View {
                 if displayFixture.status.live { await load(force: true) }
             }
         }
+        .refreshable { await load(force: true) }
     }
 
     private var tabBar: some View {
@@ -452,13 +466,13 @@ struct AcMatchDetailSheet: View {
             if let m = momentum, m.available, !m.points.isEmpty {
                 momentumCard(m)
             } else {
-                emptyTab("الزخم غير متاح")
+                emptyTab("الزخم يظهر هنا أثناء المباراة")
             }
         case .pressure:
             if let p = pressure, p.available, !p.points.isEmpty {
                 pressureCard(p)
             } else {
-                emptyTab("الضغط غير متاح")
+                emptyTab("مؤشّر الضغط يظهر هنا أثناء المباراة")
             }
         case .lineups:
             if let d = detail, !d.lineups.isEmpty {
@@ -489,13 +503,23 @@ struct AcMatchDetailSheet: View {
                 }
             }
         case .prediction:
-            if let d = detail, let p = d.prediction {
-                AcPredictionBarsCard(prediction: p, home: displayFixture.home, away: displayFixture.away)
+            if let d = detail {
+                if let p = d.prediction {
+                    AcPredictionBarsCard(prediction: p, home: displayFixture.home, away: displayFixture.away)
+                } else {
+                    emptyTab("التوقع غير متاح")
+                }
                 if !d.headToHead.isEmpty {
                     AcHeadToHeadCard(fixtures: d.headToHead)
+                } else if d.prediction == nil {
+                    EmptyView()
+                } else {
+                    Text("أول مواجهة رسمية بين المنتخبين")
+                        .font(AsianCupFonts.app(size: 12))
+                        .foregroundStyle(AcTheme.onDarkDim)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
                 }
-            } else {
-                emptyTab("التوقع غير متاح")
             }
         }
     }
@@ -543,22 +567,29 @@ struct AcMatchDetailSheet: View {
     }
 
     private func momentumCard(_ m: AcMomentum) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("الزخم")
+        VStack(alignment: .leading, spacing: 10) {
+            Text("الزخم الهجومي")
                 .font(AsianCupFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(AcTheme.onDark)
             if let p = m.possession {
                 HStack {
-                    Text("\(p.home)%").font(AsianCupFonts.app(size: 12, weight: .bold))
+                    Text("\(p.home)%").font(AsianCupFonts.app(size: 12, weight: .bold)).monospacedDigit()
                     Spacer()
                     Text("الاستحواذ").font(AsianCupFonts.app(size: 11)).foregroundStyle(AcTheme.onDarkDim)
                     Spacer()
-                    Text("\(p.away)%").font(AsianCupFonts.app(size: 12, weight: .bold))
+                    Text("\(p.away)%").font(AsianCupFonts.app(size: 12, weight: .bold)).monospacedDigit()
                 }
             }
-            Text("\(m.points.count) نقطة زخم")
+            Text("أعلى: \(LTeam(String(displayFixture.home.id), fallback: displayFixture.home.name)) · أسفل: \(LTeam(String(displayFixture.away.id), fallback: displayFixture.away.name))")
                 .font(AsianCupFonts.app(size: 11))
                 .foregroundStyle(AcTheme.onDarkDim)
+            Chart(m.points) { pt in
+                BarMark(x: .value("د", pt.minute), y: .value("صافي", pt.net))
+                    .foregroundStyle(pt.net >= 0 ? AcTheme.emerald : AcTheme.amber)
+            }
+            .chartYAxis(.hidden)
+            .frame(height: 160)
+            .environment(\.layoutDirection, .leftToRight)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -566,19 +597,31 @@ struct AcMatchDetailSheet: View {
     }
 
     private func pressureCard(_ p: AcPressure) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text("مؤشّر الضغط")
                 .font(AsianCupFonts.app(size: 14, weight: .bold))
                 .foregroundStyle(AcTheme.onDark)
-            if let latest = p.latest {
-                Text("\(Int(latest.value))")
-                    .font(AsianCupFonts.app(size: 28, weight: .bold))
-                    .foregroundStyle(AcTheme.emerald)
-                    .monospacedDigit()
+            if let latest = p.latest, latest.side != "even" {
+                HStack(spacing: 8) {
+                    Image(systemName: "gauge.medium").foregroundStyle(AcTheme.emerald)
+                    Text(latest.side == "home"
+                          ? LTeam(String(displayFixture.home.id), fallback: displayFixture.home.name)
+                          : LTeam(String(displayFixture.away.id), fallback: displayFixture.away.name))
+                        .font(AsianCupFonts.app(size: 12, weight: .bold))
+                    Text("\(Int(latest.value))")
+                        .font(AsianCupFonts.app(size: 12, weight: .bold))
+                        .monospacedDigit()
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(AcTheme.chipFill))
+                }
             }
-            Text("\(p.points.count) نقطة")
-                .font(AsianCupFonts.app(size: 11))
-                .foregroundStyle(AcTheme.onDarkDim)
+            Chart(p.points) { pt in
+                BarMark(x: .value("د", pt.minute), y: .value("ضغط", pt.net))
+                    .foregroundStyle(pt.net >= 0 ? AcTheme.emerald : AcTheme.crimson)
+            }
+            .chartYAxis(.hidden)
+            .frame(height: 160)
+            .environment(\.layoutDirection, .leftToRight)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -597,8 +640,9 @@ struct AcMatchDetailSheet: View {
             commentary = cR
             momentum = mR
             pressure = pR
-            if started && commentary?.available == true {
+            if !didPickDefaultTab, displayFixture.status.live {
                 tab = .commentary
+                didPickDefaultTab = true
             }
         }
         loading = false
@@ -922,24 +966,120 @@ struct AcManOfMatchCard: View {
     }
 }
 
-// شريط الأحداث الزمني (أهداف/بطاقات/تبديلات) — شعار المنتخب يميّز صاحب الحدث.
+// شريط الأحداث الزمني (أهداف/بطاقات أعلى المحور + سرد عمودي أحدثها بالأعلى) — تكافؤ WC.
 struct AcEventsTimelineCard: View {
     let events: [AcMatchEvent]
     let homeId: Int
     let home: AcTeam
     let away: AcTeam
 
+    private let barHeight: CGFloat = 96
+    private let axisY: CGFloat = 42
+    private let topRowY: CGFloat = 20
+    private let bottomRowY: CGFloat = 64
+    private let barInset: CGFloat = 16
+
+    private var barEvents: [AcMatchEvent] {
+        events.filter { $0.type == "goal" || $0.type == "yellow-card" || $0.type == "red-card" }
+    }
+    private var maxMinute: Int {
+        max(90, events.map { $0.minute + ($0.extraMinute ?? 0) }.max() ?? 90)
+    }
+    private var sorted: [AcMatchEvent] {
+        events.sorted { ($0.minute, $0.extraMinute ?? 0) > ($1.minute, $1.extraMinute ?? 0) }
+    }
+
+    private func barX(_ minute: Int, width w: CGFloat) -> CGFloat {
+        let f = min(max(CGFloat(minute) / CGFloat(maxMinute), 0), 1)
+        let usable = max(w - barInset * 2, 1)
+        return barInset + usable * (1 - f)
+    }
+
     var body: some View {
         AcDetailCard {
             AcDetailSectionTitle(icon: "clock.fill", title: L("match.events"))
+            if !barEvents.isEmpty {
+                horizontalBar
+                    .padding(.bottom, 8)
+            }
             VStack(spacing: 0) {
-                ForEach(Array(events.enumerated()), id: \.offset) { idx, ev in
+                ForEach(Array(sorted.enumerated()), id: \.offset) { idx, ev in
                     AcEventRow(event: ev, team: ev.teamId == homeId ? home : away)
-                    if idx < events.count - 1 {
+                    if idx < sorted.count - 1 {
                         Rectangle().fill(AcTheme.outline).frame(height: 1).padding(.vertical, 2)
                     }
                 }
             }
+        }
+    }
+
+    private var horizontalBar: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            GeometryReader { geo in
+                let w = geo.size.width
+                let marks = maxMinute > 95 ? [0, 45, 90, maxMinute] : [0, 45, 90]
+                ZStack(alignment: .topLeading) {
+                    Rectangle().fill(AcTheme.emerald.opacity(0.22))
+                        .frame(width: w - barInset * 2, height: 2)
+                        .position(x: w / 2, y: axisY)
+                    ForEach(marks, id: \.self) { m in
+                        let x = barX(m, width: w)
+                        Rectangle().fill(AcTheme.emerald.opacity(0.12))
+                            .frame(width: 1, height: barHeight - 22)
+                            .position(x: x, y: (barHeight - 22) / 2)
+                        Text("\(m)'")
+                            .font(AsianCupFonts.app(size: 8))
+                            .foregroundStyle(AcTheme.onDarkFaint)
+                            .monospacedDigit()
+                            .position(x: x, y: barHeight - 6)
+                    }
+                    ForEach(Array(barEvents.enumerated()), id: \.offset) { _, ev in
+                        let isHome = ev.teamId == homeId
+                        let x = barX(ev.minute + (ev.extraMinute ?? 0), width: w)
+                        VStack(spacing: 1) {
+                            if isHome {
+                                Text("\(ev.minute)'").font(AsianCupFonts.app(size: 8)).foregroundStyle(AcTheme.onDarkFaint).monospacedDigit()
+                                barMarker(ev)
+                            } else {
+                                barMarker(ev)
+                                Text("\(ev.minute)'").font(AsianCupFonts.app(size: 8)).foregroundStyle(AcTheme.onDarkFaint).monospacedDigit()
+                            }
+                        }
+                        .position(x: x, y: isHome ? topRowY : bottomRowY)
+                    }
+                }
+                .frame(width: w, height: barHeight)
+                .environment(\.layoutDirection, .leftToRight)
+            }
+            .frame(height: barHeight)
+
+            HStack {
+                HStack(spacing: 4) {
+                    Circle().fill(AcTheme.emerald).frame(width: 6, height: 6)
+                    Text(LTeam(String(home.id), fallback: home.name))
+                        .font(AsianCupFonts.app(size: 10)).foregroundStyle(AcTheme.onDarkDim).lineLimit(1)
+                }
+                Spacer()
+                HStack(spacing: 4) {
+                    Text(LTeam(String(away.id), fallback: away.name))
+                        .font(AsianCupFonts.app(size: 10)).foregroundStyle(AcTheme.onDarkDim).lineLimit(1)
+                    Circle().fill(AcTheme.amber).frame(width: 6, height: 6)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func barMarker(_ ev: AcMatchEvent) -> some View {
+        switch ev.type {
+        case "goal":
+            Image(systemName: "soccerball").font(.system(size: 11)).foregroundStyle(AcTheme.emerald)
+                .padding(2).background(Circle().fill(.white))
+        case "yellow-card":
+            RoundedRectangle(cornerRadius: 2).fill(AcTheme.amber).frame(width: 8, height: 12)
+        case "red-card":
+            RoundedRectangle(cornerRadius: 2).fill(AcTheme.crimson).frame(width: 8, height: 12)
+        default:
+            EmptyView()
         }
     }
 }
@@ -1134,27 +1274,35 @@ private struct AcRatingRow: View {
     }
 }
 
-// التشكيلات — لكل منتخب: الخطة + الأساسيون + البدلاء.
+// التشكيلات — ملعب 2D + دكة البدلاء (تكافؤ WCPitch).
 struct AcLineupsCard: View {
     let lineups: [AcLineup]
     let teamFor: (Int) -> AcTeam?
 
     var body: some View {
-        AcDetailCard {
-            AcDetailSectionTitle(icon: "person.3.fill", title: L("match.lineups"), tint: AcTheme.emeraldSoft)
-            ForEach(Array(lineups.enumerated()), id: \.offset) { idx, lineup in
-                AcLineupBlock(lineup: lineup, team: teamFor(lineup.teamId))
-                if idx < lineups.count - 1 {
-                    Rectangle().fill(AcTheme.outline).frame(height: 1).padding(.vertical, 4)
-                }
+        VStack(spacing: 16) {
+            ForEach(Array(lineups.enumerated()), id: \.offset) { _, lineup in
+                AcPitchBlock(lineup: lineup, team: teamFor(lineup.teamId))
             }
         }
     }
 }
 
-private struct AcLineupBlock: View {
+private struct AcPitchBlock: View {
     let lineup: AcLineup
     let team: AcTeam?
+
+    private var rows: [[AcLineupPlayer]] {
+        var byRow: [Int: [(col: Int, p: AcLineupPlayer)]] = [:]
+        for p in lineup.startXI {
+            let parts = (p.grid ?? "0:0").split(separator: ":").map { Int($0) ?? 0 }
+            let r = parts.first ?? 0, c = parts.count > 1 ? parts[1] : 0
+            byRow[r, default: []].append((c, p))
+        }
+        return byRow.keys.filter { $0 > 0 }.sorted().map { r in
+            byRow[r]!.sorted { $0.col < $1.col }.map { $0.p }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1174,19 +1322,75 @@ private struct AcLineupBlock: View {
                         .environment(\.layoutDirection, .leftToRight)
                 }
             }
-            ForEach(Array(lineup.startXI.enumerated()), id: \.offset) { _, p in
-                AcLineupPlayerRow(player: p, starter: true)
+
+            pitch
+
+            if !lineup.coach.isEmpty {
+                Text("المدرب: \(lineup.coach)")
+                    .font(AsianCupFonts.app(size: 11))
+                    .foregroundStyle(AcTheme.onDarkDim)
             }
+
             if !lineup.substitutes.isEmpty {
                 Text(L("match.subs"))
                     .font(AsianCupFonts.app(size: 11, weight: .bold))
                     .foregroundStyle(AcTheme.onDarkFaint)
-                    .padding(.top, 2)
-                ForEach(Array(lineup.substitutes.enumerated()), id: \.offset) { _, p in
-                    AcLineupPlayerRow(player: p, starter: false)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 8)], alignment: .leading, spacing: 8) {
+                    ForEach(Array(lineup.substitutes.enumerated()), id: \.offset) { _, p in
+                        AcLineupPlayerRow(player: p, starter: false)
+                    }
                 }
             }
         }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius).fill(AcTheme.cardFillStrong))
+        .overlay(RoundedRectangle(cornerRadius: AcTheme.cardRadius).stroke(AcTheme.outline, lineWidth: 1))
+    }
+
+    private var pitch: some View {
+        GeometryReader { geo in
+            let r = rows
+            ZStack {
+                LinearGradient(colors: [AcTheme.emerald.opacity(0.55), AcTheme.emeraldInk.opacity(0.85)],
+                               startPoint: .top, endPoint: .bottom)
+                RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.25), lineWidth: 1).padding(8)
+                Rectangle().fill(.white.opacity(0.2)).frame(height: 1)
+                Circle().stroke(.white.opacity(0.25), lineWidth: 1).frame(width: 64, height: 64)
+
+                if r.isEmpty {
+                    Text(L("match.lineups"))
+                        .font(AsianCupFonts.app(size: 12))
+                        .foregroundStyle(.white.opacity(0.8))
+                } else {
+                    ForEach(Array(r.enumerated()), id: \.offset) { ri, players in
+                        let y = geo.size.height * (1 - (CGFloat(ri) + 0.6) / (CGFloat(r.count) + 0.4))
+                        HStack(spacing: 0) {
+                            ForEach(Array(players.enumerated()), id: \.offset) { _, p in
+                                VStack(spacing: 2) {
+                                    Text(p.number.map { "\($0)" } ?? "•")
+                                        .font(AsianCupFonts.app(size: 11, weight: .bold))
+                                        .foregroundStyle(AcTheme.emeraldInk)
+                                        .monospacedDigit()
+                                        .frame(width: 28, height: 28)
+                                        .background(Circle().fill(.white))
+                                    Text(LName(p.name, p.nameEn))
+                                        .font(AsianCupFonts.app(size: 9))
+                                        .foregroundStyle(.white)
+                                        .lineLimit(1)
+                                        .frame(maxWidth: 56)
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .environment(\.layoutDirection, .leftToRight)
+                        .position(x: geo.size.width / 2, y: y)
+                        .frame(width: geo.size.width)
+                    }
+                }
+            }
+        }
+        .aspectRatio(3.0 / 4.0, contentMode: .fit)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
 

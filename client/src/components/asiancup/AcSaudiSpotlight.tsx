@@ -3,7 +3,13 @@ import { Star } from "lucide-react";
 import { AcMatchCard } from "./AcMatchCard";
 import type { AcOverview } from "./acTypes";
 
-export function AcSaudiSpotlight({ saudi }: { saudi: AcOverview["saudi"] | undefined }) {
+export function AcSaudiSpotlight({
+  saudi,
+  onOpenMatch,
+}: {
+  saudi: AcOverview["saudi"] | undefined;
+  onOpenMatch: (id: number) => void;
+}) {
   if (!saudi?.team) return null;
   const fixtures = (saudi.fixtures ?? []).slice(0, 6);
 
@@ -41,7 +47,7 @@ export function AcSaudiSpotlight({ saudi }: { saudi: AcOverview["saudi"] | undef
             <h3 className="mb-3 text-sm font-bold text-emerald-50/90">مباريات الأخضر</h3>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {fixtures.map((f) => (
-                <AcMatchCard key={f.id} fixture={f} />
+                <AcMatchCard key={f.id} fixture={f} onOpen={onOpenMatch} />
               ))}
             </div>
           </div>

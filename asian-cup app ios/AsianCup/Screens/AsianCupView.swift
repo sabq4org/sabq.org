@@ -2232,11 +2232,10 @@ struct AcViewAllLabel: View {
 // صفّ مباراة مصغّر — مرافق فاتح ومضغوط تحت بطاقة الضوء، بنفس حالات المباراة الثلاث.
 struct AcMiniMatchRow: View {
     let fixture: AcFixture
+    @State private var showDetail = false
 
     var body: some View {
-        NavigationLink {
-            AcMatchDetailSheet(fixture: fixture)
-        } label: {
+        Button { showDetail = true } label: {
             HStack(spacing: 8) {
                 side(fixture.home, leading: true)
                 center
@@ -2251,6 +2250,11 @@ struct AcMiniMatchRow: View {
             )
         }
         .buttonStyle(AcPressableStyle())
+        .sheet(isPresented: $showDetail) {
+            NavigationStack { AcMatchDetailSheet(fixture: fixture) }
+                .presentationDetents([.large])
+                .asianCupRTL()
+        }
     }
 
     private func side(_ team: AcTeam, leading: Bool) -> some View {
@@ -2315,6 +2319,7 @@ struct AcMiniMatchRow: View {
 //   منتهية: النتيجة النهائية. في نسخ التطوير: ضغطة مطوّلة تعاين شكل المباشر.
 struct AcMatchSpotlight: View {
     let fixture: AcFixture
+    @State private var showDetail = false
     // معاينة شكل «المباشر» في نسخ التطوير: ضغطة مطوّلة على البطاقة،
     // أو التشغيل بوسيط -AcSpotlightPreview (لِلقطات الشاشة والمراجعات).
     #if DEBUG
@@ -2332,12 +2337,15 @@ struct AcMatchSpotlight: View {
     private var elapsed: Int { fixture.status.elapsed ?? (previewLive ? 63 : 0) }
 
     var body: some View {
-        NavigationLink {
-            AcMatchDetailSheet(fixture: fixture)
-        } label: {
+        Button { showDetail = true } label: {
             card
         }
         .buttonStyle(AcPressableStyle())
+        .sheet(isPresented: $showDetail) {
+            NavigationStack { AcMatchDetailSheet(fixture: fixture) }
+                .presentationDetents([.large])
+                .asianCupRTL()
+        }
         #if DEBUG
         .simultaneousGesture(
             LongPressGesture(minimumDuration: 0.6).onEnded { _ in
@@ -3270,6 +3278,7 @@ struct AcBracketSection: View {
 private struct AcBracketCell: View {
     let fixture: AcFixture?
     var caption: String? = nil
+    @State private var showDetail = false
 
     var body: some View {
         VStack(spacing: 5) {
@@ -3279,12 +3288,15 @@ private struct AcBracketCell: View {
                     .foregroundStyle(AcTheme.onDarkFaint)
             }
             if let fixture {
-                NavigationLink {
-                    AcMatchDetailSheet(fixture: fixture)
-                } label: {
+                Button { showDetail = true } label: {
                     card(fixture)
                 }
                 .buttonStyle(AcPressableStyle())
+                .sheet(isPresented: $showDetail) {
+                    NavigationStack { AcMatchDetailSheet(fixture: fixture) }
+                        .presentationDetents([.large])
+                        .asianCupRTL()
+                }
             } else {
                 placeholder
             }
@@ -4094,8 +4106,10 @@ private struct AcTeamNextMatchFeature: View {
             .overlay(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
         }
         .buttonStyle(AcPressableStyle())
-        .navigationDestination(isPresented: $showDetail) {
-            AcMatchDetailSheet(fixture: fixture)
+        .sheet(isPresented: $showDetail) {
+            NavigationStack { AcMatchDetailSheet(fixture: fixture) }
+                .presentationDetents([.large])
+                .asianCupRTL()
         }
     }
 
@@ -4227,8 +4241,10 @@ private struct AcTeamJourneyRow: View {
             .overlay(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
         }
         .buttonStyle(AcPressableStyle())
-        .navigationDestination(isPresented: $showDetail) {
-            AcMatchDetailSheet(fixture: fixture)
+        .sheet(isPresented: $showDetail) {
+            NavigationStack { AcMatchDetailSheet(fixture: fixture) }
+                .presentationDetents([.large])
+                .asianCupRTL()
         }
     }
 }
