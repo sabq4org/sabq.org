@@ -7,6 +7,7 @@ import type { Express } from "express";
 import {
   getAcOverview,
   getAcTeams,
+  getAcTeamsRanked,
   getAcFixtures,
   getAcStandings,
   getAcTopScorers,
@@ -66,7 +67,7 @@ export function registerAsianCupRoutes(app: Express) {
     if (!guard(res)) return;
     try {
       res.set("Cache-Control", "public, max-age=600, s-maxage=3600, stale-while-revalidate=7200");
-      res.json({ teams: await getAcTeams() });
+      res.json({ teams: await getAcTeamsRanked() });
     } catch (error) {
       console.error("[AsianCup] teams failed:", error);
       res.status(502).json({ message: "تعذر جلب قائمة المنتخبات حاليًا" });
