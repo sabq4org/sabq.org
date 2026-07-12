@@ -101,22 +101,22 @@ export default function AsianCupPredictions() {
       <NavigationBar />
 
       <main className="flex-1">
-        {/* بانر البطل — فاتح بدل شريط أخضر مصمت */}
-        <section className="relative overflow-hidden border-b border-emerald-500/15 bg-gradient-to-bl from-emerald-500/[0.12] via-background to-background">
-          <div className="absolute -top-24 -left-16 h-64 w-64 rounded-full bg-emerald-400/15 blur-3xl" aria-hidden />
+        {/* بانر البطل — أخضر داكن أصلي */}
+        <section className="relative overflow-hidden bg-gradient-to-bl from-[#02160f] via-[#04392a] to-[#021a12] text-white">
+          <div className="absolute inset-0 opacity-10 [background-image:radial-gradient(circle_at_20%_30%,white_1px,transparent_1px)] [background-size:24px_24px]" />
           <div className="relative mx-auto max-w-4xl px-4 py-10 sm:py-12">
-            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+            <div className="flex items-center gap-2 text-emerald-100">
               <Trophy className="h-5 w-5" />
               <span className="text-sm font-bold">كأس آسيا 2027 · السعودية</span>
             </div>
-            <h1 className="mt-2 text-3xl font-black text-foreground sm:text-4xl">توقّعات كأس آسيا الذكية</h1>
-            <p className="mt-2 max-w-xl text-muted-foreground">
+            <h1 className="mt-2 text-3xl font-black sm:text-4xl">توقّعات كأس آسيا الذكية</h1>
+            <p className="mt-2 max-w-xl text-emerald-50/90">
               توقّع نتيجة كل مباراة، واكسب نقاطًا أكثر كلّما كان توقّعك الصحيح أجرأ. يساعدك توقّع سبق
               الذكي وإجماع الجمهور — والإصابات المتتالية تُضاعِف رصيدك.
             </p>
 
             {isAuthenticated ? (
-              <div className="mt-5 inline-flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card px-4 py-2.5 shadow-sm">
+              <div className="mt-5 inline-flex flex-wrap items-center gap-4 rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur">
                 <Stat value={formatNumber(me?.points ?? myRank?.totalPoints ?? 0)} label="نقاطي" />
                 <Divider />
                 <Stat value={formatNumber(me?.correct ?? myRank?.correctCount ?? 0)} label="نتيجة صحيحة" />
@@ -126,10 +126,10 @@ export default function AsianCupPredictions() {
                   <>
                     <Divider />
                     <div className="text-center">
-                      <p className="inline-flex items-center gap-1 text-xl font-black tabular-nums text-foreground">
-                        <Flame className="h-4 w-4 text-orange-500" /> {formatNumber(me!.currentStreak)}
+                      <p className="inline-flex items-center gap-1 text-xl font-black tabular-nums">
+                        <Flame className="h-4 w-4 text-orange-300" /> {formatNumber(me!.currentStreak)}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">سلسلة حالية</p>
+                      <p className="text-[11px] text-emerald-100">سلسلة حالية</p>
                     </div>
                   </>
                 )}
@@ -143,7 +143,7 @@ export default function AsianCupPredictions() {
             ) : (
               <button
                 onClick={goLogin}
-                className="mt-5 inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-emerald-500"
+                className="mt-5 inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-emerald-700 transition hover:bg-emerald-50"
               >
                 <Sparkles className="h-4 w-4" /> سجّل دخولك وابدأ التوقّع
               </button>
@@ -214,14 +214,14 @@ export default function AsianCupPredictions() {
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="text-center">
-      <p className="text-xl font-black tabular-nums text-foreground">{value}</p>
-      <p className="text-[11px] text-muted-foreground">{label}</p>
+      <p className="text-xl font-black tabular-nums">{value}</p>
+      <p className="text-[11px] text-emerald-100">{label}</p>
     </div>
   );
 }
 
 function Divider() {
-  return <div className="h-8 w-px bg-border" />;
+  return <div className="h-8 w-px bg-white/25" />;
 }
 
 /** شرح مختصر لآلية الاحتساب المبتكرة — يميّز هذه المسابقة عن توقّع النتيجة الجاف. */
