@@ -653,11 +653,29 @@ enum AcFormat {
 
     static func dateRange(startIso: String?, endIso: String?) -> String {
         guard let startIso, let s = AcDateMath.date(from: startIso) else { return "" }
-        let f = formatter("d MMMM yyyy")
-        let start = f.string(from: s)
-        guard let endIso, let e = AcDateMath.date(from: endIso) else { return start }
-        let end = f.string(from: e)
-        return start == end ? start : "\(start) — \(end)"
+        guard let endIso, let e = AcDateMath.date(from: endIso) else {
+            return formatter("dd MMMM yyyy").string(from: s)
+        }
+
+        var cal = gregorian
+        cal.timeZone = riyadh
+        let sc = cal.dateComponents([.year, .month, .day], from: s)
+        let ec = cal.dateComponents([.year, .month, .day], from: e)
+
+        // نفس الشهر والسنة → «07 - 20 يناير 2027»
+        if sc.year == ec.year, sc.month == ec.month {
+            let d1 = formatter("dd").string(from: s)
+            let d2 = formatter("dd").string(from: e)
+            let monthYear = formatter("MMMM yyyy").string(from: e)
+            return "\(d1) - \(d2) \(monthYear)"
+        }
+        // نفس السنة وشهور مختلفة → «07 يناير - 05 فبراير 2027»
+        if sc.year == ec.year {
+            let left = formatter("dd MMMM").string(from: s)
+            let right = formatter("dd MMMM yyyy").string(from: e)
+            return "\(left) - \(right)"
+        }
+        return "\(formatter("dd MMMM yyyy").string(from: s)) - \(formatter("dd MMMM yyyy").string(from: e))"
     }
 }
 

@@ -20,7 +20,7 @@ export function AcPredictionsCTA() {
     <section className="mx-auto max-w-6xl px-3 py-3 sm:px-4">
       <Link
         href="/asian-cup/predictions"
-        className="group flex cursor-pointer items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-bl from-emerald-600 via-emerald-700 to-emerald-800 p-4 text-white shadow-sm transition hover:shadow-md"
+        className="group flex cursor-pointer items-center gap-4 overflow-hidden rounded-2xl bg-gradient-to-bl from-emerald-500 via-emerald-600 to-teal-600 p-4 text-white shadow-sm transition hover:shadow-md"
         data-testid="ac-predictions-cta"
       >
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15">

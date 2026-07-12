@@ -16,10 +16,15 @@ struct AcMember: Decodable, Hashable {
     let id: String
     let name: String?
     let email: String?
+    let phone: String?
     let avatar: String?
 
-    init(id: String, name: String?, email: String?, avatar: String?) {
-        self.id = id; self.name = name; self.email = email; self.avatar = avatar
+    init(id: String, name: String?, email: String?, phone: String? = nil, avatar: String?) {
+        self.id = id
+        self.name = name
+        self.email = email
+        self.phone = phone
+        self.avatar = avatar
     }
 
     init(from decoder: Decoder) throws {
@@ -32,6 +37,7 @@ struct AcMember: Decodable, Hashable {
         name = (try? c.decode(String.self, forKey: AcFlexKey("name")))
             ?? (combined.isEmpty ? nil : combined)
         email = try? c.decode(String.self, forKey: AcFlexKey("email"))
+        phone = try? c.decode(String.self, forKey: AcFlexKey("phone"))
         avatar = (try? c.decode(String.self, forKey: AcFlexKey("profileImageUrl")))
             ?? (try? c.decode(String.self, forKey: AcFlexKey("avatar")))
     }
@@ -41,6 +47,7 @@ private struct AcStoredMember: Codable {
     let id: String
     let name: String?
     let email: String?
+    let phone: String?
     let avatar: String?
 }
 
@@ -63,7 +70,30 @@ private struct AcDeviceInfo: Encodable {
     let platform: String
     let osVersion: String
     let appVersion: String
-    let deviceName: String
+    let deviceName: String?
+    let deviceId: String?
+}
+
+private struct AcLoginRequest: Encodable {
+    let email: String?
+    let phone: String?
+    let password: String
+    let deviceInfo: AcDeviceInfo?
+}
+
+private struct AcPhoneSendRequest: Encodable {
+    let phone: String
+}
+
+private struct AcPhoneSendResponse: Decodable {
+    let success: Bool
+    let message: String?
+}
+
+private struct AcPhoneVerifyRequest: Encodable {
+    let phone: String
+    let code: String
+    let deviceInfo: AcDeviceInfo?
 }
 
 private struct AcAppleRequest: Encodable {
@@ -75,31 +105,73 @@ private struct AcAppleRequest: Encodable {
 }
 
 extension APIClient {
+    fileprivate static func acDeviceInfo() -> AcDeviceInfo {
+        let bundle = Bundle.main
+        let version = (bundle.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
+        let build = (bundle.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
+        return AcDeviceInfo(
+            platform: "ios",
+            osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+            appVersion: "\(version) (\(build))",
+            deviceName: "iPhone",
+            deviceId: nil
+        )
+    }
+
     fileprivate func loginWithApple(
         identityToken: String,
         firstName: String?,
         lastName: String?,
         email: String?
     ) async throws -> AcLoginResponse {
-        let bundle = Bundle.main
-        let version = (bundle.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
-        let build = (bundle.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
         let fullName = firstName != nil || lastName != nil
             ? AcAppleRequest.FullName(firstName: firstName, lastName: lastName) : nil
         let body = AcAppleRequest(
             identityToken: identityToken,
             fullName: fullName,
             email: email,
-            deviceInfo: AcDeviceInfo(
-                platform: "ios",
-                osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
-                appVersion: "\(version) (\(build))",
-                deviceName: "iPhone"
-            )
+            deviceInfo: Self.acDeviceInfo()
         )
         return try await post(
             AcLoginResponse.self,
             path: "/auth/apple",
+            body: body,
+            apiRoot: URLConstants.mobileAPI
+        )
+    }
+
+    /// دخول ببريد أو جوال + كلمة مرور — نفس `/api/v1/auth/login` المستخدم في الخليج/الرياضي.
+    fileprivate func loginWithIdentifier(_ identifier: String, password: String) async throws -> AcLoginResponse {
+        let trimmed = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isEmail = trimmed.contains("@")
+        let body = AcLoginRequest(
+            email: isEmail ? trimmed.lowercased() : nil,
+            phone: isEmail ? nil : trimmed,
+            password: password,
+            deviceInfo: Self.acDeviceInfo()
+        )
+        return try await post(
+            AcLoginResponse.self,
+            path: "/auth/login",
+            body: body,
+            apiRoot: URLConstants.mobileAPI
+        )
+    }
+
+    fileprivate func sendPhoneCode(_ phone: String) async throws -> AcPhoneSendResponse {
+        try await post(
+            AcPhoneSendResponse.self,
+            path: "/auth/phone/send",
+            body: AcPhoneSendRequest(phone: phone),
+            apiRoot: URLConstants.mobileAPI
+        )
+    }
+
+    fileprivate func verifyPhoneCode(_ phone: String, code: String) async throws -> AcLoginResponse {
+        let body = AcPhoneVerifyRequest(phone: phone, code: code, deviceInfo: Self.acDeviceInfo())
+        return try await post(
+            AcLoginResponse.self,
+            path: "/auth/phone/verify",
             body: body,
             apiRoot: URLConstants.mobileAPI
         )
@@ -124,6 +196,10 @@ extension APIClient {
     }
 }
 
+enum AcAuthErrorSource {
+    case none, credentials, apple, phone
+}
+
 @MainActor
 @Observable
 final class AcAuthStore {
@@ -133,6 +209,7 @@ final class AcAuthStore {
     private(set) var token: String?
     var isLoading = false
     var errorMessage: String?
+    var errorSource: AcAuthErrorSource = .none
 
     var isLoggedIn: Bool { token != nil }
 
@@ -149,7 +226,13 @@ final class AcAuthStore {
         }
         if let data = UserDefaults.standard.data(forKey: memberKey),
            let stored = try? JSONDecoder().decode(AcStoredMember.self, from: data) {
-            member = AcMember(id: stored.id, name: stored.name, email: stored.email, avatar: stored.avatar)
+            member = AcMember(
+                id: stored.id,
+                name: stored.name,
+                email: stored.email,
+                phone: stored.phone,
+                avatar: stored.avatar
+            )
         }
         if token != nil { await refreshProfile() }
     }
@@ -159,6 +242,7 @@ final class AcAuthStore {
         case .success(let authorization):
             guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential else {
                 errorMessage = L("auth.error.apple")
+                errorSource = .apple
                 return
             }
             handleApple(credential)
@@ -168,6 +252,7 @@ final class AcAuthStore {
 
     func startAppleSignIn() {
         errorMessage = nil
+        errorSource = .none
         let request = ASAuthorizationAppleIDProvider().createRequest()
         request.requestedScopes = [.fullName, .email]
         let coordinator = AcAppleSignInCoordinator(
@@ -190,6 +275,7 @@ final class AcAuthStore {
         guard let data = credential.identityToken,
               let identityToken = String(data: data, encoding: .utf8) else {
             errorMessage = L("auth.error.apple")
+            errorSource = .apple
             return
         }
         Task {
@@ -205,11 +291,13 @@ final class AcAuthStore {
     private func handleAppleFailure(_ error: Error) {
         if let appleError = error as? ASAuthorizationError, appleError.code == .canceled { return }
         errorMessage = L("auth.error.apple")
+        errorSource = .apple
     }
 
     private func exchange(identityToken: String, firstName: String?, lastName: String?, email: String?) async {
         isLoading = true
         errorMessage = nil
+        errorSource = .none
         defer { isLoading = false }
         do {
             let response = try await APIClient.shared.loginWithApple(
@@ -218,19 +306,88 @@ final class AcAuthStore {
                 lastName: lastName,
                 email: email
             )
-            guard let receivedToken = response.token, !receivedToken.isEmpty else {
-                throw APIError.unauthorized
-            }
-            token = receivedToken
-            AcKeychain.save(tokenKey, value: receivedToken)
-            await APIClient.shared.setAuthToken(receivedToken)
-            if let member = response.member { persist(member) }
-            await refreshProfile()
-            await AcFollowsStore.shared.reload()
-            await AcPushManager.shared.syncWithSession()
+            try await applySession(response)
         } catch {
-            errorMessage = LError(error)
+            errorMessage = friendly(error)
+            errorSource = .apple
         }
+    }
+
+    // MARK: بريد / جوال + كلمة مرور
+
+    func loginWithCredentials(identifier: String, password: String) async {
+        let id = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty, !password.isEmpty else {
+            errorMessage = L("auth.error.emptyCredentials")
+            errorSource = .credentials
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        errorSource = .none
+        defer { isLoading = false }
+        do {
+            let response = try await APIClient.shared.loginWithIdentifier(id, password: password)
+            try await applySession(response)
+        } catch {
+            errorMessage = friendly(error)
+            errorSource = .credentials
+        }
+    }
+
+    // MARK: جوال OTP
+
+    func sendPhoneCode(_ phone: String) async -> (ok: Bool, message: String) {
+        isLoading = true
+        errorMessage = nil
+        errorSource = .none
+        defer { isLoading = false }
+        do {
+            let response = try await APIClient.shared.sendPhoneCode(phone)
+            let message = response.message
+                ?? (response.success ? L("auth.phone.sent") : L("auth.phone.sendFailed"))
+            if !response.success {
+                errorMessage = message
+                errorSource = .phone
+            }
+            return (response.success, message)
+        } catch {
+            let message = friendly(error)
+            errorMessage = message
+            errorSource = .phone
+            return (false, message)
+        }
+    }
+
+    func verifyPhoneCode(_ phone: String, code: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        errorSource = .phone
+        defer { isLoading = false }
+        do {
+            let response = try await APIClient.shared.verifyPhoneCode(phone, code: code)
+            try await applySession(response)
+            return true
+        } catch {
+            errorMessage = friendly(error)
+            errorSource = .phone
+            return false
+        }
+    }
+
+    private func applySession(_ response: AcLoginResponse) async throws {
+        guard let receivedToken = response.token, !receivedToken.isEmpty else {
+            throw APIError.unauthorized
+        }
+        token = receivedToken
+        AcKeychain.save(tokenKey, value: receivedToken)
+        await APIClient.shared.setAuthToken(receivedToken)
+        if let member = response.member { persist(member) }
+        errorSource = .none
+        errorMessage = nil
+        await refreshProfile()
+        await AcFollowsStore.shared.reload()
+        await AcPushManager.shared.syncWithSession()
     }
 
     func refreshProfile() async {
@@ -242,7 +399,13 @@ final class AcAuthStore {
 
     private func persist(_ member: AcMember) {
         self.member = member
-        let stored = AcStoredMember(id: member.id, name: member.name, email: member.email, avatar: member.avatar)
+        let stored = AcStoredMember(
+            id: member.id,
+            name: member.name,
+            email: member.email,
+            phone: member.phone,
+            avatar: member.avatar
+        )
         if let data = try? JSONEncoder().encode(stored) {
             UserDefaults.standard.set(data, forKey: memberKey)
         }
@@ -253,6 +416,7 @@ final class AcAuthStore {
         token = nil
         member = nil
         errorMessage = nil
+        errorSource = .none
         AcKeychain.delete(tokenKey)
         UserDefaults.standard.removeObject(forKey: memberKey)
         AcFollowsStore.shared.clear()
@@ -261,6 +425,17 @@ final class AcAuthStore {
             guard token == nil else { return }
             await APIClient.shared.setAuthToken(nil)
         }
+    }
+
+    private func friendly(_ error: Error) -> String {
+        if let api = error as? APIError {
+            switch api {
+            case .unauthorized: return L("auth.error.unauthorized")
+            case .rateLimited: return L("auth.error.rateLimited")
+            default: return api.errorDescription ?? L("auth.error.generic")
+            }
+        }
+        return LError(error)
     }
 }
 

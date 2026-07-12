@@ -7,7 +7,7 @@ function GroupTable({ group }: { group: AcGroup }) {
   const isLive = group.rows.some((r) => r.live);
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="flex items-center justify-between bg-gradient-to-l from-emerald-600 to-emerald-700 px-4 py-2.5">
+      <div className="flex items-center justify-between bg-gradient-to-l from-emerald-500 to-emerald-600 px-4 py-2.5">
         <h3 className="text-sm font-black text-white">{group.name || "مجموعة"}</h3>
         {isLive ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-red-500/90 px-2 py-0.5 text-[10px] font-bold text-white">

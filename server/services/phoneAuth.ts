@@ -18,10 +18,37 @@ export function normalizeSaudiPhone(input: string | undefined | null): string | 
   return "+966" + d;
 }
 
+/**
+ * يُطبّع الجوال إلى E.164 الدولي.
+ * - إن وُجد `+` أو بادئة `00` → يُقبل كرقم دولي (8–15 رقمًا).
+ * - وإلا → مسار سعودي قديم (توافق تطبيقات سبق/الخليج التي ترسل 5XXXXXXXX).
+ */
+export function normalizePhone(input: string | undefined | null): string | null {
+  if (!input) return null;
+  const raw = String(input).trim();
+  const compact = raw.replace(/[\s\-().]/g, "");
+
+  if (compact.startsWith("+") || compact.startsWith("00")) {
+    let digits = compact.replace(/[^0-9]/g, "");
+    if (digits.startsWith("00")) digits = digits.slice(2);
+    if (digits.length < 8 || digits.length > 15) return null;
+    return `+${digits}`;
+  }
+
+  return normalizeSaudiPhone(input);
+}
+
 /// صيغ الجوال المحتملة في قاعدة البيانات (لربط حسابات موقع سبق القديمة).
 export function phoneCandidates(e164: string): string[] {
-  const local = e164.replace("+966", ""); // 5XXXXXXXX
-  return [e164, "966" + local, "0" + local, local];
+  const digits = e164.replace(/\D/g, "");
+  const out = new Set<string>([e164, digits]);
+  if (e164.startsWith("+966")) {
+    const local = e164.slice(4); // 5XXXXXXXX
+    out.add(`966${local}`);
+    out.add(`0${local}`);
+    out.add(local);
+  }
+  return [...out];
 }
 
 export type PhoneUserResult =
@@ -54,8 +81,8 @@ export async function findOrCreatePhoneUser(e164: string): Promise<PhoneUserResu
     return { ok: true, user: { ...existing, ...updates } };
   }
 
-  const local = e164.replace("+966", "");
-  const syntheticEmail = `p966${local}@phone.sabq.org`;
+  const digits = e164.replace(/\D/g, "");
+  const syntheticEmail = `p${digits}@phone.sabq.org`;
   const { nanoid } = await import("nanoid");
   const [created] = await db
     .insert(users)

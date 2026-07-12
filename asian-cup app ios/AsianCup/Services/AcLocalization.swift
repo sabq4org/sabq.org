@@ -73,6 +73,35 @@ final class AcLocalization: ObservableObject {
         return fallback
     }
 
+    // MARK: حالات المباراة
+    // الخادم يعيد label معرّبًا دائمًا؛ نترجم من الرمز القصير (NS/FT/…) حسب لغة الواجهة.
+    private static let statusKeys: [String: String] = [
+        "TBD": "status.tbd",
+        "NS": "status.ns",
+        "1H": "status.1h",
+        "HT": "status.ht",
+        "2H": "status.2h",
+        "ET": "status.et",
+        "BT": "status.bt",
+        "P": "status.p",
+        "SUSP": "status.susp",
+        "INT": "status.int",
+        "FT": "status.ft",
+        "AET": "status.aet",
+        "PEN": "status.pen",
+        "PST": "status.pst",
+        "CANC": "status.canc",
+        "ABD": "status.abd",
+        "AWD": "status.awd",
+        "WO": "status.wo",
+        "LIVE": "status.live",
+    ]
+
+    func statusLabel(code: String, fallback: String) -> String {
+        if let key = Self.statusKeys[code] { return t(key) }
+        return fallback
+    }
+
     // MARK: أسماء المجموعات
     // الخادم يولّد الاسم ترتيبيًا («المجموعة الأولى») حسب موقع المجموعة، فنعرّبه
     // وفق الموقع (1-أساس) عبر مفاتيح group.1…group.N، مع احتياط لنص الخادم.
@@ -118,6 +147,9 @@ final class AcLocalization: ObservableObject {
 @MainActor func LTeam(_ id: String?, fallback: String) -> String { AcLocalization.shared.teamName(id: id, fallback: fallback) }
 @MainActor func LRound(_ roundEn: String, fallback: String) -> String { AcLocalization.shared.round(roundEn, fallback: fallback) }
 @MainActor func LGroup(_ index: Int, fallback: String) -> String { AcLocalization.shared.groupName(index: index, fallback: fallback) }
+@MainActor func LStatus(_ status: AcStatus) -> String {
+    AcLocalization.shared.statusLabel(code: status.code, fallback: status.label)
+}
 
 // اسم لاعب/مدرّب: العربية تأخذ النقل الصوتي العربي؛ بقية اللغات تأخذ الاسم
 // الأصلي اللاتيني (الأكثر قابلية للقراءة عالميًّا) مع احتياط للعربي إن غاب.

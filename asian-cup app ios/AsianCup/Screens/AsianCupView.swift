@@ -1,6 +1,5 @@
 import SwiftUI
 import UserNotifications
-import AuthenticationServices
 
 // الشاشة الرئيسية لتطبيق كأس آسيا — نظرة عامة محايدة لكل المنتخبات.
 // التحديث: .task أول ظهور + .refreshable للسحب.
@@ -465,6 +464,7 @@ private struct AcPredictionMatchCard: View {
     @State private var savedPrediction: AcMyPrediction?
     @State private var submitting = false
     @State private var submitError: String?
+    @State private var showLogin = false
 
     init(match: AcPredictableMatch, me: AcPredictionMeStats?) {
         self.match = match
@@ -546,12 +546,12 @@ private struct AcPredictionMatchCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            // زر حقيقي: مسجّل الدخول يحفظ توقعه، وغيره يبدأ Apple Sign-In.
+            // مسجّل الدخول يحفظ توقعه؛ وغير المسجّل يفتح ورقة الدخول (جوال / بريد).
             Button {
                 if auth.isLoggedIn {
                     Task { await submit() }
                 } else {
-                    auth.startAppleSignIn()
+                    showLogin = true
                 }
             } label: {
                 Text(buttonTitle)
@@ -570,6 +570,7 @@ private struct AcPredictionMatchCard: View {
         .padding(16)
         .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).fill(AcTheme.cardFillStrong))
         .overlay(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).stroke(match.locked ? AcTheme.outline : AcTheme.emerald.opacity(0.25), lineWidth: 1))
+        .sheet(isPresented: $showLogin) { AcLoginSheet() }
     }
 
     private var buttonTitle: String {
@@ -809,7 +810,7 @@ private struct AcMoreScreen: View {
     }
 }
 
-// MARK: - حسابي — تسجيل دخول Apple الحقيقي (جلسة خادم سبق) + تفعيل الإشعارات
+// MARK: - حسابي — دخول بجوال OTP أو بريد/كلمة مرور + تفعيل الإشعارات
 private struct AcAccountCard: View {
     @Environment(AcAuthStore.self) private var auth
     @State private var push = AcPushManager.shared
@@ -818,7 +819,7 @@ private struct AcAccountCard: View {
         VStack(alignment: .leading, spacing: 12) {
             AcSectionHeader(
                 icon: "person.crop.circle.fill",
-                title: L("auth.title"),
+                title: auth.isLoggedIn ? L("auth.account") : L("auth.cta.signin"),
                 subtitle: auth.isLoggedIn ? L("auth.signedIn") : L("auth.subtitle")
             )
             AcGroupedCard {
@@ -832,10 +833,17 @@ private struct AcAccountCard: View {
                                 Text(auth.member?.name ?? L("auth.signedIn"))
                                     .font(AsianCupFonts.app(size: 15, weight: .bold))
                                     .foregroundStyle(AcTheme.onDark)
-                                if let email = auth.member?.email {
+                                if let email = auth.member?.email,
+                                   !email.isEmpty,
+                                   !email.contains("@phone.sabq.org") {
                                     Text(email)
                                         .font(AsianCupFonts.app(size: 11))
                                         .foregroundStyle(AcTheme.onDarkDim)
+                                } else if let phone = auth.member?.phone, !phone.isEmpty {
+                                    Text(phone)
+                                        .font(AsianCupFonts.app(size: 11))
+                                        .foregroundStyle(AcTheme.onDarkDim)
+                                        .environment(\.layoutDirection, .leftToRight)
                                 }
                             }
                             Spacer()
@@ -869,7 +877,7 @@ private struct AcAccountCard: View {
                         NavigationLink {
                             AcMatchEventNotificationsView()
                         } label: {
-                            Label("نوع تنبيهات المباريات", systemImage: "slider.horizontal.3")
+                            Label(L("notifications.prefs.type"), systemImage: "slider.horizontal.3")
                                 .font(AsianCupFonts.app(size: 13, weight: .bold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 11)
@@ -883,26 +891,398 @@ private struct AcAccountCard: View {
                     }
                     .padding(14)
                 } else {
-                    VStack(spacing: 10) {
-                        SignInWithAppleButton(.signIn, onRequest: { request in
-                            request.requestedScopes = [.fullName, .email]
-                        }, onCompletion: auth.completeAppleSignIn)
-                        .signInWithAppleButtonStyle(.black)
-                        .frame(height: 46)
-                        .clipShape(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous))
-                        .disabled(auth.isLoading)
-
-                        if auth.isLoading { ProgressView().tint(AcTheme.emerald) }
-                        if let error = auth.errorMessage {
-                            Text(error)
-                                .font(AsianCupFonts.app(size: 11, weight: .semibold))
-                                .foregroundStyle(AcTheme.crimson)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .padding(14)
+                    AcLoginForm()
+                        .padding(14)
                 }
             }
+        }
+    }
+}
+
+// MARK: - نموذج الدخول (جوال OTP | بريد + كلمة مرور) — بدون Apple / بدون علامة سبق
+
+enum AcLoginMode { case phone, email }
+
+struct AcLoginForm: View {
+    @Environment(AcAuthStore.self) private var auth
+    @State private var mode: AcLoginMode = .phone
+    @State private var email = ""
+    @State private var password = ""
+
+    var body: some View {
+        VStack(spacing: 14) {
+            modeTabs
+            if mode == .phone {
+                AcPhoneLoginFlow()
+            } else {
+                emailFields
+            }
+        }
+    }
+
+    private var modeTabs: some View {
+        HStack(spacing: 6) {
+            modeTab(L("auth.tab.phone"), icon: "iphone", value: .phone)
+            modeTab(L("auth.tab.email"), icon: "envelope", value: .email)
+        }
+        .padding(4)
+        .background(RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous).fill(AcTheme.chipFill))
+    }
+
+    private func modeTab(_ title: String, icon: String, value: AcLoginMode) -> some View {
+        let active = mode == value
+        return Button {
+            withAnimation(.easeOut(duration: 0.2)) { mode = value }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 12, weight: .bold))
+                Text(title).font(AsianCupFonts.app(size: 13, weight: .bold))
+            }
+            .foregroundStyle(active ? AcTheme.emeraldInk : AcTheme.onDarkDim)
+            .frame(maxWidth: .infinity).frame(height: 38)
+            .background(
+                RoundedRectangle(cornerRadius: AcTheme.tileRadius - 2, style: .continuous)
+                    .fill(active ? AcTheme.emerald.opacity(0.14) : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var emailFields: some View {
+        VStack(spacing: 12) {
+            loginField(text: $email, placeholder: L("auth.field.email"), icon: "envelope", secure: false)
+            loginField(text: $password, placeholder: L("auth.field.password"), icon: "lock", secure: true)
+
+            Button {
+                Task { await auth.loginWithCredentials(identifier: email, password: password) }
+            } label: {
+                HStack(spacing: 8) {
+                    if auth.isLoading && auth.errorSource != .phone {
+                        ProgressView().tint(.white)
+                    }
+                    Text(L("auth.cta.signin"))
+                        .font(AsianCupFonts.app(size: 15, weight: .bold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous)
+                        .fill(AcTheme.emerald)
+                )
+            }
+            .buttonStyle(AcPressableStyle())
+            .disabled(auth.isLoading)
+
+            if auth.errorSource == .credentials, let err = auth.errorMessage {
+                Text(err)
+                    .font(AsianCupFonts.app(size: 12))
+                    .foregroundStyle(AcTheme.crimson)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func loginField(text: Binding<String>, placeholder: String, icon: String, secure: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14))
+                .foregroundStyle(AcTheme.onDarkFaint)
+                .frame(width: 18)
+            Group {
+                if secure {
+                    SecureField("", text: text, prompt: Text(placeholder).foregroundStyle(AcTheme.onDarkFaint))
+                } else {
+                    TextField("", text: text, prompt: Text(placeholder).foregroundStyle(AcTheme.onDarkFaint))
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.emailAddress)
+                        .textContentType(.emailAddress)
+                }
+            }
+            .font(AsianCupFonts.app(size: 15))
+            .foregroundStyle(AcTheme.onDark)
+            .tint(AcTheme.emerald)
+        }
+        .padding(.horizontal, 14).padding(.vertical, 13)
+        .background(
+            RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous)
+                .fill(AcTheme.cardFill)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous)
+                        .stroke(AcTheme.outline, lineWidth: 1)
+                )
+        )
+    }
+}
+
+struct AcPhoneLoginFlow: View {
+    @Environment(AcAuthStore.self) private var auth
+    private enum Step { case phone, code }
+    @State private var step: Step = .phone
+    @State private var country: AcDialCountry = .saudi
+    @State private var number = ""
+    @State private var code = ""
+    @State private var resend = 0
+    @FocusState private var phoneFocused: Bool
+
+    private var maxNational: Int { country.nationalLength.upperBound }
+    private var normalized: String { String(number.filter(\.isNumber).prefix(maxNational)) }
+    private var phoneValid: Bool { country.nationalLength.contains(normalized.count) }
+    private var e164: String { "+\(country.dial)\(normalized)" }
+    private var e164Display: String { "+\(country.dial) \(normalized)" }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            if step == .phone { phoneStep } else { codeStep }
+        }
+    }
+
+    private var phoneStep: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 10) {
+                Menu {
+                    ForEach(AcDialCountry.all) { item in
+                        Button {
+                            country = item
+                            number = String(number.filter(\.isNumber).prefix(item.nationalLength.upperBound))
+                        } label: {
+                            Text("\(item.flag)  \(item.name)  +\(item.dial)")
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(country.flag).font(.system(size: 16))
+                        Text("+\(country.dial)")
+                            .font(AsianCupFonts.app(size: 15, weight: .bold))
+                            .foregroundStyle(AcTheme.onDark)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(AcTheme.onDarkDim)
+                    }
+                    .padding(.trailing, 2)
+                }
+                .accessibilityLabel(L("auth.phone.pickCountry"))
+                .environment(\.layoutDirection, .leftToRight)
+
+                Rectangle().fill(AcTheme.outline).frame(width: 1, height: 22)
+
+                TextField(
+                    "",
+                    text: $number,
+                    prompt: Text(verbatim: country.placeholder).foregroundStyle(AcTheme.onDarkFaint)
+                )
+                    .keyboardType(.numberPad)
+                    .textContentType(.telephoneNumber)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 17, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(AcTheme.onDark)
+                    .tint(AcTheme.emerald)
+                    .multilineTextAlignment(.leading)
+                    .focused($phoneFocused)
+                    .onChange(of: number) { _, v in
+                        number = String(v.filter(\.isNumber).prefix(maxNational))
+                    }
+            }
+            .environment(\.layoutDirection, .leftToRight)
+            .padding(.horizontal, 14).padding(.vertical, 13)
+            .background(fieldBg)
+            .contentShape(Rectangle())
+            .onTapGesture { phoneFocused = true }
+            .onAppear { phoneFocused = true }
+
+            Text(L("auth.phone.hint"))
+                .font(AsianCupFonts.app(size: 11.5))
+                .foregroundStyle(AcTheme.onDarkFaint)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            primaryButton(L("auth.phone.send"), enabled: phoneValid) { Task { await send() } }
+            phoneError
+        }
+    }
+
+    private var codeStep: some View {
+        VStack(spacing: 14) {
+            VStack(spacing: 4) {
+                Text(L("auth.phone.enterCode"))
+                    .font(AsianCupFonts.app(size: 15, weight: .bold))
+                    .foregroundStyle(AcTheme.onDark)
+                HStack(spacing: 5) {
+                    Text(L("auth.phone.sentTo"))
+                    Text(e164Display).environment(\.layoutDirection, .leftToRight)
+                    Button(L("auth.phone.edit")) {
+                        withAnimation { step = .phone; code = "" }
+                    }
+                    .foregroundStyle(AcTheme.emerald)
+                }
+                .font(AsianCupFonts.app(size: 12))
+                .foregroundStyle(AcTheme.onDarkDim)
+            }
+
+            AcOtpBoxes(code: $code) { Task { await verify() } }
+
+            if resend > 0 {
+                Text(L("auth.phone.resendIn", ["n": "\(resend)"]))
+                    .font(AsianCupFonts.app(size: 12))
+                    .foregroundStyle(AcTheme.onDarkFaint)
+            } else {
+                Button(L("auth.phone.resend")) { Task { await send() } }
+                    .buttonStyle(.plain)
+                    .font(AsianCupFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(AcTheme.emerald)
+            }
+
+            primaryButton(L("auth.phone.verify"), enabled: code.count == 6) { Task { await verify() } }
+            phoneError
+        }
+    }
+
+    private func send() async {
+        let result = await auth.sendPhoneCode(e164)
+        if result.ok {
+            withAnimation { step = .code }
+            startResend()
+        }
+    }
+
+    private func verify() async {
+        guard code.count == 6 else { return }
+        _ = await auth.verifyPhoneCode(e164, code: code)
+    }
+
+    private func startResend() {
+        resend = 60
+        Task { @MainActor in
+            while resend > 0 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if resend > 0 { resend -= 1 }
+            }
+        }
+    }
+
+    private var fieldBg: some View {
+        RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous)
+            .fill(AcTheme.cardFill)
+            .overlay(
+                RoundedRectangle(cornerRadius: AcTheme.tileRadius, style: .continuous)
+                    .stroke(AcTheme.outline, lineWidth: 1)
+            )
+    }
+
+    private func primaryButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                if auth.isLoading { ProgressView().tint(.white) }
+                Text(title).font(AsianCupFonts.app(size: 15, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity).frame(height: 48)
+            .background(
+                RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous)
+                    .fill(enabled ? AcTheme.emerald : AcTheme.emerald.opacity(0.4))
+            )
+        }
+        .buttonStyle(AcPressableStyle())
+        .disabled(!enabled || auth.isLoading)
+    }
+
+    @ViewBuilder private var phoneError: some View {
+        if auth.errorSource == .phone, let err = auth.errorMessage {
+            Text(err)
+                .font(AsianCupFonts.app(size: 12))
+                .foregroundStyle(AcTheme.crimson)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+struct AcOtpBoxes: View {
+    @Binding var code: String
+    var onComplete: () -> Void
+    private let length = 6
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ZStack {
+            HStack(spacing: 8) {
+                ForEach(0..<length, id: \.self) { i in box(i) }
+            }
+            .environment(\.layoutDirection, .leftToRight)
+            .allowsHitTesting(false)
+
+            TextField("", text: $code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(size: 22, weight: .heavy, design: .rounded).monospacedDigit())
+                .foregroundStyle(.clear)
+                .tint(.clear)
+                .multilineTextAlignment(.center)
+                .focused($focused)
+                .opacity(0.02)
+                .frame(maxWidth: .infinity)
+                .frame(height: 54)
+                .onChange(of: code) { _, v in
+                    let digits = String(v.filter(\.isNumber).prefix(length))
+                    if digits != code { code = digits }
+                    if digits.count == length { focused = false; onComplete() }
+                }
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+        .onAppear { focused = true }
+    }
+
+    private func box(_ i: Int) -> some View {
+        let chars = Array(code)
+        let digit: String = i < chars.count ? String(chars[i]) : ""
+        let active = i == chars.count
+        return Text(digit)
+            .font(.system(size: 22, weight: .heavy, design: .rounded).monospacedDigit())
+            .foregroundStyle(AcTheme.onDark)
+            .frame(maxWidth: .infinity).frame(height: 54)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(AcTheme.chipFill))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(active ? AcTheme.emerald : AcTheme.outline, lineWidth: active ? 2 : 1)
+            )
+    }
+}
+
+struct AcLoginSheet: View {
+    @Environment(AcAuthStore.self) private var auth
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 16) {
+                    Text(L("auth.subtitle"))
+                        .font(AsianCupFonts.app(size: 13))
+                        .foregroundStyle(AcTheme.onDarkDim)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                    AcLoginForm()
+                }
+                .padding(20)
+            }
+            .background(AcAmbientBackground())
+            .navigationTitle(L("auth.cta.signin"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("auth.close")) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .onChange(of: auth.isLoggedIn) { _, loggedIn in
+            if loggedIn { dismiss() }
         }
     }
 }
@@ -955,8 +1335,8 @@ private struct AcControlHub: View {
                 } label: {
                     controlRow(
                         icon: "bell.badge.fill",
-                        title: "تنبيهات المباريات",
-                        subtitle: "أهداف · بطاقات · فار · نهاية"
+                        title: L("notifications.prefs.title"),
+                        subtitle: L("notifications.prefs.subtitle")
                     ) {
                         chevron
                     }
@@ -1369,6 +1749,13 @@ private struct AcHomeHero: View {
 
                     AcTournamentTitle()
                         .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Label(L("hero.hostedBy"), systemImage: "mappin.and.ellipse")
+                        .font(AsianCupFonts.app(size: 12, weight: .semibold))
+                        .foregroundStyle(AcTheme.emeraldInk)
+                        .labelStyle(.titleAndIcon)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
 
                     if let overview {
                         Label(AcFormat.dateRange(startIso: overview.startsAt, endIso: overview.endsAt), systemImage: "calendar")
@@ -2439,7 +2826,7 @@ struct AcMatchSpotlight: View {
                 .background(Capsule().fill(AcTheme.crimson))
             }
         } else if isFinished {
-            Text(fixture.status.label)
+            Text(LStatus(fixture.status))
                 .font(AsianCupFonts.app(size: 11, weight: .bold))
                 .foregroundStyle(.white.opacity(0.85))
                 .padding(.horizontal, 10)
@@ -2965,9 +3352,14 @@ struct AcHostShowcase: View {
 // MARK: - شاشة السباقات (هدافون / صنّاع / بطاقات)
 struct AcScorersScreen: View {
     enum RaceTab: String, CaseIterable {
-        case scorers = "الهدّافون"
-        case assists = "الصنّاع"
-        case cards = "البطاقات"
+        case scorers, assists, cards
+        var title: String {
+            switch self {
+            case .scorers: return L("races.tab.scorers")
+            case .assists: return L("races.tab.assists")
+            case .cards: return L("races.tab.cards")
+            }
+        }
     }
 
     @State private var tab: RaceTab = .scorers
@@ -2981,7 +3373,7 @@ struct AcScorersScreen: View {
     var body: some View {
         AcScreenScaffold(onBack: { dismiss() }) {
             VStack(spacing: 16) {
-                AcTopBar(title: "سباقات البطولة", subtitle: "أهداف · صناعات · بطاقات", state: "—")
+                AcTopBar(title: L("races.title"), subtitle: L("races.subtitle"), state: "—")
 
                 HStack(spacing: 8) {
                     ForEach(RaceTab.allCases, id: \.self) { t in
@@ -2989,7 +3381,7 @@ struct AcScorersScreen: View {
                             withAnimation(.easeOut(duration: 0.2)) { tab = t }
                             Task { await loadTabIfNeeded(t) }
                         } label: {
-                            Text(t.rawValue)
+                            Text(t.title)
                                 .font(AsianCupFonts.app(size: 13, weight: .bold))
                                 .foregroundStyle(tab == t ? .white : AcTheme.onDarkDim)
                                 .padding(.horizontal, 12).padding(.vertical, 8)
@@ -3008,10 +3400,10 @@ struct AcScorersScreen: View {
                     case .scorers:
                         scorersList
                     case .assists:
-                        leadersList(assists, value: { "\($0.assists)" }, label: "صناعة")
+                        leadersList(assists, value: { "\($0.assists)" }, label: L("scorers.assists"))
                     case .cards:
                         leadersList(cards, value: { $0.red > 0 ? "\($0.red)" : "\($0.yellow)" },
-                                    label: { $0.red > 0 ? "حمراء" : "صفراء" })
+                                    label: { $0.red > 0 ? L("races.card.red") : L("races.card.yellow") })
                     }
                 }
             }
@@ -3054,7 +3446,7 @@ struct AcScorersScreen: View {
     ) -> some View {
         Group {
             if leaders.isEmpty {
-                AcEmptyState(icon: "list.number", title: "لا بيانات بعد", subtitle: "يظهر الترتيب مع انطلاق المباريات")
+                AcEmptyState(icon: "list.number", title: L("races.empty.title"), subtitle: L("races.empty.subtitle"))
             } else {
                 VStack(spacing: 10) {
                     ForEach(leaders) { l in
@@ -3350,10 +3742,10 @@ private struct AcBracketCell: View {
         HStack(spacing: 4) {
             if f.status.live {
                 Circle().fill(AcTheme.crimson).frame(width: 5, height: 5)
-                Text(f.status.label)
+                Text(LStatus(f.status))
                     .foregroundStyle(AcTheme.crimson)
             } else if finished {
-                Text(f.status.label)
+                Text(LStatus(f.status))
                     .foregroundStyle(AcTheme.onDarkFaint)
             } else {
                 Text("\(AcFormat.kickoffDay(f.date)) · \(AcFormat.kickoffTime(f.date))")
@@ -4229,7 +4621,7 @@ private struct AcTeamJourneyRow: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
-                Text(result ?? fixture.status.label)
+                Text(result ?? LStatus(fixture.status))
                     .font(AsianCupFonts.app(size: 11, weight: .bold))
                     .foregroundStyle(resultTint)
                     .padding(.horizontal, 9)

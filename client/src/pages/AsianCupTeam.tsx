@@ -166,7 +166,7 @@ export default function AsianCupTeam() {
       <NavigationBar />
 
       <main className="flex-1">
-        <section className="relative overflow-hidden bg-gradient-to-b from-emerald-600 to-emerald-700 text-white">
+        <section className="relative overflow-hidden bg-gradient-to-b from-emerald-500 to-emerald-600 text-white">
           <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             <Link
               href="/asian-cup"

@@ -12,7 +12,7 @@ import {
 } from "@shared/schema";
 import { db } from "../../db";
 import { varaSendOtp, varaVerifyOtp } from "../../services/varaPhoneOtp";
-import { normalizeSaudiPhone, findOrCreatePhoneUser } from "../../services/phoneAuth";
+import { normalizePhone, findOrCreatePhoneUser } from "../../services/phoneAuth";
 
 const router = Router();
 
@@ -100,7 +100,7 @@ async function issueSession(
   return { token, expiresAt };
 }
 
-// MARK: - دخول/تسجيل بالجوال (Twilio Verify) — السعودية +966 افتراضيًا
+// MARK: - دخول/تسجيل بالجوال (Twilio Verify) — E.164 دولي (+ أو 00) أو سعودي محلي.
 // (التطبيع + إنشاء/ربط المستخدم في services/phoneAuth.ts — مشترك مع الويب.)
 
 // حدّ إرسال الرمز — يحمي من قصف الرسائل والتكلفة: 5 إرسالات/نافذة لكل رقم (أو IP).
@@ -110,7 +110,7 @@ const phoneSendLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    const e164 = normalizeSaudiPhone(req.body?.phone);
+    const e164 = normalizePhone(req.body?.phone);
     return e164 || req.ip || "unknown";
   },
   message: {
@@ -402,11 +402,11 @@ router.post("/auth/apple", async (req: Request, res: Response) => {
 // إرسال رمز التحقق (SMS) عبر Twilio Verify.
 router.post("/auth/phone/send", phoneSendLimiter, async (req: Request, res: Response) => {
   try {
-    const e164 = normalizeSaudiPhone(req.body?.phone);
+    const e164 = normalizePhone(req.body?.phone);
     if (!e164) {
       return res.status(400).json({
         success: false,
-        message: "رقم جوال سعودي غير صحيح. أدخل رقمك بدون صفر (مثال: 5XXXXXXXX).",
+        message: "رقم جوال غير صحيح. أدخل الرقم بصيغة دولية مثل +9665XXXXXXXX.",
       });
     }
     const result = await varaSendOtp(e164);
@@ -420,7 +420,7 @@ router.post("/auth/phone/send", phoneSendLimiter, async (req: Request, res: Resp
 // التحقق من الرمز → دخول العضو، وإنشاء حسابه إن لم يكن موجودًا (نفس SSO سبق).
 router.post("/auth/phone/verify", async (req: Request, res: Response) => {
   try {
-    const e164 = normalizeSaudiPhone(req.body?.phone);
+    const e164 = normalizePhone(req.body?.phone);
     const code = String(req.body?.code ?? "").replace(/[^0-9]/g, "");
     if (!e164) {
       return res.status(400).json({ success: false, message: "رقم جوال غير صحيح" });
