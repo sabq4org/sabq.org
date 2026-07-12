@@ -143,7 +143,18 @@ struct AcRacesSection: View {
     }
 }
 
-// MARK: - صفحة المنتخب
+// MARK: - صفحة المنتخب (تكافؤ WCTeamSheet: ترتيب الأقسام + sheet موحّد)
+
+private enum AcTeamRoute: Identifiable {
+    case match(Int)
+    case player(Int)
+    var id: String {
+        switch self {
+        case .match(let id): return "m\(id)"
+        case .player(let id): return "p\(id)"
+        }
+    }
+}
 
 struct AcTeamSheet: View {
     let teamId: Int
@@ -151,41 +162,51 @@ struct AcTeamSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthStore.self) private var authStore
 
+    @State private var activeTeamId: Int
+    @State private var headerTeam: AcTeam
     @State private var profile: AcTeamProfile?
     @State private var loading = true
-    @State private var openPlayer: AcPlayerSelection?
-    @State private var openMatch: Int?
+    @State private var route: AcTeamRoute?
     @State private var isFollowing = false
     @State private var followBusy = false
     @State private var showLogin = false
     @State private var showAlertPrefs = false
 
-    private struct MatchSel: Identifiable { let id: Int }
+    private let sections: [(en: String, label: String)] = [
+        ("Goalkeeper", "حراسة المرمى"), ("Defender", "الدفاع"),
+        ("Midfielder", "الوسط"), ("Attacker", "الهجوم")
+    ]
+
+    init(teamId: Int, teamName: String) {
+        self.teamId = teamId
+        self.teamName = teamName
+        _activeTeamId = State(initialValue: teamId)
+        _headerTeam = State(initialValue: AcTeam(id: teamId, name: teamName, nameEn: nil, logo: "", fifaRank: nil))
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
-                    if loading {
-                        AcLoading().padding(.top, 30)
-                    } else if let p = profile {
-                        header(p)
+                if loading && profile == nil {
+                    AcLoading().padding(.top, 40)
+                } else {
+                    VStack(alignment: .leading, spacing: 22) {
+                        headerCard
                         followBar
-                        statsRow(p)
-                        if !p.fixtures.isEmpty {
-                            fixturesBlock(p.fixtures)
+                        quickFacts
+                        if let group = profile?.group, !group.rows.isEmpty {
+                            groupTable(group)
                         }
-                        if !p.squad.isEmpty {
-                            squadBlock(p.squad)
-                        }
-                    } else {
-                        acEmptyText("تعذر جلب صفحة المنتخب").padding(.top, 50)
+                        coachCard
+                        seasonStatsSection
+                        matchesSection
+                        squadSection
                     }
+                    .padding(16)
                 }
-                .padding(16)
             }
             .background(AcTheme.sectionBackground.ignoresSafeArea())
-            .navigationTitle(teamName)
+            .navigationTitle(headerTeam.name.isEmpty ? teamName : headerTeam.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(AcTheme.stadiumTop, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
@@ -194,51 +215,84 @@ struct AcTeamSheet: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: { Image(systemName: "xmark").foregroundStyle(.white) }
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    AcTeamLogo(team: headerTeam, size: 30)
+                }
             }
-            .task {
-                let r = try? await APIClient.shared.fetchAsianCupTeamProfile(teamId: teamId)
-                await MainActor.run { profile = r; loading = false }
-                await refreshFollow()
-            }
-            .sheet(item: $openPlayer) { sel in
-                AcPlayerSheet(playerId: sel.id).presentationDetents([.large])
-            }
-            .sheet(item: Binding(
-                get: { openMatch.map { MatchSel(id: $0) } },
-                set: { openMatch = $0?.id }
-            )) { sel in
-                AsianCupMatchCenter(fixtureId: sel.id)
+            .task(id: activeTeamId) { await load() }
+            .refreshable { await load(force: true) }
+            .sheet(item: $route) { r in
+                switch r {
+                case .match(let id): AsianCupMatchCenter(fixtureId: id)
+                case .player(let id): AcPlayerSheet(playerId: id).presentationDetents([.large])
+                }
             }
             .sheet(isPresented: $showLogin) { LoginSheet() }
             .sheet(isPresented: $showAlertPrefs) {
                 NavigationStack { WCMatchEventNotificationsView() }
             }
+            .task(id: activeTeamId) { await refreshFollow() }
         }
         .sabqRTL()
     }
 
-    private func header(_ p: AcTeamProfile) -> some View {
-        HStack(spacing: 14) {
-            AcTeamLogo(team: p.team, size: 64)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(p.team.name)
-                    .font(SabqFonts.app(size: 20, weight: .bold))
-                    .foregroundStyle(AcTheme.onDark)
-                if let coach = p.coach, !coach.isEmpty {
-                    Text("المدرّب: \(coach)")
-                        .font(SabqFonts.app(size: 12))
-                        .foregroundStyle(AcTheme.onDarkDim)
+    private func load(force: Bool = false) async {
+        if let p = try? await APIClient.shared.fetchAsianCupTeamProfile(teamId: activeTeamId, ignoreCache: force) {
+            await MainActor.run { profile = p; headerTeam = p.team; loading = false }
+        } else {
+            await MainActor.run { loading = false }
+        }
+    }
+
+    private func switchTeam(to t: AcTeam) {
+        guard t.id != activeTeamId else { return }
+        headerTeam = t
+        profile = nil
+        loading = true
+        activeTeamId = t.id
+    }
+
+    // MARK: ترويسة WC-style
+
+    private var headerCard: some View {
+        let isSaudi = profile?.isSaudi ?? (headerTeam.id == AcTheme.saudiId)
+        return HStack(spacing: 14) {
+            AcTeamLogo(team: headerTeam, size: 72)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text(headerTeam.name)
+                        .font(SabqFonts.headline(size: 24)).foregroundStyle(.white).lineLimit(1)
+                    if isSaudi {
+                        Text("الأخضر")
+                            .font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(.white)
+                            .padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(Capsule().fill(AcTheme.emeraldDeep))
+                    }
                 }
-                if let g = p.stats.groupName {
-                    Text(g)
-                        .font(SabqFonts.app(size: 12, weight: .medium))
-                        .foregroundStyle(AcTheme.emeraldDeep)
+                if let group = profile?.group {
+                    Label(group.name, systemImage: "list.number")
+                        .font(SabqFonts.app(size: 12)).foregroundStyle(AcTheme.emerald.opacity(0.85))
+                        .labelStyle(.titleAndIcon)
+                } else if let g = profile?.stats?.groupName {
+                    Label(g, systemImage: "list.number")
+                        .font(SabqFonts.app(size: 12)).foregroundStyle(AcTheme.emerald.opacity(0.85))
+                }
+                if let coach = profile?.coach, !coach.isEmpty {
+                    Label("المدرّب: \(coach)", systemImage: "person.crop.square")
+                        .font(SabqFonts.app(size: 12)).foregroundStyle(.white.opacity(0.75))
+                        .labelStyle(.titleAndIcon)
                 }
             }
-            Spacer()
+            Spacer(minLength: 0)
         }
-        .padding(14)
-        .acElevatedCard()
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            LinearGradient(colors: [AcTheme.heroTop, AcTheme.heroBottom],
+                           startPoint: .topTrailing, endPoint: .bottomLeading)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: AcTheme.heroTop.opacity(0.25), radius: 12, x: 0, y: 6)
     }
 
     private var followBar: some View {
@@ -284,85 +338,257 @@ struct AcTeamSheet: View {
         }
     }
 
-    private func statsRow(_ p: AcTeamProfile) -> some View {
-        let s = p.stats
-        return HStack(spacing: 8) {
-            AcFactTile(value: "\(s.played)", label: "لعب")
-            AcFactTile(value: "\(s.win)", label: "فوز")
-            AcFactTile(value: "\(s.draw)", label: "تعادل")
-            AcFactTile(value: "\(s.lose)", label: "خسارة")
-            AcFactTile(value: "\(s.points)", label: "نقاط")
-        }
-    }
+    @ViewBuilder private var quickFacts: some View {
+        let fifa = profile?.fifaRank
+        let stats = profile?.stats
+        let facts: [(value: String, label: String, accent: Color?)] = [
+            fifa.map { ("#\($0.rank)", "تصنيف فيفا", AcTheme.emeraldDeep as Color?) },
+            stats.map { ("\($0.played)", "لعب", nil) },
+            stats.map { ("\($0.points)", "نقاط", AcTheme.gold as Color?) },
+            stats.map { ($0.goalsDiff > 0 ? "+\($0.goalsDiff)" : "\($0.goalsDiff)", "فارق", nil) },
+        ].compactMap { $0 }
 
-    private func fixturesBlock(_ fixtures: [AcFixture]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("المباريات")
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(AcTheme.onDark)
-            ForEach(fixtures) { fx in
-                Button { openMatch = fx.id } label: {
-                    HStack {
-                        Text(fx.home.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
-                        if fx.started {
-                            Text("\(fx.goals.home ?? 0)–\(fx.goals.away ?? 0)")
-                                .font(SabqFonts.app(size: 14, weight: .bold).monospacedDigit())
+        if !facts.isEmpty {
+            VStack(spacing: 6) {
+                HStack(spacing: 8) {
+                    ForEach(facts, id: \.label) { f in
+                        VStack(spacing: 2) {
+                            Text(f.value)
+                                .font(SabqFonts.app(size: 15, weight: .semibold).monospacedDigit())
+                                .foregroundStyle(f.accent ?? AcTheme.onDark)
+                                .lineLimit(1).minimumScaleFactor(0.7)
                                 .environment(\.layoutDirection, .leftToRight)
-                        } else {
-                            Text(AcFormat.time(fx))
-                                .font(SabqFonts.app(size: 12, weight: .semibold))
-                                .foregroundStyle(AcTheme.emeraldDeep)
+                            Text(f.label)
+                                .font(SabqFonts.app(size: 10)).foregroundStyle(AcTheme.onDarkDim)
                         }
-                        Text(fx.away.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .trailing)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9).padding(.horizontal, 6)
+                        .acElevatedCard(cornerRadius: 12)
                     }
-                    .font(SabqFonts.app(size: 12))
-                    .foregroundStyle(AcTheme.onDark)
-                    .padding(10)
-                    .acElevatedCard(cornerRadius: 12)
                 }
-                .buttonStyle(.plain)
+                if let change = fifa?.change, change != 0 {
+                    HStack(spacing: 4) {
+                        Image(systemName: change > 0 ? "arrow.up.right" : "arrow.down.right")
+                            .font(.system(size: 9, weight: .medium))
+                        Text("\(abs(change)) مركزًا عن التحديث السابق")
+                            .font(SabqFonts.app(size: 10))
+                    }
+                    .foregroundStyle(change > 0 ? AcTheme.emerald : AcTheme.liveRed)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                }
             }
         }
     }
 
-    private func squadBlock(_ squad: [AcSquadPlayer]) -> some View {
-        let grouped = Dictionary(grouping: squad, by: \.position)
-        let order = ["حارس", "مدافع", "وسط", "مهاجم", "GK", "DF", "MF", "FW"]
-        let keys = grouped.keys.sorted { a, b in
-            (order.firstIndex(of: a) ?? 99) < (order.firstIndex(of: b) ?? 99)
+    private func groupTable(_ group: AcGroup) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(group.name).font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(AcTheme.emeraldDeep)
+                Spacer()
+                HStack(spacing: 0) {
+                    Text("لعب").frame(width: 28); Text("فارق").frame(width: 36); Text("نقاط").frame(width: 28)
+                }
+                .font(SabqFonts.app(size: 10)).foregroundStyle(AcTheme.onDarkDim)
+            }
+            ForEach(group.rows) { row in groupRow(row) }
         }
-        return VStack(alignment: .leading, spacing: 10) {
-            Text("القائمة")
-                .font(SabqFonts.app(size: 14, weight: .semibold))
-                .foregroundStyle(AcTheme.onDark)
-            ForEach(keys, id: \.self) { pos in
-                Text(pos)
-                    .font(SabqFonts.app(size: 11, weight: .medium))
-                    .foregroundStyle(AcTheme.onDarkDim)
-                ForEach(grouped[pos] ?? []) { p in
-                    Button {
-                        if let sel = AcPlayerSelection(p.id) { openPlayer = sel }
-                    } label: {
-                        HStack(spacing: 8) {
-                            if let n = p.number {
-                                Text("\(n)")
-                                    .font(SabqFonts.app(size: 11, weight: .bold).monospacedDigit())
-                                    .frame(width: 22)
+        .padding(14)
+        .acElevatedCard(cornerRadius: 20)
+    }
+
+    @ViewBuilder private func groupRow(_ row: AcStandingRow) -> some View {
+        let isCurrent = row.team.id == activeTeamId
+        let isLive = row.live == true
+        let delta = row.liveDelta ?? 0
+        let content = HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                Text("\(row.rank)").foregroundStyle(AcTheme.onDarkDim).frame(width: 16)
+                if isLive {
+                    Image(systemName: delta > 0 ? "arrow.up" : delta < 0 ? "arrow.down" : "minus")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(delta > 0 ? AcTheme.emeraldDeep : delta < 0 ? AcTheme.liveRed : AcTheme.onDarkDim)
+                }
+            }
+            AcTeamLogo(team: row.team, size: 20)
+            Text(row.team.name)
+                .font(SabqFonts.app(size: 13, weight: isCurrent ? .black : .semibold))
+                .foregroundStyle(AcTheme.onDark).lineLimit(1)
+            if isLive {
+                Text("مباشر")
+                    .font(SabqFonts.app(size: 8, weight: .bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Capsule().fill(AcTheme.liveRed))
+            }
+            Spacer()
+            Text("\(row.played)").frame(width: 28)
+            Text(row.goalsDiff > 0 ? "+\(row.goalsDiff)" : "\(row.goalsDiff)").frame(width: 36)
+                .environment(\.layoutDirection, .leftToRight)
+            Text("\(row.points)").font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(AcTheme.onDark).frame(width: 28)
+        }
+        .font(SabqFonts.app(size: 12).monospacedDigit())
+        .foregroundStyle(AcTheme.onDarkDim)
+        .padding(.vertical, 5).padding(.horizontal, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isCurrent ? AcTheme.emeraldDeep.opacity(0.16) : Color.clear)
+        )
+
+        if isCurrent {
+            content
+        } else {
+            Button { switchTeam(to: row.team) } label: { content }.buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder private var coachCard: some View {
+        if let coach = profile?.coach, !coach.isEmpty {
+            HStack(spacing: 12) {
+                Image(systemName: "person.crop.square.fill")
+                    .font(.system(size: 34)).foregroundStyle(AcTheme.onDarkDim)
+                    .frame(width: 52, height: 52)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("المدرّب").font(SabqFonts.app(size: 11, weight: .medium)).foregroundStyle(AcTheme.emerald)
+                    Text(coach).font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(AcTheme.onDark)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .acElevatedCard(cornerRadius: 18)
+        }
+    }
+
+    @ViewBuilder private var seasonStatsSection: some View {
+        if let s = profile?.seasonStats, s.available, !s.items.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chart.bar.fill").font(.system(size: 13)).foregroundStyle(AcTheme.emerald)
+                    Text("أرقام المنتخب في البطولة")
+                        .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(AcTheme.emerald)
+                    Spacer()
+                    if s.matches > 0 {
+                        Text("\(s.matches) مباراة")
+                            .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(AcTheme.onDarkDim)
+                            .padding(.horizontal, 7).padding(.vertical, 2)
+                            .background(Capsule().fill(AcTheme.chipFill))
+                    }
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
+                    ForEach(s.items) { item in
+                        AcFactTile(value: item.display, label: item.label)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private var matchesSection: some View {
+        let fixtures = profile?.fixtures ?? []
+        let live = fixtures.filter { $0.status.live }
+        let upcoming = fixtures.filter { !$0.status.live && !$0.status.finished }
+        let finished = Array(fixtures.filter { $0.status.finished }.reversed())
+        VStack(alignment: .leading, spacing: 12) {
+            Text("المباريات").font(SabqFonts.app(size: 17, weight: .semibold)).foregroundStyle(AcTheme.onDark)
+            if fixtures.isEmpty {
+                Text("لا توجد مباريات معلنة لهذا المنتخب بعد")
+                    .font(SabqFonts.app(size: 13)).foregroundStyle(AcTheme.onDarkDim)
+                    .frame(maxWidth: .infinity).padding(.vertical, 20)
+            } else {
+                matchGroup("مباشر الآن", live)
+                matchGroup("المباريات القادمة", upcoming)
+                matchGroup("النتائج", finished)
+            }
+        }
+    }
+
+    @ViewBuilder private func matchGroup(_ label: String, _ fixtures: [AcFixture]) -> some View {
+        if !fixtures.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Circle().fill(AcTheme.emeraldDeep).frame(width: 7, height: 7)
+                    Text(label).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(AcTheme.onDark)
+                    Text("(\(fixtures.count))").font(SabqFonts.app(size: 12)).foregroundStyle(AcTheme.onDarkDim)
+                }
+                ForEach(fixtures) { fx in
+                    Button { route = .match(fx.id) } label: {
+                        HStack {
+                            Text(fx.home.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                            if fx.started {
+                                Text("\(fx.goals.away ?? 0) - \(fx.goals.home ?? 0)")
+                                    .font(SabqFonts.app(size: 14, weight: .bold).monospacedDigit())
+                                    .environment(\.layoutDirection, .leftToRight)
+                            } else {
+                                Text(AcFormat.time(fx))
+                                    .font(SabqFonts.app(size: 12, weight: .semibold))
                                     .foregroundStyle(AcTheme.emeraldDeep)
                             }
-                            AcRemoteImage(url: p.photo, contentMode: .fill)
-                                .frame(width: 28, height: 28).clipShape(Circle())
-                            Text(p.name)
-                                .font(SabqFonts.app(size: 13, weight: .medium))
-                                .foregroundStyle(AcTheme.onDark)
-                            Spacer()
+                            Text(fx.away.name).lineLimit(1).frame(maxWidth: .infinity, alignment: .trailing)
                         }
-                        .padding(.vertical, 4)
+                        .font(SabqFonts.app(size: 12))
+                        .foregroundStyle(AcTheme.onDark)
+                        .padding(10)
+                        .acElevatedCard(cornerRadius: 12)
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    @ViewBuilder private var squadSection: some View {
+        let squad = profile?.squad ?? []
+        VStack(alignment: .leading, spacing: 12) {
+            Text("القائمة").font(SabqFonts.app(size: 17, weight: .semibold)).foregroundStyle(AcTheme.onDark)
+            if squad.isEmpty {
+                Text("القائمة الرسمية لم تُعلن بعد")
+                    .font(SabqFonts.app(size: 13)).foregroundStyle(AcTheme.onDarkDim)
+                    .frame(maxWidth: .infinity).padding(.vertical, 20)
+            } else {
+                ForEach(sections, id: \.en) { sec in
+                    let players = squad.filter { $0.positionEn == sec.en }
+                    if !players.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(sec.label).font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(AcTheme.emeraldDeep)
+                            ForEach(players) { p in playerRow(p) }
+                        }
+                    }
+                }
+                // أي مركز غير قياسي
+                let known = Set(sections.map(\.en))
+                let other = squad.filter { !known.contains($0.positionEn) }
+                if !other.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("آخرون").font(SabqFonts.app(size: 12, weight: .medium)).foregroundStyle(AcTheme.emeraldDeep)
+                        ForEach(other) { p in playerRow(p) }
+                    }
+                }
+            }
+        }
+    }
+
+    private func playerRow(_ p: AcSquadPlayer) -> some View {
+        Button { if let sel = AcPlayerSelection(p.id) { route = .player(sel.id) } } label: {
+            HStack(spacing: 10) {
+                if p.photo.isEmpty {
+                    Circle().fill(AcTheme.chipFill).frame(width: 36, height: 36)
+                } else {
+                    AcRemoteImage(url: p.photo, contentMode: .fill).frame(width: 36, height: 36).clipShape(Circle())
+                }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(p.name).font(SabqFonts.app(size: 14, weight: .semibold)).foregroundStyle(AcTheme.onDark).lineLimit(1)
+                    if let age = p.age {
+                        Text("\(age) سنة").font(SabqFonts.app(size: 10)).foregroundStyle(AcTheme.onDarkDim)
+                    }
+                }
+                Spacer()
+                Text(p.number.map { "\($0)" } ?? "—")
+                    .font(SabqFonts.app(size: 15, weight: .semibold)).foregroundStyle(AcTheme.onDarkDim)
+                Image(systemName: "chevron.left")
+                    .font(SabqFonts.app(size: 10, weight: .medium)).foregroundStyle(AcTheme.onDarkDim.opacity(0.6))
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .acElevatedCard(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
     }
 
     private func refreshFollow() async {
@@ -371,7 +597,7 @@ struct AcTeamSheet: View {
             return
         }
         if let follows = try? await APIClient.shared.fetchSportsFollows() {
-            let following = follows.contains { $0.kind == "team" && $0.refId == String(teamId) }
+            let following = follows.contains { $0.kind == "team" && $0.refId == String(activeTeamId) }
             await MainActor.run { isFollowing = following }
         }
     }
@@ -380,13 +606,13 @@ struct AcTeamSheet: View {
         await MainActor.run { followBusy = true }
         do {
             if isFollowing {
-                try await APIClient.shared.removeSportsFollow(kind: "team", refId: String(teamId))
+                try await APIClient.shared.removeSportsFollow(kind: "team", refId: String(activeTeamId))
                 await MainActor.run { isFollowing = false }
             } else {
-                let name = profile?.team.name ?? teamName
-                let logo = profile?.team.logo
+                let name = profile?.team.name ?? headerTeam.name
+                let logo = profile?.team.logo ?? headerTeam.logo
                 try await APIClient.shared.addSportsFollow(
-                    kind: "team", refId: String(teamId), refName: name, refLogo: logo
+                    kind: "team", refId: String(activeTeamId), refName: name, refLogo: logo
                 )
                 await MainActor.run { isFollowing = true }
             }

@@ -439,4 +439,23 @@ export function registerAsianCupRoutes(app: Express) {
       res.status(502).json({ available: false, channels: [] });
     }
   });
+
+  // نقاط اختيارية لمواءمة واجهة المونديال — تُرجع available:false حتى يتوفر المصدر.
+  app.get("/api/asian-cup/match/:id/referee", async (req, res) => {
+    if (!guard(res)) return;
+    res.set("Cache-Control", "public, max-age=300, s-maxage=1800");
+    res.json({ available: false, referee: null });
+  });
+
+  app.get("/api/asian-cup/match/:id/expected-lineup", async (req, res) => {
+    if (!guard(res)) return;
+    res.set("Cache-Control", "public, max-age=120, s-maxage=600");
+    res.json({ available: false, home: null, away: null });
+  });
+
+  app.get("/api/asian-cup/match/:id/stats", async (req, res) => {
+    if (!guard(res)) return;
+    res.set("Cache-Control", "public, max-age=30, s-maxage=60");
+    res.json({ available: false, statistics: [] });
+  });
 }

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
@@ -13,10 +13,14 @@ import { AcSchedule } from "@/components/asiancup/AcSchedule";
 import { AcTeams } from "@/components/asiancup/AcTeams";
 import { AcHostShowcase } from "@/components/asiancup/AcHostShowcase";
 import { AcKnockoutSection, AcTournamentRaces } from "@/components/asiancup/AcTournamentSections";
+import { AcMatchCenterDialog } from "@/components/asiancup/AcMatchCenterDialog";
+import { AcPlayerCardDialog } from "@/components/asiancup/AcPlayerCardDialog";
 import type { AcFixture, AcGroup, AcOverview, AcTeam } from "@/components/asiancup/acTypes";
 
 export default function AsianCup() {
   const { user } = useAuth();
+  const [openFixtureId, setOpenFixtureId] = useState<number | null>(null);
+  const [openPlayerId, setOpenPlayerId] = useState<number | null>(null);
 
   useEffect(() => {
     document.title = "كأس آسيا 2027 — التغطية الكاملة من السعودية | سبق";
@@ -67,15 +71,24 @@ export default function AsianCup() {
         <AcHero overview={overview} onJump={handleJump} />
         <AcFacts />
         <AcPredictionsCTA />
-        <AcSaudiSpotlight saudi={overview?.saudi} />
+        <AcSaudiSpotlight saudi={overview?.saudi} onOpenMatch={setOpenFixtureId} />
         <AcGroups groups={groups} />
-        <AcSchedule fixtures={fixtures} isLoading={fixturesLoading} />
-        <AcKnockoutSection />
-        <AcTournamentRaces tournamentStarted={fixtures.some((fixture) => fixture.status.live || fixture.status.finished)} />
+        <AcSchedule fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
+        <AcKnockoutSection onOpenMatch={setOpenFixtureId} />
+        <AcTournamentRaces
+          tournamentStarted={fixtures.some((fixture) => fixture.status.live || fixture.status.finished)}
+          onOpenPlayer={setOpenPlayerId}
+        />
         <AcTeams teams={teams} isLoading={teamsLoading} />
         <AcHostShowcase overview={overview} />
       </main>
 
+      <AcMatchCenterDialog
+        fixtureId={openFixtureId}
+        onClose={() => setOpenFixtureId(null)}
+        onOpenPlayer={setOpenPlayerId}
+      />
+      <AcPlayerCardDialog playerId={openPlayerId} onClose={() => setOpenPlayerId(null)} />
       <Footer />
     </div>
   );

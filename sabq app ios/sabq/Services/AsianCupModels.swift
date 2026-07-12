@@ -520,11 +520,25 @@ nonisolated struct AcAbsentee: Decodable, Identifiable, Hashable {
     var id: String { "\(location)-\(name)" }
 }
 
+nonisolated struct AcEventDetail: Decodable, Hashable {
+    let klass: String
+    let location: String
+    let minute: Int
+    let detail: String?
+}
+
+nonisolated struct AcHalftime: Decodable, Hashable {
+    let home: Int
+    let away: Int
+}
+
 nonisolated struct AcMatchFacts: Decodable, Hashable {
     let available: Bool
     let statistics: [AcStatistic]
     let weather: AcWeather?
     let absentees: [AcAbsentee]
+    let eventDetails: [AcEventDetail]?
+    let halftime: AcHalftime?
 }
 
 nonisolated struct AcXgSide: Decodable, Hashable {

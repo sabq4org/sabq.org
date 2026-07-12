@@ -8,9 +8,11 @@ import { groupFixturesByDay, type AcFixture } from "./acTypes";
 export function AcSchedule({
   fixtures,
   isLoading,
+  onOpenMatch,
 }: {
   fixtures: AcFixture[];
   isLoading: boolean;
+  onOpenMatch: (id: number) => void;
 }) {
   const rounds = useMemo(() => {
     const set: string[] = [];
@@ -86,7 +88,7 @@ export function AcSchedule({
               </div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {day.items.map((f) => (
-                  <AcMatchCard key={f.id} fixture={f} />
+                  <AcMatchCard key={f.id} fixture={f} onOpen={onOpenMatch} />
                 ))}
               </div>
             </motion.div>
