@@ -18,6 +18,7 @@ import {
   WC_FINISHED_STATUSES,
   WC_LIVE_STATUSES,
   WC_STATUS_AR,
+  WC_STATUS_EN,
   localizeEvent,
   localizeRound,
   localizeTeamName,
@@ -28,10 +29,15 @@ import { computeMatchProbabilities, toWholePercents } from "./asianCupRatings";
 import {
   TS_COMPETITION_IDS,
   TS_I18N_TYPE,
+  getTheSportsFastScore,
+  getTheSportsMatchLive,
   getTsCompetitionExtra,
   resolveTsNames,
+  type TsEvent,
+  type TsLiveStats,
 } from "./theSportsService";
 import { apiFootballGet } from "./apiFootballClient";
+import { isEnglishSports } from "./sportsLang";
 
 const LEAGUE_ID = 7; // AFC Asian Cup
 const SEASON = 2027; // كأس آسيا السعودية 2027
@@ -56,6 +62,8 @@ async function apiGet(path: string, params: Record<string, string | number>): Pr
 export interface AcTeam {
   id: number;
   name: string;
+  /** الاسم القانوني من المزوّد، لاستخدام اللغات غير العربية. */
+  nameEn: string;
   logo: string;
 }
 
@@ -126,6 +134,7 @@ function mapTeam(raw: any): AcTeam {
   return {
     id,
     name: localizeAcTeam(id, localizeTeamName(id, en)),
+    nameEn: en,
     logo: raw?.logo ?? "",
   };
 }
@@ -133,7 +142,7 @@ function mapTeam(raw: any): AcTeam {
 function statusOf(code: string, elapsed: number | null) {
   return {
     code,
-    label: WC_STATUS_AR[code] ?? code,
+    label: (isEnglishSports() ? WC_STATUS_EN[code] : WC_STATUS_AR[code]) ?? code,
     elapsed,
     live: WC_LIVE_STATUSES.has(code),
     finished: WC_FINISHED_STATUSES.has(code),
@@ -158,6 +167,48 @@ function mapFixture(raw: any): AcFixture {
   };
 }
 
+const AC_TS_COMPETITION_ID = TS_COMPETITION_IDS["asian-cup"];
+
+const TS_STATUS_TO_AC: Record<number, { code: string; label: string }> = {
+  2: { code: "1H", label: "الشوط الأول" },
+  3: { code: "HT", label: "استراحة" },
+  4: { code: "2H", label: "الشوط الثاني" },
+  5: { code: "ET", label: "وقت إضافي" },
+  6: { code: "ET", label: "وقت إضافي" },
+  7: { code: "P", label: "ركلات الترجيح" },
+  8: { code: "FT", label: "انتهت" },
+};
+
+/** تركيب النتيجة الأسرع على مباراة كأس آسيا الجارية، بأفضل جهد. */
+async function overlayAcLiveScore(fixture: AcFixture): Promise<AcFixture> {
+  if (!fixture.status.live || !AC_TS_COMPETITION_ID) return fixture;
+  try {
+    const live = await getTheSportsFastScore(
+      fixture.id,
+      fixture.timestamp,
+      AC_TS_COMPETITION_ID,
+    );
+    if (!live || (!live.live && !live.finished)) return fixture;
+    const mapped = TS_STATUS_TO_AC[live.statusId];
+    return {
+      ...fixture,
+      goals: { home: live.home, away: live.away },
+      status: {
+        ...fixture.status,
+        code: mapped?.code ?? fixture.status.code,
+        label: isEnglishSports()
+          ? WC_STATUS_EN[mapped?.code ?? fixture.status.code] ?? fixture.status.label
+          : mapped?.label ?? fixture.status.label,
+        elapsed: live.elapsed ?? fixture.status.elapsed,
+        live: live.live,
+        finished: live.finished || fixture.status.finished,
+      },
+    };
+  } catch {
+    return fixture;
+  }
+}
+
 // ---------- نقاط البيانات ----------
 
 /** المنتخبات المتأهّلة (السعودية أولًا ثم أبجديًّا عربيًّا). */
@@ -175,10 +226,13 @@ export async function getAcTeams(): Promise<AcTeam[]> {
 
 /** جدول المباريات كاملًا (مُرتَّب زمنيًّا). */
 export async function getAcFixtures(): Promise<AcFixture[]> {
-  return withSWR("ac:fixtures", FIXTURES_TTL, FIXTURES_TTL * 3, async () => {
+  const fixtures = await withSWR("ac:fixtures", FIXTURES_TTL, FIXTURES_TTL * 3, async () => {
     const raw = await apiGet("fixtures", { league: LEAGUE_ID, season: SEASON });
     return raw.map(mapFixture).sort((a, b) => a.timestamp - b.timestamp);
   });
+  // الطبقة اللحظية خارج كاش API-Football الطويل: TheSports يحدّث بالـMQTT/REST
+  // من دون تحوير عناصر الكاش المشتركة، وفشله يعيد الأساس كما هو.
+  return Promise.all(fixtures.map(overlayAcLiveScore));
 }
 
 const GROUP_ORDINALS = [
@@ -287,7 +341,7 @@ function buildGroupsFromFixtures(fixtures: AcFixture[], teams: AcTeam[]): AcGrou
   return roots.map((r, idx) => {
     const rows: AcStandingRow[] = [...members.get(r)!].map((id) => {
       const s = stats.get(id) ?? { played: 0, win: 0, draw: 0, lose: 0, gf: 0, ga: 0 };
-      const team = teamMap.get(id) ?? { id, name: String(id), logo: "" };
+      const team = teamMap.get(id) ?? { id, name: String(id), nameEn: String(id), logo: "" };
       return {
         rank: 0,
         team,
@@ -1111,7 +1165,7 @@ export async function getAcPlayerCard(playerId: number): Promise<AcPlayerCard | 
 
     const currentCareer = career[0] ?? null;
     const currentTeam = currentCareer
-      ? { id: currentCareer.teamId, name: currentCareer.team, logo: currentCareer.logo }
+      ? { id: currentCareer.teamId, name: currentCareer.team, nameEn: currentCareer.team, logo: currentCareer.logo }
       : null;
 
     const seenTrophies = new Set<string>();
@@ -1137,8 +1191,8 @@ export async function getAcPlayerCard(playerId: number): Promise<AcPlayerCard | 
       .map((row: any): AcPlayerTransfer => ({
         date: row?.date ?? null,
         type: TRANSFER_TYPE_AR[row?.type] ?? row?.type ?? "انتقال",
-        from: row?.teams?.out?.id ? mapTeam(row.teams.out) : row?.teams?.out?.name ? { id: 0, name: tr(row.teams.out.name), logo: row.teams.out.logo ?? "" } : null,
-        to: row?.teams?.in?.id ? mapTeam(row.teams.in) : row?.teams?.in?.name ? { id: 0, name: tr(row.teams.in.name), logo: row.teams.in.logo ?? "" } : null,
+        from: row?.teams?.out?.id ? mapTeam(row.teams.out) : row?.teams?.out?.name ? { id: 0, name: tr(row.teams.out.name), nameEn: row.teams.out.name, logo: row.teams.out.logo ?? "" } : null,
+        to: row?.teams?.in?.id ? mapTeam(row.teams.in) : row?.teams?.in?.name ? { id: 0, name: tr(row.teams.in.name), nameEn: row.teams.in.name, logo: row.teams.in.logo ?? "" } : null,
       }))
       .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
       .slice(0, 8);
@@ -1270,6 +1324,112 @@ export interface AcMatchDetail {
   manOfTheMatch: AcPlayerRating | null;
   prediction: AcPrediction | null;
   headToHead: AcFixture[];
+}
+
+const TS_EVENT_LABEL: Record<TsEvent["type"], string> = {
+  goal: "هدف",
+  penalty_goal: "هدف من ركلة جزاء",
+  own_goal: "هدف عكسي",
+  yellow: "بطاقة صفراء",
+  red: "بطاقة حمراء",
+  yellow_red: "بطاقة حمراء بعد إنذار ثانٍ",
+  sub: "تبديل",
+  penalty_missed: "ركلة جزاء مهدرة",
+  var: "مراجعة تقنية الفيديو",
+  injury_time: "وقت بدل ضائع",
+  other: "حدث",
+};
+
+const TS_STAT_META: Array<[keyof TsLiveStats, string]> = [
+  ["possession", "الاستحواذ"],
+  ["shotsOnTarget", "تسديدات على المرمى"],
+  ["shotsOffTarget", "تسديدات خارج المرمى"],
+  ["attacks", "الهجمات"],
+  ["dangerousAttacks", "الهجمات الخطرة"],
+  ["corners", "الركنيات"],
+  ["yellow", "البطاقات الصفراء"],
+  ["red", "البطاقات الحمراء"],
+];
+
+function mapTsStatsToAc(stats: TsLiveStats): AcStatistic[] {
+  const rows: AcStatistic[] = [];
+  for (const [key, label] of TS_STAT_META) {
+    const values = stats[key];
+    if (!values) continue;
+    const suffix = key === "possession" ? "%" : "";
+    rows.push({
+      key: `ts:${key}`,
+      label,
+      home: `${values[0]}${suffix}`,
+      away: `${values[1]}${suffix}`,
+    });
+  }
+  return rows;
+}
+
+async function mapTsEventsToAc(events: TsEvent[], fixture: AcFixture): Promise<AcMatchEvent[]> {
+  const rawNames: (string | null | undefined)[] = [];
+  for (const event of events) {
+    rawNames.push(event.player, event.assist, event.inPlayer, event.outPlayer);
+  }
+  const translateName = await resolveNames(rawNames);
+  const nameById = await resolveTsNames(
+    TS_I18N_TYPE.player,
+    events.map((event) => event.playerId),
+  );
+  return events
+    .filter((event) => event.type !== "other")
+    .map((event): AcMatchEvent => {
+      const isSub = event.type === "sub";
+      const primaryEn = isSub ? event.inPlayer ?? event.player ?? "" : event.player ?? "";
+      const secondaryEn = isSub ? event.outPlayer : event.assist;
+      const numericPlayerId = Number(event.playerId);
+      return {
+        minute: event.minute,
+        extraMinute: null,
+        teamId:
+          event.team === "home"
+            ? fixture.home.id
+            : event.team === "away"
+              ? fixture.away.id
+              : 0,
+        type: event.type,
+        label: TS_EVENT_LABEL[event.type],
+        detail: event.varResult != null ? `VAR:${event.varResult}` : "",
+        player: nameById(event.playerId) ?? translateName(primaryEn),
+        playerEn: primaryEn,
+        playerId: Number.isFinite(numericPlayerId) ? numericPlayerId : null,
+        assist: secondaryEn ? translateName(secondaryEn) : null,
+        assistEn: secondaryEn ?? null,
+        assistId: null,
+      };
+    });
+}
+
+/** تركيب لقطة TheSports الحية فوق تفاصيل API-Football من دون إفساد fallback. */
+async function overlayAcLiveDetail(detail: AcMatchDetail): Promise<AcMatchDetail> {
+  const fixture = await overlayAcLiveScore(detail.fixture);
+  if (!fixture.status.live || !AC_TS_COMPETITION_ID) return { ...detail, fixture };
+  try {
+    const live = await getTheSportsMatchLive(
+      detail.fixture.id,
+      detail.fixture.timestamp,
+      AC_TS_COMPETITION_ID,
+    );
+    if (!live || !live.live) return { ...detail, fixture };
+    const events = live.events.length
+      ? await mapTsEventsToAc(live.events, fixture)
+      : detail.events;
+    const statistics = live.stats ? mapTsStatsToAc(live.stats) : detail.statistics;
+    return {
+      ...detail,
+      fixture,
+      events: events.length ? events : detail.events,
+      statistics: statistics.length ? statistics : detail.statistics,
+    };
+  } catch {
+    return { ...detail, fixture };
+  }
 }
 
 /** سجل المواجهات المباشرة بين منتخبين (أحدث 10 منتهية). */
@@ -1436,7 +1596,7 @@ export async function getAcMatchDetail(fixtureId: number): Promise<AcMatchDetail
   const manOfTheMatch =
     detail.fixture.status.finished && detail.ratings.length > 0 ? detail.ratings[0] : null;
 
-  return { ...detail, prediction, headToHead, manOfTheMatch };
+  return overlayAcLiveDetail({ ...detail, prediction, headToHead, manOfTheMatch });
 }
 
 // ---------- حقائق البطولة (TheSports competition/additional) ----------

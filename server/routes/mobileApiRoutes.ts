@@ -86,6 +86,15 @@ import {
   type WcLongKind,
 } from "../services/wcLongPredictionsService";
 import {
+  isAcPredictionsEnabled,
+  submitPrediction as submitAcPrediction,
+  getMyPredictions as getAcMyPredictions,
+  getLeaderboard as getAcLeaderboard,
+  getLeaderboardMeta as getAcLeaderboardMeta,
+  getUpcomingPredictableMatches as getAcUpcomingPredictableMatches,
+  getMatchPredictionsSummary as getAcMatchPredictionsSummary,
+} from "../services/acPredictionsService";
+import {
   isGcPredictionsEnabled,
   submitPrediction as submitGcPrediction,
   getMyPredictions as getGcMyPredictions,
@@ -9380,6 +9389,123 @@ router.post("/world-cup/predictions/long", async (req: Request, res: Response) =
   } catch (error) {
     console.error("[Mobile WC Predictions] long submit error:", error);
     res.status(500).json({ message: "تعذر حفظ التوقّع" });
+  }
+});
+
+// ==========================================
+// مسابقة توقّعات كأس آسيا 2027 — نسخة الموبايل (Bearer)
+// ==========================================
+// نظيرة /api/asian-cup/predictions/* للويب، لكن بجلسة العضو المحمولة عبر
+// verifyMemberSession. الخدمة وقاعدة البيانات مشتركتان، لذلك يظهر التوقّع
+// والترتيب نفسيهما على الويب وiOS/Android.
+
+const AC_PRED_NOT_CONFIGURED = {
+  configured: false,
+  message: "مسابقة توقّعات كأس آسيا غير مفعّلة حاليًا",
+};
+
+function acPredGuard(res: Response): boolean {
+  if (!isAcPredictionsEnabled()) {
+    res.status(503).json(AC_PRED_NOT_CONFIGURED);
+    return false;
+  }
+  return true;
+}
+
+router.get("/asian-cup/predictions/today", async (req: Request, res: Response) => {
+  if (!acPredGuard(res)) return;
+  try {
+    const session = await verifyMemberSession(req);
+    const payload = await getAcUpcomingPredictableMatches(session?.userId);
+    res.set(
+      "Cache-Control",
+      session ? "private, no-store" : "public, max-age=15, s-maxage=30, stale-while-revalidate=60",
+    );
+    res.json(payload);
+  } catch (error) {
+    console.error("[Mobile AC Predictions] today error:", error);
+    res.status(502).json({ message: "تعذر جلب مباريات اليوم حاليًا" });
+  }
+});
+
+router.post("/asian-cup/predictions", async (req: Request, res: Response) => {
+  if (!acPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    const fixtureId = Number(req.body?.fixtureId);
+    const predHome = Number(req.body?.predHome);
+    const predAway = Number(req.body?.predAway);
+    if (!Number.isFinite(fixtureId)) {
+      return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+    }
+    const result = await submitAcPrediction(session.userId, fixtureId, predHome, predAway);
+    if (!result.ok) {
+      const map = {
+        NOT_FOUND: { code: 404, message: "المباراة غير موجودة" },
+        LOCKED: { code: 409, message: "أُغلق التوقّع — انطلقت المباراة" },
+        INVALID: { code: 400, message: "نتيجة غير صالحة" },
+      } as const;
+      const mapped = map[result.reason];
+      return res.status(mapped.code).json({ message: mapped.message });
+    }
+    res.json({ prediction: result.prediction });
+  } catch (error) {
+    console.error("[Mobile AC Predictions] submit error:", error);
+    res.status(500).json({ message: "تعذر حفظ التوقّع" });
+  }
+});
+
+router.get("/asian-cup/predictions/mine", async (req: Request, res: Response) => {
+  if (!acPredGuard(res)) return;
+  const session = await verifyMemberSession(req);
+  if (!session) return res.status(401).json({ message: "يلزم تسجيل الدخول" });
+  res.set("Cache-Control", "private, no-store");
+  try {
+    res.json({ predictions: await getAcMyPredictions(session.userId) });
+  } catch (error) {
+    console.error("[Mobile AC Predictions] mine error:", error);
+    res.status(502).json({ message: "تعذر جلب توقّعاتك حاليًا" });
+  }
+});
+
+router.get("/asian-cup/predictions/leaderboard", async (req: Request, res: Response) => {
+  if (!acPredGuard(res)) return;
+  try {
+    const session = await verifyMemberSession(req);
+    const limitRaw = Number(req.query?.limit);
+    const limit =
+      Number.isFinite(limitRaw) && limitRaw > 0
+        ? Math.min(Math.max(Math.trunc(limitRaw), 10), 500)
+        : 100;
+    const [leaders, meta] = await Promise.all([
+      getAcLeaderboard(limit),
+      getAcLeaderboardMeta(session?.userId),
+    ]);
+    res.set(
+      "Cache-Control",
+      session ? "private, no-store" : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
+    );
+    res.json({ leaders, total: meta.total, viewer: meta.viewer });
+  } catch (error) {
+    console.error("[Mobile AC Predictions] leaderboard error:", error);
+    res.status(502).json({ message: "تعذر جلب المتصدّرين حاليًا" });
+  }
+});
+
+router.get("/asian-cup/predictions/match/:fixtureId", async (req: Request, res: Response) => {
+  if (!acPredGuard(res)) return;
+  const fixtureId = Number(req.params.fixtureId);
+  if (!Number.isFinite(fixtureId)) {
+    return res.status(400).json({ message: "معرّف مباراة غير صالح" });
+  }
+  try {
+    res.set("Cache-Control", "public, max-age=10, s-maxage=15, stale-while-revalidate=30");
+    res.json(await getAcMatchPredictionsSummary(fixtureId));
+  } catch (error) {
+    console.error("[Mobile AC Predictions] match summary error:", error);
+    res.status(502).json({ message: "تعذر جلب ملخص المباراة حاليًا" });
   }
 });
 
