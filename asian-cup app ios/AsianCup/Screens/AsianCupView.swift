@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 // الشاشة الرئيسية لتطبيق كأس آسيا — كل شيء في تمريرة تمرير واحدة، مطابق لبنية
 // صفحة الويب (AcHero → AcSaudiSpotlight → AcGroups → AcSchedule → AcTeams →
@@ -341,14 +342,19 @@ private struct AcPredictionMatchesList: View {
 private struct AcPredictionMatchCard: View {
     let match: AcPredictableMatch
     let me: AcPredictionMeStats?
+    @Environment(AcAuthStore.self) private var auth
     @State private var predHome: Int
     @State private var predAway: Int
+    @State private var savedPrediction: AcMyPrediction?
+    @State private var submitting = false
+    @State private var submitError: String?
 
     init(match: AcPredictableMatch, me: AcPredictionMeStats?) {
         self.match = match
         self.me = me
         _predHome = State(initialValue: match.myPrediction?.predHome ?? 1)
         _predAway = State(initialValue: match.myPrediction?.predAway ?? 1)
+        _savedPrediction = State(initialValue: match.myPrediction)
     }
 
     private var predictedOutcome: String {
@@ -416,21 +422,58 @@ private struct AcPredictionMatchCard: View {
                 AcPredictionMeta(icon: "chart.bar.fill", value: "\(match.predictionsCount)", label: L("predictions.meta.prediction"))
             }
 
+            if let submitError {
+                Text(submitError)
+                    .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                    .foregroundStyle(AcTheme.crimson)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
             Button {
+                if auth.isLoggedIn {
+                    Task { await submit() }
+                } else {
+                    auth.startAppleSignIn()
+                }
             } label: {
-                Text(match.locked ? L("predictions.locked.note") : L("predictions.login.note"))
+                Text(buttonTitle)
                     .font(AsianCupFonts.app(size: 13, weight: .bold))
                     .foregroundStyle(match.locked ? AcTheme.onDarkFaint : .white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous).fill(match.locked ? AcTheme.chipFill : AcTheme.gold))
             }
-            .disabled(true)
+            .disabled(match.locked || submitting)
             .buttonStyle(.plain)
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(AcTheme.cardFillStrong))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(match.locked ? AcTheme.outline : AcTheme.gold.opacity(0.20), lineWidth: 1))
+    }
+
+    private var buttonTitle: String {
+        if match.locked { return L("predictions.locked.note") }
+        if submitting { return L("predictions.saving") }
+        if savedPrediction?.predHome == predHome && savedPrediction?.predAway == predAway {
+            return L("predictions.saved")
+        }
+        return auth.isLoggedIn ? L("predictions.save") : L("predictions.login.note")
+    }
+
+    @MainActor
+    private func submit() async {
+        submitting = true
+        submitError = nil
+        defer { submitting = false }
+        do {
+            savedPrediction = try await APIClient.shared.submitAcPrediction(
+                fixtureId: match.fixture.id,
+                predHome: predHome,
+                predAway: predAway
+            )
+        } catch {
+            submitError = LError(error)
+        }
     }
 }
 
@@ -632,6 +675,8 @@ private struct AcMoreScreen: View {
 
                 AcMoreHub()
 
+                AcAccountCard()
+
                 AcLanguageRow { showLanguage = true }
 
                 if let overview {
@@ -662,6 +707,64 @@ private struct AcMoreScreen: View {
         }
         .navigationDestination(isPresented: $showLanguage) {
             AcLanguagePicker().asianCupRTL()
+        }
+    }
+}
+
+private struct AcAccountCard: View {
+    @Environment(AcAuthStore.self) private var auth
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            AcSectionHeader(
+                icon: "person.crop.circle.fill",
+                title: L("auth.title"),
+                subtitle: auth.isLoggedIn ? L("auth.signedIn") : L("auth.subtitle"),
+                tint: AcTheme.teal
+            )
+            AcGroupedCard {
+                if auth.isLoggedIn {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 25, weight: .bold))
+                            .foregroundStyle(AcTheme.emerald)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(auth.member?.name ?? L("auth.signedIn"))
+                                .font(AsianCupFonts.app(size: 15, weight: .bold))
+                                .foregroundStyle(AcTheme.onDark)
+                            if let email = auth.member?.email {
+                                Text(email)
+                                    .font(AsianCupFonts.app(size: 11))
+                                    .foregroundStyle(AcTheme.onDarkDim)
+                            }
+                        }
+                        Spacer()
+                        Button(L("auth.signOut")) { auth.signOut() }
+                            .font(AsianCupFonts.app(size: 12, weight: .bold))
+                            .foregroundStyle(AcTheme.crimson)
+                    }
+                    .padding(14)
+                } else {
+                    VStack(spacing: 10) {
+                        SignInWithAppleButton(.signIn, onRequest: { request in
+                            request.requestedScopes = [.fullName, .email]
+                        }, onCompletion: auth.completeAppleSignIn)
+                        .signInWithAppleButtonStyle(.black)
+                        .frame(height: 46)
+                        .clipShape(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous))
+                        .disabled(auth.isLoading)
+
+                        if auth.isLoading { ProgressView().tint(AcTheme.gold) }
+                        if let error = auth.errorMessage {
+                            Text(error)
+                                .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                                .foregroundStyle(AcTheme.crimson)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(14)
+                }
+            }
         }
     }
 }

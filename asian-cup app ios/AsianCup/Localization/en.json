@@ -67,6 +67,9 @@
   "predictions.locked": "Locked",
   "predictions.locked.note": "Prediction window closed",
   "predictions.login.note": "Saving requires in-app sign-in",
+  "predictions.save": "Save prediction",
+  "predictions.saving": "Saving…",
+  "predictions.saved": "Prediction saved",
   "predictions.unavailable": "Predictions are unavailable right now",
   "leaderboard.empty.title": "The leaderboard hasn't started",
   "leaderboard.empty.subtitle": "Leaders appear after the first prediction round",
@@ -254,5 +257,11 @@
   "position.defender": "Defenders",
   "position.midfielder": "Midfielders",
   "position.attacker": "Forwards",
-  "position.other": "Others"
+  "position.other": "Others",
+  "auth.title": "Sabq account",
+  "auth.subtitle": "Sign in to sync predictions and follows with the web",
+  "auth.apple": "Continue with Apple",
+  "auth.signedIn": "Connected to Sabq",
+  "auth.signOut": "Sign out",
+  "auth.error.apple": "Could not sign in with Apple"
 }
