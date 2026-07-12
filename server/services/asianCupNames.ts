@@ -3,6 +3,7 @@
  * يغطّي المنتخبات الـ24 المتأهّلة (بمعرّف API-Football) وملاعب الاستضافة السعودية.
  * للإضافة مستقبلًا: أضف الصفّ هنا فقط.
  */
+import { isEnglishSports } from "./sportsLang";
 
 /** المنتخبات حسب معرّف API-Football (league=7, season=2027). */
 export const AC_TEAM_AR: Record<number, string> = {
@@ -63,6 +64,7 @@ export const AC_VENUE_AR: Record<string, { name: string; city: string }> = {
 
 /** اسم منتخب بالعربية (معرّف API-Football) — fallback للاسم الإنجليزي إن لم يُعرَّف. */
 export function localizeAcTeam(id: number | null | undefined, fallback: string): string {
+  if (isEnglishSports()) return fallback;
   if (id != null && AC_TEAM_AR[id]) return AC_TEAM_AR[id];
   return fallback;
 }
@@ -72,6 +74,7 @@ export function localizeAcVenue(
   name: string | null | undefined,
   city: string | null | undefined,
 ): { name: string; city: string } {
+  if (isEnglishSports()) return { name: name ?? "", city: city ?? "" };
   const mapped = name ? AC_VENUE_AR[name] : undefined;
   const cityAr = mapped?.city ?? (city ? (AC_CITY_AR[city] ?? city) : "");
   return { name: mapped?.name ?? name ?? "", city: cityAr };

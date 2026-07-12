@@ -399,6 +399,7 @@ struct AcMatchDetailSheet: View {
     private func load() async {
         loading = true
         detail = try? await APIClient.shared.fetchAcMatchDetail(fixture.id)
+        if let updated = detail?.fixture { AcLiveActivityStore.shared.update(updated) }
         loading = false
     }
 
@@ -420,6 +421,13 @@ struct AcMatchDetailSheet: View {
                 centerScore
                 bigTeam(displayFixture.away, saudi: false)
             }
+
+            AcFollowButton(
+                kind: "match",
+                refId: String(displayFixture.id),
+                refName: "\(displayFixture.home.name) - \(displayFixture.away.name)"
+            )
+            AcLiveActivityButton(fixture: displayFixture)
         }
         .padding(20)
         .frame(maxWidth: .infinity)

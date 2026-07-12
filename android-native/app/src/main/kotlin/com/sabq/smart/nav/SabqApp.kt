@@ -115,6 +115,9 @@ object SabqRoutes {
     const val GulfCup = "gulf-cup"
     const val GulfCupMatch = "gulf-cup/match/{id}"
     const val GulfCupTeam = "gulf-cup/team/{id}?name={name}&logo={logo}"
+    const val AsianCup = "asian-cup"
+    const val AsianCupMatch = "asian-cup/match/{id}"
+    const val AsianCupTeam = "asian-cup/team/{id}"
     // مُقترب — analytical-angles surface (landing + angle + topic + writer).
     const val Muqtarab = "muqtarab"
     const val MuqtarabAngle = "muqtarab/angle/{slug}"
@@ -130,6 +133,9 @@ object SabqRoutes {
 
     fun gulfCupTeam(id: Int, name: String, logo: String): String =
         "gulf-cup/team/$id?name=${Uri.encode(name)}&logo=${Uri.encode(logo)}"
+
+    fun asianCupMatch(id: Int): String = "asian-cup/match/$id"
+    fun asianCupTeam(id: Int): String = "asian-cup/team/$id"
 
     fun muqtarabAngle(slug: String): String = "muqtarab/angle/${Uri.encode(slug)}"
 
@@ -204,6 +210,16 @@ fun SabqApp(
         androidx.compose.runtime.LaunchedEffect(pendingPush) {
             val target = pendingPush ?: return@LaunchedEffect
             when {
+                target.deepLinkPath == "/asian-cup" ->
+                    navController.navigate(SabqRoutes.AsianCup)
+                target.deepLinkPath?.startsWith("/asian-cup/match/") == true ->
+                    target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
+                        navController.navigate(SabqRoutes.asianCupMatch(it))
+                    }
+                target.deepLinkPath?.startsWith("/asian-cup/team/") == true ->
+                    target.deepLinkPath.substringAfterLast('/').toIntOrNull()?.let {
+                        navController.navigate(SabqRoutes.asianCupTeam(it))
+                    }
                 !target.articleSlug.isNullOrBlank() ->
                     navController.navigate(SabqRoutes.articleDetail(target.articleSlug!!))
                 !target.notificationId.isNullOrBlank() ->
@@ -267,6 +283,9 @@ fun SabqApp(
                         },
                         onGulfCupClick = {
                             navController.navigate(SabqRoutes.GulfCup)
+                        },
+                        onAsianCupClick = {
+                            navController.navigate(SabqRoutes.AsianCup)
                         },
                         onCalendarAllClick = {
                             navController.navigate(SabqRoutes.Calendar)
@@ -545,6 +564,35 @@ fun SabqApp(
                         onOpenMatch = { id -> navController.navigate(SabqRoutes.gulfCupMatch(id)) },
                         onOpenTeam = { team -> navController.navigate(SabqRoutes.gulfCupTeam(team.id, team.name, team.logo)) },
                         onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                composable(SabqRoutes.AsianCup) {
+                    com.sabq.smart.feature.asiancup.AsianCupScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.asianCupMatch(id)) },
+                        onOpenTeam = { team -> navController.navigate(SabqRoutes.asianCupTeam(team.id)) },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.AsianCupMatch,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) { entry ->
+                    val fixtureId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.asiancup.AsianCupMatchScreen(
+                        fixtureId = fixtureId,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.AsianCupTeam,
+                    arguments = listOf(navArgument("id") { type = NavType.StringType }),
+                ) { entry ->
+                    val teamId = entry.arguments?.getString("id")?.toIntOrNull() ?: 0
+                    com.sabq.smart.feature.asiancup.AsianCupTeamScreen(
+                        teamId = teamId,
+                        onBack = { navController.popBackStack() },
+                        onOpenMatch = { id -> navController.navigate(SabqRoutes.asianCupMatch(id)) },
                     )
                 }
                 composable(

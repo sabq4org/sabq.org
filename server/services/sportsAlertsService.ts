@@ -92,6 +92,53 @@ interface DetectedAlert {
 const snapshots = new Map<number, MatchSnapshot>();
 let lastCleanup = 0;
 
+// آخر إحصاءات TheSports مرصودة لكل مباراة أثناء البث. detail_live يختفي بعد
+// الصافرة، فلحظة اكتشاف «نهاية المباراة» لا تضمن لقطة حيّة — نحتفظ بآخرها
+// لإثراء إشعار النهاية بأرقام المباراة (المونديال).
+const lastStats = new Map<number, TsLiveStats>();
+
+// «نهاية» متعادلة بلا ركلات ترجيح في دور إقصائي لا تكون نهاية حقيقية — القاعدة
+// تحتّم أشواطًا إضافية أو ترجيحًا، والغالب أنها FT خاطفة من المزوّد عند د90 قبل
+// التحوّل لحالة الإضافي (ET). نحتجز الإعلان حتى تنحسم أو تثبت مهلةً كاملة
+// (حارس ضد مزوّد لا يُحدّث حالته أبدًا). id → أول لحظة رصد. ذاكرة فقط — إعادة
+// النشر أثناء الاحتجاز تعيد عدّ المهلة، وهذا أهون من تعقيد الحالة المحفوظة.
+const pendingLevelFulltime = new Map<number, number>();
+const LEVEL_FULLTIME_HOLD_MS = Number(
+  process.env.SPORTS_LEVEL_FULLTIME_HOLD_MS ?? 5 * 60_000,
+);
+
+// أدوار إقصائية بالتسميات المتداولة في مصادرنا (عربية من worldCupNames/التعريب،
+// أو إنجليزية كما يمرّرها المزوّد في وضع en). مطابقة جزئية متساهلة — الحارس
+// احترازي ولا يضرّ لو فاته دورٌ غريب التسمية (نعود لسلوك الإرسال الفوري).
+const KNOCKOUT_ROUND_HINTS = [
+  "نهائي", // النهائي/نصف النهائي/ربع النهائي/ثمن النهائي
+  "دور الـ", // دور الـ32/دور الـ16
+  "المركز الثالث",
+  "الملحق",
+  "final",
+  "round of",
+  "quarter",
+  "semi",
+  "third place",
+  "play-off",
+  "playoff",
+  "knockout",
+];
+
+function isKnockoutRound(round: string): boolean {
+  const r = round.trim().toLowerCase();
+  if (!r) return false;
+  return KNOCKOUT_ROUND_HINTS.some((hint) => r.includes(hint));
+}
+
+/** تعادل بلا حسم ترجيحي في دور إقصائي — «نهايته» مشبوهة حتى إشعار آخر. */
+function isSuspectLevelKnockoutEnd(m: SplLiveBoardItem): boolean {
+  if ((m.goals.home ?? 0) !== (m.goals.away ?? 0)) return false;
+  const pens = m.penalties;
+  if (pens && pens.home != null && pens.away != null && pens.home !== pens.away) return false;
+  return isKnockoutRound(m.round);
+}
+
 // توقيعات أحداث الكروت/الفار المُرسَلة لكل مباراة (id → set of signatures). أول
 // رصدٍ لمباراة يؤسّس خطّ الأساس بلا إرسال (يتفادى إغراق متابعٍ جديد بكروت سابقة).
 const eventSeen = new Map<number, Set<string>>();
@@ -338,6 +385,13 @@ const fmtScore = (m: SplLiveBoardItem) => `${m.goals.home ?? 0}-${m.goals.away ?
 // (بلا نداء API ولا LLM في المسار الحسّاس — التزاماً بضوابط كلفة/كمون المحرّك):
 // حسم متأخّر، فوز عريض، تعادل مثير... جملةٌ قصيرة تُضاف لجسم الإشعار.
 function resultContext(m: SplLiveBoardItem): string | null {
+  // ترجيح محسوم يسبق كل القراءات — «تعادل يقسّم النقاط» لغة دوريات لا تصلح
+  // لمباراة إقصائية حُسمت من علامة الجزاء.
+  const pens = m.penalties;
+  if (pens && pens.home != null && pens.away != null && pens.home !== pens.away) {
+    const winner = pens.home > pens.away ? m.home.name : m.away.name;
+    return `${winner} يحسمها بركلات الترجيح ${pens.home}-${pens.away}`;
+  }
   const gh = m.goals.home ?? 0;
   const ga = m.goals.away ?? 0;
   const total = gh + ga;
@@ -479,6 +533,69 @@ function pickStatInsightStory(m: SplLiveBoardItem, stats: TsLiveStats | null): S
   return null;
 }
 
+// ── إثراء إشعار نهاية المونديال بأرقام المباراة (قرار المنتج 2026-07-12) ──
+// إشعار واحد لحظة الصافرة: النتيجة والقصة كما هي، يليها سطر إحصاءات وسطر
+// الهدّافين. المونديال فقط في البداية؛ التوسّع لبقية البطولات قرار لاحق.
+
+// الأزواج المعروضة بالأولوية — نكتفي بثلاثة كي لا يُقصّ الإشعار على iOS.
+const DIGEST_STATS: Array<{ key: keyof TsLiveStats; label: string; percent?: boolean }> = [
+  { key: "possession", label: "استحواذ", percent: true },
+  { key: "shotsOnTarget", label: "على المرمى" },
+  { key: "dangerousAttacks", label: "هجمات خطرة" },
+  { key: "corners", label: "ركنيات" },
+];
+
+function buildDigestStatsLine(stats: TsLiveStats | null): string | null {
+  if (!stats) return null;
+  const parts: string[] = [];
+  for (const { key, label, percent } of DIGEST_STATS) {
+    const pair = statPair(stats, key);
+    if (!pair) continue;
+    const suffix = percent ? "%" : "";
+    parts.push(`${label} ${pair[0]}${suffix}-${pair[1]}${suffix}`);
+    if (parts.length >= 3) break;
+  }
+  // رقم واحد لا يحكي قصة — سطر الإحصاءات يستحق مكانه بمؤشّرين فأكثر.
+  return parts.length >= 2 ? parts.join(" · ") : null;
+}
+
+function buildScorersLine(events: SplMatchEvent[]): string | null {
+  const goals = events.filter((e) => e.type === "goal" && !e.label.includes("ملغ"));
+  if (goals.length === 0) return null;
+  const entries = goals.slice(0, 6).map((e) => {
+    const tag = e.label.includes("جزاء") ? " (ج)" : e.label.includes("عكسي") ? " (عكسي)" : "";
+    const minute =
+      e.minute != null ? ` (د${e.minute}${e.extra ? `+${e.extra}` : ""})` : "";
+    return `${e.player}${tag}${minute}`;
+  });
+  const suffix = goals.length > entries.length ? " …" : "";
+  return `سجّل: ${entries.join(" • ")}${suffix}`;
+}
+
+/** يُثري إشعارات «انتهت المباراة» لمباريات المونديال بالإحصاءات والهدّافين — أفضل جهد. */
+async function enrichWorldCupFulltimeAlerts(
+  alerts: DetectedAlert[],
+  matches: SplLiveBoardItem[],
+): Promise<void> {
+  const byId = new Map(matches.map((m) => [m.id, m]));
+  for (const alert of alerts) {
+    if (alert.kind !== "fulltime") continue;
+    const m = byId.get(alert.fixtureId);
+    if (!m || m.competitionSlug !== "world-cup") continue;
+
+    const lines = [alert.body];
+    const statsLine = buildDigestStatsLine(lastStats.get(alert.fixtureId) ?? null);
+    if (statsLine) lines.push(statsLine);
+    // أحداث AF مكاشة (12ث) وأسماؤها معرّبة؛ المعرّفات الاصطناعية تعود فارغة فتُسقط السطر.
+    const events = await getMatchEventsOnly(alert.fixtureId).catch(() => [] as SplMatchEvent[]);
+    const scorersLine = buildScorersLine(events);
+    if (scorersLine) lines.push(scorersLine);
+    if (lines.length === 1) continue;
+
+    alert.body = lines.join("\n");
+  }
+}
+
 async function detectStatInsightAlerts(
   matches: SplLiveBoardItem[],
   tsLive: Map<number, TsMatchLive>,
@@ -540,8 +657,10 @@ async function hydrateStateOnce(): Promise<void> {
       eventSeen?: [number, string[]][];
       tsEventSeen?: [number, string[]][];
       sentAlertSigs?: [number, string[]][];
+      lastStats?: [number, TsLiveStats][];
     };
     for (const [id, snap] of parsed.snapshots ?? []) snapshots.set(id, snap);
+    for (const [id, stats] of parsed.lastStats ?? []) lastStats.set(id, stats);
     for (const [id, sigs] of parsed.eventSeen ?? []) eventSeen.set(id, new Set(sigs));
     for (const [id, sigs] of parsed.tsEventSeen ?? []) tsEventSeen.set(id, new Set(sigs));
     for (const [id, sigs] of parsed.sentAlertSigs ?? []) sentAlertSigs.set(id, new Set(sigs));
@@ -562,6 +681,7 @@ async function persistState(): Promise<void> {
       eventSeen: [...eventSeen.entries()].map(([id, set]) => [id, [...set]]),
       tsEventSeen: [...tsEventSeen.entries()].map(([id, set]) => [id, [...set]]),
       sentAlertSigs: [...sentAlertSigs.entries()].map(([id, set]) => [id, [...set]]),
+      lastStats: [...lastStats.entries()],
     });
     await redis.set(STATE_KEY, payload, {
       expiration: { type: "EX", value: STATE_TTL_SEC },
@@ -631,8 +751,26 @@ function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<n
       });
     }
 
+    // عادت حيّة (أشواط إضافية/ترجيح بعد FT خاطفة) — يسقط أي احتجاز معلّق.
+    if (!m.status.finished) pendingLevelFulltime.delete(m.id);
+
     // نهاية المباراة
     if (!prev.finished && cur.finished) {
+      // حذر الأدوار الإقصائية: تعادل بلا ترجيح لا يُنهي مباراة إقصائية — الغالب
+      // FT خاطفة قبل الأشواط الإضافية. نُبقي اللقطة «غير منتهية» فيُعاد فحص
+      // التحوّل كل دورة، ولا نُعلن إلا إن صمدت «النهاية» المهلة كاملة.
+      if (isSuspectLevelKnockoutEnd(m)) {
+        const firstSeen = pendingLevelFulltime.get(m.id) ?? Date.now();
+        pendingLevelFulltime.set(m.id, firstSeen);
+        if (Date.now() - firstSeen < LEVEL_FULLTIME_HOLD_MS) {
+          // «ما زالت جارية» من منظور اللقطة: يبقى التحوّل قابلًا للاكتشاف كل
+          // دورة، وعودة ET لا تبدو انطلاقةً جديدة (live=false كانت ستوهم بذلك).
+          cur.finished = false;
+          cur.live = true;
+          continue;
+        }
+      }
+      pendingLevelFulltime.delete(m.id);
       const why = resultContext(m);
       alerts.push({
         fixtureId: m.id,
@@ -640,6 +778,9 @@ function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<n
         title: `🏁 انتهت المباراة · ${m.home.name} ${fmtScore(m)} ${m.away.name}`,
         body: why ? `${m.competition} · ${why}` : m.competition,
         teamRefIds,
+        // بصمة معنوية: الإثراء بالإحصاءات يجعل النصّ متقلّبًا بين الدورات لو
+        // تذبذب علم النهاية عند المزوّد — النهاية حدثٌ واحد لكل مباراة.
+        dedupeKey: `fulltime:${m.id}`,
       });
     }
   }
@@ -650,6 +791,9 @@ function detectAlerts(matches: SplLiveBoardItem[], detailedGoalFixtureIds: Set<n
     lastCleanup = now;
     for (const id of snapshots.keys()) {
       if (!seenIds.has(id)) snapshots.delete(id);
+    }
+    for (const id of pendingLevelFulltime.keys()) {
+      if (!seenIds.has(id)) pendingLevelFulltime.delete(id);
     }
   }
 
@@ -1070,6 +1214,12 @@ function applyTsOverlay(
     return {
       ...m,
       goals: { home: ts.home, away: ts.away },
+      // نتيجة الترجيح من TheSports أسرع من AF بدورة كاملة — بدونها يبدو حسم
+      // الركلات «تعادلًا مشبوهًا» فيُحتجز إشعار النهاية بلا داعٍ حتى يلحق AF.
+      penalties:
+        ts.penHome != null && ts.penAway != null && (ts.penHome > 0 || ts.penAway > 0)
+          ? { home: ts.penHome, away: ts.penAway }
+          : m.penalties,
       status: {
         ...m.status,
         elapsed: ts.elapsed ?? m.status.elapsed,
@@ -1324,6 +1474,11 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
   // إحصاءات) — نداء واحد مكاش، نُعيد استخدامه في تركيب النتيجة وكشف الأحداث. أفضل جهد.
   const tsLive = await collectTsLive(baseMatches);
   const tsHandledIds = new Set(tsLive.keys());
+  // نحتفظ بآخر إحصاءات حيّة لكل مباراة — تُستهلك في إثراء إشعار النهاية لأن
+  // detail_live قد يغيب لحظة اكتشاف الصافرة.
+  for (const [id, ts] of tsLive) {
+    if (ts.stats) lastStats.set(id, ts.stats);
+  }
   // تركيب نتيجة/حالة TheSports فيُطلَق الإشعار بنفس سرعة الشاشة.
   const matches = applyTsOverlay(baseMatches, tsLive);
   // أحداث النتيجة/الحالة (انطلاق/نهاية للكل، وهدف لغير مباريات TheSports) + بطاقات/فار
@@ -1334,6 +1489,7 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
     tsEventAlerts.filter((alert) => alert.kind === "goal").map((alert) => alert.fixtureId),
   );
   const alerts = detectAlerts(matches, detailedGoalFixtureIds);
+  await enrichWorldCupFulltimeAlerts(alerts, matches);
   const eventAlerts = await detectEventAlerts(matches, tsHandledIds);
   const hardAlertFixtureIds = new Set(
     [...alerts, ...eventAlerts, ...tsEventAlerts]
@@ -1366,6 +1522,9 @@ export async function runSportsAlertsCycle(): Promise<SportsAlertsCycleSummary> 
     lastSentSigsCleanup = nowMs;
     for (const id of sentAlertSigs.keys()) {
       if (!byId.has(id)) sentAlertSigs.delete(id);
+    }
+    for (const id of lastStats.keys()) {
+      if (!byId.has(id)) lastStats.delete(id);
     }
   }
 

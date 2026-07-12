@@ -3,7 +3,7 @@
  * البيانات من API-Football عبر asianCupService خلف كاش SWR، مع Cache-Control
  * متدرّج حسب سخونة البيانات. البطولة في يناير 2027 (وضع معاينة/عدّ تنازلي الآن).
  */
-import type { Express } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import {
   getAcOverview,
   getAcTeams,
@@ -24,6 +24,7 @@ import {
   isBlockHidden,
 } from "../services/tournamentBlockSettings";
 import { detectCupChampion, manualCupChampion } from "../services/cupChampion";
+import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
 
 const NOT_CONFIGURED = {
   configured: false,
@@ -31,6 +32,11 @@ const NOT_CONFIGURED = {
 };
 
 export function registerAsianCupRoutes(app: Express) {
+  app.use("/api/asian-cup", (req: Request, res: Response, next: NextFunction) => {
+    res.vary("Accept-Language");
+    runWithSportsLang(sportsLangFromReq(req), () => next());
+  });
+
   const guard = (res: any): boolean => {
     if (!isAsianCupConfigured()) {
       res.status(503).json(NOT_CONFIGURED);

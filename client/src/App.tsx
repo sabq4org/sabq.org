@@ -431,6 +431,10 @@ const WorldCupTeam = lazy(() => retryImport(() => import("@/pages/WorldCupTeam")
 const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
 const AsianCup = lazy(() => retryImport(() => import("@/pages/AsianCup")));
 const AsianCupPredictions = lazy(() => retryImport(() => import("@/pages/AsianCupPredictions")));
+const AsianCupMatch = lazy(() => retryImport(() => import("@/pages/AsianCupMatch")));
+const AsianCupTeam = lazy(() => retryImport(() => import("@/pages/AsianCupTeam")));
+const AsianCupPlayer = lazy(() => retryImport(() => import("@/pages/AsianCupPlayer")));
+const AsianCupVenues = lazy(() => retryImport(() => import("@/pages/AsianCupVenues")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
 const GulfCupPredictions = lazy(() => retryImport(() => import("@/pages/GulfCupPredictions")));
 const GulfCupMajlis = lazy(() => retryImport(() => import("@/pages/GulfCupMajlis")));
@@ -967,6 +971,12 @@ function Router() {
         <Route path="/world-cup/team/:teamId">{() => <LazyRoute component={WorldCupTeam} />}</Route>
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
         <Route path="/asian-cup/predictions">{() => <LazyRoute component={AsianCupPredictions} />}</Route>
+        <Route path="/asian-cup/match/:id">{() => <LazyRoute component={AsianCupMatch} />}</Route>
+        <Route path="/asian-cup/team/:id">{() => <LazyRoute component={AsianCupTeam} />}</Route>
+        <Route path="/asian-cup/player/:id">{() => <LazyRoute component={AsianCupPlayer} />}</Route>
+        <Route path="/asian-cup/scorers">{() => <Redirect to="/asian-cup#ac-races" />}</Route>
+        <Route path="/asian-cup/bracket">{() => <Redirect to="/asian-cup#ac-knockout" />}</Route>
+        <Route path="/asian-cup/venues">{() => <LazyRoute component={AsianCupVenues} />}</Route>
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         <Route path="/gulf-cup/majlis/:id">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
         <Route path="/gulf-cup/majlis">{() => <LazyRoute component={GulfCupMajlis} />}</Route>

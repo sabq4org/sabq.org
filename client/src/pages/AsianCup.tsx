@@ -12,6 +12,7 @@ import { AcGroups } from "@/components/asiancup/AcGroups";
 import { AcSchedule } from "@/components/asiancup/AcSchedule";
 import { AcTeams } from "@/components/asiancup/AcTeams";
 import { AcHostShowcase } from "@/components/asiancup/AcHostShowcase";
+import { AcKnockoutSection, AcTournamentRaces } from "@/components/asiancup/AcTournamentSections";
 import { SportsNewsBlock } from "@/components/sports/SportsNewsBlock";
 import type { AcFixture, AcGroup, AcOverview, AcTeam } from "@/components/asiancup/acTypes";
 
@@ -70,6 +71,8 @@ export default function AsianCup() {
         <AcSaudiSpotlight saudi={overview?.saudi} />
         <AcGroups groups={groups} />
         <AcSchedule fixtures={fixtures} isLoading={fixturesLoading} />
+        <AcKnockoutSection />
+        <AcTournamentRaces tournamentStarted={fixtures.some((fixture) => fixture.status.live || fixture.status.finished)} />
         <AcTeams teams={teams} isLoading={teamsLoading} />
         <AcHostShowcase overview={overview} />
         <div className="mx-auto max-w-6xl px-3 sm:px-4 pb-10">

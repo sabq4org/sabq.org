@@ -621,6 +621,42 @@ interface SabqApi {
     @GET("https://api.sabq.org/api/world-cup/player/{id}/form")
     suspend fun getWorldCupPlayerForm(@Path("id") playerId: Int): com.sabq.smart.feature.worldcup.WcPlayerForm
 
+    // -- كأس آسيا 2027 ------------------------------------------------------
+    @GET("api/asian-cup/overview")
+    suspend fun getAsianCupOverview(): com.sabq.smart.feature.asiancup.AcOverview
+
+    @GET("api/asian-cup/fixtures")
+    suspend fun getAsianCupFixtures(): com.sabq.smart.feature.asiancup.AcFixturesResponse
+
+    @GET("api/asian-cup/standings")
+    suspend fun getAsianCupStandings(): com.sabq.smart.feature.asiancup.AcStandingsResponse
+
+    @GET("api/asian-cup/teams")
+    suspend fun getAsianCupTeams(): com.sabq.smart.feature.asiancup.AcTeamsResponse
+
+    @GET("api/asian-cup/team/{id}")
+    suspend fun getAsianCupTeam(@Path("id") teamId: Int): com.sabq.smart.feature.asiancup.AcTeamProfile
+
+    @GET("api/asian-cup/match/{id}")
+    suspend fun getAsianCupMatch(@Path("id") fixtureId: Int): com.sabq.smart.feature.asiancup.AcMatchDetail
+
+    @GET("api/asian-cup/scorers")
+    suspend fun getAsianCupScorers(): com.sabq.smart.feature.asiancup.AcScorersResponse
+
+    @GET("api/asian-cup/bracket")
+    suspend fun getAsianCupBracket(): com.sabq.smart.feature.asiancup.AcBracket
+
+    @GET("api/v1/asian-cup/predictions/today")
+    suspend fun getAsianCupPredictionsToday(): com.sabq.smart.feature.asiancup.AcPredictionsTodayResponse
+
+    @POST("api/v1/asian-cup/predictions")
+    suspend fun submitAsianCupPrediction(
+        @Body body: com.sabq.smart.feature.asiancup.AcPredictionSubmitBody,
+    ): com.sabq.smart.feature.asiancup.AcPredictionSubmitResponse
+
+    @GET("api/v1/asian-cup/predictions/leaderboard")
+    suspend fun getAsianCupPredictionsLeaderboard(): com.sabq.smart.feature.asiancup.AcPredictionLeaderboardResponse
+
     // -- خليجي 27 (Gulf Cup 27 — جدة 2026) --------------------------------
     @GET("https://api.sabq.org/api/gulf-cup/overview")
     suspend fun getGulfCupOverview(): com.sabq.smart.feature.gulfcup.GcOverview

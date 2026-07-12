@@ -68,8 +68,17 @@ extension AcLanguage {
                    isRTL: false, localeIdentifier: "bn_BD", flag: "🇧🇩"),
     ]
 
+    /// لا نعرض لغة قبل وجود ملف ترجمتها فعليًا داخل الحزمة. يمنع هذا الوعد
+    /// المضلّل بدعم 16 لغة بينما يسقط بعضها صامتًا إلى الإنجليزية.
+    static var available: [AcLanguage] {
+        all.filter { language in
+            Bundle.main.url(forResource: language.code, withExtension: "json", subdirectory: "Localization") != nil
+                || Bundle.main.url(forResource: language.code, withExtension: "json") != nil
+        }
+    }
+
     static func find(_ code: String?) -> AcLanguage? {
         guard let code else { return nil }
-        return all.first { $0.code == code }
+        return available.first { $0.code == code }
     }
 }

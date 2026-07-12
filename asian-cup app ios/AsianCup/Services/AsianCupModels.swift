@@ -7,6 +7,7 @@ import Foundation
 nonisolated struct AcTeam: Decodable, Identifiable, Hashable {
     let id: Int
     let name: String
+    let nameEn: String?
     let logo: String
 }
 
@@ -166,6 +167,16 @@ nonisolated struct AcPredictionsTodayResponse: Decodable, Hashable {
 
 private nonisolated struct AcPredictionsLeaderboardResponse: Decodable {
     let leaders: [AcPredictionLeader]
+}
+
+private nonisolated struct AcPredictionSubmitBody: Encodable {
+    let fixtureId: Int
+    let predHome: Int
+    let predAway: Int
+}
+
+private nonisolated struct AcPredictionSubmitResponse: Decodable {
+    let prediction: AcMyPrediction
 }
 
 // MARK: - الهدّافون (API-Football topscorers)
@@ -598,13 +609,24 @@ extension APIClient {
 
     func fetchAcPredictionsToday(ignoreCache: Bool = false) async throws -> AcPredictionsTodayResponse {
         try await get(AcPredictionsTodayResponse.self, path: "/asian-cup/predictions/today",
-                      ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+                      ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI)
     }
 
     func fetchAcPredictionsLeaderboard(ignoreCache: Bool = false) async throws -> [AcPredictionLeader] {
         let r = try await get(AcPredictionsLeaderboardResponse.self, path: "/asian-cup/predictions/leaderboard",
-                              ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
+                              ignoreCache: ignoreCache, apiRoot: URLConstants.mobileAPI)
         return r.leaders
+    }
+
+    func submitAcPrediction(fixtureId: Int, predHome: Int, predAway: Int) async throws -> AcMyPrediction {
+        let body = AcPredictionSubmitBody(fixtureId: fixtureId, predHome: predHome, predAway: predAway)
+        let response = try await post(
+            AcPredictionSubmitResponse.self,
+            path: "/asian-cup/predictions",
+            body: body,
+            apiRoot: URLConstants.mobileAPI
+        )
+        return response.prediction
     }
 
     // المرحلة 1 — نقاط API-Football الإضافية.

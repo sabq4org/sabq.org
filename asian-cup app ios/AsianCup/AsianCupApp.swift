@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct AsianCupApp: App {
+    @UIApplicationDelegateAdaptor(AcAppDelegate.self) private var appDelegate
+    @State private var auth = AcAuthStore.shared
+
     init() {
         // سجّل خط IBM Plex Sans Arabic قبل أي واجهة تستعمله.
         FontRegistration.registerAll()
@@ -13,7 +16,7 @@ struct AsianCupApp: App {
         )
     }
 
-    // المظهر وحجم الخط يتحكم بهما المستخدم من «المزيد › التحكم» —
+    // المظهر وحجم الخط يتحكم بهما المستخدم من «حسابي › التحكم» —
     // الافتراضي فاتح (هوية البطولة)، والثيم الداكن جاهز في AcTheme عبر dyn().
     @AppStorage("ac.appearance") private var appearanceRaw = "light"
     @AppStorage("ac.textScale") private var textScaleRaw = "system"
@@ -47,7 +50,13 @@ struct AsianCupApp: App {
 
     private var root: some View {
         AsianCupView()
+            .environment(auth)
             .asianCupRTL()
             .preferredColorScheme(preferredScheme)
+            .task {
+                await auth.restore()
+                await AcFollowsStore.shared.reload()
+                await AcPushManager.shared.syncWithSession()
+            }
     }
 }

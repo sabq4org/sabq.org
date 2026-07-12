@@ -1,5 +1,6 @@
 import SwiftUI
 import UserNotifications
+import AuthenticationServices
 
 // الشاشة الرئيسية لتطبيق كأس آسيا — نظرة عامة محايدة لكل المنتخبات.
 // التحديث: .task أول ظهور + .refreshable للسحب.
@@ -11,6 +12,7 @@ struct AsianCupView: View {
     @State private var loading = true
     @State private var loadError: String?
     @State private var selectedTab: AcTab = .home
+    @State private var deepLink: AcDeepLink?
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -73,6 +75,59 @@ struct AsianCupView: View {
             AcLanguageOnboarding { languageChosen = true }
                 .asianCupRTL()
         }
+        .onOpenURL(perform: openDeepLink)
+        .onReceive(NotificationCenter.default.publisher(for: .acDeepLink)) { note in
+            if let url = note.object as? URL { openDeepLink(url) }
+        }
+        .sheet(item: $deepLink) { link in
+            NavigationStack { deepLinkDestination(link) }
+                .asianCupRTL()
+        }
+    }
+
+    @ViewBuilder
+    private func deepLinkDestination(_ link: AcDeepLink) -> some View {
+        switch link {
+        case .match(let id):
+            if let fixture = fixtures.first(where: { $0.id == id }) {
+                AcMatchDetailSheet(fixture: fixture)
+            } else {
+                AcEmptyState(icon: "calendar.badge.exclamationmark", title: L("error.notFound"), subtitle: L("error.generic"))
+                    .padding()
+            }
+        case .team(let id):
+            let fallback = teams.first(where: { $0.id == id })
+                ?? AcTeam(id: id, name: "", nameEn: nil, logo: "")
+            AcTeamProfileScreen(teamId: id, fallback: fallback)
+        case .player(let id):
+            AcPlayerProfileScreen(
+                playerId: id,
+                fallbackName: "",
+                fallbackPhoto: "",
+                fallbackSubtitle: L("player.profile")
+            )
+        case .predictions:
+            AcPredictionsScreen(refreshMainData: { await loadAll(force: true) })
+        }
+    }
+
+    private func openDeepLink(_ url: URL) {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        guard let cupIndex = parts.firstIndex(of: "asian-cup") else { return }
+        let tail = Array(parts.dropFirst(cupIndex + 1))
+        if tail.first == "predictions" {
+            selectedTab = .predictions
+            deepLink = .predictions
+        } else if tail.count >= 2, let id = Int(tail[1]) {
+            switch tail[0] {
+            case "match": deepLink = .match(id)
+            case "team": deepLink = .team(id)
+            case "player": deepLink = .player(id)
+            default: break
+            }
+        } else {
+            selectedTab = .home
+        }
     }
 
     private var hasLiveFixtures: Bool {
@@ -106,6 +161,22 @@ struct AsianCupView: View {
             self.loadError = LError(error)
         }
         self.loading = false
+    }
+}
+
+private enum AcDeepLink: Identifiable {
+    case match(Int)
+    case team(Int)
+    case player(Int)
+    case predictions
+
+    var id: String {
+        switch self {
+        case .match(let id): return "match-\(id)"
+        case .team(let id): return "team-\(id)"
+        case .player(let id): return "player-\(id)"
+        case .predictions: return "predictions"
+        }
     }
 }
 
@@ -388,14 +459,19 @@ private struct AcPredictionMatchesList: View {
 private struct AcPredictionMatchCard: View {
     let match: AcPredictableMatch
     let me: AcPredictionMeStats?
+    @Environment(AcAuthStore.self) private var auth
     @State private var predHome: Int
     @State private var predAway: Int
+    @State private var savedPrediction: AcMyPrediction?
+    @State private var submitting = false
+    @State private var submitError: String?
 
     init(match: AcPredictableMatch, me: AcPredictionMeStats?) {
         self.match = match
         self.me = me
         _predHome = State(initialValue: match.myPrediction?.predHome ?? 1)
         _predAway = State(initialValue: match.myPrediction?.predAway ?? 1)
+        _savedPrediction = State(initialValue: match.myPrediction)
     }
 
     private var predictedOutcome: String {
@@ -463,21 +539,62 @@ private struct AcPredictionMatchCard: View {
                 AcIconStat(icon: "chart.bar.fill", value: "\(match.predictionsCount)", label: L("predictions.meta.prediction"))
             }
 
-            // ملاحظة معلوماتية صادقة — لا زرّ مزيّف يوحي بفعل غير متاح.
-            HStack(spacing: 6) {
-                Image(systemName: match.locked ? "lock.fill" : "info.circle")
-                    .font(.system(size: 12, weight: .semibold))
-                Text(match.locked ? L("predictions.locked.note") : L("predictions.login.note"))
-                    .font(AsianCupFonts.app(size: 12, weight: .semibold))
+            if let submitError {
+                Text(submitError)
+                    .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                    .foregroundStyle(AcTheme.crimson)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .foregroundStyle(AcTheme.onDarkDim)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous).fill(AcTheme.chipFill))
+
+            // زر حقيقي: مسجّل الدخول يحفظ توقعه، وغيره يبدأ Apple Sign-In.
+            Button {
+                if auth.isLoggedIn {
+                    Task { await submit() }
+                } else {
+                    auth.startAppleSignIn()
+                }
+            } label: {
+                Text(buttonTitle)
+                    .font(AsianCupFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(match.locked ? AcTheme.onDarkFaint : .white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(
+                        RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous)
+                            .fill(match.locked ? AcTheme.chipFill : AcTheme.emerald)
+                    )
+            }
+            .disabled(match.locked || submitting)
+            .buttonStyle(AcPressableStyle())
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).fill(AcTheme.cardFillStrong))
         .overlay(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).stroke(match.locked ? AcTheme.outline : AcTheme.emerald.opacity(0.25), lineWidth: 1))
+    }
+
+    private var buttonTitle: String {
+        if match.locked { return L("predictions.locked.note") }
+        if submitting { return L("predictions.saving") }
+        if savedPrediction?.predHome == predHome && savedPrediction?.predAway == predAway {
+            return L("predictions.saved")
+        }
+        return auth.isLoggedIn ? L("predictions.save") : L("predictions.login.note")
+    }
+
+    @MainActor
+    private func submit() async {
+        submitting = true
+        submitError = nil
+        defer { submitting = false }
+        do {
+            savedPrediction = try await APIClient.shared.submitAcPrediction(
+                fixtureId: match.fixture.id,
+                predHome: predHome,
+                predAway: predAway
+            )
+        } catch {
+            submitError = LError(error)
+        }
     }
 }
 
@@ -669,7 +786,7 @@ private struct AcMoreScreen: View {
             VStack(spacing: 18) {
                 AcTopBar(title: L("tab.more"), subtitle: L("more.subtitle"), state: acAppVersion())
 
-                AcAccountHeader(teams: teams)
+                AcAccountCard()
 
                 AcControlHub(teams: teams, fixtures: fixtures, onOpenLanguage: { showLanguage = true })
 
@@ -692,201 +809,86 @@ private struct AcMoreScreen: View {
     }
 }
 
-// MARK: - رأس الحساب — ملف المستخدم (محلي الآن، جاهز للربط بمصادقة الخادم لاحقًا)
-private struct AcAccountHeader: View {
-    let teams: [AcTeam]
-
-    @AppStorage("ac.profileName") private var profileName = ""
-    @AppStorage("ac.favoriteTeam") private var favoriteTeamId = 0
-    @State private var showEditor = false
-
-    private var favoriteTeam: AcTeam? { teams.first { $0.id == favoriteTeamId } }
+// MARK: - حسابي — تسجيل دخول Apple الحقيقي (جلسة خادم سبق) + تفعيل الإشعارات
+private struct AcAccountCard: View {
+    @Environment(AcAuthStore.self) private var auth
+    @State private var push = AcPushManager.shared
 
     var body: some View {
-        Group {
-            if profileName.isEmpty {
-                setupCard
-            } else {
-                profileCard
-            }
-        }
-        .sheet(isPresented: $showEditor) {
-            AcProfileEditor().asianCupRTL()
-        }
-    }
-
-    // حالة الضيف: دعوة لإنشاء الملف.
-    private var setupCard: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "person.crop.circle.badge.plus")
-                .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(AcTheme.emeraldInk)
-                .frame(width: 68, height: 68)
-                .background(Circle().fill(AcTheme.emerald.opacity(0.12)))
-
-            VStack(spacing: 4) {
-                Text(L("account.setup.title"))
-                    .font(AsianCupFonts.app(size: 18, weight: .bold))
-                    .foregroundStyle(AcTheme.onDarkStrong)
-                Text(L("account.setup.subtitle"))
-                    .font(AsianCupFonts.app(size: 12))
-                    .foregroundStyle(AcTheme.onDarkDim)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Button {
-                showEditor = true
-            } label: {
-                Text(L("account.setup.cta"))
-                    .font(AsianCupFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous).fill(AcTheme.emerald))
-            }
-            .buttonStyle(AcPressableStyle())
-
-            Text(L("account.local.note"))
-                .font(AsianCupFonts.app(size: 11))
-                .foregroundStyle(AcTheme.onDarkFaint)
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity)
-        .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).fill(AcTheme.heroGradient))
-        .overlay(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
-    }
-
-    // حالة الملف القائم: الاسم + المنتخب + تعديل/خروج.
-    private var profileCard: some View {
-        HStack(spacing: 14) {
-            avatar
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(profileName)
-                    .font(AsianCupFonts.app(size: 18, weight: .bold))
-                    .foregroundStyle(AcTheme.onDarkStrong)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                Text(favoriteTeam.map { LTeam(String($0.id), fallback: $0.name) } ?? L("account.fan"))
-                    .font(AsianCupFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(AcTheme.onDarkDim)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            VStack(spacing: 6) {
-                Button { showEditor = true } label: {
-                    profilePill(L("account.edit"), tint: AcTheme.emeraldInk)
-                }
-                .buttonStyle(AcPressableStyle())
-                Button { profileName = "" } label: {
-                    profilePill(L("account.signout"), tint: AcTheme.crimson)
-                }
-                .buttonStyle(AcPressableStyle())
-            }
-        }
-        .padding(18)
-        .background(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).fill(AcTheme.heroGradient))
-        .overlay(RoundedRectangle(cornerRadius: AcTheme.cardRadius, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
-    }
-
-    @ViewBuilder private var avatar: some View {
-        if let favoriteTeam {
-            AcTeamLogo(logo: favoriteTeam.logo, size: 58)
-        } else {
-            Text(String(profileName.prefix(1)))
-                .font(AsianCupFonts.app(size: 24, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 58, height: 58)
-                .background(Circle().fill(AcTheme.emerald))
-        }
-    }
-
-    private func profilePill(_ title: String, tint: Color) -> some View {
-        Text(title)
-            .font(AsianCupFonts.app(size: 11, weight: .bold))
-            .foregroundStyle(tint)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 5)
-            .frame(minWidth: 64)
-            .background(Capsule().fill(tint.opacity(0.10)))
-            .overlay(Capsule().stroke(tint.opacity(0.30), lineWidth: 1))
-    }
-}
-
-// محرّر الملف الشخصي — ورقة قصيرة لإدخال الاسم.
-private struct AcProfileEditor: View {
-    @Environment(\.dismiss) private var dismiss
-    @AppStorage("ac.profileName") private var profileName = ""
-    @State private var draft = ""
-    @FocusState private var nameFocused: Bool
-
-    private var trimmed: String {
-        draft.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    var body: some View {
-        VStack(spacing: 16) {
-            Capsule()
-                .fill(AcTheme.outlineStrong)
-                .frame(width: 40, height: 5)
-                .padding(.top, 10)
-
-            Text(L("account.setup.title"))
-                .font(AsianCupFonts.app(size: 18, weight: .bold))
-                .foregroundStyle(AcTheme.onDarkStrong)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("account.name.label"))
-                    .font(AsianCupFonts.app(size: 12, weight: .semibold))
-                    .foregroundStyle(AcTheme.onDarkDim)
-                TextField(L("account.name.placeholder"), text: $draft)
-                    .font(AsianCupFonts.app(size: 15, weight: .semibold))
-                    .foregroundStyle(AcTheme.onDarkStrong)
-                    .focused($nameFocused)
-                    .submitLabel(.done)
-                    .onSubmit(save)
+        VStack(alignment: .leading, spacing: 12) {
+            AcSectionHeader(
+                icon: "person.crop.circle.fill",
+                title: L("auth.title"),
+                subtitle: auth.isLoggedIn ? L("auth.signedIn") : L("auth.subtitle")
+            )
+            AcGroupedCard {
+                if auth.isLoggedIn {
+                    VStack(spacing: 12) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 25, weight: .bold))
+                                .foregroundStyle(AcTheme.emerald)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(auth.member?.name ?? L("auth.signedIn"))
+                                    .font(AsianCupFonts.app(size: 15, weight: .bold))
+                                    .foregroundStyle(AcTheme.onDark)
+                                if let email = auth.member?.email {
+                                    Text(email)
+                                        .font(AsianCupFonts.app(size: 11))
+                                        .foregroundStyle(AcTheme.onDarkDim)
+                                }
+                            }
+                            Spacer()
+                            Button(L("auth.signOut")) { auth.signOut() }
+                                .font(AsianCupFonts.app(size: 12, weight: .bold))
+                                .foregroundStyle(AcTheme.crimson)
+                        }
+                        Button {
+                            Task {
+                                if await push.requestAuthorization() {
+                                    await push.syncWithSession()
+                                }
+                            }
+                        } label: {
+                            Label(
+                                push.isAuthorized ? L("notifications.enabled") : L("notifications.enable"),
+                                systemImage: push.isAuthorized ? "bell.badge.fill" : "bell.badge"
+                            )
+                            .font(AsianCupFonts.app(size: 13, weight: .bold))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .foregroundStyle(push.isAuthorized ? AcTheme.emeraldInk : .white)
+                            .background(
+                                RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous)
+                                    .fill(push.isAuthorized ? AcTheme.emerald.opacity(0.12) : AcTheme.emerald)
+                            )
+                        }
+                        .disabled(push.isAuthorized)
+                        .buttonStyle(AcPressableStyle())
+                    }
                     .padding(14)
-                    .background(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous).fill(AcTheme.chipFill))
-                    .overlay(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous).stroke(AcTheme.outline, lineWidth: 1))
+                } else {
+                    VStack(spacing: 10) {
+                        SignInWithAppleButton(.signIn, onRequest: { request in
+                            request.requestedScopes = [.fullName, .email]
+                        }, onCompletion: auth.completeAppleSignIn)
+                        .signInWithAppleButtonStyle(.black)
+                        .frame(height: 46)
+                        .clipShape(RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous))
+                        .disabled(auth.isLoading)
+
+                        if auth.isLoading { ProgressView().tint(AcTheme.emerald) }
+                        if let error = auth.errorMessage {
+                            Text(error)
+                                .font(AsianCupFonts.app(size: 11, weight: .semibold))
+                                .foregroundStyle(AcTheme.crimson)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                    .padding(14)
+                }
             }
-
-            Button(action: save) {
-                Text(L("account.save"))
-                    .font(AsianCupFonts.app(size: 14, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(
-                        RoundedRectangle(cornerRadius: AcTheme.buttonRadius, style: .continuous)
-                            .fill(trimmed.isEmpty ? AcTheme.onDarkFaint : AcTheme.emerald)
-                    )
-            }
-            .buttonStyle(AcPressableStyle())
-            .disabled(trimmed.isEmpty)
-
-            Text(L("account.local.note"))
-                .font(AsianCupFonts.app(size: 11))
-                .foregroundStyle(AcTheme.onDarkFaint)
-
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 20)
-        .background(AcAmbientBackground())
-        .presentationDetents([.height(320)])
-        .onAppear {
-            draft = profileName
-            nameFocused = true
-        }
-    }
-
-    private func save() {
-        guard !trimmed.isEmpty else { return }
-        profileName = trimmed
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        dismiss()
     }
 }
 
@@ -3451,6 +3453,14 @@ private struct AcTeamHero: View {
 
                 Spacer(minLength: 0)
             }
+
+            // زر المتابعة (إشعارات المنتخب عبر الخادم) — يفتح Apple Sign-In لغير المسجّل.
+            AcFollowButton(
+                kind: "team",
+                refId: String(teamId),
+                refName: LTeam(String(team.id), fallback: team.name),
+                refLogo: team.logo
+            )
 
             if (coach?.isEmpty == false) || fifaRank != nil {
                 HStack(spacing: 8) {

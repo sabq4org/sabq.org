@@ -24,6 +24,19 @@
             "comment": "تفاصيل مجلس توقعات خليجي 27"
           }
         ]
+      },
+      {
+        "appID": "CBU7MJEC5R.com.sabq.asiancup",
+        "components": [
+          {
+            "/": "/asian-cup/*",
+            "comment": "صفحات كأس آسيا: المباراة والمنتخب واللاعب والتوقعات"
+          },
+          {
+            "/": "/asian-cup",
+            "comment": "بوابة كأس آسيا"
+          }
+        ]
       }
     ]
   }

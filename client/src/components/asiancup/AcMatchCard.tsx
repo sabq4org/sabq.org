@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { MapPin, Radio } from "lucide-react";
+import { Link } from "wouter";
 import { SAUDI_TEAM_ID, formatKickoffTime, type AcFixture } from "./acTypes";
-import { AcMatchDialog } from "./AcMatchDialog";
 
 function TeamRow({ team, highlight }: { team: AcFixture["home"]; highlight: boolean }) {
   return (
@@ -21,17 +20,15 @@ function TeamRow({ team, highlight }: { team: AcFixture["home"]; highlight: bool
 }
 
 export function AcMatchCard({ fixture }: { fixture: AcFixture }) {
-  const [open, setOpen] = useState(false);
   const started = fixture.status.live || fixture.status.finished;
   const homeSaudi = fixture.home.id === SAUDI_TEAM_ID;
   const awaySaudi = fixture.away.id === SAUDI_TEAM_ID;
   const involvesSaudi = homeSaudi || awaySaudi;
 
   return (
-    <button
-      type="button"
-      onClick={() => setOpen(true)}
-      className={`w-full rounded-2xl border p-3.5 text-right transition-shadow hover:shadow-md ${
+    <Link
+      href={`/asian-cup/match/${fixture.id}`}
+      className={`rounded-2xl border p-3.5 transition-shadow hover:shadow-md ${
         involvesSaudi
           ? "border-emerald-300/50 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-950/20"
           : "border-border bg-card"
@@ -74,7 +71,6 @@ export function AcMatchCard({ fixture }: { fixture: AcFixture }) {
           </span>
         </div>
       )}
-      <AcMatchDialog fixture={fixture} open={open} onOpenChange={setOpen} />
-    </button>
+    </Link>
   );
 }

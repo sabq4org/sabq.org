@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Star, Users } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Link } from "wouter";
 import { SAUDI_TEAM_ID, type AcTeam } from "./acTypes";
 
 export function AcTeams({ teams, isLoading }: { teams: AcTeam[]; isLoading: boolean }) {
@@ -31,8 +32,8 @@ export function AcTeams({ teams, isLoading }: { teams: AcTeam[]; isLoading: bool
           {teams.map((team, idx) => {
             const isHost = team.id === SAUDI_TEAM_ID;
             return (
+              <Link key={team.id} href={`/asian-cup/team/${team.id}`}>
               <motion.div
-                key={team.id}
                 initial={{ opacity: 0, scale: 0.92 }}
                 whileInView={{ opacity: 1, scale: 1 }}
                 viewport={{ once: true }}
@@ -64,6 +65,7 @@ export function AcTeams({ teams, isLoading }: { teams: AcTeam[]; isLoading: bool
                 </div>
                 <span className="text-center text-xs font-bold text-foreground">{team.name}</span>
               </motion.div>
+              </Link>
             );
           })}
         </div>

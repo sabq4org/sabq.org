@@ -600,10 +600,10 @@ export default function ArticlesManagement() {
 
   // Update articles order mutation with optimistic updates
   const updateOrderMutation = useMutation({
-    mutationFn: async (data: { 
+    mutationFn: async (data: {
       articleOrders: Array<{ id: string; displayOrder: number }>;
       newOrderedArticles: Article[];
-      queryKey: (string | undefined)[];
+      queryKey: (string | number | undefined)[];
     }) => {
       return await apiRequest("/api/admin/articles/update-order", {
         method: "POST",
@@ -614,15 +614,17 @@ export default function ArticlesManagement() {
     onMutate: async (data) => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ["/api/admin/articles"] });
-      
-      // Store the previous state for rollback (deep clone)
-      const previousArticles = queryClient.getQueryData<Article[]>(data.queryKey);
+
+      // Store the previous state for rollback
+      const previousData = queryClient.getQueryData<{ articles: Article[]; total: number; page: number; limit: number; totalPages: number }>(data.queryKey);
       const previousLocalArticles = [...localArticles];
-      
-      // Optimistically update the cache with cloned array
-      queryClient.setQueryData(data.queryKey, [...data.newOrderedArticles]);
-      
-      return { previousArticles: previousArticles ? [...previousArticles] : undefined, previousLocalArticles, queryKey: data.queryKey };
+
+      // Optimistically update the cache, preserving the paginated response shape
+      if (previousData) {
+        queryClient.setQueryData(data.queryKey, { ...previousData, articles: [...data.newOrderedArticles] });
+      }
+
+      return { previousData, previousLocalArticles, queryKey: data.queryKey };
     },
     onSuccess: () => {
       // Invalidate homepage and related caches for instant update
@@ -637,8 +639,8 @@ export default function ArticlesManagement() {
     },
     onError: (error: any, _variables, context) => {
       // Rollback to the previous state with fresh copies
-      if (context?.previousArticles && context?.queryKey) {
-        queryClient.setQueryData(context.queryKey, [...context.previousArticles]);
+      if (context?.previousData && context?.queryKey) {
+        queryClient.setQueryData(context.queryKey, { ...context.previousData, articles: [...context.previousData.articles] });
       }
       if (context?.previousLocalArticles) {
         setLocalArticles([...context.previousLocalArticles]);
@@ -743,7 +745,7 @@ export default function ArticlesManagement() {
     }));
 
     // Build the current query key at call time to avoid stale closures
-    const currentQueryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter];
+    const currentQueryKey = ["/api/admin/articles", searchTerm, activeStatus, typeFilter, categoryFilter, currentPage];
 
     updateOrderMutation.mutate({
       articleOrders,
