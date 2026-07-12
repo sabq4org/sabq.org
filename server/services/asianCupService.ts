@@ -34,6 +34,8 @@ import {
   getTsCompetitionExtra,
   getTsCompetitionMatchPairs,
   getTsFifaRanking,
+  getTsMatchTeamStats,
+  getTsMatchTrend,
   getTsMatchTv,
   getTsPlayerMarketHistory,
   getTsSeasonTeamStats,
@@ -1373,12 +1375,20 @@ export interface AcMatchDetail {
   headToHead: AcFixture[];
   /** قنوات بثّ المباراة حول العالم (TheSports) — [] إن تعذّر الجسر */
   tv: AcTvChannel[];
+  /** زخم المباراة بالدقيقة (يغذّي تبويبَي الزخم والضغط) — null قبل انطلاقها */
+  trend: AcTrend | null;
 }
 
 export interface AcTvChannel {
   name: string;
   country: string | null;
   logo: string | null;
+}
+
+/** مخطط زخم المباراة (TheSports match/trend): نقاط {دقيقة، قيمة −100..100}، موجب = ضغط المضيف. */
+export interface AcTrend {
+  per: number;
+  points: { minute: number; value: number }[];
 }
 
 const TS_EVENT_LABEL: Record<TsEvent["type"], string> = {
@@ -1652,8 +1662,9 @@ export async function getAcMatchDetail(fixtureId: number): Promise<AcMatchDetail
     detail.fixture.status.finished && detail.ratings.length > 0 ? detail.ratings[0] : null;
 
   const tv = await getAcMatchTv(detail.fixture).catch(() => [] as AcTvChannel[]);
+  const trend = await getAcMatchTrend(detail.fixture).catch(() => null);
 
-  return overlayAcLiveDetail({ ...detail, prediction, headToHead, manOfTheMatch, tv });
+  return overlayAcLiveDetail({ ...detail, prediction, headToHead, manOfTheMatch, tv, trend });
 }
 
 // ---------- حقائق البطولة (TheSports competition/additional) ----------
@@ -1917,4 +1928,107 @@ export async function getAcTeamsRanked(): Promise<AcTeam[]> {
   } catch {
     return teams;
   }
+}
+
+/** زخم المباراة عبر جسر TheSports — null قبل الانطلاق أو عند تعذّر الجسر. */
+export async function getAcMatchTrend(fx: AcFixture): Promise<AcTrend | null> {
+  if (!fx.status.live && !fx.status.finished) return null;
+  const ttl = fx.status.live ? 45 * 1000 : 30 * 60 * 1000;
+  return withSWR(`ac:trend:${fx.id}`, ttl, ttl * 2, async () => {
+    const uuid = await getAcMatchTsId(fx).catch(() => null);
+    if (!uuid) return null;
+    const trend = await getTsMatchTrend(uuid).catch(() => null);
+    if (!trend || trend.values.length === 0) return null;
+    return { per: trend.perMinutes, points: trend.values };
+  });
+}
+
+// ---------- الزخم والضغط اللحظيان (TheSports trend عبر الجسر — نظير المونديال) ----------
+
+export interface AcMomentumPoint {
+  label: string;
+  minute: number;
+  home: number;
+  away: number; // سالبة لتُرسم أسفل الصفر
+  net: number;
+}
+
+export interface AcMomentum {
+  available: boolean;
+  live: boolean;
+  possession: { home: number; away: number } | null;
+  points: AcMomentumPoint[];
+}
+
+export interface AcPressure {
+  available: boolean;
+  live: boolean;
+  latest: { side: "home" | "away" | "even"; value: number } | null;
+  points: AcMomentumPoint[];
+}
+
+function acTrendToPoints(values: { minute: number; value: number }[]): AcMomentumPoint[] {
+  return values.map((v) => ({
+    label: `${v.minute}'`,
+    minute: v.minute,
+    home: v.value > 0 ? v.value : 0,
+    away: v.value < 0 ? v.value : 0,
+    net: v.value,
+  }));
+}
+
+/** زخم المباراة بالدقيقة + الاستحواذ اللحظي — null قبل الانطلاق أو عند تعذّر الجسر. */
+export async function getAcMomentum(fixtureId: number): Promise<AcMomentum | null> {
+  const fixtures = await getAcFixtures().catch(() => [] as AcFixture[]);
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  if (!fx || (!fx.status.live && !fx.status.finished)) return null;
+  const uuid = await getAcMatchTsId(fx).catch(() => null);
+  if (!uuid) return null;
+
+  const [trend, sides] = await Promise.all([
+    getTsMatchTrend(uuid),
+    getTsMatchTeamStats(uuid).catch(() => []),
+  ]);
+  if (!trend || trend.values.length === 0) return null;
+
+  // الاستحواذ من إحصاء الفريقين (إقران المضيف عبر الجسر)
+  let possession: { home: number; away: number } | null = null;
+  if (sides.length >= 2) {
+    const bridge = await getAcTeamBridge();
+    const homeUuid = bridge.get(fx.home.id);
+    let home = sides[0];
+    let away = sides[1];
+    if (homeUuid && sides[1].teamId === homeUuid) {
+      home = sides[1];
+      away = sides[0];
+    }
+    const h = home.values.ball_possession;
+    const a = away.values.ball_possession;
+    if (h != null || a != null) {
+      possession = {
+        home: h ?? (a != null ? 100 - a : 0),
+        away: a ?? (h != null ? 100 - h : 0),
+      };
+    }
+  }
+
+  return { available: true, live: fx.status.live, possession, points: acTrendToPoints(trend.values) };
+}
+
+/** مؤشّر الضغط اللحظي — الجهة المسيطرة الآن + المنحنى الكامل. */
+export async function getAcPressure(fixtureId: number): Promise<AcPressure | null> {
+  const fixtures = await getAcFixtures().catch(() => [] as AcFixture[]);
+  const fx = fixtures.find((f) => f.id === fixtureId);
+  if (!fx || (!fx.status.live && !fx.status.finished)) return null;
+  const uuid = await getAcMatchTsId(fx).catch(() => null);
+  if (!uuid) return null;
+
+  const trend = await getTsMatchTrend(uuid);
+  if (!trend || trend.values.length === 0) return null;
+  const last = trend.values[trend.values.length - 1].value;
+  const latest: AcPressure["latest"] = {
+    side: last > 0 ? "home" : last < 0 ? "away" : "even",
+    value: Math.abs(last),
+  };
+  return { available: true, live: fx.status.live, latest, points: acTrendToPoints(trend.values) };
 }

@@ -1,7 +1,8 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "wouter";
-import { Activity, ArrowRight, CalendarDays, MapPin, Trophy, Tv, Users } from "lucide-react";
+import { Activity, ArrowRight, CalendarDays, Flame, Gauge, MapPin, Sparkles, Trophy, Tv, Users } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { NavigationBar } from "@/components/NavigationBar";
@@ -18,7 +19,10 @@ type AcRating = { id: number; name: string; nameEn: string; photo: string; teamI
 type AcLineupPlayer = { id: number; name: string; nameEn: string; number: number | null; position: string | null };
 type AcLineup = { teamId: number; teamName: string; formation: string | null; coach: string; startXI: AcLineupPlayer[]; substitutes: AcLineupPlayer[] };
 type AcTvChannel = { name: string; country: string | null; logo: string | null };
-type AcMatchDetail = { fixture: AcFixture; events: AcEvent[]; statistics: AcStatistic[]; ratings: AcRating[]; lineups: AcLineup[]; headToHead: AcFixture[]; manOfTheMatch: AcRating | null; prediction: { home: number; draw: number; away: number } | null; tv?: AcTvChannel[] };
+type AcMomentumPoint = { label: string; minute: number; home: number; away: number; net: number };
+type AcMomentum = { available: boolean; live: boolean; possession: { home: number; away: number } | null; points: AcMomentumPoint[] };
+type AcPressure = { available: boolean; live: boolean; latest: { side: "home" | "away" | "even"; value: number } | null; points: AcMomentumPoint[] };
+type AcMatchDetail = { fixture: AcFixture; events: AcEvent[]; statistics: AcStatistic[]; ratings: AcRating[]; lineups: AcLineup[]; headToHead: AcFixture[]; manOfTheMatch: AcRating | null; prediction: { home: number; draw: number; away: number } | null; tv?: AcTvChannel[]; trend?: unknown };
 
 type AcSquadPlayer = { id: number; name: string; nameEn: string; number: number | null; position: string; positionEn: string; age: number | null; photo: string };
 type AcTeamProfile = { team: AcTeam; coach: string | null; stats: { groupName: string | null; rank: number | null; played: number; win: number; draw: number; lose: number; goalsFor: number; goalsAgainst: number; goalsDiff: number; points: number; form: string[] }; nextMatch: AcFixture | null; fixtures: AcFixture[]; squad: AcSquadPlayer[]; fifaRank?: { rank: number; points: number | null; change: number | null } | null; seasonStats?: { available: boolean; matches: number; items: { label: string; value: number; percent?: boolean }[] } | null };
@@ -46,6 +50,70 @@ function StatGrid({ items }: { items: Array<[string, string | number]> }) {
   return <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">{items.map(([label, value]) => <div key={label} className="rounded-xl bg-muted/45 p-3 text-center"><div className="text-xl font-black tabular-nums">{value}</div><div className="text-xs text-muted-foreground">{label}</div></div>)}</div>;
 }
 
+/** مخطط الزخم: أعمدة لكل دقيقة — أخضر فوق الصفر للمضيف، كهرماني تحته للضيف. */
+function MomentumChart({ points, homeName, awayName }: { points: AcMomentumPoint[]; homeName: string; awayName: string }) {
+  if (!points.length) return null;
+  const max = Math.max(30, ...points.map((pt) => Math.abs(pt.net)));
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between text-[11px] font-bold">
+        <span className="text-emerald-600">{homeName}</span>
+        <span className="text-amber-600">{awayName}</span>
+      </div>
+      <div dir="ltr" className="flex h-40 items-center gap-px overflow-hidden rounded-xl bg-muted/40 px-1">
+        {points.map((pt) => {
+          const h = (Math.abs(pt.net) / max) * 50;
+          return (
+            <div key={pt.minute} className="relative h-full flex-1" title={`${pt.label} · ${pt.net > 0 ? homeName : awayName}`}>
+              <div
+                className={`absolute left-0 right-0 ${pt.net >= 0 ? "bottom-1/2 bg-emerald-500" : "top-1/2 bg-amber-500"} rounded-sm`}
+                style={{ height: `${h}%` }}
+              />
+            </div>
+          );
+        })}
+      </div>
+      <div dir="ltr" className="mt-1 flex justify-between text-[10px] text-muted-foreground"><span>{points[0]?.label}</span><span>{points[points.length - 1]?.label}</span></div>
+    </div>
+  );
+}
+
+function MomentumTab({ fixtureId, live, homeName, awayName }: { fixtureId: number; live: boolean; homeName: string; awayName: string }) {
+  const { data } = useQuery<AcMomentum>({ queryKey: [`/api/asian-cup/momentum/${fixtureId}`], refetchInterval: live ? 15_000 : false });
+  if (!data?.available || !data.points.length) return <Empty text="يظهر مخطط الزخم مع انطلاق المباراة." />;
+  return (
+    <Card className="space-y-4 p-5">
+      {data.possession && (
+        <div>
+          <div className="mb-1 flex justify-between text-xs font-bold"><span>{homeName} {data.possession.home}%</span><span>الاستحواذ</span><span>{data.possession.away}% {awayName}</span></div>
+          <div dir="ltr" className="flex h-2 overflow-hidden rounded-full bg-muted">
+            <div className="bg-emerald-500" style={{ width: `${data.possession.home}%` }} />
+            <div className="bg-amber-500" style={{ width: `${data.possession.away}%` }} />
+          </div>
+        </div>
+      )}
+      <MomentumChart points={data.points} homeName={homeName} awayName={awayName} />
+    </Card>
+  );
+}
+
+function PressureTab({ fixtureId, live, homeName, awayName }: { fixtureId: number; live: boolean; homeName: string; awayName: string }) {
+  const { data } = useQuery<AcPressure>({ queryKey: [`/api/asian-cup/pressure/${fixtureId}`], refetchInterval: live ? 15_000 : false });
+  if (!data?.available || !data.points.length) return <Empty text="يظهر مؤشّر الضغط مع انطلاق المباراة." />;
+  const latest = data.latest;
+  return (
+    <Card className="space-y-4 p-5">
+      {latest && latest.side !== "even" && (
+        <div className="flex items-center justify-between rounded-xl bg-muted/45 p-4">
+          <div><p className="text-xs text-muted-foreground">الضغط الآن</p><p className="text-lg font-black">{latest.side === "home" ? homeName : awayName}</p></div>
+          <div className="text-3xl font-black tabular-nums text-emerald-600">{latest.value}<span className="text-sm text-muted-foreground">/100</span></div>
+        </div>
+      )}
+      <MomentumChart points={data.points} homeName={homeName} awayName={awayName} />
+    </Card>
+  );
+}
+
 export function AsianCupMatchPage() {
   const { id } = useParams<{ id: string }>(); const matchId = Number(id);
   const { data, isLoading } = useQuery<AcMatchDetail>({ queryKey: [`/api/asian-cup/match/${matchId}`], enabled: Number.isFinite(matchId), refetchInterval: (q) => q.state.data?.fixture.status.live ? 8_000 : false });
@@ -54,13 +122,50 @@ export function AsianCupMatchPage() {
   if (isLoading) return <Shell><Loading /></Shell>; if (!data) return <Shell><Empty text="تعذّر العثور على المباراة." /></Shell>;
   const f = data.fixture;
   return <Shell><Hero title={`${f.home.name} × ${f.away.name}`} subtitle={`${f.round} · ${formatKickoffDay(f.date)} · ${formatKickoffTime(f.date)}`} /><div className="mx-auto max-w-5xl space-y-6 px-4 py-8"><Card className="p-5"><div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 text-center"><div><img src={f.home.logo} alt="" className="mx-auto h-20 w-20 object-contain" /><Link href={`/asian-cup/team/${f.home.id}`} className="mt-2 block font-black">{f.home.name}</Link></div><div><div className="text-4xl font-black tabular-nums">{f.goals.home ?? "–"} : {f.goals.away ?? "–"}</div><Badge className={f.status.live ? "mt-2 bg-red-600" : "mt-2"}>{f.status.live && f.status.elapsed ? `${f.status.elapsed}′` : f.status.label}</Badge></div><div><img src={f.away.logo} alt="" className="mx-auto h-20 w-20 object-contain" /><Link href={`/asian-cup/team/${f.away.id}`} className="mt-2 block font-black">{f.away.name}</Link></div></div>{f.venue.name ? <p className="mt-4 flex items-center justify-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" />{f.venue.name} — {f.venue.city}</p> : null}</Card>
-  {(data.tv ?? []).length > 0 && <Card className="p-5"><h2 className="mb-4 flex items-center gap-2 font-black"><Tv className="h-5 w-5 text-emerald-600" />أين تشاهد المباراة</h2><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{(data.tv ?? []).slice(0, 12).map((c, i) => <div key={`${c.name}-${i}`} className="rounded-lg bg-muted/45 px-3 py-2"><p className="truncate text-sm font-bold">{c.name}</p>{c.country && <p className="truncate text-[11px] text-muted-foreground">{c.country}</p>}</div>)}</div></Card>}
-  {data.prediction && <Card className="p-5"><h2 className="mb-4 font-black">احتمالات المباراة</h2><StatGrid items={[[f.home.name, `${data.prediction.home}%`], ["التعادل", `${data.prediction.draw}%`], [f.away.name, `${data.prediction.away}%`]]} /></Card>}
-  {data.events.length > 0 && <Card className="p-5"><h2 className="mb-4 flex items-center gap-2 font-black"><Activity className="h-5 w-5 text-emerald-600" />أحداث المباراة</h2><div className="space-y-2">{data.events.map((e, i) => <div key={`${e.minute}-${i}`} className="flex items-center gap-3 rounded-lg bg-muted/40 p-3"><span className="w-12 font-black tabular-nums">{e.minute}′</span><Badge variant="secondary">{e.label}</Badge><span className="font-bold">{e.player}</span>{e.assist && <span className="text-xs text-muted-foreground">· {e.assist}</span>}</div>)}</div></Card>}
-  {data.statistics.length > 0 && <Card className="p-5"><h2 className="mb-4 font-black">إحصاءات المباراة</h2><div className="space-y-2">{data.statistics.map((s) => <div key={s.key} className="grid grid-cols-[1fr_2fr_1fr] rounded-lg bg-muted/35 p-2 text-center"><b>{s.home}</b><span className="text-sm text-muted-foreground">{s.label}</span><b>{s.away}</b></div>)}</div></Card>}
-  {data.lineups.length > 0 && <div className="grid gap-5 lg:grid-cols-2">{data.lineups.map((l) => <Card key={l.teamId} className="p-5"><h2 className="font-black">{l.teamName} {l.formation && <Badge variant="secondary">{l.formation}</Badge>}</h2><p className="mb-3 text-xs text-muted-foreground">المدرب: {l.coach}</p><div className="space-y-2">{l.startXI.map((p) => <Link key={p.id} href={`/asian-cup/player/${p.id}`} className="flex justify-between rounded-lg bg-muted/35 p-2 text-sm"><span>{p.number ?? "–"} · {p.name}</span><span className="text-muted-foreground">{p.position}</span></Link>)}</div></Card>)}</div>}
-  {data.ratings.length > 0 && <Card className="p-5"><h2 className="mb-4 font-black">تقييمات اللاعبين</h2><div className="grid gap-2 sm:grid-cols-2">{data.ratings.slice(0, 12).map((p) => <Link key={`${p.teamId}-${p.id}`} href={`/asian-cup/player/${p.id}`} className="flex items-center gap-3 rounded-lg bg-muted/35 p-2"><img src={p.photo} alt="" className="h-9 w-9 rounded-full object-cover" /><span className="flex-1 font-bold">{p.name}</span><Badge>{p.rating.toFixed(1)}</Badge></Link>)}</div></Card>}
-  {data.headToHead.length > 0 && <Card className="space-y-2 p-5"><h2 className="mb-4 font-black">المواجهات السابقة</h2>{data.headToHead.map((x) => <MatchRow key={x.id} fixture={x} />)}</Card>}</div></Shell>;
+  <Tabs defaultValue={f.status.live || f.status.finished ? "events" : "prediction"} dir="rtl">
+    <TabsList className="mb-4 h-auto w-full flex-wrap justify-start gap-1">
+      <TabsTrigger value="events">الأحداث</TabsTrigger>
+      {(f.status.live || f.status.finished) && <TabsTrigger value="momentum" className="gap-1"><Flame className="h-3.5 w-3.5" />الزخم</TabsTrigger>}
+      {(f.status.live || f.status.finished) && <TabsTrigger value="pressure" className="gap-1"><Gauge className="h-3.5 w-3.5" />الضغط</TabsTrigger>}
+      <TabsTrigger value="lineups">التشكيلات</TabsTrigger>
+      <TabsTrigger value="stats">الإحصائيات</TabsTrigger>
+      {(data.ratings.length > 0) && <TabsTrigger value="ratings">التقييمات</TabsTrigger>}
+      <TabsTrigger value="prediction" className="gap-1"><Sparkles className="h-3.5 w-3.5" />التوقعات</TabsTrigger>
+      {(data.tv ?? []).length > 0 && <TabsTrigger value="tv" className="gap-1"><Tv className="h-3.5 w-3.5" />البث</TabsTrigger>}
+      {data.headToHead.length > 0 && <TabsTrigger value="h2h">المواجهات</TabsTrigger>}
+    </TabsList>
+
+    <TabsContent value="events" className="mt-0">
+      {data.events.length === 0 ? <Empty text="تظهر أحداث المباراة أولًا بأول مع انطلاقها." /> : <Card className="p-5"><h2 className="mb-4 flex items-center gap-2 font-black"><Activity className="h-5 w-5 text-emerald-600" />أحداث المباراة</h2><div className="space-y-2">{data.events.map((e, i) => <div key={`${e.minute}-${i}`} className="flex items-center gap-3 rounded-lg bg-muted/40 p-3"><span className="w-12 font-black tabular-nums">{e.minute}′</span><Badge variant="secondary">{e.label}</Badge><span className="font-bold">{e.player}</span>{e.assist && <span className="text-xs text-muted-foreground">· {e.assist}</span>}</div>)}</div></Card>}
+    </TabsContent>
+
+    <TabsContent value="momentum" className="mt-0"><MomentumTab fixtureId={f.id} live={f.status.live} homeName={f.home.name} awayName={f.away.name} /></TabsContent>
+    <TabsContent value="pressure" className="mt-0"><PressureTab fixtureId={f.id} live={f.status.live} homeName={f.home.name} awayName={f.away.name} /></TabsContent>
+
+    <TabsContent value="lineups" className="mt-0">
+      {data.lineups.length === 0 ? <Empty text="تُعلن التشكيلات قبل انطلاق المباراة بنحو ساعة." /> : <div className="grid gap-5 lg:grid-cols-2">{data.lineups.map((l) => <Card key={l.teamId} className="p-5"><h2 className="font-black">{l.teamName} {l.formation && <Badge variant="secondary">{l.formation}</Badge>}</h2><p className="mb-3 text-xs text-muted-foreground">المدرب: {l.coach}</p><div className="space-y-2">{l.startXI.map((p) => <Link key={p.id} href={`/asian-cup/player/${p.id}`} className="flex justify-between rounded-lg bg-muted/35 p-2 text-sm"><span>{p.number ?? "–"} · {p.name}</span><span className="text-muted-foreground">{p.position}</span></Link>)}</div></Card>)}</div>}
+    </TabsContent>
+
+    <TabsContent value="stats" className="mt-0">
+      {data.statistics.length === 0 ? <Empty text="تظهر إحصاءات المباراة مع انطلاقها." /> : <Card className="p-5"><h2 className="mb-4 font-black">إحصاءات المباراة</h2><div className="space-y-2">{data.statistics.map((s) => <div key={s.key} className="grid grid-cols-[1fr_2fr_1fr] rounded-lg bg-muted/35 p-2 text-center"><b>{s.home}</b><span className="text-sm text-muted-foreground">{s.label}</span><b>{s.away}</b></div>)}</div></Card>}
+    </TabsContent>
+
+    <TabsContent value="ratings" className="mt-0">
+      <Card className="p-5"><h2 className="mb-4 font-black">تقييمات اللاعبين</h2><div className="grid gap-2 sm:grid-cols-2">{data.ratings.slice(0, 12).map((p) => <Link key={`${p.teamId}-${p.id}`} href={`/asian-cup/player/${p.id}`} className="flex items-center gap-3 rounded-lg bg-muted/35 p-2"><img src={p.photo} alt="" className="h-9 w-9 rounded-full object-cover" /><span className="flex-1 font-bold">{p.name}</span><Badge>{p.rating.toFixed(1)}</Badge></Link>)}</div></Card>
+    </TabsContent>
+
+    <TabsContent value="prediction" className="mt-0">
+      {data.prediction ? <Card className="p-5"><h2 className="mb-4 font-black">احتمالات المباراة</h2><StatGrid items={[[f.home.name, `${data.prediction.home}%`], ["التعادل", `${data.prediction.draw}%`], [f.away.name, `${data.prediction.away}%`]]} /><p className="mt-3 text-[11px] text-muted-foreground">تقدير من نموذج التطبيق — للاسترشاد فقط.</p></Card> : <Empty text="يظهر توقع النموذج قبل انطلاق المباراة." />}
+    </TabsContent>
+
+    <TabsContent value="tv" className="mt-0">
+      <Card className="p-5"><h2 className="mb-4 flex items-center gap-2 font-black"><Tv className="h-5 w-5 text-emerald-600" />أين تشاهد المباراة</h2><div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{(data.tv ?? []).slice(0, 18).map((c, i) => <div key={`${c.name}-${i}`} className="rounded-lg bg-muted/45 px-3 py-2"><p className="truncate text-sm font-bold">{c.name}</p>{c.country && <p className="truncate text-[11px] text-muted-foreground">{c.country}</p>}</div>)}</div></Card>
+    </TabsContent>
+
+    <TabsContent value="h2h" className="mt-0">
+      <Card className="space-y-2 p-5"><h2 className="mb-4 font-black">المواجهات السابقة</h2>{data.headToHead.map((x) => <MatchRow key={x.id} fixture={x} />)}</Card>
+    </TabsContent>
+  </Tabs></div></Shell>;
 }
 
 export function AsianCupTeamPage() {

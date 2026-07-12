@@ -16,6 +16,8 @@ import {
   getAcQualificationJourney,
   getAcPlayerCard,
   getAcMatchDetail,
+  getAcMomentum,
+  getAcPressure,
   getAcFacts,
   isAsianCupConfigured,
 } from "../services/asianCupService";
@@ -203,6 +205,42 @@ export function registerAsianCupRoutes(app: Express) {
     } catch (error) {
       console.error(`[AsianCup] player ${playerId} failed:`, error);
       res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
+    }
+  });
+
+  // الزخم اللحظي (TheSports عبر الجسر) — كاش قصير أثناء البث.
+  app.get("/api/asian-cup/momentum/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    try {
+      const data = await getAcMomentum(fixtureId);
+      res.set("Cache-Control", data?.live ? "public, max-age=15, s-maxage=15" : "public, max-age=300, s-maxage=1800");
+      res.json(data ?? { available: false, live: false, possession: null, points: [] });
+    } catch (error) {
+      console.error(`[AsianCup] momentum ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب زخم المباراة حاليًا" });
+    }
+  });
+
+  // مؤشّر الضغط اللحظي.
+  app.get("/api/asian-cup/pressure/:id", async (req, res) => {
+    if (!guard(res)) return;
+    const fixtureId = Number(req.params.id);
+    if (!Number.isInteger(fixtureId) || fixtureId <= 0) {
+      res.status(400).json({ message: "معرّف مباراة غير صالح" });
+      return;
+    }
+    try {
+      const data = await getAcPressure(fixtureId);
+      res.set("Cache-Control", data?.live ? "public, max-age=15, s-maxage=15" : "public, max-age=300, s-maxage=1800");
+      res.json(data ?? { available: false, live: false, latest: null, points: [] });
+    } catch (error) {
+      console.error(`[AsianCup] pressure ${fixtureId} failed:`, error);
+      res.status(502).json({ message: "تعذر جلب مؤشّر الضغط حاليًا" });
     }
   });
 
