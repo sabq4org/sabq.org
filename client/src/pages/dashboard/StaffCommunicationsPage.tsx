@@ -461,7 +461,7 @@ function CampaignsTab() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {campaign.status === "draft" && (
+                {(campaign.status === "draft" || campaign.status === "scheduled") && (
                   <Button
                     size="sm"
                     onClick={() => sendMutation.mutate(campaign.id)}
@@ -469,7 +469,7 @@ function CampaignsTab() {
                     data-testid={`button-send-${campaign.id}`}
                   >
                     <Send className="h-4 w-4 ml-1" />
-                    إرسال الآن
+                    {campaign.status === "scheduled" ? "إرسال الآن بدل الجدولة" : "إرسال الآن"}
                   </Button>
                 )}
                 <DropdownMenu>

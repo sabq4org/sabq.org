@@ -1,29 +1,47 @@
 import { staffCommunicationsService } from "../services/staffCommunications";
 
-let schedulerInterval: ReturnType<typeof setInterval> | null = null;
+let schedulerTimeout: ReturnType<typeof setTimeout> | null = null;
+let schedulerStarted = false;
+
+// Campaign times are selected with minute precision in the UI. Align the
+// worker to the wall-clock minute instead of starting a drifting 10-minute
+// interval, which could deliver a 23:43 campaign as late as 23:53.
+const MINUTE_MS = 60 * 1000;
+const CLOCK_SETTLE_MS = 250;
+
+function scheduleNextMinuteCheck() {
+  if (!schedulerStarted) return;
+  const now = Date.now();
+  const delay = MINUTE_MS - (now % MINUTE_MS) + CLOCK_SETTLE_MS;
+  schedulerTimeout = setTimeout(() => {
+    // Schedule the following tick before processing. A large recipient list
+    // must not delay the next campaign; atomic campaign claiming prevents a
+    // second process/instance from sending the same campaign twice.
+    scheduleNextMinuteCheck();
+    void processScheduledCampaigns();
+  }, delay);
+}
 
 export function startStaffCommunicationsScheduler() {
+  if (schedulerStarted) return;
+  schedulerStarted = true;
   console.log("[StaffComm Scheduler] 🚀 Starting staff communications scheduler...");
-  
-  const CHECK_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-  
-  // Run initial check
-  processScheduledCampaigns();
-  
-  // Start interval for periodic checks
-  schedulerInterval = setInterval(async () => {
-    await processScheduledCampaigns();
-  }, CHECK_INTERVAL_MS);
-  
-  console.log("[StaffComm Scheduler] ✅ Scheduler started (checks every 10 minutes)");
+
+  // Catch anything that became due while the service was restarting, then
+  // continue at second 00 of every minute.
+  void processScheduledCampaigns();
+  scheduleNextMinuteCheck();
+
+  console.log("[StaffComm Scheduler] ✅ Scheduler started (aligned to every wall-clock minute)");
 }
 
 export function stopStaffCommunicationsScheduler() {
-  if (schedulerInterval) {
-    clearInterval(schedulerInterval);
-    schedulerInterval = null;
-    console.log("[StaffComm Scheduler] ⏹️ Scheduler stopped");
+  schedulerStarted = false;
+  if (schedulerTimeout) {
+    clearTimeout(schedulerTimeout);
+    schedulerTimeout = null;
   }
+  console.log("[StaffComm Scheduler] ⏹️ Scheduler stopped");
 }
 
 async function processScheduledCampaigns() {

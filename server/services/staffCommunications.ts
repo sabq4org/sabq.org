@@ -348,7 +348,10 @@ export class StaffCommunicationsService {
     return recipients;
   }
 
-  async sendCampaign(campaignId: string): Promise<{ success: boolean; sent: number; failed: number }> {
+  async sendCampaign(
+    campaignId: string,
+    options: { alreadyClaimed?: boolean } = {},
+  ): Promise<{ success: boolean; sent: number; failed: number }> {
     const campaign = await this.getCampaignById(campaignId);
     if (!campaign) {
       throw new Error('Campaign not found');
@@ -358,9 +361,29 @@ export class StaffCommunicationsService {
       throw new Error('Campaign already sent');
     }
 
-    await db.update(staffCommunicationCampaigns)
-      .set({ status: 'sending' })
-      .where(eq(staffCommunicationCampaigns.id, campaignId));
+    if (options.alreadyClaimed) {
+      if (campaign.status !== 'sending') {
+        throw new Error('Campaign was not claimed by the scheduler');
+      }
+    } else {
+      // Manual send and the scheduler may race at the scheduled minute. Claim
+      // only a sendable row so exactly one path can deliver the campaign.
+      const [claimedCampaign] = await db.update(staffCommunicationCampaigns)
+        .set({ status: 'sending', updatedAt: new Date() })
+        .where(and(
+          eq(staffCommunicationCampaigns.id, campaignId),
+          or(
+            eq(staffCommunicationCampaigns.status, 'draft'),
+            eq(staffCommunicationCampaigns.status, 'scheduled'),
+            eq(staffCommunicationCampaigns.status, 'failed'),
+          ),
+        ))
+        .returning({ id: staffCommunicationCampaigns.id });
+
+      if (!claimedCampaign) {
+        throw new Error('Campaign is already being sent');
+      }
+    }
 
     const recipients = await this.resolveRecipients(campaign);
     let sentCount = 0;
@@ -794,7 +817,7 @@ export class StaffCommunicationsService {
         }
         
         console.log(`[StaffComm Scheduler] Sending scheduled campaign: ${campaign.title} (ID: ${campaign.id})`);
-        const result = await this.sendCampaign(campaign.id);
+        const result = await this.sendCampaign(campaign.id, { alreadyClaimed: true });
         processed++;
         totalSent += result.sent;
         totalFailed += result.failed;
