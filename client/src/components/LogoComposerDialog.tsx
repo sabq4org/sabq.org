@@ -145,6 +145,8 @@ export function LogoComposerDialog({
   const [secondPhoto, setSecondPhoto] = useState<File | null>(null);
   const [firstFocal, setFirstFocal] = useState<FocalPoint | null>(null);
   const [secondFocal, setSecondFocal] = useState<FocalPoint | null>(null);
+  const [firstDims, setFirstDims] = useState<{ w: number; h: number } | null>(null);
+  const [secondDims, setSecondDims] = useState<{ w: number; h: number } | null>(null);
 
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -200,13 +202,81 @@ export function LogoComposerDialog({
   }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, firstFocal, secondFocal, toast]);
 
   // اكتشاف تلقائي لوجه الشخص عند اختيار صورة (Chrome/Edge — في Safari
-  // يبقى التوسيط الافتراضي ويحدد المحرر النقطة بالنقر على الصورة)
-  const selectPhoto = (file: File, setFile: (f: File) => void, setFocal: (f: FocalPoint | null) => void) => {
+  // يبقى التوسيط الافتراضي ويعدّل المحرر الموضع بالسحب داخل المعاينة)
+  const selectPhoto = (
+    file: File,
+    setFile: (f: File) => void,
+    setFocal: (f: FocalPoint | null) => void,
+    setDims: (d: { w: number; h: number } | null) => void,
+  ) => {
     setFile(file);
     setFocal(null);
+    setDims(null);
+    createImageBitmap(file)
+      .then((bitmap) => {
+        setDims({ w: bitmap.width, h: bitmap.height });
+        bitmap.close();
+      })
+      .catch(() => setDims(null));
     detectFaceFocalPoint(file).then((focal) => {
       if (focal) setFocal(focal);
     });
+  };
+
+  // ── سحب الصورة داخل المعاينة (photos): تحريك نافذة القص مباشرة ──
+  // نسبة النصف في اللوحة النهائية: (1200-14)/2 على 675
+  const HALF_RATIO = (1200 - 14) / 2 / 675;
+
+  // كسر القص في كل محور: أي جزء من الصورة تُظهره نافذة cover — يحوّل
+  // مسافة السحب على الشاشة إلى إزاحة مكافئة في إحداثيات نقطة التركيز
+  const cropFractions = (dims: { w: number; h: number } | null) => {
+    if (!dims) return { fxFrac: 0.5, fyFrac: 0.5 };
+    const ratio = dims.w / dims.h;
+    if (ratio > HALF_RATIO) return { fxFrac: (dims.h * HALF_RATIO) / dims.w, fyFrac: 1 };
+    return { fxFrac: 1, fyFrac: dims.w / HALF_RATIO / dims.h };
+  };
+
+  const dragRef = useRef<{
+    side: "first" | "second";
+    startX: number;
+    startY: number;
+    startFocal: FocalPoint;
+  } | null>(null);
+
+  const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
+
+  const handlePreviewPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (tab !== "photos" || !previewUrl) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xRel = (e.clientX - rect.left) / rect.width;
+    // النصف الأيمن (فيزيائياً) = الصورة الأولى
+    const side = xRel >= 0.5 ? "first" : "second";
+    const startFocal =
+      side === "first" ? (firstFocal ?? { fx: 0.5, fy: 0.5 }) : (secondFocal ?? { fx: 0.5, fy: 0.5 });
+    dragRef.current = { side, startX: e.clientX, startY: e.clientY, startFocal };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handlePreviewPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const halfDispW = rect.width * ((1200 - 14) / 2 / 1200);
+    const dims = drag.side === "first" ? firstDims : secondDims;
+    const { fxFrac, fyFrac } = cropFractions(dims);
+    // سحب المحتوى يميناً = كشف الجزء الأيسر = نقطة التركيز تتحرك يساراً
+    const dfx = (-(e.clientX - drag.startX) / halfDispW) * fxFrac;
+    const dfy = (-(e.clientY - drag.startY) / rect.height) * fyFrac;
+    const next = {
+      fx: clamp01(drag.startFocal.fx + dfx),
+      fy: clamp01(drag.startFocal.fy + dfy),
+    };
+    if (drag.side === "first") setFirstFocal(next);
+    else setSecondFocal(next);
+  };
+
+  const handlePreviewPointerUp = () => {
+    dragRef.current = null;
   };
 
   useEffect(() => {
@@ -363,10 +433,13 @@ export function LogoComposerDialog({
               <LogoSlot
                 label="الصورة الأولى (يمين)"
                 file={firstPhoto}
-                onSelect={(f) => validateAndSet(f, (file) => selectPhoto(file, setFirstPhoto, setFirstFocal))}
+                onSelect={(f) =>
+                  validateAndSet(f, (file) => selectPhoto(file, setFirstPhoto, setFirstFocal, setFirstDims))
+                }
                 onClear={() => {
                   setFirstPhoto(null);
                   setFirstFocal(null);
+                  setFirstDims(null);
                 }}
                 focal={firstFocal}
                 onFocalChange={setFirstFocal}
@@ -375,10 +448,13 @@ export function LogoComposerDialog({
               <LogoSlot
                 label="الصورة الثانية (يسار)"
                 file={secondPhoto}
-                onSelect={(f) => validateAndSet(f, (file) => selectPhoto(file, setSecondPhoto, setSecondFocal))}
+                onSelect={(f) =>
+                  validateAndSet(f, (file) => selectPhoto(file, setSecondPhoto, setSecondFocal, setSecondDims))
+                }
                 onClear={() => {
                   setSecondPhoto(null);
                   setSecondFocal(null);
+                  setSecondDims(null);
                 }}
                 focal={secondFocal}
                 onFocalChange={setSecondFocal}
@@ -396,6 +472,8 @@ export function LogoComposerDialog({
                   setSecondPhoto(firstPhoto);
                   setFirstFocal(secondFocal);
                   setSecondFocal(firstFocal);
+                  setFirstDims(secondDims);
+                  setSecondDims(firstDims);
                 }}
                 data-testid="button-swap-photos"
               >
@@ -404,22 +482,39 @@ export function LogoComposerDialog({
               </Button>
               <p className="text-xs text-muted-foreground">
                 كل صورة تملأ نصفها بالكامل وبينهما فراغ أبيض رفيع. الوجوه تُكتشف تلقائياً
-                حيث يدعم المتصفح ذلك، وانقر على الصورة لتحديد نقطة التركيز يدوياً —
-                القص يتمحور حولها فلا يُبتر الوجه.
+                حيث يدعم المتصفح ذلك، و<strong>اسحب الصورة داخل المعاينة بالأسفل</strong>
+                {" "}لضبط موضعها يدوياً فلا يُبتر الوجه.
               </p>
             </div>
           </TabsContent>
         </Tabs>
 
-        {/* المعاينة النهائية */}
+        {/* المعاينة النهائية — في دمج الصورتين: اسحب أي نصف لضبط موضع صورته */}
         <div className="space-y-2">
-          <Label>المعاينة النهائية (1200×675)</Label>
-          <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-muted/30">
+          <Label>
+            المعاينة النهائية (1200×675)
+            {tab === "photos" && previewUrl && (
+              <span className="mr-2 text-[11px] font-normal text-muted-foreground">
+                — اسحب أي صورة لتحريكها داخل نصفها
+              </span>
+            )}
+          </Label>
+          <div
+            className={`relative aspect-video w-full overflow-hidden rounded-lg border bg-muted/30 ${
+              tab === "photos" && previewUrl ? "cursor-grab active:cursor-grabbing touch-none select-none" : ""
+            }`}
+            onPointerDown={handlePreviewPointerDown}
+            onPointerMove={handlePreviewPointerMove}
+            onPointerUp={handlePreviewPointerUp}
+            onPointerCancel={handlePreviewPointerUp}
+            data-testid="preview-container"
+          >
             {previewUrl ? (
               <img
                 src={previewUrl}
                 alt="معاينة الشعار"
                 className="h-full w-full object-contain"
+                draggable={false}
                 data-testid="img-logo-preview"
               />
             ) : (
