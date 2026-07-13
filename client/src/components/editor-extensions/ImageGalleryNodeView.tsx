@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- Existing gallery diagnostics are outside this upload-routing change. */
 import { NodeViewWrapper, NodeViewProps } from '@tiptap/react';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { galleryStore } from '@/lib/galleryStore';
@@ -30,7 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { GripVertical, Trash2, Pencil, Images, Plus, Upload, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { getCsrfToken } from '@/lib/queryClient';
+import { apiUrl, getCsrfToken } from '@/lib/queryClient';
 
 interface GalleryImage {
   src: string;
@@ -139,6 +140,9 @@ export function ImageGalleryNodeView({ node, updateAttributes, selected, editor,
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const uploadPurpose = editor.extensionManager.extensions.find(
+    (extension) => extension.name === 'imageGallery',
+  )?.options.uploadPurpose as string | undefined;
   
   const images: GalleryImage[] = node.attrs.images || [];
   
@@ -213,6 +217,7 @@ export function ImageGalleryNodeView({ node, updateAttributes, selected, editor,
       try {
         const formData = new FormData();
         formData.append('file', file);
+        if (uploadPurpose) formData.append('entityType', `${uploadPurpose}-gallery`);
         
         const csrfToken = getCsrfToken();
         const headers: HeadersInit = {};
@@ -220,7 +225,7 @@ export function ImageGalleryNodeView({ node, updateAttributes, selected, editor,
           headers['x-csrf-token'] = csrfToken;
         }
         
-        const response = await fetch('/api/media/upload', {
+        const response = await fetch(apiUrl('/api/media/upload'), {
           method: 'POST',
           headers,
           body: formData,

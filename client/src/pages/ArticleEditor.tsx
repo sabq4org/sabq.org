@@ -3215,6 +3215,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   placeholder="ابدأ بكتابة المقال..."
                   editorRef={setEditorInstance}
                   disabled={isLockedByOther}
+                  imageUploadPurpose="article-inline"
                 />
                 {articleType === "weekly_photos" && (
                   <div className="border-t pt-6">
@@ -4578,6 +4579,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           articleTitle={title}
           articleContent={content?.substring(0, 500)}
           currentImageUrl={imageUrl}
+          uploadPurpose="article-library"
         />
       )}
 
@@ -4703,6 +4705,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         }}
         multiple={true}
         maxFiles={10}
+        uploadPurpose="article-album"
       />
 
       {/* Attachment Upload Dialog - uses MediaLibraryPicker for better integration */}
@@ -4717,6 +4720,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         }}
         articleTitle={title}
         articleContent={content?.substring(0, 500)}
+        uploadPurpose="article-attachment"
       />
     </DashboardLayout>
   );

@@ -9,6 +9,7 @@ export interface GalleryImage {
 
 export interface ImageGalleryOptions {
   HTMLAttributes: Record<string, any>;
+  uploadPurpose?: string;
 }
 
 declare module '@tiptap/core' {
@@ -32,6 +33,7 @@ export const ImageGallery = Node.create<ImageGalleryOptions>({
   addOptions() {
     return {
       HTMLAttributes: {},
+      uploadPurpose: undefined,
     };
   },
 

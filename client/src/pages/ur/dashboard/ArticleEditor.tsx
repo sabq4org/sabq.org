@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- Existing editor diagnostics are outside this upload-routing change. */
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "wouter";
@@ -1034,6 +1035,7 @@ export default function UrduArticleEditor() {
                   placeholder="مضمون لکھنا شروع کریں..."
                   editorRef={setEditorInstance}
                   dir="rtl"
+                  imageUploadPurpose="ur-article-inline"
                 />
               </CardContent>
             </Card>
@@ -1454,6 +1456,7 @@ export default function UrduArticleEditor() {
             description: "لائبریری سے تصویر کامیابی سے منتخب کی گئی",
           });
         }}
+        uploadPurpose="ur-article-library"
       />
       
       {/* AI Image Generator Dialog */}

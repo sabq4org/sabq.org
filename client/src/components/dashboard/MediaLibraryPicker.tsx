@@ -58,6 +58,7 @@ interface MediaLibraryPickerProps {
   articleTitle?: string;
   articleContent?: string;
   currentImageUrl?: string;
+  uploadPurpose?: string;
 }
 
 const uploadFormSchema = z.object({
@@ -85,6 +86,7 @@ export function MediaLibraryPicker({
   articleTitle,
   articleContent,
   currentImageUrl,
+  uploadPurpose,
 }: MediaLibraryPickerProps) {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("library");
@@ -208,6 +210,7 @@ export function MediaLibraryPicker({
     mutationFn: async (data: UploadFormValues & { file: File }) => {
       const formData = new FormData();
       formData.append("file", data.file);
+      if (uploadPurpose) formData.append("entityType", uploadPurpose);
       if (data.title) formData.append("title", data.title);
       if (data.description) formData.append("description", data.description);
       if (data.category) formData.append("category", data.category);

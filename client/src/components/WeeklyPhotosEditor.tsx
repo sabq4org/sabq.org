@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ImagePlus, Trash2, Upload, Loader2, Camera, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getCsrfToken } from "@/lib/queryClient";
+import { apiUrl, getCsrfToken } from "@/lib/queryClient";
 
 export interface WeeklyPhotoItem {
   imageUrl: string;
@@ -46,9 +46,10 @@ export function WeeklyPhotosEditor({ photos, onChange }: WeeklyPhotosEditorProps
       const formData = new FormData();
       formData.append("file", file);
       formData.append("folder", "weekly-photos");
+      formData.append("entityType", "article-weekly-photos");
       
       const csrfToken = await getCsrfToken();
-      const response = await fetch("/api/media/upload", {
+      const response = await fetch(apiUrl("/api/media/upload"), {
         method: "POST",
         headers: csrfToken ? {
           "X-CSRF-Token": csrfToken,

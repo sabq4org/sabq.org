@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest, ensureCsrfToken } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl, ensureCsrfToken } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
 import { RichTextEditor } from "@/components/RichTextEditor";
@@ -369,11 +369,12 @@ export default function MyAngle() {
     setIsUploadingHero(true);
     const fd = new FormData();
     fd.append("file", file);
+    fd.append("entityType", "article-opinion-hero");
     try {
       // ضمان توكن CSRF — الرفع أول إجراء للكاتب غالباً، فالتوكن قد لا يكون مجلوباً بعد
       // (/api/media/upload محمي بـ CSRF). بدونه يرجع 403.
       const csrf = await ensureCsrfToken();
-      const res = await fetch("/api/media/upload", {
+      const res = await fetch(apiUrl("/api/media/upload"), {
         method: "POST",
         body: fd,
         credentials: "include",
@@ -920,6 +921,7 @@ export default function MyAngle() {
                     onChange={setEditorContent}
                     placeholder="اكتب محتوى موضوعك هنا..."
                     dir="rtl"
+                    imageUploadPurpose="article-opinion-inline"
                   />
                 </div>
               </div>
