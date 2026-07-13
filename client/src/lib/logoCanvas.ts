@@ -204,6 +204,24 @@ export interface MergePhotosOptions {
   firstFocal?: FocalPoint | null;
   /** تركيز الصورة الثانية (اليسرى) — الافتراضي مركز الصورة */
   secondFocal?: FocalPoint | null;
+  /**
+   * تكبير/تصغير نسبةً إلى وضع cover: ‏1 = ملء النصف بالكامل (الافتراضي)،
+   * أقل من 1 = تصغير يُظهر جزءاً أكبر من الصورة مع فراغ أبيض حولها —
+   * للصور ذات الأبعاد المتطرفة التي يبترها القص مهما تحرّكت.
+   */
+  firstZoom?: number;
+  secondZoom?: number;
+}
+
+/**
+ * أدنى zoom مفيد لصورة داخل نصف الدمج: عنده تظهر الصورة كاملة (contain).
+ * القيم الأدنى لا تضيف شيئاً سوى تصغير فارغ.
+ */
+export function minPhotoZoom(dims: { w: number; h: number }): number {
+  const halfW = (LOGO_CANVAS_WIDTH - PHOTO_GAP_PX) / 2;
+  const cover = Math.max(halfW / dims.w, LOGO_CANVAS_HEIGHT / dims.h);
+  const contain = Math.min(halfW / dims.w, LOGO_CANVAS_HEIGHT / dims.h);
+  return contain / cover;
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -233,27 +251,48 @@ export async function renderMergedPhotos(
     const halfW = (LOGO_CANVAS_WIDTH - PHOTO_GAP_PX) / 2;
     const halfH = LOGO_CANVAS_HEIGHT;
 
-    // cover: نقص من مصدر الصورة مستطيلاً بنسبة النصف متمحوراً حول نقطة
-    // التركيز (مثبّتاً داخل الحدود) ثم نرسمه ممتلئاً
-    const drawCovering = (photo: LoadedLogo, dx: number, focal?: FocalPoint | null) => {
-      const targetRatio = halfW / halfH;
-      const sourceRatio = photo.width / photo.height;
-      let sw = photo.width;
-      let sh = photo.height;
-      if (sourceRatio > targetRatio) {
-        sw = photo.height * targetRatio; // أعرض من اللازم — نقص الجانبين
-      } else {
-        sh = photo.width / targetRatio; // أطول من اللازم — نقص الأعلى والأسفل
-      }
+    // الرسم بمقياس zoom نسبةً إلى cover: عند 1 تملأ الصورة نصفها ويُقص
+    // الفائض حول نقطة التركيز؛ عند التصغير يظهر جزء أكبر، وما دون حجم
+    // النصف تتوسط الصورة على الخلفية البيضاء في ذلك المحور
+    const drawPhoto = (photo: LoadedLogo, dxBase: number, focal?: FocalPoint | null, zoom = 1) => {
+      const coverScale = Math.max(halfW / photo.width, halfH / photo.height);
+      const containScale = Math.min(halfW / photo.width, halfH / photo.height);
+      const scale = Math.max(coverScale * clamp(zoom, 0.05, 3), containScale);
       const fx = clamp(focal?.fx ?? 0.5, 0, 1);
       const fy = clamp(focal?.fy ?? 0.5, 0, 1);
-      const sx = clamp(fx * photo.width - sw / 2, 0, photo.width - sw);
-      const sy = clamp(fy * photo.height - sh / 2, 0, photo.height - sh);
-      ctx.drawImage(photo.source, sx, sy, sw, sh, dx, 0, halfW, halfH);
+
+      const drawnW = photo.width * scale;
+      const drawnH = photo.height * scale;
+
+      let sx = 0;
+      let sw = photo.width;
+      let dx = dxBase;
+      let dw = halfW;
+      if (drawnW >= halfW) {
+        sw = halfW / scale;
+        sx = clamp(fx * photo.width - sw / 2, 0, photo.width - sw);
+      } else {
+        dx = dxBase + (halfW - drawnW) / 2;
+        dw = drawnW;
+      }
+
+      let sy = 0;
+      let sh = photo.height;
+      let dy = 0;
+      let dh = halfH;
+      if (drawnH >= halfH) {
+        sh = halfH / scale;
+        sy = clamp(fy * photo.height - sh / 2, 0, photo.height - sh);
+      } else {
+        dy = (halfH - drawnH) / 2;
+        dh = drawnH;
+      }
+
+      ctx.drawImage(photo.source, sx, sy, sw, sh, dx, dy, dw, dh);
     };
 
-    drawCovering(first, halfW + PHOTO_GAP_PX, options.firstFocal); // يمين
-    drawCovering(second, 0, options.secondFocal); // يسار
+    drawPhoto(first, halfW + PHOTO_GAP_PX, options.firstFocal, options.firstZoom); // يمين
+    drawPhoto(second, 0, options.secondFocal, options.secondZoom); // يسار
 
     return await canvasToBlob(canvas);
   } finally {
