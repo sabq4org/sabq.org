@@ -50,7 +50,11 @@ export async function verifyImageMagicBytes(
   } catch (e) {
     return { ok: false, reason: "could not decode image" };
   }
-  const fmt = meta.format;
+  // libvips reports AVIF containers as HEIF with AV1 compression. Normalize
+  // that combination before comparing it with the browser's image/avif MIME.
+  const fmt = meta.format === "heif" && meta.compression === "av1"
+    ? "avif"
+    : meta.format;
   if (!fmt) {
     return { ok: false, reason: "no format detected" };
   }
@@ -66,4 +70,19 @@ export async function verifyImageMagicBytes(
     };
   }
   return { ok: true, detectedFormat: fmt };
+}
+
+/**
+ * Cloudflare Images accepts AVIF input only on Enterprise plans. Normalize
+ * user-provided AVIF files to WebP so the shared upload endpoint behaves the
+ * same regardless of the active Cloudflare plan or fallback storage provider.
+ */
+export async function transcodeAvifToWebp(buffer: Buffer): Promise<Buffer> {
+  return sharpModule(buffer, {
+    failOn: "error",
+    limitInputPixels: 100_000_000,
+  })
+    .rotate()
+    .webp({ quality: 90, effort: 4, smartSubsample: true })
+    .toBuffer();
 }

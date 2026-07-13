@@ -1,11 +1,11 @@
 // Reference: javascript_object_storage blueprint
-import type { Express, Response } from "express";
+import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { notifySearchEngines, INDEXNOW_KEY } from "./indexNow";
 import { storage } from "./storage";
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
-import { verifyImageMagicBytes } from "./utils/imageVerify";
+import { transcodeAvifToWebp, verifyImageMagicBytes } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
@@ -1718,21 +1718,36 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         'image/jpg',
         'image/png',
         'image/webp',
+        'image/avif',
       ];
       if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP'));
+        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP, AVIF'));
       }
     },
   });
+
+  // Multer rejects unsupported types before the async route handler starts.
+  // Convert those expected validation failures to useful 400 responses instead
+  // of letting the production error handler mask them as an internal 500.
+  const parseMediaUpload = (req: Request, res: Response, next: NextFunction) => {
+    mediaUpload.single('file')(req, res, (error: unknown) => {
+      if (!error) return next();
+      if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ message: "الملف كبير جداً. الحد الأقصى 10MB" });
+      }
+      const message = error instanceof Error ? error.message : "تعذّر قراءة الملف المرفوع";
+      return res.status(400).json({ message });
+    });
+  };
 
 
   // NOTE: platform-wide generic image upload pipe (avatars, category/topic
   // images, rich editor, angle-writer topic images) — NOT just the media library.
   // Intentionally auth-only: angle writers and avatar uploaders have no media.*
   // permission, so do NOT add requirePermission("media.upload") — it'd break them.
-  app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, mediaUpload.single('file'), async (req: any, res) => {
+  app.post("/api/media/upload", isAuthenticated, mediaUploadLimiter, parseMediaUpload, async (req: any, res) => {
     try {
       const userId = req.user.id;
 
@@ -1757,6 +1772,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           console.warn("[Media Upload] Magic byte verification failed:", verify.reason);
           return res.status(400).json({ message: "نوع الملف لا يطابق محتواه الفعلي" });
         }
+      }
+
+      // AVIF input support in Cloudflare Images is plan-dependent. Convert it
+      // once here to universally supported WebP before choosing CF, GCS, or
+      // local storage. The verified source remains subject to the same 10MB cap.
+      if (req.file.mimetype.toLowerCase() === 'image/avif') {
+        req.file.buffer = await transcodeAvifToWebp(req.file.buffer);
+        req.file.mimetype = 'image/webp';
+        req.file.size = req.file.buffer.length;
+        req.file.originalname = req.file.originalname.replace(/\.avif$/i, '.webp');
       }
 
       console.log("[Media Upload] File received:", {
