@@ -9,10 +9,10 @@ interface BestArticleCardProps {
 
 export function BestArticleCard({ article, loading, onNavigate }: BestArticleCardProps) {
   return (
-    <Card className="hover-elevate border-warning/40 dark:border-border bg-gradient-to-br from-warning/10 to-warning/[0.06] dark:from-card dark:to-card">
+    <Card className="hover-elevate border-border shadow-none">
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-warning" />
+        <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Trophy className="h-4 w-4 text-primary" />
           أفضل مقال هذا الأسبوع
         </CardTitle>
       </CardHeader>
