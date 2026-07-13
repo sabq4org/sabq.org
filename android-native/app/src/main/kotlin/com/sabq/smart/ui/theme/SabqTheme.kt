@@ -9,6 +9,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 
 /**
  * Sabq's design system entrypoint — equivalent to the iOS [SabqTheme]
@@ -52,7 +55,13 @@ fun SabqTheme(
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) SabqColorPalette.dark(accent) else SabqColorPalette.light(accent)
-    val typography = SabqTypography.build(articleFontSize)
+    // Width-adaptive scale: iOS sizes are points on a ~393pt-wide iPhone,
+    // while Android widths span 360–480dp. Scaling type proportionally to
+    // the width keeps every screen visually identical to iPhone; clamped
+    // so extremes never distort. Dimens (paddings/radii) are NOT scaled —
+    // they're layout-relative and fillMaxWidth absorbs width differences.
+    val deviceScale = (LocalConfiguration.current.screenWidthDp / 393f).coerceIn(0.92f, 1.08f)
+    val typography = SabqTypography.build(articleFontSize, deviceScale)
 
     // Material3 fallback scheme — kept narrow on purpose; almost
     // nothing should read MaterialTheme.colorScheme directly.
@@ -76,9 +85,14 @@ fun SabqTheme(
         )
     }
 
+    // سقف تكبير الخط النظامي عند 1.3× حفاظًا على تطابق التخطيط مع iOS الذي يتجاهل Dynamic Type هنا.
+    val density = LocalDensity.current
+    val cappedDensity = Density(density.density, fontScale = density.fontScale.coerceAtMost(1.3f))
+
     CompositionLocalProvider(
         LocalSabqColors provides colors,
         LocalSabqTypography provides typography,
+        LocalDensity provides cappedDensity,
     ) {
         MaterialTheme(colorScheme = m3, content = content)
     }

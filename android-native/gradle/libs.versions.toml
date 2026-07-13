@@ -65,7 +65,6 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 androidx-compose-animation = { group = "androidx.compose.animation", name = "animation" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "compose-navigation" }
 androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "hilt-navigation-compose" }
-androidx-compose-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts" }
 
 # Coroutines
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
