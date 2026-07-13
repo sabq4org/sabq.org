@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Trash2, GripVertical, Brain, Save, ArrowRight, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import type { Article } from "@shared/schema";
 
@@ -62,7 +62,7 @@ export default function QuizManagement() {
         limit: "50",
         ...(searchQuery && { search: searchQuery }),
       });
-      const res = await fetch(`/api/articles?${params}`);
+      const res = await fetch(apiUrl(`/api/articles?${params}`), { credentials: "include" });
       return res.json();
     },
   });
@@ -72,7 +72,9 @@ export default function QuizManagement() {
     queryKey: ["/api/admin/articles", selectedArticleId, "quiz"],
     queryFn: async () => {
       if (!selectedArticleId) return null;
-      const res = await fetch(`/api/admin/articles/${selectedArticleId}/quiz`);
+      const res = await fetch(apiUrl(`/api/admin/articles/${selectedArticleId}/quiz`), {
+        credentials: "include",
+      });
       if (!res.ok) return null;
       return res.json();
     },
