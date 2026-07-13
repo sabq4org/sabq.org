@@ -11,8 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useDashboardTheme } from "@/dashboard-themes/DashboardThemeProvider";
 import type { DashboardThemeId, DashboardThemePreset } from "@/dashboard-themes/presets";
+import { useOrgDashboardTheme } from "@/hooks/useOrgDashboardTheme";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { PERMISSION_CODES } from "@shared/rbac-constants";
 
 function ColorGrid({ colors }: { colors: DashboardThemePreset["colors"] }) {
   return (
@@ -172,15 +175,37 @@ function ActiveThemeStudio({ preset }: { preset: DashboardThemePreset }) {
 
 function DashboardAppearanceContent() {
   const { themeId, presets, setThemeId, preset } = useDashboardTheme();
+  const { setOrgThemeId, isSaving } = useOrgDashboardTheme();
+  const { user } = useAuth();
   const { toast } = useToast();
+  const canManage = hasPermission(user, PERMISSION_CODES.SYSTEM_MANAGE_SETTINGS);
 
-  const activate = (id: DashboardThemeId) => {
-    setThemeId(id);
-    const next = presets.find((item) => item.id === id);
-    toast({
-      title: "تم تطبيق ثيم اللوحة",
-      description: next ? `الثيم النشط الآن: ${next.nameAr} — يطبَّق على كامل /dashboard` : undefined,
-    });
+  const activate = async (id: DashboardThemeId) => {
+    if (!canManage) {
+      toast({
+        title: "غير مسموح",
+        description: "تطبيق سمة اللوحة على المنظمة يتطلب صلاحية إدارة إعدادات النظام.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      setThemeId(id);
+      await setOrgThemeId(id);
+      const next = presets.find((item) => item.id === id);
+      toast({
+        title: "تم تطبيق سمة اللوحة على المنظمة",
+        description: next
+          ? `الثيم النشط: ${next.nameAr} — يطبَّق على جميع من يدخل لوحة التحكم.`
+          : undefined,
+      });
+    } catch {
+      toast({
+        title: "تعذر الحفظ",
+        description: "فشل حفظ سمة اللوحة على السيرفر. حاول مرة أخرى.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -188,8 +213,18 @@ function DashboardAppearanceContent() {
       <DashboardPageHeader
         icon={Palette}
         title="مركز سمات اللوحة"
-        description="اختر ثيماً ليطبَّق فوراً على كامل لوحة التحكم (الشريط، الترويسة، البطاقات، الأزرار، النماذج) دون المساس بالموقع العام."
+        description="سمة واحدة للمنظمة كلها: ما يختاره مسؤول النظام يُطبَّق على جميع مستخدمي لوحة التحكم (الشريط، الترويسة، البطاقات، الأزرار) دون المساس بالموقع العام."
       />
+
+      {!canManage && (
+        <Card className="border-border shadow-none">
+          <CardContent className="p-4 text-sm text-muted-foreground">
+            يمكنك معاينة السمة النشطة للمنظمة. تغييرها وحفظها متاح فقط لمن لديه صلاحية
+            {" "}
+            <strong className="text-foreground">إدارة إعدادات النظام</strong>.
+          </CardContent>
+        </Card>
+      )}
 
       <ActiveThemeStudio preset={preset} />
 
@@ -242,11 +277,11 @@ function DashboardAppearanceContent() {
                   <Button
                     size="sm"
                     variant={active ? "secondary" : "default"}
-                    disabled={active}
+                    disabled={active || isSaving || !canManage}
                     onClick={() => activate(item.id)}
                     data-testid={`dashboard-theme-activate-${item.id}`}
                   >
-                    {active ? "مفعّل الآن" : "تطبيق على اللوحة"}
+                    {active ? "مفعّل للمنظمة" : canManage ? "تطبيق على المنظمة" : "للمسؤولين فقط"}
                   </Button>
                 </CardContent>
               </Card>
@@ -258,7 +293,7 @@ function DashboardAppearanceContent() {
       <Card className="border-border/70 shadow-none">
         <CardContent className="flex flex-col gap-2 p-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <p>
-            الثيم النشط: <strong className="text-foreground">{preset.nameAr}</strong>
+            سمة المنظمة: <strong className="text-foreground">{preset.nameAr}</strong>
             {" · "}
             التجربة على <Link href="/dashboard" className="text-primary underline-offset-2 hover:underline">نظرة عامة</Link>
           </p>

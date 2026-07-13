@@ -2,6 +2,13 @@ import { Router } from "express";
 import { storage } from "../storage";
 import { requireAuth, requirePermission } from "../rbac";
 import { TOURNAMENT_BLOCK_KEYS } from "../services/tournamentBlockSettings";
+import {
+  DASHBOARD_THEME_IDS,
+  DASHBOARD_THEME_SETTING_KEY,
+  DEFAULT_DASHBOARD_THEME_ID,
+  isDashboardThemeId,
+  parseDashboardThemeId,
+} from "@shared/dashboard-theme";
 
 const router: Router = Router();
 
@@ -141,5 +148,46 @@ for (const [slug, settingKey] of Object.entries(TOURNAMENT_BLOCK_KEYS)) {
     }
   });
 }
+
+// Org-wide dashboard shell theme (shared by all users)
+router.get("/api/system/dashboard-theme", async (_req, res) => {
+  try {
+    const setting = await storage.getSystemSetting(DASHBOARD_THEME_SETTING_KEY);
+    const themeId = parseDashboardThemeId(setting?.themeId ?? setting);
+    res.json({ themeId });
+  } catch (error) {
+    console.error("Error fetching dashboard theme:", error);
+    res.json({ themeId: DEFAULT_DASHBOARD_THEME_ID });
+  }
+});
+
+router.post(
+  "/api/system/dashboard-theme",
+  requireAuth,
+  requirePermission("system.manage_settings"),
+  async (req: any, res) => {
+    try {
+      const themeId = parseDashboardThemeId(req.body?.themeId);
+      if (!isDashboardThemeId(req.body?.themeId)) {
+        return res.status(400).json({
+          message: "Invalid themeId",
+          allowed: DASHBOARD_THEME_IDS,
+        });
+      }
+
+      await storage.upsertSystemSetting(
+        DASHBOARD_THEME_SETTING_KEY,
+        { themeId },
+        "appearance",
+        true,
+      );
+
+      res.json({ success: true, themeId });
+    } catch (error) {
+      console.error("Error updating dashboard theme:", error);
+      res.status(500).json({ message: "Failed to update dashboard theme" });
+    }
+  },
+);
 
 export default router;

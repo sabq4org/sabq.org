@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from "react";
 import {
@@ -16,13 +15,16 @@ import {
   type DashboardThemeId,
   type DashboardThemePreset,
 } from "./presets";
+import { useOrgDashboardTheme } from "@/hooks/useOrgDashboardTheme";
 import { cn } from "@/lib/utils";
 
 interface DashboardThemeContextValue {
   themeId: DashboardThemeId;
   preset: DashboardThemePreset;
   presets: DashboardThemePreset[];
+  /** Optimistic local apply; org save is done via setOrgThemeId on appearance page. */
   setThemeId: (id: DashboardThemeId) => void;
+  isOrgLoading: boolean;
 }
 
 const DashboardThemeContext = createContext<DashboardThemeContextValue | null>(null);
@@ -49,19 +51,29 @@ interface DashboardThemeProviderProps {
 }
 
 export function DashboardThemeProvider({ children, className }: DashboardThemeProviderProps) {
-  const [themeId, setThemeIdState] = useState<DashboardThemeId>(() => readStoredDashboardTheme());
+  const { themeId: orgThemeId, isLoading: isOrgLoading } = useOrgDashboardTheme();
+
+  // Prefer org setting once loaded; localStorage only as first-paint fallback.
+  const resolvedId: DashboardThemeId = isOrgLoading
+    ? readStoredDashboardTheme()
+    : orgThemeId || DEFAULT_DASHBOARD_THEME_ID;
 
   const setThemeId = useCallback((id: DashboardThemeId) => {
-    setThemeIdState(id);
     writeStoredDashboardTheme(id);
   }, []);
 
+  // Keep local cache aligned with org theme for next visit first paint.
+  useEffect(() => {
+    if (!isOrgLoading) {
+      writeStoredDashboardTheme(resolvedId);
+    }
+  }, [isOrgLoading, resolvedId]);
+
   const preset = useMemo(
-    () => DASHBOARD_THEME_PRESETS.find((item) => item.id === themeId) ?? DASHBOARD_THEME_PRESETS[0]!,
-    [themeId],
+    () => DASHBOARD_THEME_PRESETS.find((item) => item.id === resolvedId) ?? DASHBOARD_THEME_PRESETS[0]!,
+    [resolvedId],
   );
 
-  const resolvedId = themeId || DEFAULT_DASHBOARD_THEME_ID;
   const fontStack = getDashboardThemeFontStack(resolvedId);
 
   // Sync theme to <html> so Radix portals (dialogs/selects) inherit tokens + fonts.
@@ -86,8 +98,9 @@ export function DashboardThemeProvider({ children, className }: DashboardThemePr
       preset,
       presets: DASHBOARD_THEME_PRESETS,
       setThemeId,
+      isOrgLoading,
     }),
-    [resolvedId, preset, setThemeId],
+    [resolvedId, preset, setThemeId, isOrgLoading],
   );
 
   return (
