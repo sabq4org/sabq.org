@@ -374,24 +374,31 @@ private fun LoadedFeed(
         item { LatestNewsHeader() }
         item {
             SurfaceCard {
-                state.articles.forEachIndexed { index, article ->
-                    // Stable slot identity so appends ("تحميل المزيد") and
-                    // pull-to-refresh recompose only changed rows instead of
-                    // re-keying by position. Keeps the SurfaceCard one-card
-                    // visual (iOS parity) while cutting recomposition churn.
-                    key(article.id) {
-                        if (index > 0) {
-                            HorizontalDivider(
-                                color = SabqTheme.colors.outline.copy(alpha = 0.3f),
-                                thickness = 0.5.dp,
+                // Rows live in their own zero-spacing Column so the
+                // SurfaceCard content spacing never opens gaps between
+                // them — iOS renders the list as ONE LazyVStack(spacing:
+                // 0) child (HomeFeedView.swift:1025) where each row only
+                // carries its call-site .padding(.vertical, 4) plus the
+                // row's internal 6pt. No dividers: iOS draws none here
+                // (the trending top-3 card is the one with Dividers).
+                // Previously each row + a HorizontalDivider were direct
+                // SurfaceCard children, so the 20dp spacedBy applied
+                // twice per boundary (~48dp of air vs iOS's 20pt).
+                Column {
+                    state.articles.forEach { article ->
+                        // Stable slot identity so appends ("تحميل المزيد")
+                        // and pull-to-refresh recompose only changed rows
+                        // instead of re-keying by position.
+                        key(article.id) {
+                            CompactArticleRow(
+                                article = article,
+                                isBookmarked = article.bookmarkKey in state.bookmarkedIds,
+                                onBookmark = { onBookmark(article.bookmarkKey) },
+                                onClick = { onArticleClick(article) },
+                                isNew = article.id in state.recentlyAddedIds,
+                                modifier = Modifier.padding(vertical = 4.dp),
                             )
                         }
-                        CompactArticleRow(
-                            article = article,
-                            isBookmarked = article.bookmarkKey in state.bookmarkedIds,
-                            onBookmark = { onBookmark(article.bookmarkKey) },
-                            onClick = { onArticleClick(article) },
-                        )
                     }
                 }
             }

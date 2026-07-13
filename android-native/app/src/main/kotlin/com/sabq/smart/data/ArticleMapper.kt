@@ -19,15 +19,15 @@ import kotlinx.serialization.json.*
  * so the UI gets stable values without recomputing on every recomposition.
  */
 fun ApiArticle.toDomain(webOrigin: String = "https://sabq.org"): Article {
-    // Category resolution priority:
-    //   1. nested category slug (English key) — when shipped
-    //   2. flat categorySlug (English key)
-    //   3. Arabic section string (e.g. "محليات", "اقتصاديات")
-    val resolvedCategory = when {
-        category?.slug != null -> ArticleCategory.fromKey(category.slug.lowercase(Locale.ROOT))
-        categorySlug != null -> ArticleCategory.fromKey(categorySlug.lowercase(Locale.ROOT))
-        else -> ArticleCategory.fromArabicSection(category?.name ?: categoryName)
-    }
+    // Category resolution mirrors iOS (SabqModels.swift:498 feeds
+    // `api.categoryName` — the Arabic name — into
+    // `ArticleCategory(fromSection:)`, which matches the Arabic
+    // rawValue first and slug second). The previous Android slug-first
+    // order collapsed everything to the blue "محلية" default whenever
+    // the backend slug wasn't one of our enum keys.
+    val resolvedCategory = ArticleCategory.fromSection(
+        category?.name ?: categoryName ?: category?.slug ?: categorySlug,
+    )
 
     val resolvedTitle = title.ifBlank { "(بدون عنوان)" }
     val resolvedExcerpt = excerpt

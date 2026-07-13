@@ -164,6 +164,26 @@ fun BreakingPill(modifier: Modifier = Modifier) {
     }
 }
 
+/** iOS `newPill` (SabqComponents.swift:1673-1683) — green "جديد" badge
+ * shown on articles that just landed via refresh. Leaf text on a leaf
+ * 12 % capsule, same 8×4 padding as [BreakingPill]. */
+@Composable
+fun NewPill(modifier: Modifier = Modifier) {
+    val capsule = CircleShape
+    Row(
+        modifier = modifier
+            .clip(capsule)
+            .background(SabqTheme.colors.leaf.copy(alpha = 0.12f), capsule)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = "جديد",
+            style = SabqTheme.typography.breakingPill,
+            color = SabqTheme.colors.leaf,
+        )
+    }
+}
+
 @Suppress("unused")
 private val brandGradientHandle: (SabqTheme) -> Brush = { _ ->
     // Reserved — keeps the brandGradient extension visible to lints that

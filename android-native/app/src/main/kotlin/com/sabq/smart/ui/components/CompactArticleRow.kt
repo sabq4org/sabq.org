@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sabq.smart.data.Article
@@ -43,37 +44,52 @@ fun CompactArticleRow(
     onBookmark: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Shows the green "جديد" pill for freshly landed articles —
+     *  iOS `isNew` (SabqComponents.swift:1524). Defaulted so the
+     *  non-home call sites stay source-compatible, exactly like iOS. */
+    isNew: Boolean = false,
 ) {
     val haptics = rememberSabqHaptics()
     val thumbShape = RoundedCornerShape(SabqTheme.dimens.thumbnailRadius)
 
+    // iOS classicLayout metrics (SabqComponents.swift:1545-1586):
+    // HStack spacing 14, text VStack spacing 8, chips HStack spacing 8,
+    // row .padding(.vertical, 6), title lineLimit 2. The previous
+    // 10/5/6/4/3-line values made every Android row taller AND the
+    // inter-row rhythm looser than iOS.
     Row(
         modifier = modifier
             .clickable { onClick() }
-            .padding(vertical = 4.dp),
+            .padding(vertical = 6.dp),
         verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         // Text column on the LEADING edge (right in RTL, matching iOS
         // HStack iteration order under .sabqRTL()).
         androidx.compose.foundation.layout.Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Full-size StatusChip — iOS uses the standard 11pt
+                // chip here, not a compact variant.
                 StatusChip(
                     title = article.category.title,
                     tint = article.category.tint(),
-                    compact = true,
                 )
                 if (article.isBreaking) BreakingPill()
+                if (isNew) NewPill()
             }
 
             Text(
                 text = article.title,
-                style = SabqTheme.typography.compactCardTitle,
+                // iOS: SabqFonts.subhead(16) = SemiBold — lighter than
+                // the Bold token so dense rows don't read newspaper-heavy.
+                style = SabqTheme.typography.compactCardTitle.copy(
+                    fontWeight = FontWeight.SemiBold,
+                ),
                 color = SabqTheme.colors.ink,
-                maxLines = 3,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
 

@@ -91,7 +91,9 @@ fun SurfaceCard(
         }
         Column(
             modifier = Modifier.padding(SabqTheme.dimens.cardPadding),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+            // iOS: VStack(alignment: .leading, spacing: 18) + .padding(20)
+            // (SabqComponents.swift:1073-1076). Was 20 — measured drift.
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             content()
         }

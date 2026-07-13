@@ -1,22 +1,29 @@
 package com.sabq.smart.data
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material.icons.filled.LocationCity
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Signpost
 import androidx.compose.material.icons.filled.SportsBasketball
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import java.util.Locale
 
 /**
- * Ports iOS [ArticleCategory] (sabq/Models/ArticleCategory.swift).
- * Eight fixed categories, each with a colour token + Material icon.
- * Server-side category string ↔ enum mapping happens in the API layer.
+ * Ports iOS [ArticleCategory] (Models/SabqModels.swift:172-283).
+ * Twelve fixed categories — the Kotlin [title] values are the iOS
+ * enum raw values ("محليات", "أعمال", "العالم"…) because the backend
+ * ships those exact Arabic names in `category.nameAr` and iOS matches
+ * them verbatim in `init(fromSection:)`. Server string ↔ enum mapping
+ * happens in [fromSection] (Arabic name first, then slug, then Local).
  */
 enum class ArticleCategory(
     val key: String,
@@ -24,18 +31,20 @@ enum class ArticleCategory(
     val subtitle: String,
     val icon: ImageVector,
 ) {
-    // Keys match the backend `slug` values from `/api/v1/sections`.
-    // Backend ships 15 sections — these 8 are the headline ones that
-    // get explicit visual treatment. Anything unmatched falls back to
-    // [Local] tint via [fromSlug].
-    Local(      "saudi",      "محلية",   "أخبار المملكة من كل اتجاه",      Icons.Filled.LocationCity),
-    Sports(     "sports",     "رياضة",   "بطولات ودوريات ولاعبون",          Icons.Filled.SportsBasketball),
-    Business(   "business",   "اقتصاد",  "أسواق ومؤشرات وصفقات",            Icons.Filled.TrendingUp),
-    Technology( "technology", "تقنية",   "ابتكار وذكاء اصطناعي ومنتجات",    Icons.Filled.Computer),
-    Culture(    "culture",    "ثقافة",   "فنون وأدب وموسيقى ومسرح",         Icons.Filled.MusicNote),
-    Community(  "community",  "مجتمع",   "حياة الناس وقضاياهم",             Icons.Filled.People),
-    World(      "world",      "دولية",   "العالم في تقارير سريعة",         Icons.Filled.Public),
-    Life(       "life",       "حياتنا",  "صحة وأسرة وأسلوب حياة",            Icons.Outlined.Flag),
+    // Keys are the iOS `slug` values (SabqModels.swift:224-239);
+    // titles are the iOS rawValues (line 172-184). Order mirrors iOS.
+    Local(      "saudi",      "محليات", "أخبار المملكة والمدن الرئيسية",  Icons.Filled.LocationCity),
+    Regions(    "regions",    "مناطق",  "تغطيات من مختلف مناطق المملكة",  Icons.Filled.Map),
+    Culture(    "culture",    "ثقافة",  "فنون وتراث وأدب ومشهد ثقافي",    Icons.Filled.MusicNote),
+    Community(  "community",  "مجتمع",  "مجتمع وتعليم وقضايا يومية",      Icons.Filled.People),
+    Sports(     "sports",     "رياضة",  "رياضة محلية وعالمية",            Icons.Filled.SportsBasketball),
+    Tourism(    "tourism",    "سياحة",  "وجهات وفعاليات وسفر",            Icons.Filled.FlightTakeoff),
+    Technology( "technology", "تقنية",  "تقنية وابتكار ورقمنة",           Icons.Filled.Computer),
+    Business(   "business",   "أعمال",  "اقتصاد وأسواق وأعمال",           Icons.Filled.TrendingUp),
+    Life(       "life",       "حياتنا", "نمط حياة وصحة وعائلة",           Icons.Outlined.Flag),
+    Cars(       "cars",       "سيارات", "سيارات وطرق ومواصلات",           Icons.Filled.DirectionsCar),
+    Stations(   "stations",   "محطات",  "محطات وقصص وملفات",              Icons.Filled.Signpost),
+    World(      "world",      "العالم", "أخبار عربية ودولية",             Icons.Filled.Public),
     ;
 
     /**
@@ -50,13 +59,17 @@ enum class ArticleCategory(
      */
     fun tint(): Color = when (this) {
         Local -> Color(0xFF3498DB)      // iOS hex 3498db
-        Sports -> Color(0xFF2ECC71)     // iOS hex 2ecc71
-        Business -> Color(0xFFCA8A04)   // iOS hex ca8a04
-        Technology -> Color(0xFF6366F1) // iOS hex 6366f1
+        Regions -> Color(0xFF84CC16)    // iOS hex 84cc16
         Culture -> Color(0xFFD946EF)    // iOS hex d946ef
         Community -> Color(0xFFF97316)  // iOS hex f97316
-        World -> Color(0xFFE74C3C)      // iOS hex e74c3c
+        Sports -> Color(0xFF2ECC71)     // iOS hex 2ecc71
+        Tourism -> Color(0xFF14B8A6)    // iOS hex 14b8a6
+        Technology -> Color(0xFF6366F1) // iOS hex 6366f1
+        Business -> Color(0xFFCA8A04)   // iOS hex ca8a04
         Life -> Color(0xFFF472B6)       // iOS hex F472B6
+        Cars -> Color(0xFF0EA5E9)       // iOS hex 0EA5E9
+        Stations -> Color(0xFFFBBF24)   // iOS hex FBBF24
+        World -> Color(0xFFE74C3C)      // iOS hex e74c3c
     }
 
     companion object {
@@ -68,24 +81,23 @@ enum class ArticleCategory(
         fun fromSlug(slug: String?): ArticleCategory = fromKey(slug)
 
         /**
-         * Resolve a category from whatever the backend ships in the
-         * `section` field — typically an Arabic plural like "محليات",
-         * "رياضات", "اقتصاديات". We match by the singular Arabic
-         * title-stem (drop trailing "ات") so plural forms route to
-         * the same enum case as the singular `title` we defined above.
-         * Falls back to [Local] when no match.
+         * Port of iOS `ArticleCategory.init(fromSection:)`
+         * (SabqModels.swift:258-270): exact Arabic-title match first
+         * (the backend's `category.nameAr` — "محليات", "أعمال",
+         * "العالم"…), then lowercase-slug match, then [Local]. The
+         * old Android-only fuzzy stem matcher (drop "ات"/"ون"/"ين")
+         * is gone — iOS never did that and it produced different
+         * chips than iOS for the same payload.
          */
-        fun fromArabicSection(arabic: String?): ArticleCategory {
-            if (arabic.isNullOrBlank()) return Local
-            val normalised = arabic.trim()
-                .removeSuffix("ات")
-                .removeSuffix("ون")
-                .removeSuffix("ين")
-            return entries.firstOrNull { cat ->
-                cat.title == arabic
-                    || cat.title == normalised
-                    || arabic.contains(cat.title)
-            } ?: Local
+        fun fromSection(raw: String?): ArticleCategory {
+            val trimmed = raw?.trim().orEmpty()
+            if (trimmed.isEmpty()) return Local
+            entries.firstOrNull { it.title == trimmed }?.let { return it }
+            val lower = trimmed.lowercase(Locale.ROOT)
+            return entries.firstOrNull { it.key == lower } ?: Local
         }
+
+        /** Legacy alias — call sites migrated to [fromSection]. */
+        fun fromArabicSection(arabic: String?): ArticleCategory = fromSection(arabic)
     }
 }

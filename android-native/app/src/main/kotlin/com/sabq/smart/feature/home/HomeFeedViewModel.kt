@@ -41,6 +41,12 @@ sealed interface HomeFeedUiState {
         val isRefreshing: Boolean = false,
         val isLoadingMore: Boolean = false,
         val bookmarkedIds: Set<String> = emptySet(),
+        /** IDs of articles that just landed via pull-to-refresh — they
+         *  get the green "جديد" pill in the latest-news list. Mirrors
+         *  iOS `ArticlesStore.recentlyAddedIDs` (ArticlesStore.swift:27),
+         *  which marks freshly inserted articles and clears the set on
+         *  the next full reload. */
+        val recentlyAddedIds: Set<String> = emptySet(),
         /** Top breaking-news headline — shown as a single coral pill
          *  between the greeting and the featured carousel. Fallback
          *  when [breakingTicker] is empty. */
@@ -109,6 +115,12 @@ class HomeFeedViewModel @Inject constructor(
     fun refresh() {
         val current = _state.value
         val slug = if (current is HomeFeedUiState.Loaded) current.selectedSlug else null
+        // Snapshot the on-screen IDs so freshly landed articles can be
+        // badged "جديد" after the refresh — iOS marks exactly the rows
+        // the reader hasn't seen yet (ArticlesStore.applyPendingArticles).
+        val previousIds =
+            if (current is HomeFeedUiState.Loaded) current.articles.mapTo(HashSet()) { it.id }
+            else emptySet()
         viewModelScope.launch {
             _state.update { c ->
                 if (c is HomeFeedUiState.Loaded) c.copy(isRefreshing = true) else c
@@ -121,15 +133,21 @@ class HomeFeedViewModel @Inject constructor(
                 .onSuccess { (featured, articles) ->
                     _state.update { c ->
                         if (c !is HomeFeedUiState.Loaded) return@update c
+                        val visible = articles.items.filterNot { f ->
+                            featured.items.any { it.id == f.id }
+                        }
                         c.copy(
                             featured = featured.items,
-                            articles = articles.items.filterNot { f ->
-                                featured.items.any { it.id == f.id }
-                            },
+                            articles = visible,
                             selectedSlug = slug,
                             currentPage = articles.page,
                             hasMore = articles.hasMore,
                             isRefreshing = false,
+                            recentlyAddedIds = if (previousIds.isEmpty()) emptySet()
+                            else visible.asSequence()
+                                .map { it.id }
+                                .filter { it !in previousIds }
+                                .toSet(),
                         )
                     }
                     loadExtras()
@@ -313,6 +331,11 @@ class HomeFeedViewModel @Inject constructor(
                             hasMore = page2.hasMore,
                             isRefreshing = false,
                             isLoadingMore = false,
+                            // Full reload (section switch) drops the "جديد"
+                            // badges — iOS clears recentlyAddedIDs on every
+                            // full load (ArticlesStore.swift:115). Appends
+                            // ("تحميل المزيد") keep them.
+                            recentlyAddedIds = if (append) c.recentlyAddedIds else emptySet(),
                         )
                     }
                 }
