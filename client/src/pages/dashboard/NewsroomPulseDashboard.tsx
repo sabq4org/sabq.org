@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   BarChart3,
   BellRing,
+  CalendarDays,
   CalendarClock,
   CheckCircle2,
   ChevronLeft,
@@ -19,6 +20,7 @@ import {
   MessageSquare,
   RefreshCw,
   Sparkles,
+  Timer,
   TrendingUp,
   UserRoundCheck,
   WandSparkles,
@@ -139,6 +141,43 @@ interface DashboardPulse {
 type IconType = React.ComponentType<{ className?: string }>;
 
 const number = (value?: number) => (value ?? 0).toLocaleString("en-US");
+
+const scheduleDateFormatter = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  weekday: "long",
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+  timeZone: "Asia/Riyadh",
+});
+
+const scheduleTimeFormatter = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+  timeZone: "Asia/Riyadh",
+});
+
+function scheduleCountdown(scheduledAt: string | null, nowMs: number): string | null {
+  if (!scheduledAt) return null;
+  const targetMs = new Date(scheduledAt).getTime();
+  if (!Number.isFinite(targetMs)) return null;
+
+  const remainingMs = targetMs - nowMs;
+  if (remainingMs <= 0) return "حان موعد النشر";
+
+  const totalMinutes = Math.max(1, Math.ceil(remainingMs / 60_000));
+  const days = Math.floor(totalMinutes / 1_440);
+  const hours = Math.floor((totalMinutes % 1_440) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) {
+    return `متبقي ${number(days)} يوم${hours ? ` و${number(hours)} ساعة` : ""}`;
+  }
+  if (hours > 0) {
+    return `متبقي ${number(hours)} ساعة${minutes ? ` و${number(minutes)} دقيقة` : ""}`;
+  }
+  return `متبقي ${number(minutes)} دقيقة`;
+}
 
 const percentChange = (current: number, previous: number) => {
   if (previous === 0) return current > 0 ? 100 : 0;
@@ -376,6 +415,85 @@ function OperationsCards() {
   );
 }
 
+function UpcomingScheduleList({ schedule }: { schedule: DashboardStats["upcomingSchedule"] }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  if (!schedule.length) {
+    return (
+      <div className="py-10 text-center">
+        <CalendarClock className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" />
+        <p className="text-sm text-muted-foreground">لا توجد مواد مجدولة قادمة</p>
+        <Button asChild variant="outline" size="sm" className="mt-4">
+          <Link href="/dashboard/articles/new">إضافة مادة</Link>
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      {schedule.map((article) => {
+        const scheduledDate = article.scheduledAt ? new Date(article.scheduledAt) : null;
+        const hasValidDate = scheduledDate && Number.isFinite(scheduledDate.getTime());
+        const countdown = scheduleCountdown(article.scheduledAt, nowMs);
+
+        return (
+          <Link key={article.id} href={`/dashboard/articles/${article.id}/edit`}>
+            <a className="group block rounded-2xl border border-border/70 bg-background/80 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:bg-muted/20 hover:shadow-md">
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <CalendarClock className="h-5 w-5" />
+                </span>
+                <p className="min-w-0 flex-1 line-clamp-2 pt-0.5 text-sm font-semibold leading-6">
+                  {article.title}
+                </p>
+                <ArrowLeft className="mt-1 h-4 w-4 shrink-0 text-muted-foreground/60 transition group-hover:-translate-x-1" />
+              </div>
+
+              {hasValidDate ? (
+                <div className="mt-4 rounded-xl border border-primary/10 bg-primary/[0.045] p-3">
+                  <div className="flex items-center gap-2 text-xs text-foreground">
+                    <CalendarDays className="h-4 w-4 shrink-0 text-primary" />
+                    <span className="font-medium">{scheduleDateFormatter.format(scheduledDate)}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <Clock3 className="h-4 w-4 shrink-0 text-primary" />
+                    <span className="font-semibold text-foreground">{scheduleTimeFormatter.format(scheduledDate)}</span>
+                    <span className="text-muted-foreground">بتوقيت الرياض</span>
+                  </div>
+                  {countdown && (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "mt-3 w-fit gap-1.5 border-0 px-2.5 py-1",
+                        countdown === "حان موعد النشر"
+                          ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                          : "bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300",
+                      )}
+                    >
+                      <Timer className="h-3.5 w-3.5" />
+                      {countdown}
+                    </Badge>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-4 rounded-xl bg-amber-50 p-3 text-xs font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  لم يحدد وقت النشر
+                </div>
+              )}
+            </a>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function NewsroomPulseDashboard() {
   const { user, isLoading: userLoading } = useAuth({ redirectToLogin: true });
   const [, navigate] = useLocation();
@@ -534,11 +652,14 @@ export default function NewsroomPulseDashboard() {
         {stats && <SmartBrief stats={stats} muqtarabCount={muqtarabCount} operationalOnly={isContentManager} />}
 
         {!isContentManager && <section className="space-y-3">
-          <SectionTitle title="أداء اليوم" description="أرقام اليوم مقارنةً بنفس الوقت من أمس — وليست إجماليات تاريخية" />
+          <SectionTitle
+            title="أداء اليوم"
+            description="أرقام اليوم حتى الآن مقارنةً بنفس الوقت من أمس"
+          />
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
             <MetricCard title="منشور اليوم" value={stats?.articles.publishedToday ?? 0} previous={stats?.articles.publishedYesterday} icon={FileText} loading={statsQuery.isLoading} />
-            <MetricCard title="مشاهدات اليوم" value={stats?.articles.viewsToday ?? 0} previous={stats?.articles.viewsYesterday} icon={Eye} loading={statsQuery.isLoading} />
-            <MetricCard title="قراءات اليوم" value={stats?.engagement.readsToday ?? 0} previous={stats?.engagement.readsYesterday} icon={BarChart3} loading={statsQuery.isLoading} />
+            <MetricCard title="مرات فتح الأخبار" value={stats?.articles.viewsToday ?? 0} previous={stats?.articles.viewsYesterday} icon={Eye} helper="يشمل جميع الزوار" loading={statsQuery.isLoading} />
+            <MetricCard title="قراءات الأعضاء" value={stats?.engagement.readsToday ?? 0} previous={stats?.engagement.readsYesterday} icon={BarChart3} helper="للأعضاء المسجلين فقط" loading={statsQuery.isLoading} />
             <MetricCard title="تفاعلات اليوم" value={stats?.reactions.todayCount ?? 0} previous={stats?.reactions.yesterdayCount} icon={Heart} loading={statsQuery.isLoading} />
             <MetricCard title="نشطون اليوم" value={stats?.users.activeToday ?? 0} icon={UserRoundCheck} helper="حسب آخر نشاط مسجل" loading={statsQuery.isLoading} />
             <MetricCard title="متوسط القراءة" value={duration(stats?.engagement.averageTimeOnSite ?? 0)} icon={Clock3} helper="دقيقة:ثانية لكل قراءة" loading={statsQuery.isLoading} />
@@ -566,19 +687,19 @@ export default function NewsroomPulseDashboard() {
           {stats && <EditorialPipeline stats={stats} />}
         </section>
 
-        <section className={cn("grid gap-4", !isContentManager && "xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)]")}>
+        <section className={cn("grid gap-4", !isContentManager && "xl:grid-cols-[minmax(0,1.25fr)_minmax(380px,.75fr)]")}>
           {!isContentManager && <Card className="border-border/70 shadow-none">
             <CardHeader className="flex-row items-center justify-between space-y-0">
               <div><CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="h-4 w-4 text-emerald-500" /> المقالات الصاعدة</CardTitle><p className="mt-1 text-xs text-muted-foreground">الأسرع في آخر 24 ساعة، ثم الأعلى إجمالاً عند غياب بيانات اللحظة</p></div>
               <Button asChild variant="ghost" size="sm"><Link href="/dashboard/articles">عرض الكل</Link></Button>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="grid gap-3">
               {trending.slice(0, 5).map((article, index) => (
                 <Link key={article.id} href={`/dashboard/articles/${article.id}/edit`}>
-                  <a className="flex items-center gap-3 rounded-xl border p-3 transition hover:bg-muted/40">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/8 text-xs font-bold text-primary">{index + 1}</span>
+                  <a className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-background/80 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-500/25 hover:bg-muted/20 hover:shadow-md">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-xs font-bold text-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-300">{index + 1}</span>
                     <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{article.title}</p><div className="mt-1 flex gap-3 text-[11px] text-muted-foreground">{article.categoryName && <span>{article.categoryName}</span>}<span>{article.recentViews ? `${number(article.recentViews)} خلال 24 ساعة` : `${number(article.views)} إجمالاً`}</span></div></div>
-                    <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+                    <ArrowLeft className="h-4 w-4 text-muted-foreground/60 transition group-hover:-translate-x-1" />
                   </a>
                 </Link>
               ))}
@@ -588,15 +709,8 @@ export default function NewsroomPulseDashboard() {
 
           <Card className="border-border/70 shadow-none">
             <CardHeader><CardTitle className="flex items-center gap-2 text-base"><CalendarClock className="h-4 w-4 text-primary" /> جدول النشر القادم</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              {schedule.length ? schedule.map((article) => (
-                <Link key={article.id} href={`/dashboard/articles/${article.id}/edit`}>
-                  <a className="block rounded-xl border p-3 transition hover:bg-muted/40">
-                    <p className="line-clamp-2 text-sm font-medium">{article.title}</p>
-                    <p className="mt-2 text-xs text-primary">{article.scheduledAt ? new Intl.DateTimeFormat("ar-SA-u-nu-latn", { weekday: "short", hour: "numeric", minute: "2-digit" }).format(new Date(article.scheduledAt)) : "لم يحدد الوقت"}</p>
-                  </a>
-                </Link>
-              )) : <div className="py-10 text-center"><CalendarClock className="mx-auto mb-3 h-8 w-8 text-muted-foreground/30" /><p className="text-sm text-muted-foreground">لا توجد مواد مجدولة قادمة</p><Button asChild variant="outline" size="sm" className="mt-4"><Link href="/dashboard/articles/new">إضافة مادة</Link></Button></div>}
+            <CardContent>
+              <UpcomingScheduleList schedule={schedule} />
             </CardContent>
           </Card>
         </section>
