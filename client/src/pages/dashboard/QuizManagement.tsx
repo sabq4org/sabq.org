@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Plus, Trash2, GripVertical, Brain, Save, ArrowRight, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { DashboardLayout } from "@/components/DashboardLayout";
 import type { Article } from "@shared/schema";
 
 interface QuizQuestion {
@@ -192,6 +193,7 @@ export default function QuizManagement() {
   const selectedArticle = articlesData?.articles?.find((a) => a.id === selectedArticleId);
 
   return (
+    <DashboardLayout>
     <div className="min-h-screen bg-background p-4 md:p-6" dir="rtl">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
@@ -424,5 +426,6 @@ export default function QuizManagement() {
         </Card>
       </div>
     </div>
+    </DashboardLayout>
   );
 }

@@ -457,6 +457,672 @@ input, select, textarea {
   --card-foreground: var(--ifox-text-primary);
 }
 
+/* =====================================================
+ * Dashboard Theme Center presets (scoped to /dashboard)
+ * Applied via [data-dashboard-theme] on DashboardThemeProvider.
+ * Does NOT touch the public site ThemeProvider.
+ * Twitter tokens adapted from https://21st.dev/@serafim/themes/twitter
+ * (oklch → HSL components for hsl(var(--*)) Tailwind mapping).
+ * ===================================================== */
+
+html[data-dashboard-theme="twitter"], .dashboard-theme[data-dashboard-theme="twitter"] {
+  --background: 0 0% 100%;
+  --foreground: 210 24.9% 7.8%;
+  --card: 180 6.9% 97.1%;
+  --card-foreground: 210 24.9% 7.8%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 210 24.9% 7.8%;
+  --primary: 203.9 88.3% 53.1%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 24.9% 7.8%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 240 1.9% 90%;
+  --muted-foreground: 210 10% 40%;
+  --accent: 211.6 51.3% 92.7%;
+  --accent-foreground: 203.9 88.3% 53.1%;
+  --destructive: 356.3 90.6% 54.3%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 201.4 30.4% 91%;
+  --input: 200 22.9% 97.5%;
+  --ring: 202.8 89.1% 53.1%;
+  --chart-1: 203.9 88.3% 53.1%;
+  --chart-2: 159.8 100% 36.1%;
+  --chart-3: 42 92.8% 56.3%;
+  --chart-4: 147.1 78.5% 42%;
+  --chart-5: 341.5 75.2% 51%;
+  --sidebar: 180 6.9% 97.1%;
+  --sidebar-foreground: 210 24.9% 7.8%;
+  --sidebar-primary: 203.9 88.3% 53.1%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 211.6 51.3% 92.7%;
+  --sidebar-accent-foreground: 203.9 88.3% 53.1%;
+  --sidebar-border: 205 24.9% 90.6%;
+  --sidebar-ring: 202.8 89.1% 53.1%;
+  --radius: 1.3rem;
+  --success: 159.8 100% 36.1%;
+  --success-foreground: 0 0% 100%;
+  --warning: 42 92.8% 56.3%;
+  --warning-foreground: 210 24.9% 7.8%;
+}
+
+.dark html[data-dashboard-theme="twitter"],
+.dark .dashboard-theme[data-dashboard-theme="twitter"],
+html[data-dashboard-theme="twitter"].dark,
+.dashboard-theme[data-dashboard-theme="twitter"].dark {
+  --background: 0 0% 0%;
+  --foreground: 200 6.5% 91.2%;
+  --card: 228 9.8% 10%;
+  --card-foreground: 120 0% 85.1%;
+  --popover: 0 0% 0%;
+  --popover-foreground: 200 6.5% 91.2%;
+  --primary: 203.8 87.6% 52.6%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 195 15.5% 94.9%;
+  --secondary-foreground: 210 24.9% 7.8%;
+  --muted: 120 0% 9.4%;
+  --muted-foreground: 210 3.4% 46.3%;
+  --accent: 205.7 70.1% 7.8%;
+  --accent-foreground: 203.8 87.6% 52.6%;
+  --destructive: 356.3 90.6% 54.3%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 210 5.2% 14.9%;
+  --input: 207.7 27.6% 18.4%;
+  --ring: 202.8 89.1% 53.1%;
+  --chart-1: 203.9 88.3% 53.1%;
+  --chart-2: 159.8 100% 36.1%;
+  --chart-3: 42 92.8% 56.3%;
+  --chart-4: 147.1 78.5% 42%;
+  --chart-5: 341.5 75.2% 51%;
+  --sidebar: 228 9.8% 10%;
+  --sidebar-foreground: 120 0% 85.1%;
+  --sidebar-primary: 202.8 89.1% 53.1%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 205.7 70.1% 7.8%;
+  --sidebar-accent-foreground: 203.8 87.6% 52.6%;
+  --sidebar-border: 205.7 15.8% 26.1%;
+  --sidebar-ring: 202.8 89.1% 53.1%;
+  --radius: 1.3rem;
+  --success: 159.8 100% 36.1%;
+  --success-foreground: 0 0% 100%;
+  --warning: 42 92.8% 56.3%;
+  --warning-foreground: 0 0% 0%;
+}
+
+/* Claude + Claude Azure + WhatsApp from 21st.dev (hex → HSL) */
+
+html[data-dashboard-theme="claude"], .dashboard-theme[data-dashboard-theme="claude"] {
+  /* Official Claude tokens: cream surfaces (not pure white) */
+  --background: 48 33% 97%;
+  --foreground: 48 20% 20%;
+  --card: 48 33% 97%;
+  --card-foreground: 60 3% 8%;
+  --card-border: 50 7% 84%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 51 19% 13%;
+  --popover-border: 50 7% 84%;
+  --primary: 15 56% 52%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 46 23% 89%;
+  --secondary-foreground: 51 8% 30%;
+  --muted: 44 29% 90%;
+  --muted-foreground: 50 2% 50%;
+  --accent: 46 23% 89%;
+  --accent-foreground: 51 19% 13%;
+  --destructive: 60 3% 8%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 50 7% 84%;
+  --input: 51 8% 68%;
+  --ring: 15 56% 52%;
+  --chart-1: 18 57% 44%;
+  --chart-2: 251 85% 75%;
+  --chart-3: 46 28% 82%;
+  --chart-4: 257 49% 88%;
+  --chart-5: 18 60% 44%;
+  --sidebar: 51 26% 95%;
+  --sidebar-foreground: 60 3% 23%;
+  --sidebar-primary: 15 56% 52%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 46 23% 89%;
+  --sidebar-accent-foreground: 0 0% 20%;
+  --sidebar-border: 50 7% 84%;
+  --sidebar-ring: 0 0% 71%;
+  --radius: 0.5rem;
+}
+
+/* Claude-specific extras covered by universal dashboard surface rules below */
+
+.dashboard-theme .theme-frame-option,
+html[data-dashboard-theme] .theme-frame-option {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  border-radius: calc(var(--radius) + 0.15rem);
+  box-shadow: none;
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.dashboard-theme .theme-frame-option[data-active="true"],
+.dashboard-theme .theme-frame-option[aria-pressed="true"],
+html[data-dashboard-theme] .theme-frame-option[data-active="true"],
+html[data-dashboard-theme] .theme-frame-option[aria-pressed="true"] {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary) / 0.06);
+}
+
+.dark html[data-dashboard-theme="claude"],
+.dark .dashboard-theme[data-dashboard-theme="claude"],
+html[data-dashboard-theme="claude"].dark,
+.dashboard-theme[data-dashboard-theme="claude"].dark {
+  --background: 60 3% 15%;
+  --foreground: 46 10% 74%;
+  --card: 60 2% 18%;
+  --card-foreground: 48 33% 97%;
+  --card-border: 60 5% 23%;
+  --popover: 60 2% 18%;
+  --popover-foreground: 60 5% 89%;
+  --popover-border: 60 5% 23%;
+  --primary: 15 63% 60%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 48 33% 97%;
+  --secondary-foreground: 60 2% 18%;
+  --muted: 60 4% 10%;
+  --muted-foreground: 51 9% 69%;
+  --accent: 48 11% 9%;
+  --accent-foreground: 51 26% 95%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 60 5% 23%;
+  --input: 52 5% 31%;
+  --ring: 15 63% 60%;
+  --chart-1: 18 57% 44%;
+  --chart-2: 251 85% 75%;
+  --chart-3: 48 11% 9%;
+  --chart-4: 248 25% 23%;
+  --chart-5: 18 60% 44%;
+  --sidebar: 30 3% 12%;
+  --sidebar-foreground: 46 10% 74%;
+  --sidebar-primary: 0 0% 20%;
+  --sidebar-primary-foreground: 0 0% 98%;
+  --sidebar-accent: 60 3% 6%;
+  --sidebar-accent-foreground: 46 10% 74%;
+  --sidebar-border: 60 5% 23%;
+  --sidebar-ring: 0 0% 71%;
+  --radius: 0.5rem;
+}
+
+html[data-dashboard-theme="claude-azure"], .dashboard-theme[data-dashboard-theme="claude-azure"] {
+  --card: 204 33.3% 97.1%;
+  --ring: 208.9 55.6% 52.4%;
+  --input: 212.3 8% 68%;
+  --muted: 208 29.4% 90%;
+  --accent: 207.7 22.8% 88.8%;
+  --border: 188.6 8.9% 84.5%;
+  --chart-1: 215.2 57.1% 43.9%;
+  --chart-2: 222.5 84.6% 74.5%;
+  --chart-3: 210 20.4% 80.8%;
+  --chart-4: 217.2 49.2% 88.4%;
+  --chart-5: 219.6 60% 44.1%;
+  --popover: 0 0% 100%;
+  --primary: 208.9 55.6% 52.4%;
+  --sidebar: 205.7 25.9% 94.7%;
+  --secondary: 207.7 22.8% 88.8%;
+  --background: 0 0% 94.5%;
+  --foreground: 213 19.6% 20%;
+  --destructive: 0 72% 51%;
+  --sidebar-ring: 0 0% 71%;
+  --sidebar-accent: 207.7 22.8% 88.8%;
+  --sidebar-border: 0 0% 92.2%;
+  --card-foreground: 132 11.6% 8.4%;
+  --sidebar-primary: 208.9 55.6% 52.4%;
+  --muted-foreground: 190 2.4% 50.2%;
+  --accent-foreground: 203.1 19.4% 13.1%;
+  --popover-foreground: 203.1 19.4% 13.1%;
+  --primary-foreground: 0 0% 100%;
+  --sidebar-foreground: 180 2.5% 23.3%;
+  --secondary-foreground: 203.1 8.5% 30%;
+  --destructive-foreground: 0 0% 100%;
+  --sidebar-accent-foreground: 0 0% 20.4%;
+  --sidebar-primary-foreground: 0 0% 98.4%;
+  --radius: 0.5rem;
+}
+
+.dark html[data-dashboard-theme="claude-azure"],
+.dark .dashboard-theme[data-dashboard-theme="claude-azure"],
+html[data-dashboard-theme="claude-azure"].dark,
+.dashboard-theme[data-dashboard-theme="claude-azure"].dark {
+  --card: 210 2.7% 14.5%;
+  --ring: 211.4 63.1% 59.6%;
+  --input: 210 5.1% 30.6%;
+  --muted: 210 3.8% 10.2%;
+  --accent: 216 10.6% 9.2%;
+  --border: 210 5.1% 23.1%;
+  --chart-1: 215.2 57.1% 43.9%;
+  --chart-2: 222.5 84.6% 74.5%;
+  --chart-3: 216 10.6% 9.2%;
+  --chart-4: 213.1 25.2% 22.5%;
+  --chart-5: 219.6 60% 44.1%;
+  --popover: 210 2.1% 18.4%;
+  --primary: 211.4 63.1% 59.6%;
+  --sidebar: 210 3.3% 11.8%;
+  --secondary: 204 33.3% 97.1%;
+  --background: 0 0% 6.7%;
+  --foreground: 216.9 9.8% 73.9%;
+  --destructive: 0 84.2% 60.2%;
+  --sidebar-ring: 0 0% 71%;
+  --sidebar-accent: 180 3.4% 5.7%;
+  --sidebar-border: 0 0% 92.2%;
+  --card-foreground: 216 33.3% 97.1%;
+  --sidebar-primary: 211.4 63.1% 59.6%;
+  --muted-foreground: 205.7 8.9% 69%;
+  --accent-foreground: 205.7 25.9% 94.7%;
+  --popover-foreground: 200 5.5% 89.2%;
+  --primary-foreground: 0 0% 100%;
+  --sidebar-foreground: 216.9 9.8% 73.9%;
+  --secondary-foreground: 210 2.1% 18.4%;
+  --destructive-foreground: 0 0% 100%;
+  --sidebar-accent-foreground: 216.9 9.8% 73.9%;
+  --sidebar-primary-foreground: 0 0% 98.4%;
+  --radius: 0.5rem;
+}
+
+html[data-dashboard-theme="whatsapp"], .dashboard-theme[data-dashboard-theme="whatsapp"] {
+  --card: 0 0% 100%;
+  --ring: 142.4 70.2% 48.6%;
+  --input: 200 15.8% 92.5%;
+  --muted: 216 20% 95.1%;
+  --accent: 142.4 70.2% 48.6%;
+  --border: 200 15.8% 92.5%;
+  --chart-1: 142.4 70.2% 48.6%;
+  --chart-2: 173.1 86.1% 19.8%;
+  --chart-3: 173.1 77.2% 31%;
+  --chart-4: 198.4 87.1% 57.5%;
+  --chart-5: 167.1 100% 32.9%;
+  --popover: 0 0% 100%;
+  --primary: 173.1 86.1% 19.8%;
+  --sidebar: 0 0% 100%;
+  --secondary: 151.8 54.8% 93.9%;
+  --background: 216 20% 95.1%;
+  --foreground: 202.5 32% 9.8%;
+  --destructive: 4.6 81.2% 56.3%;
+  --sidebar-ring: 142.4 70.2% 48.6%;
+  --sidebar-accent: 151.8 54.8% 93.9%;
+  --sidebar-border: 200 15.8% 92.5%;
+  --card-foreground: 202.5 32% 9.8%;
+  --sidebar-primary: 173.1 86.1% 19.8%;
+  --muted-foreground: 202.2 11.7% 45.3%;
+  --accent-foreground: 0 0% 100%;
+  --popover-foreground: 202.5 32% 9.8%;
+  --primary-foreground: 0 0% 100%;
+  --sidebar-foreground: 202.5 32% 9.8%;
+  --secondary-foreground: 173.1 86.1% 19.8%;
+  --destructive-foreground: 0 0% 100%;
+  --sidebar-accent-foreground: 173.1 86.1% 19.8%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --radius: 1rem;
+}
+
+.dark html[data-dashboard-theme="whatsapp"],
+.dark .dashboard-theme[data-dashboard-theme="whatsapp"],
+html[data-dashboard-theme="whatsapp"].dark,
+.dashboard-theme[data-dashboard-theme="whatsapp"].dark {
+  --card: 202.9 25.3% 16.3%;
+  --ring: 167.1 100% 32.9%;
+  --input: 202.5 22.2% 21.2%;
+  --muted: 204.7 26.2% 12.7%;
+  --accent: 142.4 70.2% 48.6%;
+  --border: 202.5 22.2% 21.2%;
+  --chart-1: 142.4 70.2% 48.6%;
+  --chart-2: 167.1 100% 32.9%;
+  --chart-3: 173.1 77.2% 31%;
+  --chart-4: 198.4 87.1% 57.5%;
+  --chart-5: 173.1 86.1% 19.8%;
+  --popover: 202.9 25.3% 16.3%;
+  --primary: 167.1 100% 32.9%;
+  --sidebar: 202.5 32% 9.8%;
+  --secondary: 163.6 47.8% 13.5%;
+  --background: 204 40.5% 7.3%;
+  --foreground: 200 15.8% 92.5%;
+  --destructive: 4.6 81.2% 56.3%;
+  --sidebar-ring: 167.1 100% 32.9%;
+  --sidebar-accent: 163.6 47.8% 13.5%;
+  --sidebar-border: 202.5 22.2% 21.2%;
+  --card-foreground: 200 15.8% 92.5%;
+  --sidebar-primary: 167.1 100% 32.9%;
+  --muted-foreground: 203.1 12% 57.6%;
+  --accent-foreground: 202.5 32% 9.8%;
+  --popover-foreground: 200 15.8% 92.5%;
+  --primary-foreground: 202.5 32% 9.8%;
+  --sidebar-foreground: 200 15.8% 92.5%;
+  --secondary-foreground: 167.1 100% 32.9%;
+  --destructive-foreground: 200 15.8% 92.5%;
+  --sidebar-accent-foreground: 167.1 100% 32.9%;
+  --sidebar-primary-foreground: 202.5 32% 9.8%;
+  --radius: 1rem;
+}
+
+html[data-dashboard-theme="elegant-luxury"], .dashboard-theme[data-dashboard-theme="elegant-luxury"] {
+  --background: 24 33% 97%;
+  --foreground: 0 0% 10%;
+  --card: 24 33% 97%;
+  --card-foreground: 0 0% 10%;
+  --card-border: 38 64% 89%;
+  --popover: 24 33% 97%;
+  --popover-foreground: 0 0% 10%;
+  --popover-border: 38 64% 89%;
+  --primary: 0 56% 39%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 43 91% 92%;
+  --secondary-foreground: 40 100% 25%;
+  --muted: 22 21% 93%;
+  --muted-foreground: 33 5% 32%;
+  --accent: 48 96% 89%;
+  --accent-foreground: 0 63% 31%;
+  --destructive: 0 70% 35%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 38 64% 89%;
+  --input: 38 64% 89%;
+  --ring: 0 56% 39%;
+  --chart-1: 0 74% 42%;
+  --chart-2: 0 56% 39%;
+  --chart-3: 0 63% 31%;
+  --chart-4: 26 90% 37%;
+  --chart-5: 23 83% 31%;
+  --sidebar: 22 21% 93%;
+  --sidebar-foreground: 0 0% 10%;
+  --sidebar-primary: 0 56% 39%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 48 96% 89%;
+  --sidebar-accent-foreground: 0 63% 31%;
+  --sidebar-border: 38 64% 89%;
+  --sidebar-ring: 0 56% 39%;
+  --radius: 0.375rem;
+}
+
+.dark html[data-dashboard-theme="elegant-luxury"],
+.dark .dashboard-theme[data-dashboard-theme="elegant-luxury"],
+html[data-dashboard-theme="elegant-luxury"].dark,
+.dashboard-theme[data-dashboard-theme="elegant-luxury"].dark {
+  --background: 24 10% 10%;
+  --foreground: 60 5% 96%;
+  --card: 12 6% 15%;
+  --card-foreground: 60 5% 96%;
+  --card-border: 30 6% 25%;
+  --popover: 12 6% 15%;
+  --popover-foreground: 60 5% 96%;
+  --popover-border: 30 6% 25%;
+  --primary: 0 74% 42%;
+  --primary-foreground: 24 33% 97%;
+  --secondary: 23 83% 31%;
+  --secondary-foreground: 48 96% 89%;
+  --muted: 24 9% 11%;
+  --muted-foreground: 24 6% 83%;
+  --accent: 26 90% 37%;
+  --accent-foreground: 48 96% 89%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 30 6% 25%;
+  --input: 30 6% 25%;
+  --ring: 0 74% 42%;
+  --chart-1: 0 91% 71%;
+  --chart-2: 0 84% 60%;
+  --chart-3: 0 72% 51%;
+  --chart-4: 43 96% 56%;
+  --chart-5: 38 92% 50%;
+  --sidebar: 24 10% 10%;
+  --sidebar-foreground: 60 5% 96%;
+  --sidebar-primary: 0 74% 42%;
+  --sidebar-primary-foreground: 24 33% 97%;
+  --sidebar-accent: 26 90% 37%;
+  --sidebar-accent-foreground: 48 96% 89%;
+  --sidebar-border: 30 6% 25%;
+  --sidebar-ring: 0 74% 42%;
+  --radius: 0.375rem;
+}
+
+html[data-dashboard-theme="sage-meadow"], .dashboard-theme[data-dashboard-theme="sage-meadow"] {
+  --background: 40 44% 96%;
+  --foreground: 25 20% 20%;
+  --card: 40 44% 98%;
+  --card-foreground: 25 20% 20%;
+  --card-border: 35 30% 85%;
+  --popover: 40 44% 96%;
+  --popover-foreground: 25 20% 20%;
+  --popover-border: 35 30% 85%;
+  --primary: 145 30% 45%;
+  --primary-foreground: 40 44% 98%;
+  --secondary: 200 40% 55%;
+  --secondary-foreground: 25 30% 25%;
+  --muted: 40 20% 90%;
+  --muted-foreground: 25 10% 45%;
+  --accent: 15 65% 90%;
+  --accent-foreground: 15 60% 30%;
+  --destructive: 0 55% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 35 30% 85%;
+  --input: 35 30% 90%;
+  --ring: 145 30% 45%;
+  --chart-1: 145 35% 50%;
+  --chart-2: 200 40% 65%;
+  --chart-3: 35 70% 75%;
+  --chart-4: 10 50% 70%;
+  --chart-5: 160 25% 80%;
+  --sidebar: 145 15% 94%;
+  --sidebar-foreground: 145 25% 25%;
+  --sidebar-primary: 145 30% 45%;
+  --sidebar-primary-foreground: 40 44% 98%;
+  --sidebar-accent: 145 20% 88%;
+  --sidebar-accent-foreground: 145 30% 30%;
+  --sidebar-border: 145 20% 85%;
+  --sidebar-ring: 145 30% 45%;
+  --radius: 0.8rem;
+}
+
+.dark html[data-dashboard-theme="sage-meadow"],
+.dark .dashboard-theme[data-dashboard-theme="sage-meadow"],
+html[data-dashboard-theme="sage-meadow"].dark,
+.dashboard-theme[data-dashboard-theme="sage-meadow"].dark {
+  --background: 220 25% 12%;
+  --foreground: 40 30% 92%;
+  --card: 220 25% 15%;
+  --card-foreground: 40 30% 92%;
+  --card-border: 220 20% 25%;
+  --popover: 220 25% 12%;
+  --popover-foreground: 40 30% 92%;
+  --popover-border: 220 20% 25%;
+  --primary: 155 35% 45%;
+  --primary-foreground: 220 25% 10%;
+  --secondary: 210 20% 25%;
+  --secondary-foreground: 40 30% 90%;
+  --muted: 220 20% 20%;
+  --muted-foreground: 215 15% 70%;
+  --accent: 170 30% 25%;
+  --accent-foreground: 170 30% 90%;
+  --destructive: 0 60% 45%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 220 20% 25%;
+  --input: 220 20% 20%;
+  --ring: 155 35% 45%;
+  --chart-1: 155 40% 55%;
+  --chart-2: 190 45% 50%;
+  --chart-3: 45 50% 60%;
+  --chart-4: 15 55% 65%;
+  --chart-5: 260 30% 70%;
+  --sidebar: 220 30% 10%;
+  --sidebar-foreground: 215 20% 85%;
+  --sidebar-primary: 155 35% 45%;
+  --sidebar-primary-foreground: 220 25% 10%;
+  --sidebar-accent: 215 20% 18%;
+  --sidebar-accent-foreground: 40 30% 92%;
+  --sidebar-border: 220 25% 18%;
+  --sidebar-ring: 155 35% 45%;
+  --radius: 0.8rem;
+}
+
+
+/* =====================================================
+ * Universal dashboard theme surface (all presets)
+ * Applies fonts, cards, semantic status tokens, portals via html[data-dashboard-theme]
+ * ===================================================== */
+
+html[data-dashboard-theme],
+.dashboard-theme {
+  --success: 142 71% 45%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 25 20% 12%;
+  --info: 199 89% 48%;
+  --info-foreground: 0 0% 100%;
+  font-family: var(--dashboard-font-sans, "IBM Plex Sans Arabic", "Tajawal", Inter, system-ui, sans-serif);
+}
+
+html[data-dashboard-theme] .shadcn-card,
+.dashboard-theme .shadcn-card,
+html[data-dashboard-theme] [class*="rounded-2xl"].border,
+.dashboard-theme [class*="rounded-2xl"].border {
+  background-color: hsl(var(--card));
+  border-color: hsl(var(--border));
+  border-width: 1px;
+  border-style: solid;
+  box-shadow: none;
+  border-radius: calc(var(--radius) + 0.25rem);
+}
+
+html[data-dashboard-theme] input:not([type="checkbox"]):not([type="radio"]),
+.dashboard-theme input:not([type="checkbox"]):not([type="radio"]),
+html[data-dashboard-theme] textarea,
+.dashboard-theme textarea {
+  border-color: hsl(var(--border));
+}
+
+/* Soften common rainbow utility leftovers inside themed dashboard surfaces */
+html[data-dashboard-theme] .bg-sky-50,
+html[data-dashboard-theme] .bg-sky-50\/30,
+html[data-dashboard-theme] .bg-sky-50\/35,
+html[data-dashboard-theme] .bg-sky-50\/50,
+html[data-dashboard-theme] .bg-blue-50,
+.dashboard-theme .bg-sky-50,
+.dashboard-theme .bg-blue-50 {
+  background-color: hsl(var(--primary) / 0.06) !important;
+}
+html[data-dashboard-theme] .bg-sky-100,
+html[data-dashboard-theme] .bg-sky-100\/80,
+html[data-dashboard-theme] .bg-blue-100,
+.dashboard-theme .bg-sky-100,
+.dashboard-theme .bg-blue-100 {
+  background-color: hsl(var(--primary) / 0.12) !important;
+}
+html[data-dashboard-theme] .text-sky-600,
+html[data-dashboard-theme] .text-sky-700,
+html[data-dashboard-theme] .text-blue-600,
+html[data-dashboard-theme] .text-blue-700,
+.dashboard-theme .text-sky-600,
+.dashboard-theme .text-sky-700,
+.dashboard-theme .text-blue-600,
+.dashboard-theme .text-blue-700 {
+  color: hsl(var(--primary)) !important;
+}
+html[data-dashboard-theme] .border-sky-200,
+html[data-dashboard-theme] .border-sky-200\/55,
+html[data-dashboard-theme] .border-blue-200,
+.dashboard-theme .border-sky-200,
+.dashboard-theme .border-blue-200 {
+  border-color: hsl(var(--primary) / 0.22) !important;
+}
+
+html[data-dashboard-theme] .bg-emerald-50,
+html[data-dashboard-theme] .bg-emerald-50\/50,
+html[data-dashboard-theme] .bg-green-50,
+.dashboard-theme .bg-emerald-50,
+.dashboard-theme .bg-green-50 {
+  background-color: hsl(var(--success) / 0.1) !important;
+}
+html[data-dashboard-theme] .bg-emerald-100,
+html[data-dashboard-theme] .bg-green-100,
+.dashboard-theme .bg-emerald-100,
+.dashboard-theme .bg-green-100 {
+  background-color: hsl(var(--success) / 0.16) !important;
+}
+html[data-dashboard-theme] .text-emerald-600,
+html[data-dashboard-theme] .text-emerald-700,
+html[data-dashboard-theme] .text-green-600,
+html[data-dashboard-theme] .text-green-700,
+.dashboard-theme .text-emerald-600,
+.dashboard-theme .text-emerald-700,
+.dashboard-theme .text-green-600,
+.dashboard-theme .text-green-700 {
+  color: hsl(var(--success)) !important;
+}
+html[data-dashboard-theme] .border-emerald-200,
+html[data-dashboard-theme] .border-green-200,
+.dashboard-theme .border-emerald-200,
+.dashboard-theme .border-green-200 {
+  border-color: hsl(var(--success) / 0.28) !important;
+}
+
+html[data-dashboard-theme] .bg-amber-50,
+html[data-dashboard-theme] .bg-yellow-50,
+.dashboard-theme .bg-amber-50,
+.dashboard-theme .bg-yellow-50 {
+  background-color: hsl(var(--warning) / 0.12) !important;
+}
+html[data-dashboard-theme] .bg-amber-100,
+html[data-dashboard-theme] .bg-yellow-100,
+.dashboard-theme .bg-amber-100,
+.dashboard-theme .bg-yellow-100 {
+  background-color: hsl(var(--warning) / 0.18) !important;
+}
+html[data-dashboard-theme] .text-amber-600,
+html[data-dashboard-theme] .text-amber-700,
+html[data-dashboard-theme] .text-yellow-600,
+html[data-dashboard-theme] .text-yellow-700,
+html[data-dashboard-theme] .fill-amber-400,
+html[data-dashboard-theme] .text-amber-500,
+.dashboard-theme .text-amber-600,
+.dashboard-theme .text-amber-700,
+.dashboard-theme .text-amber-500,
+.dashboard-theme .fill-amber-400 {
+  color: hsl(var(--warning)) !important;
+  fill: hsl(var(--warning)) !important;
+}
+html[data-dashboard-theme] .border-amber-200,
+.dashboard-theme .border-amber-200 {
+  border-color: hsl(var(--warning) / 0.3) !important;
+}
+
+html[data-dashboard-theme] .bg-rose-50,
+html[data-dashboard-theme] .bg-red-50,
+.dashboard-theme .bg-rose-50,
+.dashboard-theme .bg-red-50 {
+  background-color: hsl(var(--destructive) / 0.08) !important;
+}
+html[data-dashboard-theme] .text-rose-600,
+html[data-dashboard-theme] .text-rose-700,
+html[data-dashboard-theme] .text-red-600,
+.dashboard-theme .text-rose-600,
+.dashboard-theme .text-rose-700,
+.dashboard-theme .text-red-600 {
+  color: hsl(var(--destructive)) !important;
+}
+
+html[data-dashboard-theme] .bg-violet-50,
+html[data-dashboard-theme] .bg-purple-50,
+html[data-dashboard-theme] .bg-indigo-50,
+.dashboard-theme .bg-violet-50,
+.dashboard-theme .bg-purple-50,
+.dashboard-theme .bg-indigo-50 {
+  background-color: hsl(var(--accent)) !important;
+}
+html[data-dashboard-theme] .text-violet-600,
+html[data-dashboard-theme] .text-purple-600,
+html[data-dashboard-theme] .text-indigo-600,
+.dashboard-theme .text-violet-600,
+.dashboard-theme .text-purple-600,
+.dashboard-theme .text-indigo-600 {
+  color: hsl(var(--primary)) !important;
+}
+
+
+/* sabq = inherit global tokens (no overrides) */
+
 @layer base {
   * {
     @apply border-border;

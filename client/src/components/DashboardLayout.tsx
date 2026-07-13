@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNav, trackNavClick } from "@/nav/useNav";
 import { AppBreadcrumbs } from "./AppBreadcrumbs";
 import { InternalAnnouncement } from "./InternalAnnouncement";
+import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvider";
 import type { UserRole } from "@/nav/types";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { NavItem } from "@/nav/types";
@@ -199,12 +200,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   // عرض شاشة تحميل أثناء التحقق من المصادقة
   if (isLoading || !user) {
     return (
-      <div className="flex h-screen w-full items-center justify-center" dir="rtl">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
+      <DashboardThemeProvider>
+        <div className="flex h-screen w-full items-center justify-center" dir="rtl">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
+          </div>
         </div>
-      </div>
+      </DashboardThemeProvider>
     );
   }
 
@@ -295,7 +298,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         aria-label={favoriteIds.includes(child.id) ? `إزالة ${child.labelAr || child.labelKey} من المفضلة` : `إضافة ${child.labelAr || child.labelKey} إلى المفضلة`}
                         title={favoriteIds.includes(child.id) ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}
                       >
-                        <Star className={`h-3.5 w-3.5 ${favoriteIds.includes(child.id) ? "fill-current text-amber-500" : ""}`} />
+                        <Star className={`h-3.5 w-3.5 ${favoriteIds.includes(child.id) ? "fill-current text-warning" : ""}`} />
                       </button>
                     </SidebarMenuSubItem>
                   );
@@ -355,6 +358,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   } as React.CSSProperties;
 
   return (
+    <DashboardThemeProvider>
     <DirectionProvider dir="rtl">
     <SidebarProvider style={sidebarStyle}>
       <div className="flex h-screen w-full" dir="rtl">
@@ -408,7 +412,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 {favoriteItems.length > 0 && !normalizedSearch && (
                   <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/20 p-2">
                     <div className="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] font-medium text-muted-foreground">
-                      <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
+                      <Star className="h-3.5 w-3.5 fill-warning text-warning" />
                       <span>المفضلة</span>
                     </div>
                     <div className="space-y-0.5">
@@ -465,10 +469,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             <button
                               type="button"
                               onClick={() => toggleFavorite(item)}
-                              className="ml-1 rounded p-1.5 text-muted-foreground hover:text-amber-500"
+                              className="ml-1 rounded p-1.5 text-muted-foreground hover:text-warning"
                               aria-label={isFavorite ? `إزالة ${item.labelAr || item.labelKey} من المفضلة` : `إضافة ${item.labelAr || item.labelKey} إلى المفضلة`}
                             >
-                              <Star className={`h-3.5 w-3.5 ${isFavorite ? "fill-current text-amber-500" : ""}`} />
+                              <Star className={`h-3.5 w-3.5 ${isFavorite ? "fill-current text-warning" : ""}`} />
                             </button>
                           </div>
                         );
@@ -581,5 +585,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
     </SidebarProvider>
     </DirectionProvider>
+    </DashboardThemeProvider>
   );
 }

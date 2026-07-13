@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   KeyRound,
   UserCircle,
+  Paintbrush,
   SquareStack,
   PieChart,
   Activity,
@@ -808,6 +809,15 @@ export const navConfig: NavItem[] = [
     roles: ["admin", "editor"],
     featureFlags: ["smartThemes"],
     children: [
+      {
+        id: "dashboard-appearance",
+        labelKey: "nav.dashboardAppearance",
+        labelAr: "سمات اللوحة",
+        path: "/dashboard/appearance",
+        icon: Paintbrush,
+        roles: ["admin", "editor"],
+        permissions: ["appearance.view", "appearance.manage"],
+      },
       {
         id: "themes",
         labelKey: "nav.themes",

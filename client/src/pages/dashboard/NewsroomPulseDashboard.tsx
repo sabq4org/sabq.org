@@ -190,42 +190,12 @@ const duration = (seconds: number) => {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 };
 
-const METRIC_TONES = {
-  sky: {
-    card: "border-sky-200/60 from-sky-50/70 to-card dark:border-sky-900/40 dark:from-sky-950/25",
-    icon: "bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
-  },
-  emerald: {
-    card: "border-emerald-200/60 from-emerald-50/70 to-card dark:border-emerald-900/40 dark:from-emerald-950/25",
-    icon: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
-  },
-  teal: {
-    card: "border-teal-200/60 from-teal-50/70 to-card dark:border-teal-900/40 dark:from-teal-950/25",
-    icon: "bg-teal-100 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300",
-  },
-  rose: {
-    card: "border-rose-200/60 from-rose-50/70 to-card dark:border-rose-900/40 dark:from-rose-950/25",
-    icon: "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300",
-  },
-  amber: {
-    card: "border-amber-200/60 from-amber-50/70 to-card dark:border-amber-900/40 dark:from-amber-950/25",
-    icon: "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
-  },
-  cyan: {
-    card: "border-cyan-200/60 from-cyan-50/70 to-card dark:border-cyan-900/40 dark:from-cyan-950/25",
-    icon: "bg-cyan-100 text-cyan-700 dark:bg-cyan-950/50 dark:text-cyan-300",
-  },
-} as const;
-
-type MetricTone = keyof typeof METRIC_TONES;
-
 function MetricCard({
   title,
   value,
   previous,
   icon: Icon,
   helper,
-  tone = "sky",
   loading,
 }: {
   title: string;
@@ -233,30 +203,28 @@ function MetricCard({
   previous?: number;
   icon: IconType;
   helper?: string;
-  tone?: MetricTone;
   loading?: boolean;
 }) {
   const numericValue = typeof value === "number" ? value : undefined;
   const change = numericValue !== undefined && previous !== undefined
     ? percentChange(numericValue, previous)
     : undefined;
-  const palette = METRIC_TONES[tone];
 
   return (
-    <Card className={cn("overflow-hidden rounded-2xl border bg-gradient-to-br shadow-sm", palette.card)}>
+    <Card className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
       <CardContent className="flex h-full flex-col p-0">
         <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
           <div className="flex items-start justify-between gap-2">
-            <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", palette.icon)}>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <Icon className="h-[18px] w-[18px]" />
             </span>
             {change !== undefined && !loading && (
               <span
                 className={cn(
                   "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium",
-                  change > 0 && "bg-emerald-100/90 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
-                  change < 0 && "bg-rose-100/90 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300",
-                  change === 0 && "bg-muted/80 text-muted-foreground",
+                  change > 0 && "bg-primary/10 text-primary",
+                  change < 0 && "bg-destructive/10 text-destructive",
+                  change === 0 && "bg-muted text-muted-foreground",
                 )}
               >
                 {change > 0 ? <TrendingUp className="h-3 w-3" /> : change < 0 ? <TrendingDown className="h-3 w-3" /> : null}
@@ -281,7 +249,7 @@ function MetricCard({
         </div>
 
         {helper && (
-          <div className="border-t border-border/50 bg-background/45 px-4 py-2.5 backdrop-blur-[2px]">
+          <div className="border-t border-border/60 bg-muted/30 px-4 py-2.5">
             <p className="text-[11px] leading-relaxed text-muted-foreground">{helper}</p>
           </div>
         )}
@@ -307,16 +275,16 @@ function ActionCard({
 }) {
   const styles = {
     danger: {
-      accent: "text-rose-600 dark:text-rose-400",
-      icon: "bg-rose-50 text-rose-600 dark:bg-rose-950/35 dark:text-rose-400",
+      accent: "text-destructive",
+      icon: "bg-destructive/10 text-destructive",
     },
     warning: {
-      accent: "text-amber-700 dark:text-amber-400",
-      icon: "bg-amber-50 text-amber-700 dark:bg-amber-950/35 dark:text-amber-400",
+      accent: "text-primary",
+      icon: "bg-primary/10 text-primary",
     },
     info: {
-      accent: "text-sky-700 dark:text-sky-400",
-      icon: "bg-sky-50 text-sky-700 dark:bg-sky-950/35 dark:text-sky-400",
+      accent: "text-primary",
+      icon: "bg-primary/10 text-primary",
     },
   };
   const style = styles[tone];
@@ -364,11 +332,11 @@ function SmartBrief({ stats, muqtarabCount, operationalOnly = false }: { stats: 
     : "ولا توجد مواد مجدولة حالياً.";
 
   return (
-    <Card className="overflow-hidden border-primary/15 bg-gradient-to-l from-primary/[0.07] via-background to-background shadow-none">
+    <Card className="overflow-hidden border-border bg-card shadow-sm">
       <CardContent className="p-5 sm:p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex gap-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <WandSparkles className="h-5 w-5" />
             </span>
             <div>
@@ -397,11 +365,11 @@ function SmartBrief({ stats, muqtarabCount, operationalOnly = false }: { stats: 
 
 function EditorialPipeline({ stats }: { stats: DashboardStats }) {
   const steps = [
-    { label: "مسودات", value: stats.articles.draft, color: "bg-slate-400" },
-    { label: "بانتظار المراجعة", value: stats.articles.pendingReview, color: "bg-amber-500" },
-    { label: "تحتاج تعديلات", value: stats.articles.needsChanges, color: "bg-rose-500" },
-    { label: "مجدولة", value: stats.articles.scheduled, color: "bg-sky-500" },
-    { label: "نُشرت اليوم", value: stats.articles.publishedToday, color: "bg-emerald-500" },
+    { label: "مسودات", value: stats.articles.draft, color: "bg-muted-foreground/45" },
+    { label: "بانتظار المراجعة", value: stats.articles.pendingReview, color: "bg-secondary" },
+    { label: "تحتاج تعديلات", value: stats.articles.needsChanges, color: "bg-destructive" },
+    { label: "مجدولة", value: stats.articles.scheduled, color: "bg-primary" },
+    { label: "نُشرت اليوم", value: stats.articles.publishedToday, color: "bg-chart-2" },
   ];
   const max = Math.max(...steps.map((step) => step.value), 1);
 
@@ -516,8 +484,8 @@ function UpcomingScheduleList({ schedule }: { schedule: DashboardStats["upcoming
                         className={cn(
                           "shrink-0 gap-1.5 border-0 px-2.5 py-1 whitespace-nowrap",
                           countdown === "حان موعد النشر"
-                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
-                            : "bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300",
+                            ? "bg-secondary text-secondary-foreground"
+                            : "bg-primary/10 text-primary",
                         )}
                       >
                         <Timer className="h-3.5 w-3.5" />
@@ -527,7 +495,7 @@ function UpcomingScheduleList({ schedule }: { schedule: DashboardStats["upcoming
                   )}
                 </div>
               ) : (
-                <div className="mt-4 rounded-xl bg-amber-50 p-3 text-xs font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                <div className="mt-4 rounded-xl bg-secondary/80 p-3 text-xs font-medium text-secondary-foreground">
                   لم يحدد وقت النشر
                 </div>
               )}
@@ -623,7 +591,7 @@ export default function NewsroomPulseDashboard() {
   if (!stats && !statsQuery.isLoading) {
     return (
       <DashboardLayout>
-        <Card className="mx-auto max-w-xl"><CardContent className="p-8 text-center"><AlertTriangle className="mx-auto mb-3 h-8 w-8 text-amber-500" /><h2 className="font-bold">تعذر تحميل نبض غرفة الأخبار</h2><Button className="mt-4" onClick={() => statsQuery.refetch()}>إعادة المحاولة</Button></CardContent></Card>
+        <Card className="mx-auto max-w-xl"><CardContent className="p-8 text-center"><AlertTriangle className="mx-auto mb-3 h-8 w-8 text-destructive" /><h2 className="font-bold">تعذر تحميل نبض غرفة الأخبار</h2><Button className="mt-4" onClick={() => statsQuery.refetch()}>إعادة المحاولة</Button></CardContent></Card>
       </DashboardLayout>
     );
   }
@@ -674,7 +642,7 @@ export default function NewsroomPulseDashboard() {
             <p className="mt-2 text-sm text-muted-foreground">مرحباً {user.firstName || "بك"}، هذه الأولويات وما يحدث في غرفة الأخبار الآن.</p>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-emerald-500" /> آخر تحديث {refreshedAt}</span>
+            <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-primary" /> آخر تحديث {refreshedAt}</span>
             <Button variant="outline" size="sm" onClick={() => { statsQuery.refetch(); pulseQuery.refetch(); }} disabled={statsQuery.isFetching || pulseQuery.isFetching} className="gap-2">
               <RefreshCw className={cn("h-3.5 w-3.5", (statsQuery.isFetching || pulseQuery.isFetching) && "animate-spin")} /> تحديث
             </Button>
@@ -702,12 +670,12 @@ export default function NewsroomPulseDashboard() {
         {!isContentManager && <section className="space-y-3">
           <SectionTitle title="أداء اليوم" description="أرقام اليوم حتى الآن، مقارنةً بنفس الساعة من أمس" />
           <div className="grid grid-cols-2 gap-3 xl:grid-cols-6">
-            <MetricCard title="نُشر اليوم" value={stats?.articles.publishedToday ?? 0} previous={stats?.articles.publishedYesterday} icon={FileText} helper="مواد نُشرت منذ منتصف الليل" tone="emerald" loading={statsQuery.isLoading} />
-            <MetricCard title="مرات فتح الأخبار" value={stats?.articles.viewsToday ?? 0} previous={stats?.articles.viewsYesterday} icon={Eye} helper="يشمل كل الزوار" tone="sky" loading={statsQuery.isLoading} />
-            <MetricCard title="قراءات الأعضاء" value={stats?.engagement.readsToday ?? 0} previous={stats?.engagement.readsYesterday} icon={BarChart3} helper="للأعضاء المسجّلين فقط" tone="teal" loading={statsQuery.isLoading} />
-            <MetricCard title="تفاعلات اليوم" value={stats?.reactions.todayCount ?? 0} previous={stats?.reactions.yesterdayCount} icon={Heart} helper="إعجابات وردود الفعل" tone="rose" loading={statsQuery.isLoading} />
-            <MetricCard title="أعضاء نشطون" value={stats?.users.activeToday ?? 0} icon={UserRoundCheck} helper="سجّلوا نشاطاً منذ منتصف الليل" tone="amber" loading={statsQuery.isLoading} />
-            <MetricCard title="متوسط مدة القراءة" value={duration(stats?.engagement.averageTimeOnSite ?? 0)} icon={Clock3} helper="دقيقة:ثانية · من جلسات الأعضاء" tone="cyan" loading={statsQuery.isLoading} />
+            <MetricCard title="نُشر اليوم" value={stats?.articles.publishedToday ?? 0} previous={stats?.articles.publishedYesterday} icon={FileText} helper="مواد نُشرت منذ منتصف الليل" loading={statsQuery.isLoading} />
+            <MetricCard title="مرات فتح الأخبار" value={stats?.articles.viewsToday ?? 0} previous={stats?.articles.viewsYesterday} icon={Eye} helper="يشمل كل الزوار" loading={statsQuery.isLoading} />
+            <MetricCard title="قراءات الأعضاء" value={stats?.engagement.readsToday ?? 0} previous={stats?.engagement.readsYesterday} icon={BarChart3} helper="للأعضاء المسجّلين فقط" loading={statsQuery.isLoading} />
+            <MetricCard title="تفاعلات اليوم" value={stats?.reactions.todayCount ?? 0} previous={stats?.reactions.yesterdayCount} icon={Heart} helper="إعجابات وردود الفعل" loading={statsQuery.isLoading} />
+            <MetricCard title="أعضاء نشطون" value={stats?.users.activeToday ?? 0} icon={UserRoundCheck} helper="سجّلوا نشاطاً منذ منتصف الليل" loading={statsQuery.isLoading} />
+            <MetricCard title="متوسط مدة القراءة" value={duration(stats?.engagement.averageTimeOnSite ?? 0)} icon={Clock3} helper="دقيقة:ثانية · من جلسات الأعضاء" loading={statsQuery.isLoading} />
           </div>
         </section>}
 
@@ -735,14 +703,14 @@ export default function NewsroomPulseDashboard() {
         <section className={cn("grid gap-4", !isContentManager && "xl:grid-cols-[minmax(0,1.25fr)_minmax(380px,.75fr)]")}>
           {!isContentManager && <Card className="border-border/70 shadow-none">
             <CardHeader className="flex-row items-center justify-between space-y-0">
-              <div><CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="h-4 w-4 text-emerald-500" /> المقالات الصاعدة</CardTitle><p className="mt-1 text-xs text-muted-foreground">الأسرع في آخر 24 ساعة، ثم الأعلى إجمالاً عند غياب بيانات اللحظة</p></div>
+              <div><CardTitle className="flex items-center gap-2 text-base"><TrendingUp className="h-4 w-4 text-primary" /> المقالات الصاعدة</CardTitle><p className="mt-1 text-xs text-muted-foreground">الأسرع في آخر 24 ساعة، ثم الأعلى إجمالاً عند غياب بيانات اللحظة</p></div>
               <Button asChild variant="ghost" size="sm"><Link href="/dashboard/articles">عرض الكل</Link></Button>
             </CardHeader>
             <CardContent className="grid gap-3">
               {trending.slice(0, 5).map((article, index) => (
                 <Link key={article.id} href={`/dashboard/articles/${article.id}/edit`}>
-                  <a className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-background/80 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-500/25 hover:bg-muted/20 hover:shadow-md">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-xs font-bold text-emerald-700 dark:bg-emerald-950/35 dark:text-emerald-300">{index + 1}</span>
+                  <a className="group flex items-center gap-3 rounded-2xl border border-border/70 bg-background/80 p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:bg-muted/20 hover:shadow-md">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">{index + 1}</span>
                     <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{article.title}</p><div className="mt-1 flex gap-3 text-[11px] text-muted-foreground">{article.categoryName && <span>{article.categoryName}</span>}<span>{article.recentViews ? `${number(article.recentViews)} خلال 24 ساعة` : `${number(article.views)} إجمالاً`}</span></div></div>
                     <ArrowLeft className="h-4 w-4 text-muted-foreground/60 transition group-hover:-translate-x-1" />
                   </a>

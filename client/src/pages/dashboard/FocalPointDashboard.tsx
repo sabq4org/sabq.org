@@ -10,6 +10,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/format";
+import { DashboardLayout } from "@/components/DashboardLayout";
 
 interface FocalPointStats {
   total_published: string;
@@ -107,6 +108,7 @@ export default function FocalPointDashboard() {
   const coveragePercent = withImages > 0 ? Math.round((withFocalPoints / withImages) * 100) : 0;
 
   return (
+    <DashboardLayout>
     <div className="p-6 max-w-5xl mx-auto space-y-6" dir="rtl">
       <div className="flex items-center gap-3 flex-wrap">
         <Focus className="h-7 w-7 text-primary" />
@@ -408,5 +410,6 @@ export default function FocalPointDashboard() {
         </Card>
       )}
     </div>
+    </DashboardLayout>
   );
 }

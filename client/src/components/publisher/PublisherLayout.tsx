@@ -22,6 +22,7 @@ import { NotificationBell } from "../NotificationBell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvider";
 
 interface PublisherLayoutProps {
   children: ReactNode;
@@ -67,12 +68,14 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
   // عرض شاشة تحميل أثناء التحقق من المصادقة
   if (isLoading || !user) {
     return (
-      <div className="flex h-screen w-full items-center justify-center" dir="rtl">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
+      <DashboardThemeProvider>
+        <div className="flex h-screen w-full items-center justify-center" dir="rtl">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">جاري التحميل...</p>
+          </div>
         </div>
-      </div>
+      </DashboardThemeProvider>
     );
   }
 
@@ -110,6 +113,7 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
   };
 
   return (
+    <DashboardThemeProvider>
     <SidebarProvider>
       <div className="flex h-screen w-full" dir="rtl">
         <Sidebar side="right" collapsible="offcanvas">
@@ -211,5 +215,6 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
         </SidebarInset>
       </div>
     </SidebarProvider>
+    </DashboardThemeProvider>
   );
 }

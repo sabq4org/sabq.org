@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Check, Palette } from "lucide-react";
 import type { Theme } from "@shared/schema";
+import { DashboardLayout } from "@/components/DashboardLayout";
 
 export default function ThemeSwitcher() {
   const { toast } = useToast();
@@ -41,6 +42,7 @@ export default function ThemeSwitcher() {
   });
 
   return (
+    <DashboardLayout>
     <div className="container mx-auto py-8 px-4" dir="rtl">
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
@@ -137,5 +139,6 @@ export default function ThemeSwitcher() {
         </div>
       )}
     </div>
+    </DashboardLayout>
   );
 }
