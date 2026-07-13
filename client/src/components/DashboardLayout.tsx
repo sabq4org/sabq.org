@@ -33,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "./ThemeToggle";
+import { DashboardThemePickerButton } from "./DashboardThemePickerButton";
 import { AutoPublishBanner } from "./AutoPublishBanner";
 import { EditorPresenceBar } from "./admin/EditorPresenceBar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -507,8 +508,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span>الرئيسية</span>
               </Link>
             </Button>
+            <DashboardThemePickerButton />
             <ThemeToggle />
-            
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-8 w-8 md:h-9 md:w-9 rounded-full" data-testid="button-user-menu">

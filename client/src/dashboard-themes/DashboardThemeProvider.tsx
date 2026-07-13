@@ -16,15 +16,18 @@ import {
   type DashboardThemePreset,
 } from "./presets";
 import { useOrgDashboardTheme } from "@/hooks/useOrgDashboardTheme";
+import { usePersonalDashboardTheme } from "@/hooks/usePersonalDashboardTheme";
 import { cn } from "@/lib/utils";
 
 interface DashboardThemeContextValue {
   themeId: DashboardThemeId;
   preset: DashboardThemePreset;
   presets: DashboardThemePreset[];
-  /** Optimistic local apply; org save is done via setOrgThemeId on appearance page. */
+  /** Optimistic local apply while personal/org save settles. */
   setThemeId: (id: DashboardThemeId) => void;
   isOrgLoading: boolean;
+  personalThemeId: DashboardThemeId | null;
+  orgThemeId: DashboardThemeId;
 }
 
 const DashboardThemeContext = createContext<DashboardThemeContextValue | null>(null);
@@ -52,22 +55,24 @@ interface DashboardThemeProviderProps {
 
 export function DashboardThemeProvider({ children, className }: DashboardThemeProviderProps) {
   const { themeId: orgThemeId, isLoading: isOrgLoading } = useOrgDashboardTheme();
+  const { personalThemeId, isLoading: isPersonalLoading } = usePersonalDashboardTheme();
 
-  // Prefer org setting once loaded; localStorage only as first-paint fallback.
-  const resolvedId: DashboardThemeId = isOrgLoading
+  const prefsLoading = isOrgLoading || isPersonalLoading;
+
+  // Priority: personal override → org default → local cache → built-in default
+  const resolvedId: DashboardThemeId = prefsLoading
     ? readStoredDashboardTheme()
-    : orgThemeId || DEFAULT_DASHBOARD_THEME_ID;
+    : personalThemeId ?? orgThemeId ?? DEFAULT_DASHBOARD_THEME_ID;
 
   const setThemeId = useCallback((id: DashboardThemeId) => {
     writeStoredDashboardTheme(id);
   }, []);
 
-  // Keep local cache aligned with org theme for next visit first paint.
   useEffect(() => {
-    if (!isOrgLoading) {
+    if (!prefsLoading) {
       writeStoredDashboardTheme(resolvedId);
     }
-  }, [isOrgLoading, resolvedId]);
+  }, [prefsLoading, resolvedId]);
 
   const preset = useMemo(
     () => DASHBOARD_THEME_PRESETS.find((item) => item.id === resolvedId) ?? DASHBOARD_THEME_PRESETS[0]!,
@@ -76,7 +81,6 @@ export function DashboardThemeProvider({ children, className }: DashboardThemePr
 
   const fontStack = getDashboardThemeFontStack(resolvedId);
 
-  // Sync theme to <html> so Radix portals (dialogs/selects) inherit tokens + fonts.
   useEffect(() => {
     const root = document.documentElement;
     dashboardThemeMountCount += 1;
@@ -98,9 +102,11 @@ export function DashboardThemeProvider({ children, className }: DashboardThemePr
       preset,
       presets: DASHBOARD_THEME_PRESETS,
       setThemeId,
-      isOrgLoading,
+      isOrgLoading: prefsLoading,
+      personalThemeId,
+      orgThemeId: orgThemeId || DEFAULT_DASHBOARD_THEME_ID,
     }),
-    [resolvedId, preset, setThemeId, isOrgLoading],
+    [resolvedId, preset, setThemeId, prefsLoading, personalThemeId, orgThemeId],
   );
 
   return (

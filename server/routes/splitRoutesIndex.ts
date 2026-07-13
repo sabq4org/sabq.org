@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { aiHubRouter } from "./aiHub";
 import { integrationsStatusRouter } from "./integrationsStatus";
 import systemSettingsRouter from "./systemSettings";
+import userDashboardThemeRouter from "./userDashboardTheme";
 import adminActivityLogsRouter from "./adminActivityLogs";
 import keywordFollowingRouter from "./keywordFollowing";
 import interestsRouter from "./interests";
@@ -77,6 +78,7 @@ export function registerSplitRoutes(app: Express) {
   app.use("/api/audio-newsletters", audioNewsletterRoutes);
 
   app.use(systemSettingsRouter);
+  app.use(userDashboardThemeRouter);
   app.use(aiHubRouter);
   app.use(integrationsStatusRouter);
   app.use(adminActivityLogsRouter);
