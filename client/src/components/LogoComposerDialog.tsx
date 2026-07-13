@@ -11,10 +11,11 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeftRight, Loader2, Upload, X } from "lucide-react";
+import { ArrowLeftRight, Loader2, Upload, X, ZoomIn, ZoomOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   detectFaceFocalPoint,
+  minPhotoZoom,
   renderFittedLogo,
   renderMergedLogos,
   renderMergedPhotos,
@@ -147,6 +148,9 @@ export function LogoComposerDialog({
   const [secondFocal, setSecondFocal] = useState<FocalPoint | null>(null);
   const [firstDims, setFirstDims] = useState<{ w: number; h: number } | null>(null);
   const [secondDims, setSecondDims] = useState<{ w: number; h: number } | null>(null);
+  // تكبير نسبةً إلى cover: ‏1 = ملء النصف، أقل = تصغير يُظهر جزءاً أكبر
+  const [firstZoom, setFirstZoom] = useState(1);
+  const [secondZoom, setSecondZoom] = useState(1);
 
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -181,6 +185,8 @@ export function LogoComposerDialog({
               : await renderMergedPhotos(firstPhoto!, secondPhoto!, {
                   firstFocal,
                   secondFocal,
+                  firstZoom,
+                  secondZoom,
                 });
         if (renderTokenRef.current === token) setPreviewBlob(blob);
       } catch (error) {
@@ -199,7 +205,7 @@ export function LogoComposerDialog({
       }
     };
     generate();
-  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, firstFocal, secondFocal, toast]);
+  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, firstFocal, secondFocal, firstZoom, secondZoom, toast]);
 
   // اكتشاف تلقائي لوجه الشخص عند اختيار صورة (Chrome/Edge — في Safari
   // يبقى التوسيط الافتراضي ويعدّل المحرر الموضع بالسحب داخل المعاينة)
@@ -212,6 +218,8 @@ export function LogoComposerDialog({
     setFile(file);
     setFocal(null);
     setDims(null);
+    if (setFile === setFirstPhoto) setFirstZoom(1);
+    else setSecondZoom(1);
     createImageBitmap(file)
       .then((bitmap) => {
         setDims({ w: bitmap.width, h: bitmap.height });
@@ -227,13 +235,32 @@ export function LogoComposerDialog({
   // نسبة النصف في اللوحة النهائية: (1200-14)/2 على 675
   const HALF_RATIO = (1200 - 14) / 2 / 675;
 
-  // كسر القص في كل محور: أي جزء من الصورة تُظهره نافذة cover — يحوّل
-  // مسافة السحب على الشاشة إلى إزاحة مكافئة في إحداثيات نقطة التركيز
-  const cropFractions = (dims: { w: number; h: number } | null) => {
+  // كسر القص في كل محور: أي جزء من الصورة تُظهره النافذة عند zoom الحالي —
+  // يحوّل مسافة السحب على الشاشة إلى إزاحة مكافئة في إحداثيات نقطة التركيز
+  const cropFractions = (dims: { w: number; h: number } | null, zoom: number) => {
     if (!dims) return { fxFrac: 0.5, fyFrac: 0.5 };
     const ratio = dims.w / dims.h;
-    if (ratio > HALF_RATIO) return { fxFrac: (dims.h * HALF_RATIO) / dims.w, fyFrac: 1 };
-    return { fxFrac: 1, fyFrac: dims.w / HALF_RATIO / dims.h };
+    const base =
+      ratio > HALF_RATIO
+        ? { fxFrac: (dims.h * HALF_RATIO) / dims.w, fyFrac: 1 }
+        : { fxFrac: 1, fyFrac: dims.w / HALF_RATIO / dims.h };
+    return {
+      fxFrac: Math.min(1, base.fxFrac / zoom),
+      fyFrac: Math.min(1, base.fyFrac / zoom),
+    };
+  };
+
+  // حدود التصغير: لا معنى للنزول تحت ظهور الصورة كاملة (contain)
+  const zoomBounds = (dims: { w: number; h: number } | null) => ({
+    min: dims ? Math.max(minPhotoZoom(dims), 0.2) : 0.4,
+    max: 2,
+  });
+
+  const stepZoom = (side: "first" | "second", direction: 1 | -1) => {
+    const dims = side === "first" ? firstDims : secondDims;
+    const setZoom = side === "first" ? setFirstZoom : setSecondZoom;
+    const { min, max } = zoomBounds(dims);
+    setZoom((z) => Math.min(max, Math.max(min, z * (direction === 1 ? 1.15 : 1 / 1.15))));
   };
 
   const dragRef = useRef<{
@@ -263,7 +290,7 @@ export function LogoComposerDialog({
     const rect = e.currentTarget.getBoundingClientRect();
     const halfDispW = rect.width * ((1200 - 14) / 2 / 1200);
     const dims = drag.side === "first" ? firstDims : secondDims;
-    const { fxFrac, fyFrac } = cropFractions(dims);
+    const { fxFrac, fyFrac } = cropFractions(dims, drag.side === "first" ? firstZoom : secondZoom);
     // سحب المحتوى يميناً = كشف الجزء الأيسر = نقطة التركيز تتحرك يساراً
     const dfx = (-(e.clientX - drag.startX) / halfDispW) * fxFrac;
     const dfy = (-(e.clientY - drag.startY) / rect.height) * fyFrac;
@@ -319,6 +346,10 @@ export function LogoComposerDialog({
     setSecondPhoto(null);
     setFirstFocal(null);
     setSecondFocal(null);
+    setFirstDims(null);
+    setSecondDims(null);
+    setFirstZoom(1);
+    setSecondZoom(1);
     setPreviewBlob(null);
     setTab("fit");
   };
@@ -474,6 +505,8 @@ export function LogoComposerDialog({
                   setSecondFocal(firstFocal);
                   setFirstDims(secondDims);
                   setSecondDims(firstDims);
+                  setFirstZoom(secondZoom);
+                  setSecondZoom(firstZoom);
                 }}
                 data-testid="button-swap-photos"
               >
@@ -510,13 +543,64 @@ export function LogoComposerDialog({
             data-testid="preview-container"
           >
             {previewUrl ? (
-              <img
-                src={previewUrl}
-                alt="معاينة الشعار"
-                className="h-full w-full object-contain"
-                draggable={false}
-                data-testid="img-logo-preview"
-              />
+              <>
+                <img
+                  src={previewUrl}
+                  alt="معاينة الشعار"
+                  className="h-full w-full object-contain"
+                  draggable={false}
+                  data-testid="img-logo-preview"
+                />
+                {/* أزرار تكبير/تصغير لكل نصف — تظهر في دمج الصورتين فقط */}
+                {tab === "photos" && (
+                  <>
+                    <div className="absolute top-2 right-2 flex gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-7 w-7 bg-background/80 backdrop-blur border shadow-sm"
+                        onClick={() => stepZoom("first", -1)}
+                        title="تصغير الصورة اليمنى"
+                        data-testid="button-zoom-out-first"
+                      >
+                        <ZoomOut className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-7 w-7 bg-background/80 backdrop-blur border shadow-sm"
+                        onClick={() => stepZoom("first", 1)}
+                        title="تكبير الصورة اليمنى"
+                        data-testid="button-zoom-in-first"
+                      >
+                        <ZoomIn className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="absolute top-2 left-2 flex gap-1" onPointerDown={(e) => e.stopPropagation()}>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-7 w-7 bg-background/80 backdrop-blur border shadow-sm"
+                        onClick={() => stepZoom("second", -1)}
+                        title="تصغير الصورة اليسرى"
+                        data-testid="button-zoom-out-second"
+                      >
+                        <ZoomOut className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-7 w-7 bg-background/80 backdrop-blur border shadow-sm"
+                        onClick={() => stepZoom("second", 1)}
+                        title="تكبير الصورة اليسرى"
+                        data-testid="button-zoom-in-second"
+                      >
+                        <ZoomIn className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </>
             ) : (
               <div className="h-full w-full flex items-center justify-center text-sm text-muted-foreground">
                 {isRendering ? (
