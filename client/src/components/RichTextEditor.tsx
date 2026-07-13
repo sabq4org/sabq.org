@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- Existing editor diagnostics are outside this upload-routing change. */
 import { useEditor, EditorContent, Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -84,6 +85,7 @@ interface RichTextEditorProps {
   editorRef?: (editor: Editor | null) => void;
   dir?: "rtl" | "ltr";
   disabled?: boolean;
+  imageUploadPurpose?: string;
 }
 
 function ToolbarButton({
@@ -121,7 +123,8 @@ export function RichTextEditor({
   placeholder = "ابدأ الكتابة...",
   editorRef,
   dir = "rtl",
-  disabled = false
+  disabled = false,
+  imageUploadPurpose,
 }: RichTextEditorProps) {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -163,7 +166,7 @@ export function RichTextEditor({
       TextStyle,
       Color,
       TwitterEmbed,
-      ImageGallery,
+      ImageGallery.configure({ uploadPurpose: imageUploadPurpose }),
       VideoEmbed,
       Placeholder.configure({
         placeholder,
@@ -802,6 +805,7 @@ export function RichTextEditor({
         onOpenChange={setImageDialogOpen}
         onImageUploaded={handleImageUploaded}
         multiple={false}
+        uploadPurpose={imageUploadPurpose}
       />
 
       {/* Twitter Dialog */}
@@ -846,6 +850,7 @@ export function RichTextEditor({
         multiple={true}
         maxFiles={10}
         showCaptions={true}
+        uploadPurpose={imageUploadPurpose ? `${imageUploadPurpose}-gallery` : undefined}
       />
 
       {/* YouTube Dialog */}

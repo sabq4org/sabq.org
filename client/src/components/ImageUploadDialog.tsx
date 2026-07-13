@@ -28,6 +28,7 @@ interface ImageUploadDialogProps {
   multiple?: boolean;
   maxFiles?: number;
   showCaptions?: boolean;
+  uploadPurpose?: string;
 }
 
 interface UploadingFile {
@@ -49,6 +50,7 @@ export function ImageUploadDialog({
   multiple = false,
   maxFiles = 5,
   showCaptions = false,
+  uploadPurpose,
 }: ImageUploadDialogProps) {
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -137,6 +139,7 @@ export function ImageUploadDialog({
   const uploadFile = async (file: File, index: number): Promise<string> => {
     const formData = new FormData();
     formData.append('file', file);
+    if (uploadPurpose) formData.append('entityType', uploadPurpose);
     const csrfToken = await ensureCsrfToken();
 
     return new Promise((resolve, reject) => {
@@ -156,14 +159,10 @@ export function ImageUploadDialog({
 
       // Success handler
       xhr.addEventListener('load', () => {
-        console.log('[ImageUpload] Response status:', xhr.status);
-        console.log('[ImageUpload] Response text:', xhr.responseText.substring(0, 500));
-        
         if (xhr.status === 200) {
           try {
             const response = JSON.parse(xhr.responseText);
             const imageUrl = response.url;
-            console.log('[ImageUpload] Parsed response URL:', imageUrl);
             if (!imageUrl || typeof imageUrl !== 'string') {
               console.error('[ImageUpload] Invalid URL in response:', response);
               reject(new Error('رابط الصورة غير صحيح في الاستجابة'));

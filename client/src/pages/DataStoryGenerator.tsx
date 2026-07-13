@@ -736,6 +736,7 @@ export default function DataStoryGenerator() {
                         content={draftContent}
                         onChange={setDraftContent}
                         placeholder="محتوى القصة..."
+                        imageUploadPurpose="article-data-story-inline"
                       />
                     </div>
 

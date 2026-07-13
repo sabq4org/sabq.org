@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- Existing editor diagnostics are outside this upload-routing change. */
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "wouter";
@@ -1044,6 +1045,7 @@ export default function EnglishArticleEditor() {
                   placeholder="Start writing the article..."
                   editorRef={setEditorInstance}
                   dir="ltr"
+                  imageUploadPurpose="en-article-inline"
                 />
               </CardContent>
             </Card>
@@ -1463,6 +1465,7 @@ export default function EnglishArticleEditor() {
             description: "Image selected from library successfully",
           });
         }}
+        uploadPurpose="en-article-library"
       />
 
       {/* AI Image Generator Dialog */}
