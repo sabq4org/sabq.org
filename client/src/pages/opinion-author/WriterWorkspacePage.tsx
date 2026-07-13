@@ -171,6 +171,8 @@ export default function WriterWorkspacePage() {
   const [coachResult, setCoachResult] = useState<CoachResult | null>(null);
   const [reviewResult, setReviewResult] = useState<ReviewResult | null>(null);
   const [reviewTitle, setReviewTitle] = useState("");
+  /** Ideas are AI-generated and slow — only fetch after explicit user action. */
+  const [ideasRequested, setIdeasRequested] = useState(false);
 
   const analyticsQuery = useQuery<Analytics>({
     queryKey: ["/api/opinion-author/analytics"],
@@ -184,6 +186,7 @@ export default function WriterWorkspacePage() {
   const ideasQuery = useQuery<{ ideas: WriterIdea[]; generatedBy: "ai" | "fallback" }>({
     queryKey: ["/api/opinion-author/ideas"],
     staleTime: 30 * 60 * 1000,
+    enabled: ideasRequested,
   });
   const styleQuery = useQuery<Record<string, unknown>>({
     queryKey: ["/api/opinion-author/style-profile"],
@@ -261,6 +264,11 @@ export default function WriterWorkspacePage() {
     setActiveTab("ideas");
   };
 
+  const requestIdeas = () => {
+    setIdeasRequested(true);
+    void ideasQuery.refetch();
+  };
+
   const unreadNotifications = (notificationsQuery.data?.items ?? []).filter((notification) => !notification.readAt);
   const unreadNotificationsCount = notificationsQuery.data?.unread ?? unreadNotifications.length;
   const openEditorialNotification = (notification: EditorialNotification) => {
@@ -312,7 +320,15 @@ export default function WriterWorkspacePage() {
                   <BookOpen className="h-4 w-4 text-primary" /> دليل الكاتب
                 </Button>
                 <WriterInquiriesButton className="justify-center" />
-                <Button variant="outline" size="sm" className="justify-center gap-1.5" onClick={() => setActiveTab("ideas")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="justify-center gap-1.5"
+                  onClick={() => {
+                    setActiveTab("ideas");
+                    requestIdeas();
+                  }}
+                >
                   <Lightbulb className="h-4 w-4 text-primary" /> ساعدني في اختيار فكرة
                 </Button>
                 <Button size="sm" className="justify-center gap-1.5" onClick={() => navigate("/dashboard/articles/new")}>
@@ -387,16 +403,37 @@ export default function WriterWorkspacePage() {
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <h2 className="text-base font-semibold sm:text-xl">بوصلة الأفكار</h2>
-                    <p className="hidden text-sm text-muted-foreground sm:block">ثلاث فرص منتقاة لك، وليست قائمة أخبار عامة.</p>
+                    <p className="hidden text-sm text-muted-foreground sm:block">ثلاث فرص منتقاة لك عند الطلب، وليست قائمة أخبار عامة.</p>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={() => ideasQuery.refetch()} disabled={ideasQuery.isFetching} className="gap-1.5 text-primary hover:bg-primary/10">
-                    <RefreshCw className={`h-4 w-4 ${ideasQuery.isFetching ? "animate-spin" : ""}`} /> تحديث
-                  </Button>
+                  {ideasRequested && (
+                    <Button variant="ghost" size="sm" onClick={requestIdeas} disabled={ideasQuery.isFetching} className="gap-1.5 text-primary hover:bg-primary/10">
+                      <RefreshCw className={`h-4 w-4 ${ideasQuery.isFetching ? "animate-spin" : ""}`} /> تحديث
+                    </Button>
+                  )}
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">
-                  {ideasQuery.isLoading
-                    ? [0, 1, 2].map((item) => <div key={item} className="h-28 animate-pulse rounded-xl bg-muted sm:h-40" />)
-                    : ideas.map((idea) => <IdeaCard key={idea.id} idea={idea} onStart={() => startFromIdea(idea)} />)}
+                  {!ideasRequested ? (
+                    <div className="md:col-span-3">
+                      <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
+                        <Lightbulb className="h-5 w-5 text-primary" />
+                        <div>
+                          <p className="text-sm font-medium">اقترح أفكارًا عند الحاجة</p>
+                          <p className="mt-1 text-xs text-muted-foreground sm:text-sm">التوليد بالذكاء الاصطناعي يستغرق وقتًا، لذلك لا يبدأ إلا بطلبك.</p>
+                        </div>
+                        <Button size="sm" className="gap-2" onClick={requestIdeas}>
+                          <Sparkles className="h-4 w-4" /> اقترح 3 أفكار
+                        </Button>
+                      </div>
+                    </div>
+                  ) : ideasQuery.isLoading || ideasQuery.isFetching ? (
+                    [0, 1, 2].map((item) => <div key={item} className="h-28 animate-pulse rounded-xl bg-muted sm:h-40" />)
+                  ) : ideas.length > 0 ? (
+                    ideas.map((idea) => <IdeaCard key={idea.id} idea={idea} onStart={() => startFromIdea(idea)} />)
+                  ) : (
+                    <div className="md:col-span-3">
+                      <EmptyState icon={Lightbulb} title="تعذر جلب الأفكار" text="جرّب مرة أخرى بعد قليل." />
+                    </div>
+                  )}
                 </div>
               </section>
 
@@ -518,7 +555,26 @@ export default function WriterWorkspacePage() {
                 </Card>
                 <StyleProfileCard profile={styleQuery.data} loading={styleQuery.isLoading} />
               </div>
-              <div className="grid gap-3 md:grid-cols-3">{ideas.map((idea) => <IdeaCard key={idea.id} idea={idea} onStart={() => startFromIdea(idea)} />)}</div>
+              <div className="grid gap-3 md:grid-cols-3">
+                {!ideasRequested ? (
+                  <div className="md:col-span-3">
+                    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
+                      <Lightbulb className="h-5 w-5 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">لم تُطلب أفكار بعد</p>
+                        <p className="mt-1 text-xs text-muted-foreground sm:text-sm">اضغط الزر لتوليد ثلاث فرص مخصّصة لك.</p>
+                      </div>
+                      <Button size="sm" className="gap-2" onClick={requestIdeas}>
+                        <Sparkles className="h-4 w-4" /> اقترح 3 أفكار
+                      </Button>
+                    </div>
+                  </div>
+                ) : ideasQuery.isLoading || ideasQuery.isFetching ? (
+                  [0, 1, 2].map((item) => <div key={item} className="h-28 animate-pulse rounded-xl bg-muted sm:h-40" />)
+                ) : (
+                  ideas.map((idea) => <IdeaCard key={idea.id} idea={idea} onStart={() => startFromIdea(idea)} />)
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="articles" className="mt-3 space-y-3 sm:mt-5 sm:space-y-5">
