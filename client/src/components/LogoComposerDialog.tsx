@@ -14,9 +14,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeftRight, Loader2, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
+  detectFaceFocalPoint,
   renderFittedLogo,
   renderMergedLogos,
   renderMergedPhotos,
+  type FocalPoint,
 } from "@/lib/logoCanvas";
 
 interface LogoComposerDialogProps {
@@ -36,11 +38,15 @@ interface LogoSlotProps {
   onSelect: (file: File) => void;
   onClear: () => void;
   testId: string;
+  /** عند تمريرهما: النقر على الصورة يحدد نقطة التركيز (وجه الشخص) بدل فتح منتقي الملفات */
+  focal?: FocalPoint | null;
+  onFocalChange?: (focal: FocalPoint) => void;
 }
 
-function LogoSlot({ label, file, onSelect, onClear, testId }: LogoSlotProps) {
+function LogoSlot({ label, file, onSelect, onClear, testId, focal, onFocalChange }: LogoSlotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const focalMode = Boolean(onFocalChange);
 
   useEffect(() => {
     if (!file) {
@@ -73,11 +79,32 @@ function LogoSlot({ label, file, onSelect, onClear, testId }: LogoSlotProps) {
         />
         {file && thumbUrl ? (
           <>
-            <img
-              src={thumbUrl}
-              alt={file.name}
-              className="max-h-20 max-w-full object-contain mx-auto"
-            />
+            <span
+              className={`relative inline-block ${focalMode ? "cursor-crosshair" : ""}`}
+              onClick={(e) => {
+                if (!focalMode) return;
+                e.stopPropagation();
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                onFocalChange!({
+                  fx: (e.clientX - rect.left) / rect.width,
+                  fy: (e.clientY - rect.top) / rect.height,
+                });
+              }}
+              data-testid={`${testId}-focal-area`}
+            >
+              <img
+                src={thumbUrl}
+                alt={file.name}
+                className={`${focalMode ? "max-h-32" : "max-h-20"} max-w-full object-contain mx-auto`}
+              />
+              {focalMode && focal && (
+                <span
+                  className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary/60 shadow ring-1 ring-black/30"
+                  style={{ left: `${focal.fx * 100}%`, top: `${focal.fy * 100}%` }}
+                  data-testid={`${testId}-focal-marker`}
+                />
+              )}
+            </span>
             <Button
               variant="ghost"
               size="icon"
@@ -94,7 +121,7 @@ function LogoSlot({ label, file, onSelect, onClear, testId }: LogoSlotProps) {
         ) : (
           <div className="text-muted-foreground">
             <Upload className="h-6 w-6 mx-auto mb-1" />
-            <p className="text-xs">اضغط لاختيار الشعار</p>
+            <p className="text-xs">{focalMode ? "اضغط لاختيار الصورة" : "اضغط لاختيار الشعار"}</p>
           </div>
         )}
       </div>
@@ -116,6 +143,8 @@ export function LogoComposerDialog({
   const [showDivider, setShowDivider] = useState(false);
   const [firstPhoto, setFirstPhoto] = useState<File | null>(null);
   const [secondPhoto, setSecondPhoto] = useState<File | null>(null);
+  const [firstFocal, setFirstFocal] = useState<FocalPoint | null>(null);
+  const [secondFocal, setSecondFocal] = useState<FocalPoint | null>(null);
 
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -147,7 +176,10 @@ export function LogoComposerDialog({
               ? await renderMergedLogos(firstLogo!, secondLogo!, {
                   divider: showDivider,
                 })
-              : await renderMergedPhotos(firstPhoto!, secondPhoto!);
+              : await renderMergedPhotos(firstPhoto!, secondPhoto!, {
+                  firstFocal,
+                  secondFocal,
+                });
         if (renderTokenRef.current === token) setPreviewBlob(blob);
       } catch (error) {
         console.error("Logo render error:", error);
@@ -165,7 +197,17 @@ export function LogoComposerDialog({
       }
     };
     generate();
-  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, toast]);
+  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, firstFocal, secondFocal, toast]);
+
+  // اكتشاف تلقائي لوجه الشخص عند اختيار صورة (Chrome/Edge — في Safari
+  // يبقى التوسيط الافتراضي ويحدد المحرر النقطة بالنقر على الصورة)
+  const selectPhoto = (file: File, setFile: (f: File) => void, setFocal: (f: FocalPoint | null) => void) => {
+    setFile(file);
+    setFocal(null);
+    detectFaceFocalPoint(file).then((focal) => {
+      if (focal) setFocal(focal);
+    });
+  };
 
   useEffect(() => {
     if (!previewBlob) {
@@ -205,6 +247,8 @@ export function LogoComposerDialog({
     setShowDivider(false);
     setFirstPhoto(null);
     setSecondPhoto(null);
+    setFirstFocal(null);
+    setSecondFocal(null);
     setPreviewBlob(null);
     setTab("fit");
   };
@@ -319,15 +363,25 @@ export function LogoComposerDialog({
               <LogoSlot
                 label="الصورة الأولى (يمين)"
                 file={firstPhoto}
-                onSelect={(f) => validateAndSet(f, setFirstPhoto)}
-                onClear={() => setFirstPhoto(null)}
+                onSelect={(f) => validateAndSet(f, (file) => selectPhoto(file, setFirstPhoto, setFirstFocal))}
+                onClear={() => {
+                  setFirstPhoto(null);
+                  setFirstFocal(null);
+                }}
+                focal={firstFocal}
+                onFocalChange={setFirstFocal}
                 testId="slot-first-photo"
               />
               <LogoSlot
                 label="الصورة الثانية (يسار)"
                 file={secondPhoto}
-                onSelect={(f) => validateAndSet(f, setSecondPhoto)}
-                onClear={() => setSecondPhoto(null)}
+                onSelect={(f) => validateAndSet(f, (file) => selectPhoto(file, setSecondPhoto, setSecondFocal))}
+                onClear={() => {
+                  setSecondPhoto(null);
+                  setSecondFocal(null);
+                }}
+                focal={secondFocal}
+                onFocalChange={setSecondFocal}
                 testId="slot-second-photo"
               />
             </div>
@@ -340,6 +394,8 @@ export function LogoComposerDialog({
                 onClick={() => {
                   setFirstPhoto(secondPhoto);
                   setSecondPhoto(firstPhoto);
+                  setFirstFocal(secondFocal);
+                  setSecondFocal(firstFocal);
                 }}
                 data-testid="button-swap-photos"
               >
@@ -347,7 +403,9 @@ export function LogoComposerDialog({
                 تبديل الترتيب
               </Button>
               <p className="text-xs text-muted-foreground">
-                كل صورة تملأ نصفها بالكامل مع قص متمركز للفائض، وبينهما فراغ أبيض رفيع.
+                كل صورة تملأ نصفها بالكامل وبينهما فراغ أبيض رفيع. الوجوه تُكتشف تلقائياً
+                حيث يدعم المتصفح ذلك، وانقر على الصورة لتحديد نقطة التركيز يدوياً —
+                القص يتمحور حولها فلا يُبتر الوجه.
               </p>
             </div>
           </TabsContent>
