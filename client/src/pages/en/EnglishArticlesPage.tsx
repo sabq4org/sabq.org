@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -163,14 +163,12 @@ export default function EnglishArticlesPage() {
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
     queryKey: ["/api/en/dashboard/articles/metrics"],
     queryFn: async () => {
-      const response = await fetch("/api/en/dashboard/articles/metrics", { credentials: "include" });
+      const response = await fetch(apiUrl("/api/en/dashboard/articles/metrics"), { credentials: "include" });
       if (!response.ok) {
         console.error("Metrics fetch failed:", response.status, response.statusText);
         throw new Error("Failed to fetch metrics");
       }
-      const data = await response.json();
-      console.log("English metrics loaded:", data);
-      return data;
+      return response.json();
     },
     enabled: !!user,
   });
@@ -198,7 +196,7 @@ export default function EnglishArticlesPage() {
       params.append("page", currentPage.toString());
       params.append("limit", "30");
       
-      const url = `/api/en/dashboard/articles?${params.toString()}`;
+      const url = apiUrl(`/api/en/dashboard/articles?${params.toString()}`);
       const response = await fetch(url, { credentials: "include" });
       if (!response.ok) {
         throw new Error(`Failed to fetch articles: ${response.statusText}`);
@@ -214,7 +212,7 @@ export default function EnglishArticlesPage() {
   const { data: categoriesRaw } = useQuery<Category[]>({
     queryKey: ["/api/en/dashboard/categories"],
     queryFn: async () => {
-      const response = await fetch("/api/en/dashboard/categories", { credentials: "include" });
+      const response = await fetch(apiUrl("/api/en/dashboard/categories"), { credentials: "include" });
       if (!response.ok) {
         throw new Error(`Failed to fetch categories: ${response.statusText}`);
       }
