@@ -41,7 +41,7 @@ export function PublishingActivityCard({
               {daysSinceLastPublished !== null ? (
                 <span>
                   آخر نشر منذ{" "}
-                  <span className={daysSinceLastPublished > 14 ? "text-amber-600 font-medium" : "font-medium"}>
+                  <span className={daysSinceLastPublished > 14 ? "text-warning font-medium" : "font-medium"}>
                     {daysSinceLastPublished === 0
                       ? "اليوم"
                       : daysSinceLastPublished === 1

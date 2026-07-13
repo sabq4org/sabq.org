@@ -50,7 +50,7 @@ export function ContributorRankCard({ roleType = "opinion_author", loading: pare
                 <span className="text-3xl font-bold">#{data.rank}</span>
                 <span className="text-sm text-muted-foreground">من {data.totalAuthors}</span>
                 {data.isTopTen && (
-                  <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 text-xs">
+                  <Badge className="bg-warning/15 text-warning dark:bg-warning/15 dark:text-warning text-xs">
                     الأكثر قراءة
                   </Badge>
                 )}
