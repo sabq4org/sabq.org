@@ -13,7 +13,13 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeftRight, Loader2, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { renderFittedLogo, renderMergedLogos } from "@/lib/logoCanvas";
+import {
+  detectFaceFocalPoint,
+  renderFittedLogo,
+  renderMergedLogos,
+  renderMergedPhotos,
+  type FocalPoint,
+} from "@/lib/logoCanvas";
 
 interface LogoComposerDialogProps {
   open: boolean;
@@ -32,11 +38,15 @@ interface LogoSlotProps {
   onSelect: (file: File) => void;
   onClear: () => void;
   testId: string;
+  /** عند تمريرهما: النقر على الصورة يحدد نقطة التركيز (وجه الشخص) بدل فتح منتقي الملفات */
+  focal?: FocalPoint | null;
+  onFocalChange?: (focal: FocalPoint) => void;
 }
 
-function LogoSlot({ label, file, onSelect, onClear, testId }: LogoSlotProps) {
+function LogoSlot({ label, file, onSelect, onClear, testId, focal, onFocalChange }: LogoSlotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const focalMode = Boolean(onFocalChange);
 
   useEffect(() => {
     if (!file) {
@@ -69,11 +79,32 @@ function LogoSlot({ label, file, onSelect, onClear, testId }: LogoSlotProps) {
         />
         {file && thumbUrl ? (
           <>
-            <img
-              src={thumbUrl}
-              alt={file.name}
-              className="max-h-20 max-w-full object-contain mx-auto"
-            />
+            <span
+              className={`relative inline-block ${focalMode ? "cursor-crosshair" : ""}`}
+              onClick={(e) => {
+                if (!focalMode) return;
+                e.stopPropagation();
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                onFocalChange!({
+                  fx: (e.clientX - rect.left) / rect.width,
+                  fy: (e.clientY - rect.top) / rect.height,
+                });
+              }}
+              data-testid={`${testId}-focal-area`}
+            >
+              <img
+                src={thumbUrl}
+                alt={file.name}
+                className={`${focalMode ? "max-h-32" : "max-h-20"} max-w-full object-contain mx-auto`}
+              />
+              {focalMode && focal && (
+                <span
+                  className="pointer-events-none absolute h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary/60 shadow ring-1 ring-black/30"
+                  style={{ left: `${focal.fx * 100}%`, top: `${focal.fy * 100}%` }}
+                  data-testid={`${testId}-focal-marker`}
+                />
+              )}
+            </span>
             <Button
               variant="ghost"
               size="icon"
@@ -90,7 +121,7 @@ function LogoSlot({ label, file, onSelect, onClear, testId }: LogoSlotProps) {
         ) : (
           <div className="text-muted-foreground">
             <Upload className="h-6 w-6 mx-auto mb-1" />
-            <p className="text-xs">اضغط لاختيار الشعار</p>
+            <p className="text-xs">{focalMode ? "اضغط لاختيار الصورة" : "اضغط لاختيار الشعار"}</p>
           </div>
         )}
       </div>
@@ -104,12 +135,18 @@ export function LogoComposerDialog({
   onImageReady,
 }: LogoComposerDialogProps) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"fit" | "merge">("fit");
+  const [tab, setTab] = useState<"fit" | "merge" | "photos">("fit");
 
   const [fitFile, setFitFile] = useState<File | null>(null);
   const [firstLogo, setFirstLogo] = useState<File | null>(null);
   const [secondLogo, setSecondLogo] = useState<File | null>(null);
   const [showDivider, setShowDivider] = useState(false);
+  const [firstPhoto, setFirstPhoto] = useState<File | null>(null);
+  const [secondPhoto, setSecondPhoto] = useState<File | null>(null);
+  const [firstFocal, setFirstFocal] = useState<FocalPoint | null>(null);
+  const [secondFocal, setSecondFocal] = useState<FocalPoint | null>(null);
+  const [firstDims, setFirstDims] = useState<{ w: number; h: number } | null>(null);
+  const [secondDims, setSecondDims] = useState<{ w: number; h: number } | null>(null);
 
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -123,7 +160,11 @@ export function LogoComposerDialog({
     const token = ++renderTokenRef.current;
     const generate = async () => {
       const ready =
-        tab === "fit" ? fitFile !== null : firstLogo !== null && secondLogo !== null;
+        tab === "fit"
+          ? fitFile !== null
+          : tab === "merge"
+            ? firstLogo !== null && secondLogo !== null
+            : firstPhoto !== null && secondPhoto !== null;
       if (!ready) {
         setPreviewBlob(null);
         return;
@@ -133,9 +174,14 @@ export function LogoComposerDialog({
         const blob =
           tab === "fit"
             ? await renderFittedLogo(fitFile!)
-            : await renderMergedLogos(firstLogo!, secondLogo!, {
-                divider: showDivider,
-              });
+            : tab === "merge"
+              ? await renderMergedLogos(firstLogo!, secondLogo!, {
+                  divider: showDivider,
+                })
+              : await renderMergedPhotos(firstPhoto!, secondPhoto!, {
+                  firstFocal,
+                  secondFocal,
+                });
         if (renderTokenRef.current === token) setPreviewBlob(blob);
       } catch (error) {
         console.error("Logo render error:", error);
@@ -153,7 +199,85 @@ export function LogoComposerDialog({
       }
     };
     generate();
-  }, [tab, fitFile, firstLogo, secondLogo, showDivider, toast]);
+  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, firstFocal, secondFocal, toast]);
+
+  // اكتشاف تلقائي لوجه الشخص عند اختيار صورة (Chrome/Edge — في Safari
+  // يبقى التوسيط الافتراضي ويعدّل المحرر الموضع بالسحب داخل المعاينة)
+  const selectPhoto = (
+    file: File,
+    setFile: (f: File) => void,
+    setFocal: (f: FocalPoint | null) => void,
+    setDims: (d: { w: number; h: number } | null) => void,
+  ) => {
+    setFile(file);
+    setFocal(null);
+    setDims(null);
+    createImageBitmap(file)
+      .then((bitmap) => {
+        setDims({ w: bitmap.width, h: bitmap.height });
+        bitmap.close();
+      })
+      .catch(() => setDims(null));
+    detectFaceFocalPoint(file).then((focal) => {
+      if (focal) setFocal(focal);
+    });
+  };
+
+  // ── سحب الصورة داخل المعاينة (photos): تحريك نافذة القص مباشرة ──
+  // نسبة النصف في اللوحة النهائية: (1200-14)/2 على 675
+  const HALF_RATIO = (1200 - 14) / 2 / 675;
+
+  // كسر القص في كل محور: أي جزء من الصورة تُظهره نافذة cover — يحوّل
+  // مسافة السحب على الشاشة إلى إزاحة مكافئة في إحداثيات نقطة التركيز
+  const cropFractions = (dims: { w: number; h: number } | null) => {
+    if (!dims) return { fxFrac: 0.5, fyFrac: 0.5 };
+    const ratio = dims.w / dims.h;
+    if (ratio > HALF_RATIO) return { fxFrac: (dims.h * HALF_RATIO) / dims.w, fyFrac: 1 };
+    return { fxFrac: 1, fyFrac: dims.w / HALF_RATIO / dims.h };
+  };
+
+  const dragRef = useRef<{
+    side: "first" | "second";
+    startX: number;
+    startY: number;
+    startFocal: FocalPoint;
+  } | null>(null);
+
+  const clamp01 = (v: number) => Math.min(Math.max(v, 0), 1);
+
+  const handlePreviewPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (tab !== "photos" || !previewUrl) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xRel = (e.clientX - rect.left) / rect.width;
+    // النصف الأيمن (فيزيائياً) = الصورة الأولى
+    const side = xRel >= 0.5 ? "first" : "second";
+    const startFocal =
+      side === "first" ? (firstFocal ?? { fx: 0.5, fy: 0.5 }) : (secondFocal ?? { fx: 0.5, fy: 0.5 });
+    dragRef.current = { side, startX: e.clientX, startY: e.clientY, startFocal };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handlePreviewPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const halfDispW = rect.width * ((1200 - 14) / 2 / 1200);
+    const dims = drag.side === "first" ? firstDims : secondDims;
+    const { fxFrac, fyFrac } = cropFractions(dims);
+    // سحب المحتوى يميناً = كشف الجزء الأيسر = نقطة التركيز تتحرك يساراً
+    const dfx = (-(e.clientX - drag.startX) / halfDispW) * fxFrac;
+    const dfy = (-(e.clientY - drag.startY) / rect.height) * fyFrac;
+    const next = {
+      fx: clamp01(drag.startFocal.fx + dfx),
+      fy: clamp01(drag.startFocal.fy + dfy),
+    };
+    if (drag.side === "first") setFirstFocal(next);
+    else setSecondFocal(next);
+  };
+
+  const handlePreviewPointerUp = () => {
+    dragRef.current = null;
+  };
 
   useEffect(() => {
     if (!previewBlob) {
@@ -191,6 +315,10 @@ export function LogoComposerDialog({
     setFirstLogo(null);
     setSecondLogo(null);
     setShowDivider(false);
+    setFirstPhoto(null);
+    setSecondPhoto(null);
+    setFirstFocal(null);
+    setSecondFocal(null);
     setPreviewBlob(null);
     setTab("fit");
   };
@@ -205,7 +333,7 @@ export function LogoComposerDialog({
     if (!previewBlob) return;
     setIsApplying(true);
     try {
-      const name = tab === "fit" ? "logo-fit" : "logo-merge";
+      const name = tab === "fit" ? "logo-fit" : tab === "merge" ? "logo-merge" : "photo-merge";
       const file = new File([previewBlob], `${name}-${Date.now()}.jpg`, {
         type: "image/jpeg",
       });
@@ -227,17 +355,20 @@ export function LogoComposerDialog({
         <DialogHeader>
           <DialogTitle>أدوات الشعار</DialogTitle>
           <DialogDescription>
-            معالجة صور الشعارات لتظهر كاملة على خلفية بيضاء بمقاس 16:9 دون قص.
+            معالجة الشعارات والصور لصورة خبر بمقاس 16:9 جاهزة للنشر دون قص عشوائي.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "fit" | "merge")}>
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "fit" | "merge" | "photos")}>
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="fit" data-testid="tab-fit-logo">
               ضبط شعار
             </TabsTrigger>
             <TabsTrigger value="merge" data-testid="tab-merge-logos">
               دمج شعارين
+            </TabsTrigger>
+            <TabsTrigger value="photos" data-testid="tab-merge-photos">
+              دمج صورتين
             </TabsTrigger>
           </TabsList>
 
@@ -296,17 +427,94 @@ export function LogoComposerDialog({
               </div>
             </div>
           </TabsContent>
+
+          <TabsContent value="photos" className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <LogoSlot
+                label="الصورة الأولى (يمين)"
+                file={firstPhoto}
+                onSelect={(f) =>
+                  validateAndSet(f, (file) => selectPhoto(file, setFirstPhoto, setFirstFocal, setFirstDims))
+                }
+                onClear={() => {
+                  setFirstPhoto(null);
+                  setFirstFocal(null);
+                  setFirstDims(null);
+                }}
+                focal={firstFocal}
+                onFocalChange={setFirstFocal}
+                testId="slot-first-photo"
+              />
+              <LogoSlot
+                label="الصورة الثانية (يسار)"
+                file={secondPhoto}
+                onSelect={(f) =>
+                  validateAndSet(f, (file) => selectPhoto(file, setSecondPhoto, setSecondFocal, setSecondDims))
+                }
+                onClear={() => {
+                  setSecondPhoto(null);
+                  setSecondFocal(null);
+                  setSecondDims(null);
+                }}
+                focal={secondFocal}
+                onFocalChange={setSecondFocal}
+                testId="slot-second-photo"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={!firstPhoto || !secondPhoto}
+                onClick={() => {
+                  setFirstPhoto(secondPhoto);
+                  setSecondPhoto(firstPhoto);
+                  setFirstFocal(secondFocal);
+                  setSecondFocal(firstFocal);
+                  setFirstDims(secondDims);
+                  setSecondDims(firstDims);
+                }}
+                data-testid="button-swap-photos"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+                تبديل الترتيب
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                كل صورة تملأ نصفها بالكامل وبينهما فراغ أبيض رفيع. الوجوه تُكتشف تلقائياً
+                حيث يدعم المتصفح ذلك، و<strong>اسحب الصورة داخل المعاينة بالأسفل</strong>
+                {" "}لضبط موضعها يدوياً فلا يُبتر الوجه.
+              </p>
+            </div>
+          </TabsContent>
         </Tabs>
 
-        {/* المعاينة النهائية */}
+        {/* المعاينة النهائية — في دمج الصورتين: اسحب أي نصف لضبط موضع صورته */}
         <div className="space-y-2">
-          <Label>المعاينة النهائية (1200×675)</Label>
-          <div className="relative aspect-video w-full overflow-hidden rounded-lg border bg-muted/30">
+          <Label>
+            المعاينة النهائية (1200×675)
+            {tab === "photos" && previewUrl && (
+              <span className="mr-2 text-[11px] font-normal text-muted-foreground">
+                — اسحب أي صورة لتحريكها داخل نصفها
+              </span>
+            )}
+          </Label>
+          <div
+            className={`relative aspect-video w-full overflow-hidden rounded-lg border bg-muted/30 ${
+              tab === "photos" && previewUrl ? "cursor-grab active:cursor-grabbing touch-none select-none" : ""
+            }`}
+            onPointerDown={handlePreviewPointerDown}
+            onPointerMove={handlePreviewPointerMove}
+            onPointerUp={handlePreviewPointerUp}
+            onPointerCancel={handlePreviewPointerUp}
+            data-testid="preview-container"
+          >
             {previewUrl ? (
               <img
                 src={previewUrl}
                 alt="معاينة الشعار"
                 className="h-full w-full object-contain"
+                draggable={false}
                 data-testid="img-logo-preview"
               />
             ) : (
@@ -315,8 +523,10 @@ export function LogoComposerDialog({
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : tab === "fit" ? (
                   "اختر الشعار لعرض المعاينة"
-                ) : (
+                ) : tab === "merge" ? (
                   "اختر الشعارين لعرض المعاينة"
+                ) : (
+                  "اختر الصورتين لعرض المعاينة"
                 )}
               </div>
             )}

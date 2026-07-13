@@ -189,3 +189,124 @@ export async function renderMergedLogos(
     second.cleanup();
   }
 }
+
+// عرض الفراغ الأبيض بين الصورتين في دمج الصور
+const PHOTO_GAP_PX = 14;
+
+/** نقطة تركيز نسبية داخل الصورة (0..1) — مركز الوجه/الموضوع المهم */
+export interface FocalPoint {
+  fx: number;
+  fy: number;
+}
+
+export interface MergePhotosOptions {
+  /** تركيز الصورة الأولى (اليمنى) — الافتراضي مركز الصورة */
+  firstFocal?: FocalPoint | null;
+  /** تركيز الصورة الثانية (اليسرى) — الافتراضي مركز الصورة */
+  secondFocal?: FocalPoint | null;
+}
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.min(Math.max(value, min), max);
+
+/**
+ * دمج صورتين (فوتوغرافيتين) جنباً إلى جنب على لوحة 1200×675.
+ * عكس دمج الشعارات: كل صورة تملأ نصفها بالكامل (cover) مع قص للفائض —
+ * بلا هوامش خارجية، وبينهما فراغ أبيض رفيع فقط.
+ * الصورة الأولى في النصف الأيمن والثانية في الأيسر (ترتيب عربي).
+ *
+ * القص واعٍ بنقطة التركيز: نافذة القص تنزاح لتتمركز حول نقطة التركيز
+ * (وجه الشخص مثلاً) بدل مركز الصورة، مع تثبيتها داخل حدود الصورة —
+ * فلا يُبتر الوجه في الصور التي يقع موضوعها بعيداً عن المنتصف.
+ */
+export async function renderMergedPhotos(
+  firstFile: File,
+  secondFile: File,
+  options: MergePhotosOptions = {},
+): Promise<Blob> {
+  const [first, second] = await Promise.all([
+    loadLogo(firstFile),
+    loadLogo(secondFile),
+  ]);
+  try {
+    const { canvas, ctx } = createWhiteCanvas();
+    const halfW = (LOGO_CANVAS_WIDTH - PHOTO_GAP_PX) / 2;
+    const halfH = LOGO_CANVAS_HEIGHT;
+
+    // cover: نقص من مصدر الصورة مستطيلاً بنسبة النصف متمحوراً حول نقطة
+    // التركيز (مثبّتاً داخل الحدود) ثم نرسمه ممتلئاً
+    const drawCovering = (photo: LoadedLogo, dx: number, focal?: FocalPoint | null) => {
+      const targetRatio = halfW / halfH;
+      const sourceRatio = photo.width / photo.height;
+      let sw = photo.width;
+      let sh = photo.height;
+      if (sourceRatio > targetRatio) {
+        sw = photo.height * targetRatio; // أعرض من اللازم — نقص الجانبين
+      } else {
+        sh = photo.width / targetRatio; // أطول من اللازم — نقص الأعلى والأسفل
+      }
+      const fx = clamp(focal?.fx ?? 0.5, 0, 1);
+      const fy = clamp(focal?.fy ?? 0.5, 0, 1);
+      const sx = clamp(fx * photo.width - sw / 2, 0, photo.width - sw);
+      const sy = clamp(fy * photo.height - sh / 2, 0, photo.height - sh);
+      ctx.drawImage(photo.source, sx, sy, sw, sh, dx, 0, halfW, halfH);
+    };
+
+    drawCovering(first, halfW + PHOTO_GAP_PX, options.firstFocal); // يمين
+    drawCovering(second, 0, options.secondFocal); // يسار
+
+    return await canvasToBlob(canvas);
+  } finally {
+    first.cleanup();
+    second.cleanup();
+  }
+}
+
+interface DetectedFaceBox {
+  boundingBox: { x: number; y: number; width: number; height: number };
+}
+
+/**
+ * اكتشاف تلقائي لنقطة التركيز عبر FaceDetector المدمج في المتصفح
+ * (Chrome/Edge — غير مدعوم في Safari). يرجع مركز اتحاد مستطيلات الوجوه
+ * المكتشفة، أو null حين لا دعم أو لا وجوه — فيبقى التوسيط الافتراضي
+ * ويستطيع المحرر تحديد النقطة يدوياً بالنقر.
+ */
+export async function detectFaceFocalPoint(file: File): Promise<FocalPoint | null> {
+  const FaceDetectorCtor = (
+    window as unknown as {
+      FaceDetector?: new (opts?: { fastMode?: boolean; maxDetectedFaces?: number }) => {
+        detect(source: ImageBitmap): Promise<DetectedFaceBox[]>;
+      };
+    }
+  ).FaceDetector;
+  if (!FaceDetectorCtor) return null;
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const detector = new FaceDetectorCtor({ fastMode: true, maxDetectedFaces: 5 });
+      const faces = await detector.detect(bitmap);
+      if (!faces?.length) return null;
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const face of faces) {
+        const b = face.boundingBox;
+        minX = Math.min(minX, b.x);
+        minY = Math.min(minY, b.y);
+        maxX = Math.max(maxX, b.x + b.width);
+        maxY = Math.max(maxY, b.y + b.height);
+      }
+      return {
+        fx: clamp((minX + maxX) / 2 / bitmap.width, 0, 1),
+        fy: clamp((minY + maxY) / 2 / bitmap.height, 0, 1),
+      };
+    } finally {
+      bitmap.close();
+    }
+  } catch {
+    return null;
+  }
+}
