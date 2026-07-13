@@ -30,6 +30,21 @@ class AsianCupRepository @Inject constructor(private val api: SabqApi) {
         api.submitAsianCupPrediction(AcPredictionSubmitBody(fixtureId, home, away)).prediction
 }
 
+/**
+ * يجلب نظرة كأس آسيا العامة لشريط الرئيسية فقط — يطابق نمط
+ * [com.sabq.smart.feature.worldcup.WorldCupStripViewModel]: جلبة واحدة
+ * best-effort عند الإنشاء، والفشل يُبقي القيمة null فيختفي الشريط.
+ */
+@HiltViewModel
+class AsianCupStripViewModel @Inject constructor(private val repo: AsianCupRepository) : ViewModel() {
+    private val _overview = MutableStateFlow<AcOverview?>(null)
+    val overview: StateFlow<AcOverview?> = _overview.asStateFlow()
+
+    init {
+        viewModelScope.launch { _overview.value = runCatching { repo.overview() }.getOrNull() }
+    }
+}
+
 @HiltViewModel
 class AsianCupViewModel @Inject constructor(private val repo: AsianCupRepository) : ViewModel() {
     enum class Tab { HOME, MATCHES, PREDICTIONS, GROUPS, MORE }

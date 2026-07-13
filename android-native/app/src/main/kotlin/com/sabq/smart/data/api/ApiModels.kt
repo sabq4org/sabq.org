@@ -277,6 +277,34 @@ data class ApiBreakingHeadline(
     val publishedAt: String? = null,
 )
 
+/**
+ * Dashboard-curated "شريط الأخبار العاجلة" — `GET /api/breaking-ticker/
+ * active` (server/routes.ts → storage.getActiveBreakingTicker). The
+ * payload is `{ topic: {...}, headlines: [...] }` with camelCase keys,
+ * or a bare `null` when no topic is active (decoding then fails and
+ * callers treat it as "no ticker" via runCatching). Distinct from
+ * [ApiBreakingTicker] (`/api/v1/breaking`), which returns breaking-type
+ * *articles*. iOS counterpart: `APIBreakingTicker`
+ * (Services/APIModels.swift:417).
+ */
+@Serializable
+data class ApiBreakingTickerActive(
+    val headlines: List<ApiBreakingTickerHeadline> = emptyList(),
+)
+
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiBreakingTickerHeadline(
+    val id: String = "",
+    val headline: String = "",
+    @JsonNames("linked_article_slug")
+    val linkedArticleSlug: String? = null,
+    @JsonNames("linked_article_id")
+    val linkedArticleId: String? = null,
+    @JsonNames("external_url")
+    val externalUrl: String? = null,
+)
+
 /** Single entry from `GET /api/trending-keywords`. */
 @Serializable
 data class ApiTrendingKeyword(

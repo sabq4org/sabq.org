@@ -293,7 +293,17 @@ private enum class AcRace { GOALS, ASSISTS }
     } } } }
 }
 
-@Composable fun AsianCupHomeStrip(onClick: () -> Unit) { Box(Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(20.dp)).background(Brush.horizontalGradient(listOf(AcColors.green, AcColors.cardHi))).clickable(onClick = onClick).padding(16.dp)) { Column(Modifier.align(Alignment.CenterStart)) { Text("كأس آسيا 2027", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, fontFamily = IbmPlexSansArabic); Text("المباريات · المجموعات · التوقعات", color = Color.White.copy(.8f), fontFamily = IbmPlexSansArabic) }; Icon(Icons.Filled.EmojiEvents, null, tint = AcColors.gold, modifier = Modifier.align(Alignment.CenterEnd).size(46.dp)) } }
+/** شريط كأس آسيا على الرئيسية — لا يُعرض قبل وصول النظرة العامة، ويختفي كليًا
+ *  عند إطفاء البلوك من لوحة التحكم (`blockHidden`) أو فشل الجلب — مطابق iOS
+ *  `AsianCupHomeStrip.swift:50-52`. */
+@Composable fun AsianCupHomeStrip(onClick: () -> Unit, viewModel: AsianCupStripViewModel = hiltViewModel()) {
+    val overview by viewModel.overview.collectAsStateWithLifecycle()
+    val ov = overview ?: return
+    if (ov.blockHidden) return
+    AsianCupHomeStripCard(onClick)
+}
+
+@Composable private fun AsianCupHomeStripCard(onClick: () -> Unit) { Box(Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(20.dp)).background(Brush.horizontalGradient(listOf(AcColors.green, AcColors.cardHi))).clickable(onClick = onClick).padding(16.dp)) { Column(Modifier.align(Alignment.CenterStart)) { Text("كأس آسيا 2027", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black, fontFamily = IbmPlexSansArabic); Text("المباريات · المجموعات · التوقعات", color = Color.White.copy(.8f), fontFamily = IbmPlexSansArabic) }; Icon(Icons.Filled.EmojiEvents, null, tint = AcColors.gold, modifier = Modifier.align(Alignment.CenterEnd).size(46.dp)) } }
 @Composable private fun AcSection(text: String) { Text(text, color = AcColors.gold, fontSize = 16.sp, fontWeight = FontWeight.Black, fontFamily = IbmPlexSansArabic) }
 @Composable private fun AcEmpty(text: String) { Box(Modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) { Text(text, color = AcColors.dim, fontFamily = IbmPlexSansArabic) } }
 @Composable private fun AcError(message: String, retry: () -> Unit) { Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(message, color = AcColors.text, fontFamily = IbmPlexSansArabic); TextButton(retry) { Text("إعادة المحاولة", color = AcColors.gold, fontFamily = IbmPlexSansArabic) } } }
