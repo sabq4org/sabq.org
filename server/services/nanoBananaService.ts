@@ -7,6 +7,7 @@ import { Modality } from "@google/genai";
 import { createGoogleGenAI } from "../utils/googleGenAi";
 import { ObjectStorageService } from "../objectStorage";
 import pRetry from "p-retry";
+import { newsImageStorageService } from "./newsImageStorageService";
 
 // Validate required environment variables - Try both possible key names
 const apiKey = process.env.GEMINI_API_KEY || process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
@@ -389,43 +390,27 @@ export async function uploadImageToStorage(
     const mainFileName = `${uniqueBase}.webp`;
     const thumbFileName = `${uniqueBase}_thumb.webp`;
 
-    // Try Cloudflare Images first — on Railway/headless setups the
-    // Replit ObjectStorage path needs PUBLIC_OBJECT_SEARCH_PATHS that
-    // doesn't exist there. CF Images is the canonical home for image
-    // assets anyway. We upload the main WebP and reuse the same image
-    // for the thumbnail URL (CF native variants/transforms handle
-    // sizing on the delivery side).
-    const { cloudflareImagesService } = await import("./cloudflareImagesService");
-    if (cloudflareImagesService.isCloudflareConfigured()) {
-      console.log(`[Nano Banana Pro] Cloudflare Images configured, uploading...`);
-      const cfMain = await cloudflareImagesService.uploadToCloudflare(
-        webpBuffer,
-        mainFileName,
-        { source: "nano-banana", type: "ai-generated" },
-        "image/webp"
-      );
-      if (cfMain.success && cfMain.deliveryUrl) {
-        // Upload thumbnail separately so the thumbnailUrl is a distinct
-        // CF asset (callers may want a smaller image without relying on
-        // CF variant config).
-        const cfThumb = await cloudflareImagesService.uploadToCloudflare(
-          thumbnailBuffer,
-          thumbFileName,
-          { source: "nano-banana", type: "ai-generated-thumb" },
-          "image/webp"
-        );
-        const thumbnailUrl =
-          cfThumb.success && cfThumb.deliveryUrl
-            ? cfThumb.deliveryUrl
-            : cfMain.deliveryUrl;
-        console.log(`[Nano Banana Pro] Cloudflare upload successful: ${cfMain.deliveryUrl}`);
+    // Generated editorial art uses the canonical news-image service. R2
+    // creates its own responsive renditions; Cloudflare Images stays as the
+    // fallback while rollout is below 100%.
+    if (newsImageStorageService.isUploadAvailable()) {
+      const stored = await newsImageStorageService.upload({
+        buffer: webpBuffer,
+        filename: mainFileName,
+        mimeType: "image/webp",
+        purpose: "article-ai-generated",
+        metadata: { source: "nano-banana" },
+        rolloutKey: `nano-banana:${uniqueBase}`,
+      });
+      if (stored.success && stored.deliveryUrl) {
+        console.log(`[Nano Banana Pro] Canonical image upload successful`);
         return {
-          url: cfMain.deliveryUrl,
-          thumbnailUrl,
+          url: stored.deliveryUrl,
+          thumbnailUrl: stored.thumbnailUrl || stored.deliveryUrl,
           blurDataUrl,
         };
       }
-      console.warn(`[Nano Banana Pro] Cloudflare upload failed, falling back to GCS:`, cfMain.error);
+      console.warn(`[Nano Banana Pro] Canonical image upload failed, falling back to GCS:`, stored.error);
     }
 
     // Upload main WebP image to GCS (Replit object storage path)

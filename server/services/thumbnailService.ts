@@ -9,7 +9,7 @@ import { db } from '../db';
 import { articles } from '@shared/schema';
 import { eq, desc } from 'drizzle-orm';
 import path from 'path';
-import { cloudflareImagesService } from './cloudflareImagesService';
+import { newsImageStorageService } from './newsImageStorageService';
 
 interface FocalPoint {
   x: number;
@@ -317,21 +317,22 @@ async function uploadThumbnailToStorage(
   const ext = filename.split('.').pop()?.toLowerCase() || 'jpeg';
   const contentType = ext === 'webp' ? 'image/webp' : ext === 'png' ? 'image/png' : 'image/jpeg';
 
-  // Primary: Cloudflare Images (canonical image backend in production).
-  // The GCS path below relies on Replit's credential sidecar (127.0.0.1:1106),
-  // which doesn't exist on Railway — so prefer CF Images whenever it's configured.
-  if (cloudflareImagesService.isCloudflareConfigured()) {
-    const res = await cloudflareImagesService.uploadToCloudflare(
+  // Editorial thumbnails follow the same R2 rollout and Cloudflare fallback as
+  // their source article images.
+  if (newsImageStorageService.isUploadAvailable()) {
+    const res = await newsImageStorageService.upload({
       buffer,
       filename,
-      { source: 'thumbnail' },
-      contentType
-    );
+      mimeType: contentType,
+      purpose: 'article-thumbnail',
+      metadata: { source: 'thumbnail-service' },
+      rolloutKey: `thumbnail:${filename}`,
+    });
     if (res.success && res.deliveryUrl) {
-      console.log(`[Thumbnail Service] Thumbnail uploaded to Cloudflare Images: ${res.deliveryUrl}`);
+      console.log(`[Thumbnail Service] Thumbnail uploaded to canonical image storage`);
       return res.deliveryUrl;
     }
-    console.warn(`[Thumbnail Service] Cloudflare upload failed (${res.error}); falling back to object storage`);
+    console.warn(`[Thumbnail Service] Canonical upload failed (${res.error}); falling back to object storage`);
   }
 
   // Fallback: GCS / object storage (Replit + local dev). Uses the centralized bucket config.

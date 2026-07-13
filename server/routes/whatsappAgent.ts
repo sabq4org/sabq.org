@@ -13,6 +13,7 @@ import { memoryCache } from "../memoryCache";
 import { invalidatePublishedContent } from "../services/contentInvalidation";
 import mammoth from "mammoth";
 import OpenAI from "openai";
+import { newsImageStorageService } from "../services/newsImageStorageService";
 
 const router = Router();
 
@@ -23,6 +24,21 @@ async function uploadToCloudStorage(
   isPublic: boolean = false
 ): Promise<string> {
   try {
+    if (isPublic && contentType.startsWith('image/') && newsImageStorageService.isUploadAvailable()) {
+      const imageResult = await newsImageStorageService.upload({
+        buffer: file,
+        filename,
+        mimeType: contentType,
+        purpose: 'whatsapp-article-image',
+        metadata: { source: 'whatsapp-agent' },
+        rolloutKey: `whatsapp:${filename}:${file.length}`,
+      });
+      if (imageResult.success && imageResult.deliveryUrl) {
+        return imageResult.deliveryUrl;
+      }
+      console.warn('[WhatsApp Agent] Canonical image upload failed; trying legacy storage');
+    }
+
     const objectDir = isPublic 
       ? (process.env.PUBLIC_OBJECT_SEARCH_PATHS || "").split(',')[0]?.trim() || ""
       : process.env.PRIVATE_OBJECT_DIR || "";

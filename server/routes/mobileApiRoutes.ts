@@ -60,6 +60,7 @@ import crypto from "crypto";
 import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
 import { sendEmailNotification } from "../services/email";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
+import { newsImageStorageService } from "../services/newsImageStorageService";
 import { summarizeText } from "../ai-content-tools";
 import { generateSeoMetadata } from "../seo-generator";
 import { summarizeArticle, generateSmartContent } from "../openai";
@@ -4634,7 +4635,7 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       });
     }
 
-    // Upload images to CF Images. We treat the order client-side as the
+    // Upload images to the canonical news-image service. We treat the order client-side as the
     // intended display order: index 0 → hero, the rest → albumImages[].
     //
     // Images are validated first (cheap, synchronous), then uploaded in
@@ -4645,7 +4646,7 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
     // image instead of the sum.
     const uploadedUrls: string[] = [];
     if (imagePayload.length > 0) {
-      if (!cloudflareImagesService.isCloudflareConfigured()) {
+      if (!newsImageStorageService.isUploadAvailable()) {
         return res.status(502).json({ success: false, message: "خدمة رفع الصور غير مهيأة حالياً" });
       }
 
@@ -4665,9 +4666,8 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
         const mimeType = `image/${ext === "heif" ? "heic" : ext}`;
         const buffer = Buffer.from(matches[2], "base64");
 
-        // 20 MB per image cap — CF Images max is 10 MB for free, 20 MB Pro;
-        // we leave the actual upper bound to CF but stop egregiously large
-        // payloads early.
+        // 20 MB per image cap keeps oversized payloads from reaching either
+        // storage provider.
         if (buffer.length > 20 * 1024 * 1024) {
           return res.status(413).json({
             success: false,
@@ -4681,12 +4681,14 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       const batchStamp = Date.now();
       const results = await Promise.all(
         decoded.map((img, i) =>
-          cloudflareImagesService.uploadToCloudflare(
-            img.buffer,
-            `submission-${session.userId}-${batchStamp}-${i}.${img.ext}`,
-            { type: "mobile-article-submission", userId: session.userId, slot: String(i) },
-            img.mimeType
-          )
+          newsImageStorageService.upload({
+            buffer: img.buffer,
+            filename: `submission-${session.userId}-${batchStamp}-${i}.${img.ext}`,
+            mimeType: img.mimeType,
+            purpose: "mobile-article-submission",
+            metadata: { userId: session.userId, slot: String(i), source: "mobile-app" },
+            rolloutKey: `${session.userId}:${batchStamp}:${i}`,
+          })
         )
       );
 
@@ -4694,7 +4696,7 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       for (let i = 0; i < results.length; i++) {
         const result = results[i];
         if (!result.success || !result.deliveryUrl) {
-          console.error("[Mobile API] /articles/submit CF Images upload failed:", result.error);
+          console.error("[Mobile API] /articles/submit image upload failed:", result.error);
           return res.status(502).json({
             success: false,
             message: `تعذر رفع الصورة ${i + 1}. حاول لاحقاً.`,
@@ -5044,20 +5046,21 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
       });
     }
 
-    // Hero + album handling. New base64 images go to Cloudflare
-    // Images via the same helper /articles/submit uses; existing URLs
-    // (already on imagedelivery.net) pass through.
-    const uploadDataUrlToCf = async (dataUrl: string, idHint: string): Promise<string | null> => {
+    // Hero + album handling. New base64 images use the same canonical
+    // R2-rollout service as /articles/submit; existing HTTPS URLs pass through.
+    const uploadDataUrl = async (dataUrl: string, idHint: string): Promise<string | null> => {
       const m = dataUrl.match(/^data:image\/(png|jpeg|jpg|webp|gif|heic|heif);base64,(.+)$/i);
       if (!m) return null;
       const mimeType = `image/${m[1].toLowerCase() === "heif" ? "heic" : m[1].toLowerCase()}`;
       const buffer = Buffer.from(m[2], "base64");
-      const result = await cloudflareImagesService.uploadToCloudflare(
+      const result = await newsImageStorageService.upload({
         buffer,
-        `${idHint}.${m[1]}`,
-        { type: "mobile-article-revision" },
+        filename: `${idHint}.${m[1]}`,
         mimeType,
-      );
+        purpose: "mobile-article-revision",
+        metadata: { source: "mobile-app", articleId },
+        rolloutKey: `${session.userId}:${idHint}`,
+      });
       return result.success && result.deliveryUrl ? result.deliveryUrl : null;
     };
 
@@ -5065,7 +5068,7 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
     if (data.heroImage !== undefined) {
       if (data.heroImage.startsWith("data:")) {
         try {
-          const url = await uploadDataUrlToCf(
+          const url = await uploadDataUrl(
             data.heroImage,
             `mobile-revision-${articleId}-hero-${Date.now()}`,
           );
@@ -5084,7 +5087,7 @@ router.put("/articles/:id/resubmit", async (req: Request, res: Response) => {
       for (const img of data.albumImages) {
         if (img.startsWith("data:")) {
           try {
-            const url = await uploadDataUrlToCf(
+            const url = await uploadDataUrl(
               img,
               `mobile-revision-${articleId}-album-${Date.now()}-${albumUrls.length}`,
             );
@@ -8135,7 +8138,7 @@ router.post("/admin/seo/generate", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/v1/admin/media/upload — رفع صورة (base64 → Cloudflare Images)
+// POST /api/v1/admin/media/upload — رفع صورة خبر (base64 → التخزين المعتمد)
 router.post("/admin/media/upload", async (req: Request, res: Response) => {
   try {
     const admin = await verifyAdminSession(req);
@@ -8155,21 +8158,23 @@ router.post("/admin/media/upload", async (req: Request, res: Response) => {
     if (buffer.length > 10 * 1024 * 1024) {
       return res.status(400).json({ success: false, message: "حجم الصورة يجب أن يكون أقل من 10 ميجابايت" });
     }
-    if (!cloudflareImagesService.isCloudflareConfigured()) {
+    if (!newsImageStorageService.isUploadAvailable()) {
       return res.status(502).json({ success: false, message: "خدمة رفع الصورة غير مهيأة حالياً" });
     }
     const filename = `admin-article-${admin.userId}-${Date.now()}.${ext}`;
-    const cfResult = await cloudflareImagesService.uploadToCloudflare(
+    const imageResult = await newsImageStorageService.upload({
       buffer,
       filename,
-      { type: "article-image", userId: admin.userId },
-      `image/${ext}`,
-    );
-    if (!cfResult.success || !cfResult.deliveryUrl) {
-      console.error("[Mobile API] CF Images admin upload failed:", cfResult.error);
+      mimeType: `image/${ext}`,
+      purpose: "mobile-article-admin",
+      metadata: { userId: admin.userId, source: "mobile-admin" },
+      rolloutKey: `${admin.userId}:${filename}`,
+    });
+    if (!imageResult.success || !imageResult.deliveryUrl) {
+      console.error("[Mobile API] admin image upload failed:", imageResult.error);
       return res.status(502).json({ success: false, message: "تعذر رفع الصورة" });
     }
-    res.json({ success: true, url: cfResult.deliveryUrl });
+    res.json({ success: true, url: imageResult.deliveryUrl });
   } catch (error) {
     console.error("[Mobile API] POST /admin/media/upload error:", error);
     res.status(500).json({ success: false, message: "حدث خطأ في رفع الصورة" });

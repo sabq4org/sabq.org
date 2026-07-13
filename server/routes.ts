@@ -90,6 +90,7 @@ import { notifyAuthorTopicPublished, notifyAuthorTopicRejected } from "./service
 import { sendCorrespondentApprovalEmail, sendCorrespondentRejectionEmail, sendOpinionAuthorApprovalEmail, sendOpinionAuthorApprovalEmailExistingUser, sendOpinionAuthorRejectionEmail as sendOpinionAuthorRejectionEmailDirect, getAllDefaultTemplates, getDefaultTemplateByType } from "./services/employeeNotifications";
 import { staffCommunicationsService } from "./services/staffCommunications";
 import { cloudflareImagesService } from './services/cloudflareImagesService';
+import { isNewsImagePurpose, newsImageStorageService } from './services/newsImageStorageService';
 import { getArticleEventsWithActor, logArticleEvent } from './services/articleEventsService';
 import { extractGeoLocations } from "./services/geoExtractionService";
 import { analyzeSentiment, detectLanguage } from './sentiment-analyzer';
@@ -1778,23 +1779,41 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       const objectPath = `uploads/media/${year}/${month}/${objectId}.${fileExtension}`;
 
-      // Try Cloudflare Images first for image uploads. When CF succeeds we
-      // skip GCS entirely — GCS is only reached for non-images, or as a
-      // fallback when CF is not configured / failed.
+      // The platform-wide endpoint is shared with avatars/categories/logos.
+      // Only explicit article purposes join the R2 rollout; every other image
+      // keeps the existing Cloudflare Images behavior.
       let cloudflareUrl: string | null = null;
-      if (req.file.mimetype.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
-        console.log("[Media Upload] Cloudflare Images configured, attempting upload...");
-        const cfResult = await cloudflareImagesService.uploadToCloudflare(
-          req.file.buffer,
-          req.file.originalname,
-          { uploadedBy: userId.toString(), type: 'media' },
-          req.file.mimetype
-        );
-        if (cfResult.success && cfResult.deliveryUrl) {
-          cloudflareUrl = cfResult.deliveryUrl;
-          console.log("[Media Upload] Cloudflare upload successful:", { url: cloudflareUrl, imageId: cfResult.imageId });
+      const uploadPurpose = String(req.body?.purpose || req.body?.entityType || '').trim();
+      const isEditorialImage = isNewsImagePurpose(uploadPurpose);
+      if (
+        req.file.mimetype.startsWith('image/') &&
+        (isEditorialImage
+          ? newsImageStorageService.isUploadAvailable()
+          : cloudflareImagesService.isCloudflareConfigured())
+      ) {
+        const imageResult = isEditorialImage
+          ? await newsImageStorageService.upload({
+              buffer: req.file.buffer,
+              filename: req.file.originalname,
+              mimeType: req.file.mimetype,
+              purpose: uploadPurpose,
+              metadata: { uploadedBy: userId.toString(), source: 'web-media' },
+              rolloutKey: `${userId}:${objectId}`,
+            })
+          : await cloudflareImagesService.uploadToCloudflare(
+              req.file.buffer,
+              req.file.originalname,
+              { uploadedBy: userId.toString(), type: 'media' },
+              req.file.mimetype,
+            );
+        if (imageResult.success && imageResult.deliveryUrl) {
+          cloudflareUrl = imageResult.deliveryUrl;
+          console.log("[Media Upload] Image upload successful:", {
+            provider: ('provider' in imageResult && imageResult.provider) || 'cloudflare-images',
+            imageId: imageResult.imageId,
+          });
         } else {
-          console.log("[Media Upload] Cloudflare upload failed, will try GCS fallback:", cfResult.error);
+          console.log("[Media Upload] Primary image upload failed, will try GCS fallback:", imageResult.error);
         }
       }
 
@@ -18327,9 +18346,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       console.log("[Article Image] GCS objectPath:", objectPath);
 
-      // Try to upload to Cloudflare Images for faster CDN delivery
+      // Move the legacy object upload into the canonical news-image store.
       let finalPath = objectPath;
-      if (cloudflareImagesService.isCloudflareConfigured()) {
+      if (newsImageStorageService.isUploadAvailable()) {
         try {
           // Download the file from GCS
           const { objectStorageClient, getBucketConfig } = await import('./objectStorage');
@@ -18351,27 +18370,29 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
             const [metadata] = await file.getMetadata();
             const contentType = metadata.contentType || 'image/jpeg';
             
-            // Only upload images to Cloudflare
+            // Legacy object-upload flow: route article images through the same
+            // R2 rollout + Cloudflare fallback used by current editors.
             if (contentType.startsWith('image/')) {
-              console.log("[Article Image] Uploading to Cloudflare Images...");
-              const cfResult = await cloudflareImagesService.uploadToCloudflare(
+              const imageResult = await newsImageStorageService.upload({
                 buffer,
-                gcsFilePath.split('/').pop() || 'image.jpg',
-                { uploadedBy: userId?.toString() || 'system', type: 'article' },
-                contentType
-              );
+                filename: gcsFilePath.split('/').pop() || 'image.jpg',
+                mimeType: contentType,
+                purpose: 'article-legacy-upload',
+                metadata: { uploadedBy: userId?.toString() || 'system', source: 'legacy-object-upload' },
+                rolloutKey: `${userId || 'system'}:${gcsFilePath}`,
+              });
               
-              if (cfResult.success && cfResult.deliveryUrl) {
-                finalPath = cfResult.deliveryUrl;
-                console.log("[Article Image] Cloudflare upload successful:", finalPath);
+              if (imageResult.success && imageResult.deliveryUrl) {
+                finalPath = imageResult.deliveryUrl;
+                console.log("[Article Image] Canonical upload successful");
               } else {
-                console.log("[Article Image] Cloudflare upload failed, using GCS path:", cfResult.error);
+                console.log("[Article Image] Canonical upload failed, using GCS path:", imageResult.error);
               }
             }
           }
-        } catch (cfError) {
-          console.error("[Article Image] Cloudflare re-upload error:", cfError);
-          // Continue with GCS path if Cloudflare fails
+        } catch (imageError) {
+          console.error("[Article Image] Canonical re-upload error:", imageError);
+          // Continue with the object-storage path if the canonical upload fails.
         }
       }
 
