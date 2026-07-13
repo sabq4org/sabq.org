@@ -50,6 +50,7 @@ backup_unused_assets
 !client/src/**/*.png
 !public/**/*.png
 !android/**/*.png
+!android-native/**/*.png
 !ios/**/*.png
 !attached_assets/**/*.png
 # Apple Wallet pass templates need their icon/logo PNGs committed —
