@@ -1,11 +1,11 @@
-export type DashboardThemeId =
-  | "sabq"
-  | "twitter"
-  | "claude"
-  | "claude-azure"
-  | "whatsapp"
-  | "elegant-luxury"
-  | "sage-meadow";
+import {
+  DEFAULT_DASHBOARD_THEME_ID,
+  isDashboardThemeId,
+  type DashboardThemeId,
+} from "@shared/dashboard-theme";
+
+export type { DashboardThemeId };
+export { DEFAULT_DASHBOARD_THEME_ID, isDashboardThemeId };
 
 export interface DashboardThemeColorToken {
   key: string;
@@ -27,6 +27,7 @@ export interface DashboardThemePreset {
   colors: DashboardThemeColorToken[];
 }
 
+/** Local cache of the org theme for faster first paint / offline fallback. */
 export const DASHBOARD_THEME_STORAGE_KEY = "sabq.dashboard.theme.v1";
 
 export const DASHBOARD_THEME_PRESETS: DashboardThemePreset[] = [
@@ -171,17 +172,11 @@ export const DASHBOARD_THEME_PRESETS: DashboardThemePreset[] = [
   },
 ];
 
-export const DEFAULT_DASHBOARD_THEME_ID: DashboardThemeId = "twitter";
-
 /** Always keep Arabic readable; theme latin fonts trail as fallbacks. */
 export function getDashboardThemeFontStack(id: DashboardThemeId): string {
   const preset = DASHBOARD_THEME_PRESETS.find((item) => item.id === id);
   const latin = preset?.latinFont ?? "Inter";
   return `"IBM Plex Sans Arabic", "Tajawal", ${latin}, system-ui, sans-serif`;
-}
-
-export function isDashboardThemeId(value: unknown): value is DashboardThemeId {
-  return DASHBOARD_THEME_PRESETS.some((preset) => preset.id === value);
 }
 
 export function readStoredDashboardTheme(): DashboardThemeId {

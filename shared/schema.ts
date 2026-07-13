@@ -1385,7 +1385,10 @@ export const userPreferences = pgTable("user_preferences", {
   preferredAuthors: jsonb("preferred_authors").$type<string[]>(), // array of user IDs
   blockedCategories: jsonb("blocked_categories").$type<string[]>(), // array of category IDs to hide
   recommendationFrequency: text("recommendation_frequency").default("daily"), // daily, weekly, never
-  
+
+  /** Personal dashboard shell theme; null/undefined = follow org default from system_settings */
+  dashboardThemeId: text("dashboard_theme_id"),
+
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

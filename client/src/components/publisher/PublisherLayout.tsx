@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "../ThemeToggle";
+import { DashboardThemePickerButton } from "../DashboardThemePickerButton";
 import { NotificationBell } from "../NotificationBell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { apiRequest } from "@/lib/queryClient";
@@ -206,6 +207,7 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
                 <span className="sr-only">عرض الموقع</span>
               </Link>
             </Button>
+            <DashboardThemePickerButton />
             <ThemeToggle />
           </header>
           
