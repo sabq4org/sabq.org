@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
-import { Calendar, momentLocalizer, Views, View } from "react-big-calendar";
-import moment from "moment";
+import { Calendar, dateFnsLocalizer, Views, View } from "react-big-calendar";
+import { add, format, getDay, isSameDay, startOfWeek, sub } from "date-fns";
+import { arSA } from "date-fns/locale";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -8,20 +9,19 @@ import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
 import { motion } from "framer-motion";
 
-// Setup moment for Arabic locale
-moment.locale('ar', {
-  months: 'يناير_فبراير_مارس_أبريل_مايو_يونيو_يوليو_أغسطس_سبتمبر_أكتوبر_نوفمبر_ديسمبر'.split('_'),
-  monthsShort: 'يناير_فبراير_مارس_أبريل_مايو_يونيو_يوليو_أغسطس_سبتمبر_أكتوبر_نوفمبر_ديسمبر'.split('_'),
-  weekdays: 'الأحد_الإثنين_الثلاثاء_الأربعاء_الخميس_الجمعة_السبت'.split('_'),
-  weekdaysShort: 'أحد_إثنين_ثلاثاء_أربعاء_خميس_جمعة_سبت'.split('_'),
-  weekdaysMin: 'ح_ن_ث_ر_خ_ج_س'.split('_'),
-  week: {
-    dow: 6, // Saturday is the first day of the week
-    doy: 12
-  }
+const locales = {
+  "ar-SA": arSA,
+};
+
+const localizer = dateFnsLocalizer({
+  format,
+  getDay,
+  locales,
+  startOfWeek,
 });
 
-const localizer = momentLocalizer(moment);
+const calendarStep = (view: View) =>
+  view === Views.DAY ? { days: 1 } : view === Views.WEEK ? { weeks: 1 } : { months: 1 };
 
 interface CalendarEvent {
   id: string;
@@ -105,7 +105,7 @@ export function IFoxCalendar({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setCurrentDate(moment(currentDate).subtract(1, currentView === Views.DAY ? 'day' : currentView === Views.WEEK ? 'week' : 'month').toDate())}
+            onClick={() => setCurrentDate(sub(currentDate, calendarStep(currentView)))}
             className="text-white hover:bg-white/10"
           >
             <ChevronRight className="w-4 h-4" />
@@ -120,7 +120,7 @@ export function IFoxCalendar({
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => setCurrentDate(moment(currentDate).add(1, currentView === Views.DAY ? 'day' : currentView === Views.WEEK ? 'week' : 'month').toDate())}
+            onClick={() => setCurrentDate(add(currentDate, calendarStep(currentView)))}
             className="text-white hover:bg-white/10"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -130,7 +130,7 @@ export function IFoxCalendar({
         <div className="flex items-center gap-2">
           <CalendarIcon className="w-5 h-5 text-white/60" />
           <h2 className="text-lg font-semibold text-white">
-            {moment(currentDate).format(currentView === Views.DAY ? 'DD MMMM YYYY' : 'MMMM YYYY')}
+            {format(currentDate, currentView === Views.DAY ? "dd MMMM yyyy" : "MMMM yyyy", { locale: arSA })}
           </h2>
         </div>
 
@@ -166,7 +166,7 @@ export function IFoxCalendar({
 
   const DateCellWrapper = useCallback(({ children, value }: any) => {
     const hasEvents = events.some(
-      event => moment(event.start).isSame(value, 'day')
+      event => isSameDay(event.start, value)
     );
     
     return (
@@ -174,7 +174,7 @@ export function IFoxCalendar({
         className={cn(
           "h-full",
           hasEvents && "bg-white/5",
-          moment(value).isSame(new Date(), 'day') && "bg-violet-500/10"
+          isSameDay(value, new Date()) && "bg-violet-500/10"
         )}
         onClick={() => onDateClick?.(value)}
       >
@@ -184,12 +184,12 @@ export function IFoxCalendar({
   }, [events, onDateClick]);
 
   const formats = useMemo(() => ({
-    dayFormat: 'dd DD',
-    weekdayFormat: 'dddd',
-    monthHeaderFormat: 'MMMM YYYY',
+    dayFormat: "EEE dd",
+    weekdayFormat: "EEEE",
+    monthHeaderFormat: "MMMM yyyy",
     dayRangeHeaderFormat: ({ start, end }: any) =>
-      `${moment(start).format('DD MMMM')} - ${moment(end).format('DD MMMM YYYY')}`,
-    dayHeaderFormat: 'dddd DD MMMM',
+      `${format(start, "dd MMMM", { locale: arSA })} - ${format(end, "dd MMMM yyyy", { locale: arSA })}`,
+    dayHeaderFormat: "EEEE dd MMMM",
   }), []);
 
   const messages = {
@@ -213,6 +213,7 @@ export function IFoxCalendar({
       <div className="bg-white/5 rounded-lg p-4" style={{ height: '500px' }}>
         <Calendar
           localizer={localizer}
+          culture="ar-SA"
           events={events}
           startAccessor="start"
           endAccessor="end"
