@@ -21,6 +21,7 @@
 ## docs/setup/ — الإعداد والتشغيل
 - `DATABASE_SETUP_INSTRUCTIONS_AR.md`
 - `OBJECT-STORAGE-SETUP.md`
+- `R2_NEWS_IMAGES_ROLLOUT.md` — تشغيل صور الأخبار على R2، التدرج، الكاش، والتراجع
 - `SECRETS-UPDATE-GUIDE.md`
 - `WEBHOOK-SETUP-GUIDE.md`
 - `MIGRATION_RUNBOOK.md`
