@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PhoneIphone
 import androidx.compose.material.icons.outlined.MarkEmailRead
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -177,6 +178,13 @@ fun LoginScreen(
             }
         }
 
+        // «أو» ثم أزرار الدخول الاجتماعي — نفس ترتيب iOS `LoginSheet.loginFormView`:
+        // الحقول ← فاصل «أو» ← SocialAuthButtons (وينتهي المكوّن بفاصل «أو» ثانٍ)
+        // ← رابط إنشاء الحساب. أخطاء Google تظهر عبر بانر حالة النموذج الحالي.
+        LoginDividerOr()
+
+        SocialAuthButtons(viewModel = viewModel)
+
         Text(
             text = "ليس لديك حساب؟ إنشاء حساب جديد",
             style = SabqTheme.typography.chipLabel,
@@ -186,6 +194,27 @@ fun LoginScreen(
                 .padding(top = 8.dp)
                 .clickable { onSmartSignUpClick() },
         )
+    }
+}
+
+/** فاصل «أو» على مستوى الشاشة قبل أزرار الدخول الاجتماعي — يطابق
+ *  `dividerOr` في iOS `LoginSheet` (خط بلون outline كامل بلا شفافية،
+ *  نص «أو» 12sp semibold بلون tertiaryInk، مسافة 12dp). */
+@Composable
+private fun LoginDividerOr() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        HorizontalDivider(modifier = Modifier.weight(1f), color = SabqTheme.colors.outline)
+        Text(
+            text = "أو",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = SabqTheme.colors.tertiaryInk,
+        )
+        HorizontalDivider(modifier = Modifier.weight(1f), color = SabqTheme.colors.outline)
     }
 }
 
