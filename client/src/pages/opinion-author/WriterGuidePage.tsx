@@ -91,9 +91,9 @@ export default function WriterGuidePage() {
   return (
     <DashboardLayout>
       <main className="mt-3 w-full bg-background pb-12 text-right" dir="rtl">
-        <section className="overflow-hidden rounded-2xl border border-sky-200/70 bg-sky-50/55 p-5 dark:border-sky-900/40 dark:bg-sky-950/10 sm:p-7 lg:p-9">
+        <section className="overflow-hidden rounded-2xl border border-border bg-primary/5 p-5 dark:border-border dark:bg-primary/10 sm:p-7 lg:p-9">
           <div className="max-w-3xl">
-            <Badge variant="outline" className="mb-4 gap-1.5 border-sky-300 bg-background/70 text-sky-800 dark:text-sky-200">
+            <Badge variant="outline" className="mb-4 gap-1.5 border-primary/30 bg-background/70 text-primary dark:text-foreground">
               <BookOpenCheck className="h-3.5 w-3.5" /> دليل الكاتب
             </Badge>
             <h1 className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl">من الفكرة الأولى إلى المقال المنشور</h1>
@@ -154,9 +154,9 @@ export default function WriterGuidePage() {
               <Principle title="لا تسلّم له موقفك" text="المساعد قد يرتب الحجة، لكنه لا يعرف تجربتك ولا يتحمل مسؤولية رأيك." />
               <Principle title="تحقق قبل أن تثق" text="لا تعتمد رقمًا أو اسمًا أو اقتباسًا اقترحه الذكاء قبل الرجوع إلى مصدر أصلي." />
             </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-5 dark:border-amber-900/40 dark:bg-amber-950/10 sm:p-6">
-              <h3 className="font-semibold text-amber-950 dark:text-amber-100">علامات تدعوك للتوقف والمراجعة</h3>
-              <p className="mt-2 text-base leading-8 text-amber-950/75 dark:text-amber-100/75">عبارة تبدو مؤكدة بلا مصدر، اقتباس لا تتذكر أصله، وصف جارح لشخص أو فئة، استنتاج طبي أو قانوني، أو نص أصبح أنيقًا لكنه لم يعد يشبهك.</p>
+            <div className="rounded-2xl border border-warning/40 bg-warning/10 p-5 dark:border-border dark:bg-warning/10 sm:p-6">
+              <h3 className="font-semibold text-warning dark:text-warning">علامات تدعوك للتوقف والمراجعة</h3>
+              <p className="mt-2 text-base leading-8 text-warning/80 dark:text-warning/75">عبارة تبدو مؤكدة بلا مصدر، اقتباس لا تتذكر أصله، وصف جارح لشخص أو فئة، استنتاج طبي أو قانوني، أو نص أصبح أنيقًا لكنه لم يعد يشبهك.</p>
             </div>
           </GuideSection>
 
@@ -179,29 +179,29 @@ export default function WriterGuidePage() {
 }
 
 function GuideSection({ id, eyebrow, title, intro, children }: { id: string; eyebrow: string; title: string; intro?: string; children: ReactNode }) {
-  return <section id={id} className="scroll-mt-24 space-y-5"><header className="max-w-3xl"><p className="text-sm font-semibold text-sky-700 dark:text-sky-300">{eyebrow}</p><h2 className="mt-1 text-2xl font-bold leading-tight sm:text-3xl">{title}</h2>{intro && <p className="mt-3 text-base leading-8 text-muted-foreground sm:text-lg sm:leading-9">{intro}</p>}</header>{children}</section>;
+  return <section id={id} className="scroll-mt-24 space-y-5"><header className="max-w-3xl"><p className="text-sm font-semibold text-primary dark:text-primary">{eyebrow}</p><h2 className="mt-1 text-2xl font-bold leading-tight sm:text-3xl">{title}</h2>{intro && <p className="mt-3 text-base leading-8 text-muted-foreground sm:text-lg sm:leading-9">{intro}</p>}</header>{children}</section>;
 }
 
 function Step({ number, title, text }: { number: string; title: string; text: string }) {
-  return <Card className="shadow-none"><CardContent className="p-4 sm:p-5"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-sky-100 text-sm font-bold text-sky-800 dark:bg-sky-950 dark:text-sky-200">{number}</span><h3 className="mt-4 font-semibold">{title}</h3><p className="mt-2 text-sm leading-7 text-muted-foreground">{text}</p></CardContent></Card>;
+  return <Card className="shadow-none"><CardContent className="p-4 sm:p-5"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary dark:bg-primary/15 dark:text-foreground">{number}</span><h3 className="mt-4 font-semibold">{title}</h3><p className="mt-2 text-sm leading-7 text-muted-foreground">{text}</p></CardContent></Card>;
 }
 
 function IdeaTool({ icon: Icon, title, description, use }: (typeof ideaTools)[number]) {
-  return <Card className="shadow-none"><CardContent className="p-5 sm:p-6"><div className="flex items-start gap-3"><span className="rounded-lg bg-sky-50 p-1.5 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 sm:rounded-xl sm:p-2.5"><Icon className="h-4 w-4 sm:h-5 sm:w-5" /></span><div><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 text-base leading-8 text-muted-foreground">{description}</p></div></div><div className="mt-4 rounded-xl bg-muted/45 p-3 text-sm leading-7"><strong>كيف تستخدمها؟ </strong>{use}</div></CardContent></Card>;
+  return <Card className="shadow-none"><CardContent className="p-5 sm:p-6"><div className="flex items-start gap-3"><span className="rounded-lg bg-primary/5 p-1.5 text-primary dark:bg-primary/15 dark:text-primary sm:rounded-xl sm:p-2.5"><Icon className="h-4 w-4 sm:h-5 sm:w-5" /></span><div><h3 className="text-lg font-semibold">{title}</h3><p className="mt-2 text-base leading-8 text-muted-foreground">{description}</p></div></div><div className="mt-4 rounded-xl bg-muted/45 p-3 text-sm leading-7"><strong>كيف تستخدمها؟ </strong>{use}</div></CardContent></Card>;
 }
 
 function SoftNote({ icon: Icon, title, children }: { icon: typeof Feather; title: string; children: ReactNode }) {
-  return <div className="rounded-2xl border border-sky-200/70 bg-sky-50/45 p-4 dark:border-sky-900/40 dark:bg-sky-950/10 sm:p-5"><div className="flex items-start gap-3"><Icon className="mt-1 h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300 sm:h-5 sm:w-5" /><div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm leading-7 text-foreground/70 sm:text-base sm:leading-8">{children}</p></div></div></div>;
+  return <div className="rounded-2xl border border-border bg-primary/[0.04] p-4 dark:border-border dark:bg-primary/10 sm:p-5"><div className="flex items-start gap-3"><Icon className="mt-1 h-4 w-4 shrink-0 text-primary dark:text-primary sm:h-5 sm:w-5" /><div><h3 className="font-semibold">{title}</h3><p className="mt-1 text-sm leading-7 text-foreground/70 sm:text-base sm:leading-8">{children}</p></div></div></div>;
 }
 
 function ReadingCard({ title, icon: Icon, items }: { title: string; icon: typeof Feather; items: string[] }) {
-  return <Card className="shadow-none"><CardContent className="p-5 sm:p-6"><h3 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-4 w-4 text-sky-700 dark:text-sky-300 sm:h-5 sm:w-5" />{title}</h3><ul className="mt-4 space-y-3">{items.map((item) => <li key={item} className="flex items-start gap-2 text-sm leading-7 text-muted-foreground sm:text-base"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-emerald-600" />{item}</li>)}</ul></CardContent></Card>;
+  return <Card className="shadow-none"><CardContent className="p-5 sm:p-6"><h3 className="flex items-center gap-2 text-lg font-semibold"><Icon className="h-4 w-4 text-primary dark:text-primary sm:h-5 sm:w-5" />{title}</h3><ul className="mt-4 space-y-3">{items.map((item) => <li key={item} className="flex items-start gap-2 text-sm leading-7 text-muted-foreground sm:text-base"><CheckCircle2 className="mt-1 h-4 w-4 shrink-0 text-success" />{item}</li>)}</ul></CardContent></Card>;
 }
 
 function JourneyStep({ icon: Icon, title, text }: { icon: typeof Feather; title: string; text: string }) {
-  return <div className="relative rounded-xl border bg-card p-4"><Icon className="h-4 w-4 text-sky-700 dark:text-sky-300 sm:h-5 sm:w-5" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></div>;
+  return <div className="relative rounded-xl border bg-card p-4"><Icon className="h-4 w-4 text-primary dark:text-primary sm:h-5 sm:w-5" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{text}</p></div>;
 }
 
 function Principle({ title, text }: { title: string; text: string }) {
-  return <div className="rounded-xl border bg-card p-5"><Sparkles className="h-4 w-4 text-sky-700 dark:text-sky-300 sm:h-5 sm:w-5" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-2 text-sm leading-7 text-muted-foreground sm:text-base">{text}</p></div>;
+  return <div className="rounded-xl border bg-card p-5"><Sparkles className="h-4 w-4 text-primary dark:text-primary sm:h-5 sm:w-5" /><h3 className="mt-3 font-semibold">{title}</h3><p className="mt-2 text-sm leading-7 text-muted-foreground sm:text-base">{text}</p></div>;
 }

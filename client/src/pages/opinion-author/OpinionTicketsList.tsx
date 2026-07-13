@@ -132,8 +132,8 @@ export default function OpinionTicketsList() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-amber-500/10">
-              <MessageSquare className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+            <div className="p-2 rounded-lg bg-warning/10">
+              <MessageSquare className="h-5 w-5 text-warning dark:text-warning" />
             </div>
             <div>
               <h1 className="text-2xl font-bold" data-testid="text-page-title">
@@ -280,18 +280,18 @@ export default function OpinionTicketsList() {
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-muted/40",
                       idx !== tickets.length - 1 && "border-b",
-                      t.hasUnread && "bg-amber-50/40 dark:bg-amber-500/5"
+                      t.hasUnread && "bg-warning/5 dark:bg-warning/5"
                     )}
                     data-testid={`row-ticket-${t.id}`}
                   >
-                    <div className="h-9 w-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
-                      <MessageSquare className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <div className="h-9 w-9 rounded-lg bg-warning/10 flex items-center justify-center shrink-0">
+                      <MessageSquare className="h-4 w-4 text-warning dark:text-warning" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-medium text-sm line-clamp-1">{t.title}</h3>
                         {t.hasUnread && (
-                          <span className="inline-block h-2 w-2 rounded-full bg-amber-500" aria-label="غير مقروء" />
+                          <span className="inline-block h-2 w-2 rounded-full bg-warning" aria-label="غير مقروء" />
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-0.5">
