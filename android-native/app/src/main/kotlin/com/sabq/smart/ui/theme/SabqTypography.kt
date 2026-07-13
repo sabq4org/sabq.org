@@ -110,58 +110,74 @@ data class SabqTypography(
     val searchBarText: TextStyle,
 ) {
     companion object {
+        /**
+         * iOS weight-softening policy — an exact port of
+         * `FontRegistration.swift::SabqFonts.app(size:weight:)`:
+         * only Regular/SemiBold/Bold ship on iOS, so
+         *   - any size ≤ 13pt renders Regular (captions),
+         *   - Medium always renders Regular,
+         *   - Bold at > 13pt softens to SemiBold,
+         *   - Heavy/Black soften to Bold.
+         * Android must apply the SAME mapping or every title renders one
+         * weight heavier than iOS (strict-parity audit 2026-07-13).
+         */
+        private fun iosWeight(size: Float, nominal: FontWeight): FontWeight {
+            if (size <= 13f) return FontWeight.Normal
+            return when {
+                nominal.weight >= FontWeight.ExtraBold.weight -> FontWeight.Bold
+                nominal.weight >= FontWeight.SemiBold.weight -> FontWeight.SemiBold
+                else -> FontWeight.Normal // Regular + Medium
+            }
+        }
+
         /** Build typography keyed off the user's articleFontSize preference. */
         fun build(articleFontSize: Float = 17f): SabqTypography {
             val lineHeight = LineHeightStyle(
                 alignment = LineHeightStyle.Alignment.Center,
                 trim = LineHeightStyle.Trim.None,
             )
-            // Letter-spacing tracking: heavy Arabic glyphs ride too close
-            // together at default `0.sp` and lose the premium-editorial
-            // feel iOS gets for free from SF Pro's optical kerning. Slight
-            // positive tracking on titles + headings restores the breath.
-            // Body/meta stay at 0 so reading rhythm is untouched.
+            // Strict iOS parity: zero letter-spacing everywhere (iOS uses
+            // no kerning/tracking anywhere in SabqComponents.swift). Sizes
+            // and nominal weights below are the iOS call-site values; the
+            // effective weight comes from [iosWeight].
             fun base(
-                weight: FontWeight,
+                nominal: FontWeight,
                 size: Float,
                 lh: Float = size * 1.35f,
-                tracking: Float = 0f,
             ) = TextStyle(
                 fontFamily = IbmPlexSansArabic,
-                fontWeight = weight,
+                fontWeight = iosWeight(size, nominal),
                 fontSize = size.sp,
                 lineHeight = lh.sp,
                 lineHeightStyle = lineHeight,
-                letterSpacing = tracking.sp,
+                letterSpacing = 0.sp,
                 textAlign = TextAlign.Start,
             )
             return SabqTypography(
-                // Reduced from 30sp → 26sp: 30 read as oversized on most
-                // Android screens where density is higher than iOS Retina.
-                screenTitle        = base(FontWeight.Bold, 26f, tracking = 0.3f),
-                sectionHeader      = base(FontWeight.Bold, 18f, tracking = 0.3f),
-                cardTitle          = base(FontWeight.Bold, 19f, tracking = 0.2f),
-                articleDetailTitle = base(FontWeight.Bold, articleFontSize + 6f, tracking = 0.2f),
-                featuredCardTitle  = base(FontWeight.Bold, 20f, lh = 28f, tracking = 0.2f),
-                compactCardTitle   = base(FontWeight.Bold, 16f, lh = 22f, tracking = 0.2f),
+                screenTitle        = base(FontWeight.Bold, 30f),
+                sectionHeader      = base(FontWeight.Bold, 19f),
+                cardTitle          = base(FontWeight.Bold, 19f),
+                articleDetailTitle = base(FontWeight.Bold, articleFontSize + 6f),
+                featuredCardTitle  = base(FontWeight.Bold, 20f, lh = 28f),
+                compactCardTitle   = base(FontWeight.Bold, 16f, lh = 22f),
                 excerpt            = base(FontWeight.Normal, 15f, lh = 22f),
-                body               = base(FontWeight.Normal, articleFontSize, lh = articleFontSize + 8f),
+                // iOS body: lineSpacing(8) is ADDITIVE over the font's
+                // natural line height (~1.35×size for Plex Arabic).
+                body               = base(FontWeight.Normal, articleFontSize, lh = articleFontSize * 1.35f + 8f),
                 chipLabel          = base(FontWeight.SemiBold, 14f),
-                statusChip         = base(FontWeight.SemiBold, 12f),
+                statusChip         = base(FontWeight.SemiBold, 11f),
                 meta               = base(FontWeight.Medium, 13f),
                 metaSmall          = base(FontWeight.Medium, 11f),
-                breakingPill       = base(FontWeight.Bold, 11f, tracking = 0.3f),
-                ctaButton          = base(FontWeight.Bold, 17f, tracking = 0.2f),
-                tabLabel           = base(FontWeight.Bold, 12.5f, tracking = 0.2f),
-                // Phase 2 — strict-parity audit additions:
-                // Reduced from 22sp → 19sp: stat values in BookmarksView/
-                // TrendingView felt disproportionately large next to body text.
-                statValue          = base(FontWeight.Bold, 19f, tracking = 0.2f),
-                tileTitle          = base(FontWeight.Bold, 17f, tracking = 0.2f),
-                greetingHeadline   = base(FontWeight.Black, 15f, tracking = 0.2f),
-                mostViewedCardTitle = base(FontWeight.Bold, 14.5f, lh = 20f, tracking = 0.1f),
+                breakingPill       = base(FontWeight.Bold, 10f),
+                ctaButton          = base(FontWeight.Bold, 17f),
+                tabLabel           = base(FontWeight.Bold, 12.5f),
+                statValue          = base(FontWeight.SemiBold, 22f),
+                tileTitle          = base(FontWeight.SemiBold, 17f),
+                // iOS nominal .heavy → renders Bold under the softening policy.
+                greetingHeadline   = base(FontWeight.Black, 15f),
+                mostViewedCardTitle = base(FontWeight.SemiBold, 14.5f, lh = 20f),
                 microMeta          = base(FontWeight.Medium, 10f),
-                smallActionButton  = base(FontWeight.SemiBold, 13f, tracking = 0.1f),
+                smallActionButton  = base(FontWeight.SemiBold, 13f),
                 searchBarText      = base(FontWeight.Medium, 16f),
             )
         }

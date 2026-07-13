@@ -94,7 +94,7 @@ fun CommentRow(
                     Text(
                         text = comment.userName ?: "مستخدم",
                         style = SabqTheme.typography.compactCardTitle.copy(
-                            fontSize = 13.5f.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = SabqTheme.colors.ink,
                         ),
@@ -102,7 +102,7 @@ fun CommentRow(
                     Text(
                         text = relativeTime(comment.createdAt),
                         style = SabqTheme.typography.metaSmall.copy(
-                            fontSize = 11.5f.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = SabqTheme.colors.tertiaryInk,
                         ),
@@ -228,9 +228,10 @@ private fun CommentAvatar(comment: Comment, size: androidx.compose.ui.unit.Dp) {
         ) {
             Text(
                 text = initials,
+                // iOS: size 12 — renders Regular under the ≤13 softening.
                 style = SabqTheme.typography.compactCardTitle.copy(
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
                     color = SabqTheme.colors.primaryEnd,
                 ),
             )
@@ -261,7 +262,7 @@ private fun AiModerationChip() {
         Text(
             text = "SABQ AI يراجع",
             style = SabqTheme.typography.metaSmall.copy(
-                fontSize = 10.5f.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White,
             ),
