@@ -273,25 +273,51 @@ function ActionCard({
   icon: IconType;
   tone: "danger" | "warning" | "info";
 }) {
-  // Compact horizontal row — theme tokens only (no rainbow icon washes).
-  // Urgent counts keep a quiet destructive accent; icons always follow primary.
-  const countClass =
-    tone === "danger" && count > 0 ? "text-destructive" : "text-foreground";
+  // Desktop keeps the original vertical card; mobile uses a compact row.
+  const styles = {
+    danger: {
+      accent: "text-destructive",
+      icon: "bg-destructive/10 text-destructive",
+    },
+    warning: {
+      accent: "text-primary",
+      icon: "bg-primary/10 text-primary",
+    },
+    info: {
+      accent: "text-primary",
+      icon: "bg-primary/10 text-primary",
+    },
+  };
+  const style = styles[tone];
 
   return (
     <Link href={href}>
-      <a className="group flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5 text-foreground shadow-none transition hover:border-border hover:bg-muted/20 sm:px-3.5 sm:py-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="h-4 w-4" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold leading-tight">{title}</div>
-          <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground sm:text-xs">{description}</p>
+      <a className="group block rounded-xl border border-border/70 bg-card text-foreground shadow-none transition hover:border-border hover:bg-muted/20 hover:shadow-sm sm:rounded-2xl">
+        {/* Mobile: compact horizontal row */}
+        <div className="flex items-center gap-3 px-3 py-2.5 sm:hidden">
+          <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", style.icon)}>
+            <Icon className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold leading-tight">{title}</div>
+            <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{description}</p>
+          </div>
+          <div className={cn("shrink-0 text-lg font-bold tabular-nums", style.accent)}>{number(count)}</div>
+          <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground/50" />
         </div>
-        <div className={cn("shrink-0 text-lg font-bold tabular-nums sm:text-xl", countClass)}>
-          {number(count)}
+
+        {/* Desktop/tablet: original vertical card */}
+        <div className="hidden p-4 sm:block">
+          <div className="flex items-start justify-between gap-3">
+            <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", style.icon)}>
+              <Icon className="h-5 w-5" />
+            </span>
+            <ChevronLeft className="h-4 w-4 text-muted-foreground/60 transition group-hover:-translate-x-1" />
+          </div>
+          <div className={cn("mt-4 text-2xl font-bold", style.accent)}>{number(count)}</div>
+          <div className="mt-1 text-sm font-semibold">{title}</div>
+          <p className="mt-1 text-xs text-muted-foreground">{description}</p>
         </div>
-        <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground/50 transition group-hover:-translate-x-0.5" />
       </a>
     </Link>
   );
@@ -299,10 +325,10 @@ function ActionCard({
 
 function SectionTitle({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-3">
+    <div className="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h2 className="text-base font-bold sm:text-xl">{title}</h2>
-        {description && <p className="mt-0.5 hidden text-sm text-muted-foreground sm:mt-1 sm:block">{description}</p>}
+        <h2 className="text-lg font-bold sm:text-xl">{title}</h2>
+        {description && <p className="mt-1 text-sm text-muted-foreground max-sm:line-clamp-1">{description}</p>}
       </div>
       {action}
     </div>
@@ -630,7 +656,7 @@ export default function NewsroomPulseDashboard() {
               </span>
               <h1 className="text-xl font-bold tracking-tight sm:text-3xl">نبض سبق اليوم</h1>
             </div>
-            <p className="mt-1.5 hidden text-sm text-muted-foreground sm:mt-2 sm:block">مرحباً {user.firstName || "بك"}، هذه الأولويات وما يحدث في غرفة الأخبار الآن.</p>
+            <p className="mt-1.5 text-sm text-muted-foreground sm:mt-2">مرحباً {user.firstName || "بك"}، هذه الأولويات وما يحدث في غرفة الأخبار الآن.</p>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-primary" /> آخر تحديث {refreshedAt}</span>
@@ -642,7 +668,7 @@ export default function NewsroomPulseDashboard() {
 
         <section className="space-y-3">
           <SectionTitle title="يتطلب تدخلك" description="الأعمال التي لا ينبغي أن تبقى في قائمة الانتظار" />
-          <div className={cn("grid gap-2 sm:grid-cols-2 sm:gap-3", !isContentManager && "xl:grid-cols-2")}>
+          <div className={cn("grid gap-2 sm:grid-cols-2 sm:gap-3", !isContentManager && "xl:grid-cols-4")}>
             {!isContentManager && <ActionCard title="تعليقات للمراجعة" count={stats?.comments.pending ?? 0} description={stats?.comments.pendingOlderThanTwoHours ? `${number(stats.comments.pendingOlderThanTwoHours)} تجاوزت ساعتين` : "ضمن وقت الاستجابة"} href="/dashboard/ai-moderation" icon={MessageSquare} tone="danger" />}
             {canReviewMuqtarab && <ActionCard title="مراجعة مُقترب" count={muqtarabCount} description="مواضيع تنتظر قرار التحرير" href="/dashboard/muqtarab/review" icon={BellRing} tone="warning" />}
             <ActionCard title="المسار التحريري" count={pipelineTotal} description={`${number(stats?.articles.scheduled)} مواد مجدولة`} href="/dashboard/articles" icon={FileClock} tone="info" />
