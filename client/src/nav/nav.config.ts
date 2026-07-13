@@ -75,7 +75,7 @@ export const navConfig: NavItem[] = [
     labelAr: "نظرة عامة",
     path: "/dashboard",
     icon: LayoutDashboard,
-    roles: ["admin", "editor", "content_manager", "author", "reviewer", "analyst", "reporter", "comments_moderator", "guest", "opinion_author"],
+    roles: ["admin", "editor", "content_manager", "author", "reviewer", "analyst", "comments_moderator", "guest", "opinion_author"],
     // No permissions - all authenticated users can access the dashboard overview
     meta: { exact: true },
   },

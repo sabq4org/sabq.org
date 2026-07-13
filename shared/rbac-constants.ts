@@ -303,10 +303,8 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.MEDIA_UPLOAD,
     PERMISSION_CODES.COMMENTS_VIEW_OWN, // عرض التعليقات على مقالاته فقط
     PERMISSION_CODES.ANALYTICS_VIEW_OWN, // عرض إحصائيات مقالاته فقط
-    // Dashboard - المراسل يرى الإحصائيات فقط
+    // Dashboard - يدخل إلى مساحة أخباره الشخصية فقط، بلا إحصاءات عامة للصحيفة
     PERMISSION_CODES.DASHBOARD_VIEW,
-    PERMISSION_CODES.DASHBOARD_VIEW_STATS,
-    PERMISSION_CODES.DASHBOARD_VIEW_VISITORS,
   ],
 
   [ROLE_NAMES.OPINION_AUTHOR]: [

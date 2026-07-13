@@ -14149,8 +14149,12 @@ Respond in valid JSON format only:
     try {
       const userId = req.user.id;
       const user = await storage.getUser(userId);
+      const assignedRoles = await storage.getUserRoles(userId).catch(() => []);
+      const roleNames = new Set([user?.role, ...assignedRoles.map((role) => role.name)].filter(Boolean));
+      const canViewEditorialStats = ["admin", "superadmin", "system_admin", "editor", "chief_editor", "content_manager", "analyst"]
+        .some((role) => roleNames.has(role));
 
-      if (!user || (user.role !== "editor" && user.role !== "admin" && user.role !== "reporter")) {
+      if (!user || !canViewEditorialStats) {
         return res.status(403).json({ message: "Forbidden" });
       }
 
@@ -14174,19 +14178,22 @@ Respond in valid JSON format only:
         return res.status(403).json({ message: "Forbidden" });
       }
 
+      const assignedRoles = await storage.getUserRoles(userId).catch(() => []);
+      const roleNames = new Set([user.role, ...assignedRoles.map((role) => role.name)]);
+      const isReporter = roleNames.has("reporter");
+      const hasElevatedDashboardRole = ["admin", "superadmin", "system_admin", "editor", "chief_editor", "content_manager", "analyst"]
+        .some((role) => roleNames.has(role));
+      if (isReporter && !hasElevatedDashboardRole) {
+        return res.status(403).json({ message: "هذه الإحصاءات غير متاحة لدور المراسل" });
+      }
+
       // Require staff role - check both legacy and RBAC roles
-      const allowedRoles = ['admin', 'superadmin', 'editor', 'chief_editor', 'system_admin', 'moderator', 'reporter', 'comments_moderator', 'content_manager', 'publisher', 'writer', 'content_creator', 'opinion_author'];
+      const allowedRoles = ['admin', 'superadmin', 'editor', 'chief_editor', 'system_admin', 'moderator', 'comments_moderator', 'content_manager', 'publisher', 'writer', 'content_creator', 'opinion_author'];
       const hasLegacyRole = allowedRoles.includes(user.role);
       
       // Also check RBAC roles - any role that's not 'reader' is considered staff
-      let hasRbacRole = false;
-    try {
-        const userRoles = await storage.getUserRoles(userId);
-        // Check if user has any of the predefined staff roles OR any custom role
-        hasRbacRole = userRoles.some(r => allowedRoles.includes(r.name) || r.name !== 'reader');
-      } catch (e) {
-        // Ignore RBAC check errors
-      }
+      // Check if the user has any predefined staff role or custom non-reader role.
+      const hasRbacRole = assignedRoles.some(r => allowedRoles.includes(r.name) || r.name !== 'reader');
 
       if (!hasLegacyRole && !hasRbacRole) {
         return res.status(403).json({ message: "Forbidden" });
