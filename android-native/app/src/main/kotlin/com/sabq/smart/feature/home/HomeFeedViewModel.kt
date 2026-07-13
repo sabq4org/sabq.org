@@ -6,6 +6,7 @@ import com.sabq.smart.data.Article
 import com.sabq.smart.data.ArticleRepository
 import com.sabq.smart.data.AudioNewsletter
 import com.sabq.smart.data.BookmarksStore
+import com.sabq.smart.data.BreakingTickerHeadline
 import com.sabq.smart.data.CalendarEvent
 import com.sabq.smart.data.HajjBlock
 import com.sabq.smart.data.HomeExtrasRepository
@@ -41,8 +42,13 @@ sealed interface HomeFeedUiState {
         val isLoadingMore: Boolean = false,
         val bookmarkedIds: Set<String> = emptySet(),
         /** Top breaking-news headline — shown as a single coral pill
-         *  between the greeting and the featured carousel. */
+         *  between the greeting and the featured carousel. Fallback
+         *  when [breakingTicker] is empty. */
         val breaking: Article? = null,
+        /** Dashboard-curated breaking ticker headlines. When non-empty
+         *  the rotating [BreakingTickerBar] takes precedence over the
+         *  single [breaking] pill — mirrors iOS HomeFeedView.swift:157. */
+        val breakingTicker: List<BreakingTickerHeadline> = emptyList(),
         /** Top opinion articles (max 5). Rendered as a horizontal
          *  rail under the opinionsPreview section. */
         val opinions: List<Article> = emptyList(),
@@ -229,6 +235,9 @@ class HomeFeedViewModel @Inject constructor(
     private fun loadExtras() {
         viewModelScope.launch {
             val breakingJob = async { runCatching { repo.getBreaking() }.getOrDefault(emptyList()) }
+            // بار العاجل من لوحة التحكم — الخادم يرجع `null` حرفيًا عند عدم
+            // وجود موضوع نشط ففشلُ الترميز هنا يعني «لا شريط» (سقوط للبطاقة).
+            val tickerJob = async { runCatching { extrasRepo.getBreakingTicker() }.getOrDefault(emptyList()) }
             val opinionsJob = async { runCatching { repo.getOpinions(page = 1, limit = 5) }.getOrNull()?.items ?: emptyList() }
             val trendingJob = async { runCatching { repo.getTrending() }.getOrDefault(emptyList()) }
             val storiesJob = async { runCatching { extrasRepo.getStories() }.getOrDefault(emptyList()) }
@@ -247,6 +256,7 @@ class HomeFeedViewModel @Inject constructor(
             async { runCatching { bookmarks.syncFromServer() } }
 
             val breaking = breakingJob.await().firstOrNull()
+            val breakingTicker = tickerJob.await()
             val opinions = opinionsJob.await()
             val trending = trendingJob.await().take(3)
             val stories = storiesJob.await()
@@ -261,6 +271,7 @@ class HomeFeedViewModel @Inject constructor(
                 if (c is HomeFeedUiState.Loaded) {
                     c.copy(
                         breaking = breaking,
+                        breakingTicker = breakingTicker,
                         opinions = opinions,
                         trending = trending,
                         stories = stories,

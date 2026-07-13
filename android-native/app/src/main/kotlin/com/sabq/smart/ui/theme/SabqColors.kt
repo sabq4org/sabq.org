@@ -76,24 +76,20 @@ object SabqColorPalette {
      * into Color() with the 0-1 range so rounding stays identical.
      */
     fun light(accent: SabqAccent = SabqAccent.Blue): SabqColors = SabqColors(
-        // Android-specific tuning: background is noticeably darker than
-        // surface so cards read as a distinct layer without heavy borders.
-        // iOS values (0.95/0.97/0.99) were too close to White on Compose.
-        background  = Color(0.91f, 0.93f, 0.95f, 1f),
+        // Strict iOS parity (owner directive 2026-07-13): values are the
+        // exact SabqTheme components from SabqComponents.swift — no
+        // Android-side tuning.
+        background  = Color(0.95f, 0.97f, 0.99f, 1f),   // iOS #F2F7FC
         surface     = Color.White,
         ink         = Color(0.10f, 0.10f, 0.14f, 1f),
         secondaryInk = Color(0.38f, 0.40f, 0.46f, 1f),
         tertiaryInk = Color(0.56f, 0.58f, 0.64f, 1f),
-        outline     = Color(0.82f, 0.84f, 0.87f, 1f),
-        shadow      = Color(0f, 0f, 0f, 0.09f),
-        deepShadow  = Color(0f, 0f, 0f, 0.14f),
-        // Pure white family — article body, summary box, and loading
-        // states all read as one clean white surface with no visible tint.
-        paleFill    = Color(0.99f, 0.99f, 0.99f, 1f),
-        // softFill: used for summary + action bar — one clear step darker
-        // than pure white so both boxes read as distinct surfaces.
-        softFill    = Color(0.94f, 0.94f, 0.95f, 1f),
-        warmGlow    = Color(0.98f, 0.98f, 0.98f, 1f),
+        outline     = Color(0.88f, 0.90f, 0.93f, 1f),   // iOS #E0E6ED
+        shadow      = Color(0f, 0f, 0f, 0.05f),          // iOS alpha 0.05
+        deepShadow  = Color(0f, 0f, 0f, 0.08f),          // iOS alpha 0.08
+        paleFill    = Color(0.94f, 0.97f, 0.99f, 1f),   // iOS #F0F7FC
+        softFill    = Color(0.92f, 0.95f, 0.98f, 1f),   // iOS #EBF2FA
+        warmGlow    = Color(0.95f, 0.97f, 0.99f, 1f),   // iOS #F2F7FC
         teal        = Color(0.16f, 0.65f, 0.55f, 1f),
         sky         = Color(0.22f, 0.52f, 0.95f, 1f),
         gold        = Color(0.92f, 0.68f, 0.20f, 1f),
@@ -103,7 +99,8 @@ object SabqColorPalette {
         noonTint    = Color(0.93f, 0.58f, 0.22f, 1f),
         duskTint    = Color(0.95f, 0.45f, 0.20f, 1f),
         nightTint   = Color(0.46f, 0.52f, 0.95f, 1f),
-        trendingAccent = Color(0.98f, 0.45f, 0.09f, 1f),
+        // iOS flame uses system orange (#FF9500) — no invented accent.
+        trendingAccent = Color(1.00f, 0.58f, 0.00f, 1f),
         mediaScrim  = Color(0.04f, 0.04f, 0.06f, 0.55f),
         journeyGradientStart = Color(0.55f, 0.36f, 0.92f, 1f),
         primaryStart = accent.light,
@@ -112,16 +109,15 @@ object SabqColorPalette {
     )
 
     fun dark(accent: SabqAccent = SabqAccent.Blue): SabqColors = SabqColors(
-        // Android dark: background slightly darker, surface lifted further
-        // so the delta between the two layers is visible on OLED/LCD alike.
-        background  = Color(0.05f, 0.05f, 0.07f, 1f),
-        surface     = Color(0.14f, 0.14f, 0.17f, 1f),
+        // Strict iOS parity — exact SabqTheme dark components.
+        background  = Color(0.07f, 0.07f, 0.09f, 1f),   // iOS #121217
+        surface     = Color(0.12f, 0.12f, 0.14f, 1f),   // iOS #1F1F24
         ink         = Color(0.95f, 0.95f, 0.97f, 1f),
         secondaryInk = Color(0.68f, 0.68f, 0.72f, 1f),
         tertiaryInk = Color(0.50f, 0.50f, 0.55f, 1f),
-        outline     = Color(0.26f, 0.26f, 0.30f, 1f),
-        shadow      = Color(0f, 0f, 0f, 0.40f),
-        deepShadow  = Color(0f, 0f, 0f, 0.55f),
+        outline     = Color(0.20f, 0.20f, 0.23f, 1f),   // iOS #33333B
+        shadow      = Color(0f, 0f, 0f, 0.30f),          // iOS alpha 0.30
+        deepShadow  = Color(0f, 0f, 0f, 0.40f),          // iOS alpha 0.40
         paleFill    = Color(0.14f, 0.14f, 0.16f, 1f),
         softFill    = Color(0.16f, 0.16f, 0.18f, 1f),
         warmGlow    = Color(0.12f, 0.12f, 0.14f, 1f),
@@ -133,8 +129,10 @@ object SabqColorPalette {
         dawnTint    = Color(0.96f, 0.72f, 0.18f, 1f),
         noonTint    = Color(0.93f, 0.58f, 0.22f, 1f),
         duskTint    = Color(0.95f, 0.45f, 0.20f, 1f),
-        nightTint   = Color(0.55f, 0.62f, 1.00f, 1f),
-        trendingAccent = Color(1.00f, 0.55f, 0.20f, 1f),
+        // iOS greeting nightTint is a single value with no dark variant.
+        nightTint   = Color(0.46f, 0.52f, 0.95f, 1f),
+        // iOS system orange, dark variant #FF9F0A.
+        trendingAccent = Color(1.00f, 0.62f, 0.04f, 1f),
         mediaScrim  = Color(0.00f, 0.00f, 0.02f, 0.65f),
         journeyGradientStart = Color(0.55f, 0.36f, 0.92f, 1f),
         primaryStart = accent.dark,

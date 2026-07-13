@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical } from "lucide-react";
+import { Edit, Trash2, Send, Star, Bell, Plus, Archive, Trash, GripVertical, ChevronLeft, ChevronRight } from "lucide-react";
 import { ViewsCount } from "@/components/ViewsCount";
 import { EnglishDashboardLayout } from "@/components/en/EnglishDashboardLayout";
 import {
@@ -64,8 +64,9 @@ type Article = {
   updatedAt: string;
   category?: {
     id: string;
-    nameAr: string;
-    nameEn: string;
+    name?: string;
+    nameAr?: string;
+    nameEn?: string;
   } | null;
   author?: {
     id: string;
@@ -80,8 +81,9 @@ type Article = {
 
 type Category = {
   id: string;
-  nameAr: string;
-  nameEn: string;
+  name: string;
+  nameEn?: string;
+  nameAr?: string;
 };
 
 function SortableRow({ article, children }: { article: Article; children: React.ReactNode }) {
@@ -128,9 +130,11 @@ export default function EnglishArticlesPage() {
   const [bulkArchiveReason, setBulkArchiveReason] = useState("");
   const [bulkArchiveReasonError, setBulkArchiveReasonError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [activeStatus, setActiveStatus] = useState<"published" | "scheduled" | "draft" | "archived">("published");
   const [typeFilter, setTypeFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
   
   // State for bulk selection
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
@@ -147,48 +151,74 @@ export default function EnglishArticlesPage() {
     })
   );
 
+  // Debounce search so typing triggers a real filtered request
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm.trim());
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   // Fetch metrics
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
     queryKey: ["/api/en/dashboard/articles/metrics"],
     queryFn: async () => {
-      const response = await fetch("/api/en/dashboard/articles/metrics", { credentials: "include" });
+      const response = await fetch(apiUrl("/api/en/dashboard/articles/metrics"), { credentials: "include" });
       if (!response.ok) {
         console.error("Metrics fetch failed:", response.status, response.statusText);
         throw new Error("Failed to fetch metrics");
       }
-      const data = await response.json();
-      console.log("English metrics loaded:", data);
-      return data;
+      return response.json();
     },
     enabled: !!user,
   });
 
-  // Fetch articles with filters
-  const { data: articlesRaw, isLoading: articlesLoading } = useQuery<Article[]>({
-    queryKey: ["/api/en/dashboard/articles", searchTerm, activeStatus, typeFilter, categoryFilter],
+  // Reset page when filters/search change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, activeStatus, typeFilter, categoryFilter]);
+
+  // Fetch articles with filters and pagination
+  const { data: articlesData, isLoading: articlesLoading } = useQuery<{
+    articles: Article[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  }>({
+    queryKey: ["/api/en/dashboard/articles", debouncedSearch, activeStatus, typeFilter, categoryFilter, currentPage],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (searchTerm) params.append("search", searchTerm);
+      if (debouncedSearch) params.append("search", debouncedSearch);
       if (activeStatus) params.append("status", activeStatus);
       if (typeFilter && typeFilter !== "all") params.append("articleType", typeFilter);
       if (categoryFilter && categoryFilter !== "all") params.append("categoryId", categoryFilter);
+      params.append("page", currentPage.toString());
+      params.append("limit", "30");
       
-      const url = `/api/en/dashboard/articles${params.toString() ? `?${params.toString()}` : ""}`;
+      const url = apiUrl(`/api/en/dashboard/articles?${params.toString()}`);
       const response = await fetch(url, { credentials: "include" });
       if (!response.ok) {
         throw new Error(`Failed to fetch articles: ${response.statusText}`);
       }
-      const data = await response.json();
-      // API returns { articles: [...], total, page, limit, totalPages }
-      return data.articles || data;
+      return response.json();
     },
     enabled: !!user,
   });
-  const articles = Array.isArray(articlesRaw) ? articlesRaw : [];
+  const articles = Array.isArray(articlesData?.articles) ? articlesData.articles : [];
+  const totalPages = articlesData?.totalPages || 1;
 
-  // Fetch categories for filter
+  // Fetch English categories for filter (not Arabic /api/categories)
   const { data: categoriesRaw } = useQuery<Category[]>({
-    queryKey: ["/api/categories"],
+    queryKey: ["/api/en/dashboard/categories"],
+    queryFn: async () => {
+      const response = await fetch(apiUrl("/api/en/dashboard/categories"), { credentials: "include" });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch categories: ${response.statusText}`);
+      }
+      const data = await response.json();
+      return Array.isArray(data) ? data : (data.categories || []);
+    },
     enabled: !!user,
   });
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
@@ -293,23 +323,26 @@ export default function EnglishArticlesPage() {
   const toggleBreakingMutation = useMutation({
     mutationFn: async ({ id, currentState }: { id: string; currentState: boolean }) => {
       return await apiRequest(`/api/en/dashboard/articles/${id}/toggle-breaking`, {
-        method: "POST",
+        method: "PATCH",
       });
     },
     onMutate: async ({ id, currentState }) => {
-      const queryKey = ["/api/en/dashboard/articles", searchTerm, activeStatus, typeFilter, categoryFilter];
+      const queryKey = ["/api/en/dashboard/articles", debouncedSearch, activeStatus, typeFilter, categoryFilter, currentPage];
       
       await queryClient.cancelQueries({ queryKey: ["/api/en/dashboard/articles"] });
       
       const previousArticles = queryClient.getQueryData(queryKey);
       
-      queryClient.setQueryData(queryKey, (old: Article[] | undefined) => {
-        if (!old) return old;
-        return old.map(article => 
-          article.id === id 
-            ? { ...article, newsType: currentState ? "regular" : "breaking" }
-            : article
-        );
+      queryClient.setQueryData(queryKey, (old: { articles: Article[]; total: number; page: number; limit: number; totalPages: number } | undefined) => {
+        if (!old?.articles) return old;
+        return {
+          ...old,
+          articles: old.articles.map(article =>
+            article.id === id
+              ? { ...article, newsType: currentState ? "regular" : "breaking" }
+              : article
+          ),
+        };
       });
       
       return { previousArticles, queryKey };
@@ -695,7 +728,7 @@ export default function EnglishArticlesPage() {
                   <SelectItem value="all">All Categories</SelectItem>
                   {categories.map((cat) => (
                     <SelectItem key={cat.id} value={cat.id}>
-                      {cat.nameEn}
+                      {cat.nameEn || cat.name || cat.nameAr || cat.id}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -824,7 +857,7 @@ export default function EnglishArticlesPage() {
                             </div>
                           </td>
                           <td className="py-3 px-4">
-                            <span className="text-sm">{article.category?.nameEn || "-"}</span>
+                            <span className="text-sm">{article.category?.nameEn || article.category?.name || article.category?.nameAr || "-"}</span>
                           </td>
                           <td className="py-3 px-4">
                             <BreakingSwitch 
@@ -907,7 +940,7 @@ export default function EnglishArticlesPage() {
                   </div>
                   <span className="text-muted-foreground">•</span>
                   <span className="text-muted-foreground">
-                    {article.category?.nameEn || "-"}
+                    {article.category?.nameEn || article.category?.name || article.category?.nameAr || "-"}
                   </span>
                 </div>
 
@@ -1004,6 +1037,35 @@ export default function EnglishArticlesPage() {
           )}
         </div>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-4 py-4 border-t mt-2" data-testid="pagination-container-en">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1 || articlesLoading}
+            data-testid="button-pagination-prev-en"
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Previous
+          </Button>
+          <span className="text-sm tabular-nums text-muted-foreground" data-testid="text-pagination-info-en">
+            Page {currentPage.toLocaleString("en-US")} of {totalPages.toLocaleString("en-US")}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage >= totalPages || articlesLoading}
+            data-testid="button-pagination-next-en"
+          >
+            Next
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog

@@ -172,10 +172,11 @@ private fun SendButton(
         contentAlignment = Alignment.Center,
     ) {
         if (isSubmitting) {
+            // iOS: ProgressView().frame(32×32) — الدوّار الفعلي ~20pt داخل الإطار
             CircularProgressIndicator(
                 color = Color.White,
                 strokeWidth = 2.dp,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(20.dp),
             )
         } else {
             Icon(

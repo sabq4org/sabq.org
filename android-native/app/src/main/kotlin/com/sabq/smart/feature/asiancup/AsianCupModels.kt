@@ -23,6 +23,9 @@ import kotlinx.serialization.Serializable
     val startsAt: String? = null, val endsAt: String? = null, val teamsCount: Int = 0,
     val groupsCount: Int = 0, val host: String = "", val venues: List<AcVenue> = emptyList(),
     val started: Boolean = false, val saudi: AcSaudi = AcSaudi(), val nextMatch: AcFixture? = null,
+    /** إطفاء بلوك الرئيسية من لوحة التحكم — الاسم الحرفي في استجابة
+     *  `/api/asian-cup/overview` هو `blockHidden` (server/routes/asianCup.ts:73). */
+    val blockHidden: Boolean = false,
 )
 @Serializable data class AcTeamsResponse(val teams: List<AcTeam> = emptyList())
 @Serializable data class AcFixturesResponse(val fixtures: List<AcFixture> = emptyList())

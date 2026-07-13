@@ -43,23 +43,14 @@ fun SurfaceCard(
     content: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
-    // Sharper, fully-opaque gray frame. The previous 0.5dp / 50%-alpha
-    // outline disappeared against the light page background, so the
-    // user couldn't visually pick out where a block started or ended.
-    // Light mode uses a noticeably darker gray than `outline` (which is
-    // tuned for hairline separators); dark mode keeps the theme outline.
-    // Reported 2026-05-24.
-    val frameColor = if (SabqTheme.colors.isDark) {
-        SabqTheme.colors.outline
-    } else {
-        Color(0xFFDCDFE3)
-    }
+    // Strict iOS parity (owner directive 2026-07-13, supersedes the
+    // 2026-05-24 opaque-frame divergence): iOS strokes `outline` at
+    // 0.5pt in both modes; light/dark difference comes from the theme
+    // shadow alphas (0.05 / 0.30), not from branched elevation.
+    val frameColor = SabqTheme.colors.outline
 
-    // Elevation values differ between light and dark: light mode needs
-    // a stronger halo to pop the white card off the gray background;
-    // dark mode uses a subtler lift since surface is already lighter than bg.
-    val softElevation = if (SabqTheme.colors.isDark) 6.dp else 10.dp
-    val rimElevation  = if (SabqTheme.colors.isDark) 2.dp  else 1.5.dp
+    val softElevation = 10.dp
+    val rimElevation = 1.dp
 
     Box(
         modifier = modifier
@@ -81,7 +72,7 @@ fun SurfaceCard(
             )
             .clip(shape)
             .background(SabqTheme.colors.surface, shape)
-            .border(BorderStroke(1.dp, frameColor), shape),
+            .border(BorderStroke(0.5.dp, frameColor), shape),
     ) {
         if (accent != null) {
             // Decorative tinted circle in the corner — equivalent to
@@ -100,7 +91,7 @@ fun SurfaceCard(
         }
         Column(
             modifier = Modifier.padding(SabqTheme.dimens.cardPadding),
-            verticalArrangement = Arrangement.spacedBy(18.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             content()
         }

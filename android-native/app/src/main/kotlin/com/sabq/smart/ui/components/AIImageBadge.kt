@@ -74,7 +74,7 @@ fun AIImageBadge(
             Text(
                 text = "مولدة بالذكاء الاصطناعي",
                 style = TextStyle(
-                    fontSize = (11 * sizeScale).sp,
+                    fontSize = (10 * sizeScale).sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
                 ),
@@ -84,7 +84,7 @@ fun AIImageBadge(
                 imageVector = Icons.Filled.AutoAwesome,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size((11 * sizeScale).dp),
+                modifier = Modifier.size((10 * sizeScale).dp),
             )
         }
     }

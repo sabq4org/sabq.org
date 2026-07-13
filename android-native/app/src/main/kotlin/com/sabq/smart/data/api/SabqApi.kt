@@ -57,6 +57,18 @@ interface SabqApi {
     @GET("api/v1/breaking")
     suspend fun getBreaking(): ApiBreakingTicker
 
+    /**
+     * Dashboard-curated breaking ticker. Public namespace (NOT v1),
+     * mirroring iOS `APIClient.fetchBreakingTicker`
+     * (Services/APIClient.swift:449 → `/breaking-ticker/active`).
+     * Returns `{ topic, headlines }` or a bare `null` when no topic is
+     * active — the null body fails kotlinx decoding, so callers wrap
+     * the call in `runCatching` and fall back to the single breaking
+     * article pill.
+     */
+    @GET("api/breaking-ticker/active")
+    suspend fun getBreakingTickerActive(): ApiBreakingTickerActive
+
     /** Trending page — top articles + keywords. iOS uses
      *  `articlesStore.trendingArticles.prefix(3)` on Home and the full
      *  list (plus `tags`) on the dedicated `TrendingView`. */

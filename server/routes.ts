@@ -6857,9 +6857,18 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Get article by ID for editing (admin only)
-  app.get("/api/admin/articles/:id", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
+  app.get("/api/admin/articles/:id", requireAuth, requireAnyPermission(
+    "articles.view",
+    "articles.edit",
+    "articles.edit_any",
+    "articles.edit_own",
+    "opinion.view",
+    "opinion.edit_own",
+    "opinion.edit_any",
+  ), async (req: any, res) => {
     try {
       const articleId = req.params.id;
+      const userId = req.user?.id;
 
       const reporterAlias = aliasedTable(users, 'reporter');
 
@@ -6896,11 +6905,33 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         return res.status(404).json({ message: "Article not found" });
       }
 
+      // Own-only roles (edit_own / opinion.edit_own without broader view/edit)
+      // may only open articles they authored, reported, or submitted.
+      const userPermissions = await getUserPermissions(userId);
+      const canViewAny =
+        userPermissions.includes("articles.view") ||
+        userPermissions.includes("articles.edit") ||
+        userPermissions.includes("articles.edit_any") ||
+        userPermissions.includes("opinion.view") ||
+        userPermissions.includes("opinion.edit_any") ||
+        userPermissions.includes("system.admin");
+      if (!canViewAny) {
+        const isOwner =
+          result.article.authorId === userId ||
+          result.article.reporterId === userId ||
+          result.article.submitterId === userId;
+        if (!isOwner) {
+          return res.status(403).json({ message: "Forbidden" });
+        }
+      }
+
       res.json({
         ...result.article,
         category: result.category,
         author: result.reporter || result.author,
         reporter: result.reporter,
+        // Editor who entered the article (authorId) — used by the editor banner
+        enteredBy: result.author,
       });
     } catch (error) {
       console.error("Error fetching article:", error);
@@ -14351,9 +14382,56 @@ Respond in valid JSON format only:
   // Get all English articles with filtering (dashboard)
   app.get("/api/en/dashboard/articles", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
-      const { search, status, articleType, categoryId, authorId, featured } = req.query;
+      const { search, status, articleType, categoryId, authorId, featured, page = "1", limit = "30" } = req.query;
+      const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+      const limitNum = Math.max(1, Math.min(100, parseInt(limit as string, 10) || 30));
+      const offset = (pageNum - 1) * limitNum;
 
       const reporterAlias = aliasedTable(users, 'reporter');
+      const whereConditions = [];
+
+      const searchQuery = typeof search === "string" ? search.trim() : "";
+      if (searchQuery) {
+        const pattern = `%${searchQuery.replace(/[%_\\]/g, "\\$&")}%`;
+        whereConditions.push(
+          or(
+            ilike(enArticles.title, pattern),
+            ilike(enArticles.subtitle, pattern),
+            ilike(enArticles.slug, pattern),
+            ilike(enArticles.englishSlug, pattern),
+            ilike(enArticles.excerpt, pattern),
+          )
+        );
+      }
+
+      if (status && status !== "all") {
+        whereConditions.push(eq(enArticles.status, status as string));
+      }
+
+      if (articleType && articleType !== "all") {
+        whereConditions.push(eq(enArticles.articleType, articleType));
+      }
+
+      if (categoryId) {
+        whereConditions.push(eq(enArticles.categoryId, categoryId));
+      }
+
+      if (authorId) {
+        whereConditions.push(eq(enArticles.authorId, authorId));
+      }
+
+      if (featured !== undefined) {
+        whereConditions.push(eq(enArticles.isFeatured, featured === "true"));
+      }
+
+      const whereClause = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+      let countQuery = db.select({ count: sql<number>`count(*)` }).from(enArticles).$dynamic();
+      if (whereClause) {
+        countQuery = countQuery.where(whereClause);
+      }
+      const [countResult] = await countQuery;
+      const total = Number(countResult?.count || 0);
 
       let query = db
         .select({
@@ -14384,36 +14462,14 @@ Respond in valid JSON format only:
         .leftJoin(reporterAlias, eq(enArticles.reporterId, reporterAlias.id))
         .$dynamic();
 
-      if (search) {
-        query = query.where(
-          or(
-            ilike(enArticles.title, `%${search}%`),
-            ilike(enArticles.excerpt, `%${search}%`)
-          )
-        );
+      if (whereClause) {
+        query = query.where(whereClause);
       }
 
-      if (status && status !== "all") {
-        query = query.where(eq(enArticles.status, status));
-      }
-
-      if (articleType && articleType !== "all") {
-        query = query.where(eq(enArticles.articleType, articleType));
-      }
-
-      if (categoryId) {
-        query = query.where(eq(enArticles.categoryId, categoryId));
-      }
-
-      if (authorId) {
-        query = query.where(eq(enArticles.authorId, authorId));
-      }
-
-      if (featured !== undefined) {
-        query = query.where(eq(enArticles.isFeatured, featured === "true"));
-      }
-
-      query = query.orderBy(desc(enArticles.createdAt));
+      query = query
+        .orderBy(desc(enArticles.displayOrder), desc(enArticles.createdAt))
+        .limit(limitNum)
+        .offset(offset);
 
       const results = await query;
 
@@ -14424,7 +14480,13 @@ Respond in valid JSON format only:
         publisher: (row as any).publisher,
       }));
 
-      res.json({ articles: formattedArticles, total: formattedArticles.length });
+      res.json({
+        articles: formattedArticles,
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(total / limitNum),
+      });
     } catch (error) {
       console.error("Error fetching English articles:", error);
       res.status(500).json({ message: "Failed to fetch English articles" });
@@ -14812,7 +14874,7 @@ Respond in valid JSON format only:
         return res.status(404).json({ message: "Article not found" });
       }
 
-      const newNewsType = article.newsType === 'breaking' ? 'standard' : 'breaking';
+      const newNewsType = article.newsType === 'breaking' ? 'regular' : 'breaking';
 
       const [updatedArticle] = await db
         .update(enArticles)
@@ -15530,11 +15592,16 @@ Respond in valid JSON format only:
       // Get user permissions from RBAC system
       const userPermissions = await getUserPermissions(userId);
       
-      // Check permissions using RBAC system
-      const canViewAny = userPermissions.includes("articles.view") || 
+      // Align with PUT /api/dashboard/articles/:id and PATCH /api/admin/articles/:id:
+      // articles.edit alone must be enough to open the editor (not only view/edit_any).
+      const canViewAny = userPermissions.includes("articles.view") ||
+                         userPermissions.includes("articles.edit") ||
                          userPermissions.includes("articles.edit_any") ||
+                         userPermissions.includes("opinion.view") ||
+                         userPermissions.includes("opinion.edit_any") ||
                          userPermissions.includes("system.admin");
-      const canViewOwn = userPermissions.includes("articles.edit_own");
+      const canViewOwn = userPermissions.includes("articles.edit_own") ||
+                         userPermissions.includes("opinion.edit_own");
       
       // Legacy role fallback
       const isLegacyAdmin = user.role === "admin" || user.role === "editor";
@@ -15551,7 +15618,7 @@ Respond in valid JSON format only:
 
       // Allow if user has view_any permission, is admin, or is the author
       const hasFullAccess = canViewAny || isLegacyAdmin;
-      const isAuthor = article.authorId === userId || article.reporterId === userId;
+      const isAuthor = article.authorId === userId || article.reporterId === userId || (article as any).submitterId === userId;
       
       if (!hasFullAccess && !isAuthor) {
         return res.status(403).json({ message: "Forbidden" });
