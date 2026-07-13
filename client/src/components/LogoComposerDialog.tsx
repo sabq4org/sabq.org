@@ -13,7 +13,11 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeftRight, Loader2, Upload, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { renderFittedLogo, renderMergedLogos } from "@/lib/logoCanvas";
+import {
+  renderFittedLogo,
+  renderMergedLogos,
+  renderMergedPhotos,
+} from "@/lib/logoCanvas";
 
 interface LogoComposerDialogProps {
   open: boolean;
@@ -104,12 +108,14 @@ export function LogoComposerDialog({
   onImageReady,
 }: LogoComposerDialogProps) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"fit" | "merge">("fit");
+  const [tab, setTab] = useState<"fit" | "merge" | "photos">("fit");
 
   const [fitFile, setFitFile] = useState<File | null>(null);
   const [firstLogo, setFirstLogo] = useState<File | null>(null);
   const [secondLogo, setSecondLogo] = useState<File | null>(null);
   const [showDivider, setShowDivider] = useState(false);
+  const [firstPhoto, setFirstPhoto] = useState<File | null>(null);
+  const [secondPhoto, setSecondPhoto] = useState<File | null>(null);
 
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -123,7 +129,11 @@ export function LogoComposerDialog({
     const token = ++renderTokenRef.current;
     const generate = async () => {
       const ready =
-        tab === "fit" ? fitFile !== null : firstLogo !== null && secondLogo !== null;
+        tab === "fit"
+          ? fitFile !== null
+          : tab === "merge"
+            ? firstLogo !== null && secondLogo !== null
+            : firstPhoto !== null && secondPhoto !== null;
       if (!ready) {
         setPreviewBlob(null);
         return;
@@ -133,9 +143,11 @@ export function LogoComposerDialog({
         const blob =
           tab === "fit"
             ? await renderFittedLogo(fitFile!)
-            : await renderMergedLogos(firstLogo!, secondLogo!, {
-                divider: showDivider,
-              });
+            : tab === "merge"
+              ? await renderMergedLogos(firstLogo!, secondLogo!, {
+                  divider: showDivider,
+                })
+              : await renderMergedPhotos(firstPhoto!, secondPhoto!);
         if (renderTokenRef.current === token) setPreviewBlob(blob);
       } catch (error) {
         console.error("Logo render error:", error);
@@ -153,7 +165,7 @@ export function LogoComposerDialog({
       }
     };
     generate();
-  }, [tab, fitFile, firstLogo, secondLogo, showDivider, toast]);
+  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, toast]);
 
   useEffect(() => {
     if (!previewBlob) {
@@ -191,6 +203,8 @@ export function LogoComposerDialog({
     setFirstLogo(null);
     setSecondLogo(null);
     setShowDivider(false);
+    setFirstPhoto(null);
+    setSecondPhoto(null);
     setPreviewBlob(null);
     setTab("fit");
   };
@@ -205,7 +219,7 @@ export function LogoComposerDialog({
     if (!previewBlob) return;
     setIsApplying(true);
     try {
-      const name = tab === "fit" ? "logo-fit" : "logo-merge";
+      const name = tab === "fit" ? "logo-fit" : tab === "merge" ? "logo-merge" : "photo-merge";
       const file = new File([previewBlob], `${name}-${Date.now()}.jpg`, {
         type: "image/jpeg",
       });
@@ -227,17 +241,20 @@ export function LogoComposerDialog({
         <DialogHeader>
           <DialogTitle>أدوات الشعار</DialogTitle>
           <DialogDescription>
-            معالجة صور الشعارات لتظهر كاملة على خلفية بيضاء بمقاس 16:9 دون قص.
+            معالجة الشعارات والصور لصورة خبر بمقاس 16:9 جاهزة للنشر دون قص عشوائي.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "fit" | "merge")}>
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as "fit" | "merge" | "photos")}>
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="fit" data-testid="tab-fit-logo">
               ضبط شعار
             </TabsTrigger>
             <TabsTrigger value="merge" data-testid="tab-merge-logos">
               دمج شعارين
+            </TabsTrigger>
+            <TabsTrigger value="photos" data-testid="tab-merge-photos">
+              دمج صورتين
             </TabsTrigger>
           </TabsList>
 
@@ -296,6 +313,44 @@ export function LogoComposerDialog({
               </div>
             </div>
           </TabsContent>
+
+          <TabsContent value="photos" className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <LogoSlot
+                label="الصورة الأولى (يمين)"
+                file={firstPhoto}
+                onSelect={(f) => validateAndSet(f, setFirstPhoto)}
+                onClear={() => setFirstPhoto(null)}
+                testId="slot-first-photo"
+              />
+              <LogoSlot
+                label="الصورة الثانية (يسار)"
+                file={secondPhoto}
+                onSelect={(f) => validateAndSet(f, setSecondPhoto)}
+                onClear={() => setSecondPhoto(null)}
+                testId="slot-second-photo"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={!firstPhoto || !secondPhoto}
+                onClick={() => {
+                  setFirstPhoto(secondPhoto);
+                  setSecondPhoto(firstPhoto);
+                }}
+                data-testid="button-swap-photos"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+                تبديل الترتيب
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                كل صورة تملأ نصفها بالكامل مع قص متمركز للفائض، وبينهما فراغ أبيض رفيع.
+              </p>
+            </div>
+          </TabsContent>
         </Tabs>
 
         {/* المعاينة النهائية */}
@@ -315,8 +370,10 @@ export function LogoComposerDialog({
                   <Loader2 className="h-6 w-6 animate-spin" />
                 ) : tab === "fit" ? (
                   "اختر الشعار لعرض المعاينة"
-                ) : (
+                ) : tab === "merge" ? (
                   "اختر الشعارين لعرض المعاينة"
+                ) : (
+                  "اختر الصورتين لعرض المعاينة"
                 )}
               </div>
             )}

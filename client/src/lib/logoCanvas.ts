@@ -189,3 +189,51 @@ export async function renderMergedLogos(
     second.cleanup();
   }
 }
+
+// عرض الفراغ الأبيض بين الصورتين في دمج الصور
+const PHOTO_GAP_PX = 14;
+
+/**
+ * دمج صورتين (فوتوغرافيتين) جنباً إلى جنب على لوحة 1200×675.
+ * عكس دمج الشعارات: كل صورة تملأ نصفها بالكامل (cover) مع قص متمركز
+ * للفائض — بلا هوامش خارجية، وبينهما فراغ أبيض رفيع فقط.
+ * الصورة الأولى في النصف الأيمن والثانية في الأيسر (ترتيب عربي).
+ */
+export async function renderMergedPhotos(
+  firstFile: File,
+  secondFile: File,
+): Promise<Blob> {
+  const [first, second] = await Promise.all([
+    loadLogo(firstFile),
+    loadLogo(secondFile),
+  ]);
+  try {
+    const { canvas, ctx } = createWhiteCanvas();
+    const halfW = (LOGO_CANVAS_WIDTH - PHOTO_GAP_PX) / 2;
+    const halfH = LOGO_CANVAS_HEIGHT;
+
+    // cover: نقص من مصدر الصورة مستطيلاً بنفس نسبة النصف ثم نرسمه ممتلئاً
+    const drawCovering = (photo: LoadedLogo, dx: number) => {
+      const targetRatio = halfW / halfH;
+      const sourceRatio = photo.width / photo.height;
+      let sw = photo.width;
+      let sh = photo.height;
+      if (sourceRatio > targetRatio) {
+        sw = photo.height * targetRatio; // أعرض من اللازم — نقص الجانبين
+      } else {
+        sh = photo.width / targetRatio; // أطول من اللازم — نقص الأعلى والأسفل
+      }
+      const sx = (photo.width - sw) / 2;
+      const sy = (photo.height - sh) / 2;
+      ctx.drawImage(photo.source, sx, sy, sw, sh, dx, 0, halfW, halfH);
+    };
+
+    drawCovering(first, halfW + PHOTO_GAP_PX); // يمين
+    drawCovering(second, 0); // يسار
+
+    return await canvasToBlob(canvas);
+  } finally {
+    first.cleanup();
+    second.cleanup();
+  }
+}
