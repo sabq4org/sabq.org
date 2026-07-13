@@ -544,7 +544,9 @@ export default function NewsroomPulseDashboard() {
   const [, navigate] = useLocation();
   const isAngleWriter = hasRole(user, "angle_writer");
   const isContentManager = hasRole(user, "content_manager");
-  const canViewStats = hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_STATS) || hasRole(user, "admin", "system_admin", "editor", "content_manager");
+  const hasElevatedDashboardRole = hasRole(user, "admin", "system_admin", "editor", "content_manager", "analyst", "reviewer", "author", "comments_moderator");
+  const isReporterOnly = hasRole(user, "reporter") && !hasElevatedDashboardRole;
+  const canViewStats = !isReporterOnly && (hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_STATS) || hasRole(user, "admin", "system_admin", "editor", "content_manager"));
   const canReviewMuqtarab = hasPermission(user, "muqtarab.manage");
   const canViewMessages = hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_MESSAGES);
   const canViewWriterTickets = hasRole(user, "admin", "editor", "system_admin");
@@ -552,7 +554,8 @@ export default function NewsroomPulseDashboard() {
   useEffect(() => {
     if (user?.role === "opinion_author") navigate("/dashboard/opinion-author", { replace: true });
     if (user && isAngleWriter) navigate("/dashboard/my-angle", { replace: true });
-  }, [user, isAngleWriter, navigate]);
+    if (user && isReporterOnly) navigate("/dashboard/reporter/articles", { replace: true });
+  }, [user, isAngleWriter, isReporterOnly, navigate]);
 
   const statsQuery = useQuery<DashboardStats>({
     queryKey: ["/api/admin/dashboard/stats"],
@@ -613,7 +616,7 @@ export default function NewsroomPulseDashboard() {
     ? new Intl.DateTimeFormat("ar-SA-u-nu-latn", { hour: "numeric", minute: "2-digit" }).format(new Date(stats.generatedAt))
     : "—";
 
-  if (userLoading || !user || isAngleWriter || user.role === "opinion_author") {
+  if (userLoading || !user || isAngleWriter || isReporterOnly || user.role === "opinion_author") {
     return <DashboardLayout><div className="space-y-4"><Skeleton className="h-20 w-full" /><div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{[1,2,3,4].map((i) => <Skeleton key={i} className="h-32" />)}</div></div></DashboardLayout>;
   }
 
