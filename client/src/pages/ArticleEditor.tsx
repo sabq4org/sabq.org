@@ -393,13 +393,21 @@ export default function ArticleEditor() {
   const contentNoun = isOpinionContext ? 'مقال' : 'خبر';
   const contentNounAccusative = isOpinionContext ? 'مقالاً' : 'خبراً';
 
-  // Permission check: require articles.create for new articles, articles.edit/edit_any/edit_own for editing
-  const canAccessEditor = user && hasAnyPermission(
-    user, 
-    "articles.create", 
-    "articles.edit", 
-    "articles.edit_any", 
-    "articles.edit_own"
+  // Permission check: require articles.create for new articles, articles.edit/edit_any/edit_own for editing.
+  // Opinion authors use opinion.* codes (ROLE_PERMISSIONS_MAP) — without them the editor redirects away
+  // before the article query can run, which looks like "التعديل لا يجلب البيانات".
+  const canAccessEditor = user && (
+    hasAnyPermission(
+      user,
+      "articles.create",
+      "articles.edit",
+      "articles.edit_any",
+      "articles.edit_own",
+      "opinion.create",
+      "opinion.edit_own",
+      "opinion.edit_any",
+      "opinion.view",
+    )
   );
   
   // Check if user can publish directly (otherwise saves as draft)
@@ -528,11 +536,21 @@ export default function ArticleEditor() {
     return isCoreCategory;
   });
 
-  const { data: article } = useQuery<ArticleWithDetails>({
-    queryKey: isNewArticle ? ["article-editor-new"] : ["/api/dashboard/articles", id],
-    enabled: !isNewArticle && !!user,
-    refetchOnMount: true, // Always fetch fresh data when opening editor
-    staleTime: 0, // Consider data stale immediately to ensure fresh data
+  // Load via /api/admin/articles/:id (same surface as save PATCH/POST) — the legacy
+  // /api/dashboard/articles/:id path uses a heavier getArticleById join that can stall
+  // and left the form empty with no loading/error UI.
+  const {
+    data: article,
+    isLoading: isArticleLoading,
+    isError: isArticleError,
+    isFetched: isArticleFetched,
+    refetch: refetchArticle,
+    error: articleError,
+  } = useQuery<ArticleWithDetails>({
+    queryKey: isNewArticle ? ["article-editor-new"] : ["/api/admin/articles", id],
+    enabled: !isNewArticle && !!user && !!id && !isUserLoading,
+    refetchOnMount: true,
+    staleTime: 0,
   });
 
   // Fetch media assets for this article
@@ -612,7 +630,10 @@ export default function ArticleEditor() {
 
   // Load article data when editing
   useEffect(() => {
-    if (article && !isNewArticle) {
+    // Guard: ignore list payloads / mismatched ids (can happen if queryKey briefly lacked id)
+    if (!article || isNewArticle || Array.isArray(article) || !article.id || (id && article.id !== id)) {
+      return;
+    }
       console.log('[ArticleEditor] Loading article data:', {
         articleId: article.id,
         reporterId: article.reporterId,
@@ -734,8 +755,7 @@ export default function ArticleEditor() {
           })
           .catch(err => console.error('[ArticleEditor] Error loading poll:', err));
       }
-    }
-  }, [article, isNewArticle]);
+  }, [article, isNewArticle, id]);
 
   // Auto-save draft key - unique per article or "new" for new articles
   const autoSaveKey = `article-draft-${isNewArticle ? 'new' : id}`;
@@ -1444,7 +1464,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       
       // If updating existing article, also invalidate its specific query
       if (!isNewArticle && id) {
-        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/articles", id] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id] });
         queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id, "angles"] });
       }
       
@@ -2056,6 +2076,45 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
     return null;
   }
 
+  // Editing an existing article: show loading / error instead of an empty form
+  if (!isNewArticle && (isUserLoading || isArticleLoading)) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground" data-testid="article-editor-loading">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm">جاري تحميل المقال...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!isNewArticle && (isArticleError || (isArticleFetched && !article?.id))) {
+    const message =
+      articleError instanceof Error && articleError.message
+        ? articleError.message
+        : "تعذر جلب بيانات المقال. تحقق من الصلاحيات أو أعد المحاولة.";
+    return (
+      <DashboardLayout>
+        <div className="mx-auto max-w-lg space-y-4 py-16 text-center" data-testid="article-editor-error">
+          <AlertCircle className="mx-auto h-10 w-10 text-destructive" />
+          <h2 className="text-lg font-semibold">تعذر تحميل المقال</h2>
+          <p className="text-sm text-muted-foreground">{message}</p>
+          <div className="flex items-center justify-center gap-2">
+            <Button variant="outline" onClick={() => refetchArticle()} data-testid="button-retry-load-article">
+              <RefreshCw className="h-4 w-4 ml-2" />
+              إعادة المحاولة
+            </Button>
+            <Button variant="ghost" asChild>
+              <Link href={isOpinionAuthor ? "/dashboard/opinion-author" : "/dashboard/articles"}>
+                العودة
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout>
       {/* Draft Recovery Dialog */}
@@ -2255,7 +2314,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               className="gap-2"
               onClick={() => {
                 if (id) {
-                  queryClient.invalidateQueries({ queryKey: ["/api/dashboard/articles", id] });
+                  queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id] });
                 }
               }}
               data-testid="button-refresh-concurrent-editors"
