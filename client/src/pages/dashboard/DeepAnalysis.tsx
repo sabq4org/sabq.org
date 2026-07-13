@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { queryClient, apiRequest, getCsrfToken, apiUrl } from "@/lib/queryClient";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -252,6 +253,7 @@ export default function DeepAnalysis() {
   };
 
   return (
+    <DashboardLayout>
     <div className="mx-auto w-full max-w-[1600px] space-y-6 px-4 pb-10 sm:px-6" dir="rtl">
       <DashboardPageHeader
         icon={Brain}
@@ -632,5 +634,6 @@ export default function DeepAnalysis() {
         </div>
       </div>
     </div>
+    </DashboardLayout>
   );
 }

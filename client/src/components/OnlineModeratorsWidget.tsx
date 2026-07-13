@@ -109,17 +109,17 @@ export function OnlineModeratorsWidget() {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center justify-between text-base">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-              <Users className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+              <Users className="h-4 w-4 text-primary" />
             </div>
             <span>المتصلون</span>
           </div>
           {onlineModerators.length > 0 && (
             <Badge 
-              className="border border-emerald-200 bg-emerald-50 px-2 text-xs text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/35 dark:text-emerald-300"
+              className="border border-primary/20 bg-primary/10 px-2 text-xs text-primary hover:bg-primary/10"
               data-testid="badge-online-count"
             >
-              <Circle className="h-2 w-2 fill-current ml-1 animate-pulse" />
+              <Circle className="ml-1 h-2 w-2 animate-pulse fill-current" />
               {onlineModerators.length} نشط
             </Badge>
           )}
@@ -144,14 +144,14 @@ export function OnlineModeratorsWidget() {
                           className="relative group cursor-default"
                           data-testid={`moderator-online-${mod.id}`}
                         >
-                          <Avatar className="h-11 w-11 ring-2 ring-green-500 ring-offset-2 ring-offset-background transition-transform group-hover:scale-105">
+                          <Avatar className="h-11 w-11 ring-2 ring-chart-2 ring-offset-2 ring-offset-background transition-transform group-hover:scale-105">
                             <AvatarImage src={mod.profileImageUrl || undefined} alt={getDisplayName(mod)} />
-                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white text-sm font-medium">
+                            <AvatarFallback className="bg-primary text-sm font-medium text-primary-foreground">
                               {getInitials(mod.firstName, mod.lastName, mod.email)}
                             </AvatarFallback>
                           </Avatar>
                           <Circle 
-                            className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 fill-green-500 text-green-500 bg-background rounded-full ring-2 ring-background"
+                            className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-background fill-chart-2 text-chart-2 ring-2 ring-background"
                             data-testid="indicator-online"
                           />
                         </div>

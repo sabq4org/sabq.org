@@ -35,6 +35,7 @@ import { InternalAnnouncement } from "../InternalAnnouncement";
 import type { UserRole } from "@/nav/types";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { NavItem } from "@/nav/types";
+import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvider";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -97,12 +98,14 @@ export function UrduDashboardLayout({ children }: DashboardLayoutProps) {
 
   if (isLoading || !user) {
     return (
-      <div className="flex h-screen w-full items-center justify-center" dir="rtl">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">...لوڈ ہو رہا ہے</p>
+      <DashboardThemeProvider>
+        <div className="flex h-screen w-full items-center justify-center" dir="rtl">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+            <p className="mt-4 text-muted-foreground">...لوڈ ہو رہا ہے</p>
+          </div>
         </div>
-      </div>
+      </DashboardThemeProvider>
     );
   }
 
@@ -234,6 +237,7 @@ export function UrduDashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return (
+    <DashboardThemeProvider>
     <SidebarProvider>
       <div className="flex h-screen w-full" dir="rtl">
         <Sidebar side="right" collapsible="offcanvas">
@@ -308,5 +312,6 @@ export function UrduDashboardLayout({ children }: DashboardLayoutProps) {
         </SidebarInset>
       </div>
     </SidebarProvider>
+    </DashboardThemeProvider>
   );
 }

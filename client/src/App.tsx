@@ -193,6 +193,7 @@ const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
 const ThemeEditor = lazy(() => retryImport(() => import("@/pages/ThemeEditor")));
 const ThemeSwitcher = lazy(() => retryImport(() => import("@/pages/dashboard/ThemeSwitcher")));
+const DashboardAppearancePage = lazy(() => retryImport(() => import("@/pages/dashboard/DashboardAppearancePage")));
 
 // === LAZY IMPORTS (Onboarding) ===
 const Welcome = lazy(() => retryImport(() => import("@/pages/onboarding/Welcome")));
@@ -896,6 +897,7 @@ function Router() {
         <Route path="/dashboard/themes/switcher">{() => <LazyRoute component={ThemeSwitcher} />}</Route>
         <Route path="/dashboard/themes/:id">{() => <LazyRoute component={ThemeEditor} />}</Route>
         <Route path="/dashboard/themes">{() => <LazyRoute component={ThemeManager} />}</Route>
+        <Route path="/dashboard/appearance">{() => <LazyRoute component={DashboardAppearancePage} />}</Route>
         <Route path="/profile/:userId">{() => <LazyRoute component={PublicProfile} />}</Route>
         <Route path="/profile">{() => <LazyRoute component={Profile} />}</Route>
         <Route path="/dashboard/loyalty">{() => <LazyRoute component={LoyaltyAccount} />}</Route>
