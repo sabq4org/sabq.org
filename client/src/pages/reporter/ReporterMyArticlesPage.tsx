@@ -151,16 +151,16 @@ export default function ReporterMyArticlesPage() {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-4 md:p-6" dir="rtl">
+      <div className="space-y-4 p-3 pb-20 md:space-y-6 md:p-6" dir="rtl">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div>
-            <h1 className="text-2xl font-bold">أخباري</h1>
-            <p className="text-muted-foreground text-sm mt-1">
+            <h1 className="text-xl font-bold sm:text-2xl">أخباري</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground sm:mt-1 sm:text-sm">
               تتبّع أخبارك وملاحظات فريق التحرير
             </p>
           </div>
-          <Button onClick={handleNewArticle} className="gap-2">
+          <Button onClick={handleNewArticle} size="sm" className="gap-2 sm:h-10 sm:px-4 sm:text-sm">
             <PlusCircle className="h-4 w-4" />
             خبر جديد
           </Button>

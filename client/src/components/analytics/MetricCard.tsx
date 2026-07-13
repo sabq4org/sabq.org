@@ -50,20 +50,20 @@ export function MetricCard({
 
   const getTrendColor = () => {
     if (!trend) return "";
-    if (trend.value > 0) return "text-green-600 dark:text-green-400";
-    if (trend.value < 0) return "text-red-600 dark:text-red-400";
+    if (trend.value > 0) return "text-success";
+    if (trend.value < 0) return "text-destructive";
     return "text-muted-foreground";
   };
 
   return (
-    <Card className={cn("hover-elevate", className)}>
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
+    <Card className={cn("hover-elevate shadow-none", className)}>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-3 pb-1.5 sm:p-6 sm:pb-2">
+        <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm">
           {title}
         </CardTitle>
-        {Icon && <Icon className="h-4 w-4 text-muted-foreground" />}
+        {Icon && <Icon className="h-3.5 w-3.5 text-muted-foreground sm:h-4 sm:w-4" />}
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-3 pt-0 sm:p-6 sm:pt-0">
         {loading ? (
           <div className="space-y-2">
             <div className="h-8 w-24 animate-pulse rounded bg-muted" />
@@ -71,7 +71,7 @@ export function MetricCard({
           </div>
         ) : (
           <>
-            <div className="text-2xl font-bold">{formatValue(value)}</div>
+            <div className="text-xl font-bold sm:text-2xl">{formatValue(value)}</div>
             {trend && (
               <div className={cn("flex items-center gap-1 text-xs", getTrendColor())}>
                 {getTrendIcon()}

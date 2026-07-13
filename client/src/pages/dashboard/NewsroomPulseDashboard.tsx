@@ -211,17 +211,17 @@ function MetricCard({
     : undefined;
 
   return (
-    <Card className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+    <Card className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-none sm:rounded-2xl sm:shadow-sm">
       <CardContent className="flex h-full flex-col p-0">
-        <div className="flex flex-1 flex-col gap-3 p-4 sm:p-5">
+        <div className="flex flex-1 flex-col gap-2 p-3 sm:gap-3 sm:p-5">
           <div className="flex items-start justify-between gap-2">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Icon className="h-[18px] w-[18px]" />
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:h-10 sm:w-10 sm:rounded-xl">
+              <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
             </span>
             {change !== undefined && !loading && (
               <span
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium",
+                  "inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium sm:px-2 sm:py-1 sm:text-[11px]",
                   change > 0 && "bg-primary/10 text-primary",
                   change < 0 && "bg-destructive/10 text-destructive",
                   change === 0 && "bg-muted text-muted-foreground",
@@ -234,22 +234,22 @@ function MetricCard({
           </div>
 
           <div>
-            <p className="text-[13px] font-semibold leading-snug text-foreground">{title}</p>
+            <p className="text-xs font-semibold leading-snug text-foreground sm:text-[13px]">{title}</p>
             {loading ? (
-              <Skeleton className="mt-2 h-9 w-20" />
+              <Skeleton className="mt-2 h-7 w-16 sm:h-9 sm:w-20" />
             ) : (
-              <p className="mt-1.5 text-3xl font-bold tabular-nums tracking-tight sm:text-[2rem]">
+              <p className="mt-1 text-xl font-bold tabular-nums tracking-tight sm:mt-1.5 sm:text-[2rem]">
                 {typeof value === "number" ? number(value) : value}
               </p>
             )}
             {change !== undefined && !loading && (
-              <p className="mt-1 text-[11px] text-muted-foreground">مقارنةً بنفس الساعة أمس</p>
+              <p className="mt-1 hidden text-[11px] text-muted-foreground sm:block">مقارنةً بنفس الساعة أمس</p>
             )}
           </div>
         </div>
 
         {helper && (
-          <div className="border-t border-border/60 bg-muted/30 px-4 py-2.5">
+          <div className="hidden border-t border-border/60 bg-muted/30 px-4 py-2.5 sm:block">
             <p className="text-[11px] leading-relaxed text-muted-foreground">{helper}</p>
           </div>
         )}
@@ -273,34 +273,25 @@ function ActionCard({
   icon: IconType;
   tone: "danger" | "warning" | "info";
 }) {
-  const styles = {
-    danger: {
-      accent: "text-destructive",
-      icon: "bg-destructive/10 text-destructive",
-    },
-    warning: {
-      accent: "text-primary",
-      icon: "bg-primary/10 text-primary",
-    },
-    info: {
-      accent: "text-primary",
-      icon: "bg-primary/10 text-primary",
-    },
-  };
-  const style = styles[tone];
+  // Compact horizontal row — theme tokens only (no rainbow icon washes).
+  // Urgent counts keep a quiet destructive accent; icons always follow primary.
+  const countClass =
+    tone === "danger" && count > 0 ? "text-destructive" : "text-foreground";
 
   return (
     <Link href={href}>
-      <a className="group block rounded-2xl border border-border/70 bg-card p-4 text-foreground shadow-none transition hover:border-border hover:bg-muted/20 hover:shadow-sm">
-        <div className="flex items-start justify-between gap-3">
-          <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-xl", style.icon)}>
-            <Icon className="h-5 w-5" />
-          </span>
-          <ChevronLeft className="h-4 w-4 text-muted-foreground/60 transition group-hover:-translate-x-1" />
+      <a className="group flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5 text-foreground shadow-none transition hover:border-border hover:bg-muted/20 sm:px-3.5 sm:py-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold leading-tight">{title}</div>
+          <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground sm:text-xs">{description}</p>
         </div>
-        <div className={cn("mt-4 text-2xl font-bold", style.accent)}>{number(count)}</div>
-        <div className="mt-1 text-sm font-semibold">{title}</div>
-        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
+        <div className={cn("shrink-0 text-lg font-bold tabular-nums sm:text-xl", countClass)}>
+          {number(count)}
+        </div>
+        <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground/50 transition group-hover:-translate-x-0.5" />
       </a>
     </Link>
   );
@@ -308,10 +299,10 @@ function ActionCard({
 
 function SectionTitle({ title, description, action }: { title: string; description?: string; action?: React.ReactNode }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-3">
       <div>
-        <h2 className="text-lg font-bold sm:text-xl">{title}</h2>
-        {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+        <h2 className="text-base font-bold sm:text-xl">{title}</h2>
+        {description && <p className="mt-0.5 hidden text-sm text-muted-foreground sm:mt-1 sm:block">{description}</p>}
       </div>
       {action}
     </div>
@@ -332,19 +323,19 @@ function SmartBrief({ stats, muqtarabCount, operationalOnly = false }: { stats: 
     : "ولا توجد مواد مجدولة حالياً.";
 
   return (
-    <Card className="overflow-hidden border-border bg-card shadow-sm">
-      <CardContent className="p-5 sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex gap-4">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <WandSparkles className="h-5 w-5" />
+    <Card className="overflow-hidden border-border bg-card shadow-none sm:shadow-sm">
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between sm:gap-5">
+          <div className="flex gap-3 sm:gap-4">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary sm:h-11 sm:w-11 sm:rounded-2xl">
+              <WandSparkles className="h-4 w-4 sm:h-5 sm:w-5" />
             </span>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="font-bold">موجز سبق الذكي</h2>
+                <h2 className="text-sm font-bold sm:text-base">موجز سبق الذكي</h2>
                 <Badge variant="secondary" className="text-[10px]">مبني على بيانات اللحظة</Badge>
               </div>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+              <p className="mt-1.5 max-w-3xl text-xs leading-6 text-muted-foreground sm:mt-2 sm:text-sm sm:leading-7">
                 الأولوية الآن: <strong className="text-foreground">{priority}</strong>.
                 {!operationalOnly && muqtarabCount > 0 && <> وهناك <strong className="text-foreground">{number(muqtarabCount)} موضوعاً في مُقترب</strong> بانتظار القرار.</>}
                 {operationalOnly
@@ -355,7 +346,7 @@ function SmartBrief({ stats, muqtarabCount, operationalOnly = false }: { stats: 
           </div>
           <div className="flex shrink-0 flex-wrap gap-2">
             <Button asChild size="sm"><Link href={operationalOnly ? "/dashboard/articles" : "/dashboard/ai-moderation"}>ابدأ بالأولوية</Link></Button>
-            <Button asChild size="sm" variant="outline"><Link href="/dashboard/articles">إدارة المحتوى</Link></Button>
+            <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex"><Link href="/dashboard/articles">إدارة المحتوى</Link></Button>
           </div>
         </div>
       </CardContent>
@@ -369,7 +360,7 @@ function EditorialPipeline({ stats }: { stats: DashboardStats }) {
     { label: "بانتظار المراجعة", value: stats.articles.pendingReview, color: "bg-secondary" },
     { label: "تحتاج تعديلات", value: stats.articles.needsChanges, color: "bg-destructive" },
     { label: "مجدولة", value: stats.articles.scheduled, color: "bg-primary" },
-    { label: "نُشرت اليوم", value: stats.articles.publishedToday, color: "bg-chart-2" },
+    { label: "نُشرت اليوم", value: stats.articles.publishedToday, color: "bg-primary/70" },
   ];
   const max = Math.max(...steps.map((step) => step.value), 1);
 
@@ -627,19 +618,19 @@ export default function NewsroomPulseDashboard() {
 
   return (
     <DashboardLayout>
-      <main dir="rtl" className="mx-auto max-w-[1600px] space-y-7 pb-10">
+      <main dir="rtl" className="mx-auto max-w-[1600px] space-y-4 pb-24 sm:space-y-7 sm:pb-10">
         <DashboardAnnouncementBanner deferLoading={statsQuery.isLoading} />
 
-        <header className="flex flex-col gap-4 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
+        <header className="flex flex-col gap-3 border-b pb-4 sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:pb-5">
           <div>
-            <p className="mb-1 text-sm text-muted-foreground">{dateLabel}</p>
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Activity className="h-5 w-5" />
+            <p className="mb-1 text-xs text-muted-foreground sm:text-sm">{dateLabel}</p>
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:h-10 sm:w-10 sm:rounded-xl">
+                <Activity className="h-4 w-4 sm:h-5 sm:w-5" />
               </span>
-              <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">نبض سبق اليوم</h1>
+              <h1 className="text-xl font-bold tracking-tight sm:text-3xl">نبض سبق اليوم</h1>
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">مرحباً {user.firstName || "بك"}، هذه الأولويات وما يحدث في غرفة الأخبار الآن.</p>
+            <p className="mt-1.5 hidden text-sm text-muted-foreground sm:mt-2 sm:block">مرحباً {user.firstName || "بك"}، هذه الأولويات وما يحدث في غرفة الأخبار الآن.</p>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5"><Activity className="h-3.5 w-3.5 text-primary" /> آخر تحديث {refreshedAt}</span>
@@ -651,7 +642,7 @@ export default function NewsroomPulseDashboard() {
 
         <section className="space-y-3">
           <SectionTitle title="يتطلب تدخلك" description="الأعمال التي لا ينبغي أن تبقى في قائمة الانتظار" />
-          <div className={cn("grid gap-3 sm:grid-cols-2", !isContentManager && "xl:grid-cols-4")}>
+          <div className={cn("grid gap-2 sm:grid-cols-2 sm:gap-3", !isContentManager && "xl:grid-cols-2")}>
             {!isContentManager && <ActionCard title="تعليقات للمراجعة" count={stats?.comments.pending ?? 0} description={stats?.comments.pendingOlderThanTwoHours ? `${number(stats.comments.pendingOlderThanTwoHours)} تجاوزت ساعتين` : "ضمن وقت الاستجابة"} href="/dashboard/ai-moderation" icon={MessageSquare} tone="danger" />}
             {canReviewMuqtarab && <ActionCard title="مراجعة مُقترب" count={muqtarabCount} description="مواضيع تنتظر قرار التحرير" href="/dashboard/muqtarab/review" icon={BellRing} tone="warning" />}
             <ActionCard title="المسار التحريري" count={pipelineTotal} description={`${number(stats?.articles.scheduled)} مواد مجدولة`} href="/dashboard/articles" icon={FileClock} tone="info" />
@@ -758,7 +749,11 @@ export default function NewsroomPulseDashboard() {
         </details>
 
         <div className="fixed bottom-4 left-4 z-20 sm:hidden">
-          <Button asChild className="h-12 rounded-full px-5 shadow-lg"><Link href="/dashboard/articles/new"><Sparkles className="ml-2 h-4 w-4" /> مادة جديدة</Link></Button>
+          <Button asChild size="sm" className="h-10 rounded-full px-4 shadow-md">
+            <Link href="/dashboard/articles/new">
+              <Sparkles className="ml-1.5 h-3.5 w-3.5" /> مادة جديدة
+            </Link>
+          </Button>
         </div>
       </main>
     </DashboardLayout>

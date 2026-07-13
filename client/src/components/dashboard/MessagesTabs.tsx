@@ -8,13 +8,11 @@ import { cn } from "@/lib/utils";
 import { apiUrl } from "@/lib/queryClient";
 
 /**
- * Two prominent "inbox" tabs at the top of the admin dashboard:
+ * Two compact inbox rows on the admin dashboard:
  *   - رسائل الزوار → /dashboard/contact-messages   (pending count)
  *   - رسائل الكتاب → /dashboard/opinion-tickets    (unread count)
  *
- * Each renders as a soft-tinted Card with an icon, a count, and a
- * pulsing dot when there is something new — so a busy admin notices
- * them without needing to open the sidebar.
+ * Theme tokens only — no sky/amber washes that fight the org dashboard theme.
  */
 
 interface ContactMessagesResponse {
@@ -33,68 +31,49 @@ interface TabCardProps {
   count: number;
   isLoading: boolean;
   icon: React.ComponentType<{ className?: string }>;
-  tone: "cyan" | "amber";
+  urgent?: boolean;
   testId: string;
 }
 
-const TONE_STYLES: Record<TabCardProps["tone"], {
-  bg: string;
-  iconBg: string;
-  iconColor: string;
-  dot: string;
-  badge: string;
-}> = {
-  cyan: {
-    bg: "bg-card hover:bg-muted/25 border-border/70 hover:border-border",
-    iconBg: "bg-sky-50 dark:bg-sky-950/35",
-    iconColor: "text-sky-700 dark:text-sky-400",
-    dot: "bg-sky-500",
-    badge: "bg-sky-50 hover:bg-sky-50 text-sky-700 border border-sky-200 dark:bg-sky-950/35 dark:text-sky-300 dark:border-sky-900",
-  },
-  amber: {
-    bg: "bg-card hover:bg-muted/25 border-border/70 hover:border-border",
-    iconBg: "bg-amber-50 dark:bg-amber-950/35",
-    iconColor: "text-amber-700 dark:text-amber-400",
-    dot: "bg-amber-500",
-    badge: "bg-amber-50 hover:bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/35 dark:text-amber-300 dark:border-amber-900",
-  },
-};
-
-function TabCard({ title, subtitle, href, count, isLoading, icon: Icon, tone, testId }: TabCardProps) {
-  const t = TONE_STYLES[tone];
+function TabCard({ title, subtitle, href, count, isLoading, icon: Icon, urgent, testId }: TabCardProps) {
   const hasNew = !isLoading && count > 0;
 
   return (
     <Link href={href}>
       <a
-        className={cn(
-          "block group rounded-2xl border transition-colors relative shadow-none",
-          t.bg
-        )}
+        className="group relative block rounded-xl border border-border/70 bg-card shadow-none transition-colors hover:border-border hover:bg-muted/20"
         data-testid={testId}
       >
-        <Card className="bg-transparent border-0 shadow-none">
-          <CardContent className="p-4">
+        <Card className="border-0 bg-transparent shadow-none">
+          <CardContent className="p-2.5 sm:p-3">
             <div className="flex items-center gap-3">
-              <div className={cn("p-2.5 rounded-xl shrink-0", t.iconBg)}>
-                <Icon className={cn("h-5 w-5", t.iconColor)} />
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Icon className="h-4 w-4" />
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-semibold text-sm">{title}</h3>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-semibold">{title}</h3>
                   {isLoading ? (
                     <Skeleton className="h-5 w-10 rounded-full" />
                   ) : hasNew ? (
-                    <Badge className={cn("text-[10px] h-5 px-1.5 min-w-[20px] justify-center", t.badge)} data-testid={`${testId}-badge`}>
+                    <Badge
+                      className={cn(
+                        "h-5 min-w-[20px] justify-center border px-1.5 text-[10px]",
+                        urgent
+                          ? "border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/10"
+                          : "border-primary/25 bg-primary/10 text-primary hover:bg-primary/10",
+                      )}
+                      data-testid={`${testId}-badge`}
+                    >
                       {count}
                     </Badge>
                   ) : null}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
                   {hasNew ? subtitle : "لا توجد جديدة"}
                 </p>
               </div>
-              <ChevronLeft className="h-4 w-4 text-muted-foreground group-hover:translate-x-[-2px] transition-transform shrink-0" />
+              <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-[-2px]" />
             </div>
           </CardContent>
         </Card>
@@ -102,8 +81,8 @@ function TabCard({ title, subtitle, href, count, isLoading, icon: Icon, tone, te
           <span
             aria-hidden
             className={cn(
-              "absolute -top-1 -end-1 h-3 w-3 rounded-full ring-2 ring-background animate-pulse",
-              t.dot
+              "absolute -top-1 -end-1 h-2.5 w-2.5 animate-pulse rounded-full ring-2 ring-background",
+              urgent ? "bg-destructive" : "bg-primary",
             )}
           />
         )}
@@ -152,8 +131,8 @@ export function MessagesTabs({
   return (
     <div
       className={cn(
-        "grid gap-3",
-        showVisitorMessages && showWriterTickets ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1"
+        "grid gap-2 sm:gap-3",
+        showVisitorMessages && showWriterTickets ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1",
       )}
       data-testid="messages-tabs"
     >
@@ -165,7 +144,6 @@ export function MessagesTabs({
           count={visitorCount}
           isLoading={visitorQuery.isLoading}
           icon={Mail}
-          tone="cyan"
           testId="tab-visitor-messages"
         />
       )}
@@ -177,7 +155,7 @@ export function MessagesTabs({
           count={writerCount}
           isLoading={writerQuery.isLoading}
           icon={MessageSquare}
-          tone="amber"
+          urgent
           testId="tab-writer-tickets"
         />
       )}
