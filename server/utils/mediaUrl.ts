@@ -12,7 +12,12 @@ export function isAllowedMediaUrl(rawUrl: string, reqHost?: string): boolean {
     if (u.username || u.password) return false; // no user:pass@ phishing forms
     const host = u.hostname.toLowerCase();
     const allowed = new Set<string>(['imagedelivery.net', 'storage.googleapis.com']);
-    for (const envVal of [process.env.S3_PUBLIC_URL, process.env.S3_ENDPOINT]) {
+    for (const envVal of [
+      process.env.NEWS_IMAGES_R2_PUBLIC_URL,
+      process.env.R2_PUBLIC_URL,
+      process.env.S3_PUBLIC_URL,
+      process.env.S3_ENDPOINT,
+    ]) {
       if (envVal) {
         try { allowed.add(new URL(envVal).hostname.toLowerCase()); } catch { /* ignore */ }
       }

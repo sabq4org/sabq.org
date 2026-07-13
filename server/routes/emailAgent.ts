@@ -8,7 +8,7 @@ import OpenAI from "openai";
 import { storage } from "../storage";
 import { analyzeAndEditWithSabqStyle, detectLanguage, normalizeLanguageCode } from "../ai/contentAnalyzer";
 import { objectStorageClient } from "../objectStorage";
-import { cloudflareImagesService } from "../services/cloudflareImagesService";
+import { newsImageStorageService } from "../services/newsImageStorageService";
 import { nanoid } from "nanoid";
 import { isAuthenticated } from "../auth";
 import { requireRole, requirePermission } from "../rbac";
@@ -124,26 +124,26 @@ async function uploadAttachmentToGCS(
   contentType: string,
   isPublic: boolean = false
 ): Promise<string> {
-  // 🎯 PUBLIC IMAGES: Cloudflare Images is the canonical store. Try it FIRST
-  // and return immediately on success, so the upload works on Railway where
-  // PUBLIC_OBJECT_SEARCH_PATHS / Replit Object Storage are not configured.
-  if (isPublic && contentType.startsWith('image/') && cloudflareImagesService.isCloudflareConfigured()) {
+  // Public editorial images use the shared R2 rollout with Cloudflare Images
+  // fallback. Non-image attachments remain on the private object-store path.
+  if (isPublic && contentType.startsWith('image/') && newsImageStorageService.isUploadAvailable()) {
     try {
-      console.log(`[Email Agent] ☁️ Uploading image to Cloudflare Images (primary)...`);
-      const cfResult = await cloudflareImagesService.uploadToCloudflare(
-        file,
+      const imageResult = await newsImageStorageService.upload({
+        buffer: file,
         filename,
-        { source: 'email-agent', type: 'article-image' },
-        contentType
-      );
+        mimeType: contentType,
+        purpose: 'email-article-image',
+        metadata: { source: 'email-agent' },
+        rolloutKey: `email:${filename}:${file.length}`,
+      });
 
-      if (cfResult.success && cfResult.deliveryUrl) {
-        console.log(`[Email Agent] ☁️ Cloudflare upload successful: ${cfResult.deliveryUrl}`);
-        return cfResult.deliveryUrl;
+      if (imageResult.success && imageResult.deliveryUrl) {
+        console.log(`[Email Agent] ☁️ Canonical image upload successful`);
+        return imageResult.deliveryUrl;
       }
-      console.log(`[Email Agent] ☁️ Cloudflare upload failed, falling back to GCS: ${cfResult.error}`);
-    } catch (cfError) {
-      console.error("[Email Agent] ☁️ Cloudflare upload error, falling back to GCS:", cfError);
+      console.log(`[Email Agent] ☁️ Canonical upload failed, falling back to GCS: ${imageResult.error}`);
+    } catch (imageError) {
+      console.error("[Email Agent] ☁️ Canonical upload error, falling back to GCS:", imageError);
     }
   }
 
