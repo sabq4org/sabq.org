@@ -83,23 +83,78 @@ function fileToDataUrl(filePath: string): string | null {
 
 async function fetchImageAsDataUrl(url: string | null | undefined): Promise<string | null> {
   if (!url || !/^https?:\/\//i.test(url)) return null;
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12_000);
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: { Accept: "image/*,*/*" },
-    });
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const ctype = (res.headers.get("content-type") || "image/jpeg").split(";")[0]!.trim();
-    if (!ctype.startsWith("image/")) return null;
-    const ab = await res.arrayBuffer();
-    if (ab.byteLength > 8_000_000) return null;
-    return `data:${ctype};base64,${Buffer.from(ab).toString("base64")}`;
-  } catch {
-    return null;
+
+  const candidates = jpegFriendlyCandidates(url);
+  for (const candidate of candidates) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 12_000);
+      const res = await fetch(candidate, {
+        signal: controller.signal,
+        headers: { Accept: "image/jpeg,image/png,image/*;q=0.8,*/*;q=0.5" },
+      });
+      clearTimeout(timer);
+      if (!res.ok) continue;
+      const ab = await res.arrayBuffer();
+      if (ab.byteLength < 24 || ab.byteLength > 8_000_000) continue;
+      const buf = Buffer.from(ab);
+      // pdfmake/pdfkit only support JPEG + PNG — WebP/AVIF crash the export.
+      const isJpeg = buf[0] === 0xff && buf[1] === 0xd8;
+      const isPng = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+      if (!isJpeg && !isPng) continue;
+      const mime = isJpeg ? "image/jpeg" : "image/png";
+      return `data:${mime};base64,${buf.toString("base64")}`;
+    } catch {
+      /* try next candidate */
+    }
   }
+  return null;
+}
+
+/** Prefer JPEG/PNG variants for CDNs that default to WebP. */
+function jpegFriendlyCandidates(url: string): string[] {
+  const out = [url];
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes("imagedelivery.net")) {
+      // .../<imageId>/<variant> → force a jpeg-friendly variant when possible
+      const parts = u.pathname.split("/").filter(Boolean);
+      if (parts.length >= 2) {
+        const base = parts.slice(0, -1).join("/");
+        out.unshift(`${u.origin}/${base}/w=1200,format=jpeg`);
+        out.unshift(`${u.origin}/${base}/public`);
+      }
+    }
+    if (!u.searchParams.has("format")) {
+      const withFmt = new URL(url);
+      withFmt.searchParams.set("format", "jpeg");
+      out.unshift(withFmt.toString());
+    }
+  } catch {
+    /* keep original */
+  }
+  return [...new Set(out)];
+}
+
+function loadPdfPrinterModule(): Promise<any> {
+  return import("pdfmake").then((mod: any) => {
+    const ctor = mod?.default ?? mod;
+    if (typeof ctor !== "function") {
+      throw new Error("pdfmake PdfPrinter is unavailable");
+    }
+    return ctor;
+  });
+}
+
+function renderPdfBuffer(printer: any, docDefinition: object): Promise<Buffer> {
+  const pdfDoc = printer.createPdfKitDocument(docDefinition);
+  const chunks: Buffer[] = [];
+  return new Promise((resolve, reject) => {
+    pdfDoc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    pdfDoc.on("end", () => resolve(Buffer.concat(chunks)));
+    pdfDoc.on("error", reject);
+    pdfDoc.end();
+  });
 }
 
 function resolveLogoDataUrl(): string | null {
@@ -160,257 +215,254 @@ export async function buildArticlePrClientReportPdf(
   }
 
   const paragraphs = htmlToPlainParagraphs(article.content || "");
-  const bodyParagraphs =
+  const bodyParagraphs = (
     paragraphs.length > 0
       ? paragraphs
-      : [(article.excerpt || "").trim()].filter(Boolean);
+      : [(article.excerpt || "").trim()].filter(Boolean)
+  ).slice(0, 80);
 
   const logoDataUrl = resolveLogoDataUrl();
-  const heroDataUrl = await fetchImageAsDataUrl(article.imageUrl);
-  const viewsLabel = Number(article.views || 0).toLocaleString("ar-SA");
+  let heroDataUrl = await fetchImageAsDataUrl(article.imageUrl);
+  const viewsLabel = Number(article.views || 0).toLocaleString("en-US");
   const publishedLabel = formatArabicDateTime(article.publishedAt);
   const generatedLabel = formatArabicDateTime(new Date());
 
-  const { default: PdfPrinter } = await import("pdfmake");
+  const PdfPrinter = await loadPdfPrinterModule();
   const printer = new PdfPrinter(resolveFonts());
 
-  const content: any[] = [];
+  const buildDoc = (hero: string | null) => {
+    const content: any[] = [];
 
-  // Dark brand header
-  content.push({
-    table: {
-      widths: ["*"],
-      body: [
-        [
-          {
-            stack: [
-              logoDataUrl
-                ? {
-                    image: logoDataUrl,
-                    width: 96,
-                    alignment: "center" as const,
-                    margin: [0, 8, 0, 6] as [number, number, number, number],
-                  }
-                : {
-                    text: "سبق",
-                    fontSize: 28,
-                    bold: true,
-                    color: BRAND.cyan,
-                    alignment: "center" as const,
-                    margin: [0, 16, 0, 8] as [number, number, number, number],
-                  },
-              {
-                text: "تقرير أداء خبر · للإعلام والعلاقات العامة",
-                fontSize: 9,
-                color: "#A3A3A3",
-                alignment: "center" as const,
-                margin: [0, 0, 0, 10] as [number, number, number, number],
-              },
-            ],
-            fillColor: BRAND.headerBg,
-            border: [false, false, false, false],
-          },
-        ],
-      ],
-    },
-    layout: "noBorders",
-    margin: [0, 0, 0, 0],
-  });
-
-  // Cyan accent
-  content.push({
-    canvas: [
-      {
-        type: "rect",
-        x: 0,
-        y: 0,
-        w: 515,
-        h: 3,
-        color: BRAND.cyan,
-      },
-    ],
-    margin: [0, 0, 0, 22],
-  });
-
-  // Title
-  content.push({
-    text: article.title || "بدون عنوان",
-    fontSize: 18,
-    bold: true,
-    color: BRAND.ink,
-    alignment: "right" as const,
-    lineHeight: 1.35,
-    margin: [0, 0, 0, 16],
-  });
-
-  // Hero image
-  if (heroDataUrl) {
     content.push({
-      image: heroDataUrl,
-      width: 515,
-      alignment: "center" as const,
-      margin: [0, 0, 0, 14],
+      table: {
+        widths: ["*"],
+        body: [
+          [
+            {
+              stack: [
+                logoDataUrl
+                  ? {
+                      image: logoDataUrl,
+                      width: 96,
+                      alignment: "center" as const,
+                      margin: [0, 8, 0, 6] as [number, number, number, number],
+                    }
+                  : {
+                      text: "سبق",
+                      fontSize: 28,
+                      bold: true,
+                      color: BRAND.cyan,
+                      alignment: "center" as const,
+                      margin: [0, 16, 0, 8] as [number, number, number, number],
+                    },
+                {
+                  text: "تقرير أداء خبر · للإعلام والعلاقات العامة",
+                  fontSize: 9,
+                  color: "#A3A3A3",
+                  alignment: "center" as const,
+                  margin: [0, 0, 0, 10] as [number, number, number, number],
+                },
+              ],
+              fillColor: BRAND.headerBg,
+              border: [false, false, false, false],
+            },
+          ],
+        ],
+      },
+      layout: "noBorders",
+      margin: [0, 0, 0, 0],
     });
-  }
 
-  // Meta strip: views + publish time
-  content.push({
-    table: {
-      widths: ["*", "*"],
-      body: [
-        [
-          {
-            stack: [
-              {
-                text: "تاريخ ووقت النشر",
-                fontSize: 8,
-                color: BRAND.muted,
-                alignment: "center" as const,
-                margin: [0, 0, 0, 4] as [number, number, number, number],
-              },
-              {
-                text: publishedLabel,
-                fontSize: 11,
-                bold: true,
-                color: BRAND.ink,
-                alignment: "center" as const,
-              },
-            ],
-            fillColor: BRAND.soft,
-            border: [false, false, false, false],
-            margin: [8, 10, 8, 10] as [number, number, number, number],
-          },
-          {
-            stack: [
-              {
-                text: "عدد المشاهدات",
-                fontSize: 8,
-                color: BRAND.muted,
-                alignment: "center" as const,
-                margin: [0, 0, 0, 4] as [number, number, number, number],
-              },
-              {
-                text: viewsLabel,
-                fontSize: 20,
-                bold: true,
-                color: BRAND.cyan,
-                alignment: "center" as const,
-              },
-            ],
-            fillColor: BRAND.soft,
-            border: [false, false, false, false],
-            margin: [8, 10, 8, 10] as [number, number, number, number],
-          },
-        ],
-      ],
-    },
-    layout: {
-      hLineWidth: () => 0,
-      vLineWidth: (i: number) => (i === 1 ? 1 : 0),
-      vLineColor: () => BRAND.line,
-      paddingLeft: () => 0,
-      paddingRight: () => 0,
-      paddingTop: () => 0,
-      paddingBottom: () => 0,
-    },
-    margin: [0, 0, 0, 20],
-  });
-
-  // Body
-  content.push({
-    text: "نص الخبر",
-    fontSize: 11,
-    bold: true,
-    color: BRAND.ink,
-    alignment: "right" as const,
-    margin: [0, 0, 0, 6],
-  });
-  content.push({
-    canvas: [
-      {
-        type: "rect",
-        x: 435,
-        y: 0,
-        w: 80,
-        h: 2.5,
-        color: BRAND.cyan,
-      },
-    ],
-    margin: [0, 0, 0, 12],
-  });
-
-  if (bodyParagraphs.length === 0) {
     content.push({
-      text: "لا يتوفر نص للعرض.",
-      fontSize: 10,
-      color: BRAND.muted,
+      canvas: [
+        {
+          type: "rect",
+          x: 0,
+          y: 0,
+          w: 515,
+          h: 3,
+          color: BRAND.cyan,
+        },
+      ],
+      margin: [0, 0, 0, 22],
+    });
+
+    content.push({
+      text: article.title || "بدون عنوان",
+      fontSize: 18,
+      bold: true,
+      color: BRAND.ink,
       alignment: "right" as const,
+      lineHeight: 1.35,
+      margin: [0, 0, 0, 16],
     });
-  } else {
-    for (const paragraph of bodyParagraphs) {
+
+    if (hero) {
       content.push({
-        text: paragraph,
-        fontSize: 10.5,
-        color: BRAND.ink,
-        alignment: "right" as const,
-        lineHeight: 1.55,
-        margin: [0, 0, 0, 10],
+        image: hero,
+        width: 515,
+        alignment: "center" as const,
+        margin: [0, 0, 0, 14],
       });
     }
-  }
 
-  // Footer note
-  content.push({
-    canvas: [
-      {
-        type: "line",
-        x1: 0,
-        y1: 0,
-        x2: 515,
-        y2: 0,
-        lineWidth: 0.75,
-        lineColor: BRAND.line,
+    content.push({
+      table: {
+        widths: ["*", "*"],
+        body: [
+          [
+            {
+              stack: [
+                {
+                  text: "تاريخ ووقت النشر",
+                  fontSize: 8,
+                  color: BRAND.muted,
+                  alignment: "center" as const,
+                  margin: [0, 0, 0, 4] as [number, number, number, number],
+                },
+                {
+                  text: publishedLabel,
+                  fontSize: 11,
+                  bold: true,
+                  color: BRAND.ink,
+                  alignment: "center" as const,
+                },
+              ],
+              fillColor: BRAND.soft,
+              border: [false, false, false, false],
+              margin: [8, 10, 8, 10] as [number, number, number, number],
+            },
+            {
+              stack: [
+                {
+                  text: "عدد المشاهدات",
+                  fontSize: 8,
+                  color: BRAND.muted,
+                  alignment: "center" as const,
+                  margin: [0, 0, 0, 4] as [number, number, number, number],
+                },
+                {
+                  text: viewsLabel,
+                  fontSize: 20,
+                  bold: true,
+                  color: BRAND.cyan,
+                  alignment: "center" as const,
+                },
+              ],
+              fillColor: BRAND.soft,
+              border: [false, false, false, false],
+              margin: [8, 10, 8, 10] as [number, number, number, number],
+            },
+          ],
+        ],
       },
-    ],
-    margin: [0, 18, 0, 10],
-  });
-  content.push({
-    text: `صحيفة سبق الإلكترونية · sabq.org · أُنشئ في ${generatedLabel}`,
-    fontSize: 8,
-    color: BRAND.muted,
-    alignment: "center" as const,
-  });
-  content.push({
-    text: "تقرير موجّه لعملاء العلاقات العامة — للاستخدام الداخلي مع العميل.",
-    fontSize: 7.5,
-    color: "#9CA3AF",
-    alignment: "center" as const,
-    margin: [0, 4, 0, 0],
-  });
+      layout: {
+        hLineWidth: () => 0,
+        vLineWidth: (i: number) => (i === 1 ? 1 : 0),
+        vLineColor: () => BRAND.line,
+        paddingLeft: () => 0,
+        paddingRight: () => 0,
+        paddingTop: () => 0,
+        paddingBottom: () => 0,
+      },
+      margin: [0, 0, 0, 20],
+    });
 
-  const docDefinition = {
-    pageSize: "A4" as const,
-    pageMargins: [40, 36, 40, 40] as [number, number, number, number],
-    defaultStyle: {
-      font: "SabqArabic",
+    content.push({
+      text: "نص الخبر",
+      fontSize: 11,
+      bold: true,
+      color: BRAND.ink,
       alignment: "right" as const,
-    },
-    content,
-    info: {
-      title: `تقرير سبق — ${article.title || article.id}`,
-      author: "Sabq",
-      subject: "تقرير أداء خبر للعملاء",
-    },
+      margin: [0, 0, 0, 6],
+    });
+    content.push({
+      canvas: [
+        {
+          type: "rect",
+          x: 435,
+          y: 0,
+          w: 80,
+          h: 2.5,
+          color: BRAND.cyan,
+        },
+      ],
+      margin: [0, 0, 0, 12],
+    });
+
+    if (bodyParagraphs.length === 0) {
+      content.push({
+        text: "لا يتوفر نص للعرض.",
+        fontSize: 10,
+        color: BRAND.muted,
+        alignment: "right" as const,
+      });
+    } else {
+      for (const paragraph of bodyParagraphs) {
+        content.push({
+          text: paragraph,
+          fontSize: 10.5,
+          color: BRAND.ink,
+          alignment: "right" as const,
+          lineHeight: 1.55,
+          margin: [0, 0, 0, 10],
+        });
+      }
+    }
+
+    content.push({
+      canvas: [
+        {
+          type: "line",
+          x1: 0,
+          y1: 0,
+          x2: 515,
+          y2: 0,
+          lineWidth: 0.75,
+          lineColor: BRAND.line,
+        },
+      ],
+      margin: [0, 18, 0, 10],
+    });
+    content.push({
+      text: `صحيفة سبق الإلكترونية · sabq.org · أُنشئ في ${generatedLabel}`,
+      fontSize: 8,
+      color: BRAND.muted,
+      alignment: "center" as const,
+    });
+    content.push({
+      text: "تقرير موجّه لعملاء العلاقات العامة — للاستخدام الداخلي مع العميل.",
+      fontSize: 7.5,
+      color: "#9CA3AF",
+      alignment: "center" as const,
+      margin: [0, 4, 0, 0],
+    });
+
+    return {
+      pageSize: "A4" as const,
+      pageMargins: [40, 36, 40, 40] as [number, number, number, number],
+      defaultStyle: {
+        font: "SabqArabic",
+        alignment: "right" as const,
+      },
+      content,
+      info: {
+        title: `تقرير سبق — ${article.title || article.id}`,
+        author: "Sabq",
+        subject: "تقرير أداء خبر للعملاء",
+      },
+    };
   };
 
-  const pdfDoc = printer.createPdfKitDocument(docDefinition);
-  const chunks: Buffer[] = [];
-  const buffer: Buffer = await new Promise((resolve, reject) => {
-    pdfDoc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    pdfDoc.on("end", () => resolve(Buffer.concat(chunks)));
-    pdfDoc.on("error", reject);
-    pdfDoc.end();
-  });
+  let buffer: Buffer;
+  try {
+    buffer = await renderPdfBuffer(printer, buildDoc(heroDataUrl));
+  } catch (err) {
+    // Unknown image format / corrupt hero — regenerate without the article image.
+    console.warn("[PrClientReportPdf] Render with hero failed, retrying without image:", err);
+    heroDataUrl = null;
+    buffer = await renderPdfBuffer(printer, buildDoc(null));
+  }
 
   const safeSlug = (article.slug || article.id).replace(/[^a-zA-Z0-9-_]/g, "_");
   return {
