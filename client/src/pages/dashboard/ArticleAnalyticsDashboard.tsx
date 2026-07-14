@@ -105,7 +105,7 @@ interface SearchResponse {
     totalCount: number;
     offset: number;
     limit: number;
-    hasMore: boolean;
+    hasMore?: boolean;
   };
 }
 
@@ -351,9 +351,10 @@ function ArticleDetailPanel({
   onExportPrClientReport: (article: ArticleDetail) => void;
   canExportPrClientReport: boolean;
 }) {
-  const { data: article, isLoading } = useQuery<ArticleDetail>({
-    queryKey: ['/api/admin/article-analytics', articleId],
+  const { data: article, isLoading, isError, error, refetch } = useQuery<ArticleDetail>({
+    queryKey: ["/api/admin/article-analytics", articleId],
     enabled: !!articleId,
+    retry: 1,
   });
 
   if (isLoading) {
@@ -366,6 +367,20 @@ function ArticleDetailPanel({
           ))}
         </div>
         <Skeleton className="h-40" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-3 p-6 text-center">
+        <p className="text-sm text-destructive">تعذر تحميل تفاصيل المقال</p>
+        <p className="text-xs text-muted-foreground">
+          {(error as Error)?.message || "خطأ غير متوقع"}
+        </p>
+        <Button size="sm" variant="outline" onClick={() => refetch()}>
+          إعادة المحاولة
+        </Button>
       </div>
     );
   }
@@ -569,14 +584,14 @@ export default function ArticleAnalyticsDashboard() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedStatus, setSelectedStatus] = useState<string>("published");
   const [dateRange, setDateRange] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<string>("views");
+  const [sortBy, setSortBy] = useState<string>("publishedAt");
   const [offset, setOffset] = useState(0);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
-  const limit = 10;
+  const limit = 20;
 
   const getDateRange = useCallback(() => {
     const now = new Date();
@@ -707,16 +722,16 @@ export default function ArticleAnalyticsDashboard() {
   const clearFilters = useCallback(() => {
     setSearchQuery("");
     setSelectedCategory("all");
-    setSelectedStatus("all");
+    setSelectedStatus("published");
     setDateRange("all");
-    setSortBy("views");
+    setSortBy("publishedAt");
     setOffset(0);
   }, []);
 
   const articles = searchData?.articles || [];
   const pagination = searchData?.pagination;
-  const totalPages = pagination ? Math.ceil(pagination.totalCount / limit) : 0;
   const currentPage = pagination ? Math.floor(pagination.offset / limit) + 1 : 1;
+  const showNext = Boolean(pagination?.hasMore);
 
   return (
     <DashboardLayout>
@@ -816,7 +831,7 @@ export default function ArticleAnalyticsDashboard() {
                   </Select>
                 </div>
 
-                {(searchQuery || selectedCategory !== "all" || selectedStatus !== "all" || dateRange !== "all") && (
+                {(searchQuery || selectedCategory !== "all" || selectedStatus !== "published" || dateRange !== "all" || sortBy !== "publishedAt") && (
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">الفلاتر النشطة:</span>
                     {searchQuery && (
@@ -855,13 +870,16 @@ export default function ArticleAnalyticsDashboard() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">
                     النتائج
-                    {pagination && (
+                    {articles.length > 0 && (
                       <Badge variant="outline" className="mr-2">
-                        {formatNumber(pagination.totalCount)} مقال
+                        {searchQuery ? `${articles.length} نتيجة` : `آخر ${articles.length}`}
                       </Badge>
                     )}
                   </CardTitle>
                 </div>
+                <CardDescription>
+                  يُعرض أحدث 20 خبراً منشوراً. استخدم البحث لإيجاد خبر محدد.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {isSearching ? (
@@ -887,10 +905,10 @@ export default function ArticleAnalyticsDashboard() {
                       />
                     ))}
 
-                    {pagination && totalPages > 1 && (
+                    {(offset > 0 || showNext) && (
                       <div className="flex items-center justify-between pt-4">
                         <p className="text-sm text-muted-foreground">
-                          صفحة {currentPage} من {totalPages}
+                          صفحة {currentPage}
                         </p>
                         <div className="flex items-center gap-2">
                           <Button
@@ -906,7 +924,7 @@ export default function ArticleAnalyticsDashboard() {
                           <Button
                             variant="outline"
                             size="sm"
-                            disabled={!pagination.hasMore}
+                            disabled={!showNext}
                             onClick={() => setOffset(offset + limit)}
                             data-testid="button-next-page"
                           >
