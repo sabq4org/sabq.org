@@ -273,15 +273,42 @@ h2{font-size:15px;font-weight:700;margin:0 0 12px;display:inline-block;
 </html>`;
 }
 
+function resolveChromeExecutable(): string {
+  const fromEnv = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    process.env.CHROME_PATH,
+  ].filter(Boolean) as string[];
+
+  const candidates = [
+    ...fromEnv,
+    "/usr/bin/sabq-chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/chromium",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome",
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (candidate && fs.existsSync(candidate)) return candidate;
+    } catch {
+      /* continue */
+    }
+  }
+
+  throw new Error(
+    "CHROME_NOT_FOUND: No Chromium/Chrome binary available for PDF rendering. " +
+      "Set PUPPETEER_EXECUTABLE_PATH or install chromium in the runtime image.",
+  );
+}
+
 async function renderHtmlToPdf(html: string): Promise<Buffer> {
   const puppeteer = await import("puppeteer");
-  const executablePath =
-    process.env.PUPPETEER_EXECUTABLE_PATH ||
-    process.env.CHROME_PATH ||
-    undefined;
+  const executablePath = resolveChromeExecutable();
 
-  const launchOpts: Record<string, unknown> = {
+  const browser = await puppeteer.default.launch({
     headless: true,
+    executablePath,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -289,12 +316,7 @@ async function renderHtmlToPdf(html: string): Promise<Buffer> {
       "--disable-gpu",
       "--font-render-hinting=none",
     ],
-  };
-  if (executablePath) {
-    launchOpts.executablePath = executablePath;
-  }
-
-  const browser = await puppeteer.default.launch(launchOpts as any);
+  } as any);
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0", timeout: 45_000 });
