@@ -33,7 +33,11 @@ router.get(
       }
       console.error("[PrClientReportPdf] Failed to build report:", error);
       if (!res.headersSent) {
-        res.status(500).json({ message: "تعذر إنشاء تقرير PDF" });
+        const detail = error instanceof Error ? error.message : String(error ?? "");
+        res.status(500).json({
+          message: "تعذر إنشاء تقرير PDF",
+          detail: detail.slice(0, 300),
+        });
       }
     }
   },

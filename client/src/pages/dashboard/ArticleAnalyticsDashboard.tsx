@@ -693,7 +693,14 @@ export default function ArticleAnalyticsDashboard() {
         { method: "GET", credentials: "include" },
       );
       if (!response.ok) {
-        throw new Error("فشل في تصدير تقرير العميل");
+        let detail = "";
+        try {
+          const payload = await response.json();
+          detail = payload?.detail || payload?.message || "";
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail || "فشل في تصدير تقرير العميل");
       }
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -708,10 +715,13 @@ export default function ArticleAnalyticsDashboard() {
         title: "تم إنشاء تقرير العميل",
         description: "ملف PDF جاهز للمشاركة مع العميل",
       });
-    } catch {
+    } catch (error) {
       toast({
         title: "تعذر إنشاء التقرير",
-        description: "حدث خطأ أثناء إنشاء تقرير العميل. حاول مرة أخرى.",
+        description:
+          error instanceof Error && error.message
+            ? error.message
+            : "حدث خطأ أثناء إنشاء تقرير العميل. حاول مرة أخرى.",
         variant: "destructive",
       });
     } finally {

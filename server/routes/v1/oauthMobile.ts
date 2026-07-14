@@ -109,6 +109,8 @@ const phoneSendLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  // Custom keyGenerator already falls back to req.ip — disable IPv6 validation noise.
+  validate: { keyGeneratorIpFallback: false, ip: false, xForwardedForHeader: false },
   keyGenerator: (req) => {
     const e164 = normalizePhone(req.body?.phone);
     return e164 || req.ip || "unknown";
