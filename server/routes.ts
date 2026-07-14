@@ -9432,61 +9432,75 @@ Respond in valid JSON format only:
         status,
         dateFrom,
         dateTo,
-        sortBy = "views",
+        sortBy = "publishedAt",
         limit = "20",
         offset = "0"
       } = req.query;
 
-      const limitNum = Math.min(parseInt(limit) || 20, 100);
-      const offsetNum = parseInt(offset) || 0;
+      // Hard cap: never return more than 20 rows per page (keeps this admin tool light).
+      const limitNum = Math.min(Math.max(parseInt(String(limit), 10) || 20, 1), 20);
+      const offsetNum = Math.max(parseInt(String(offset), 10) || 0, 0);
 
-      // Build where conditions
       const whereConditions = [];
 
       if (query) {
-        const searchQuery = query.trim();
-        whereConditions.push(
-          or(
-            ilike(articles.title, `%${searchQuery}%`),
-            ilike(articles.excerpt, `%${searchQuery}%`)
-          )
-        );
+        const searchQuery = String(query).trim();
+        if (searchQuery) {
+          whereConditions.push(
+            or(
+              ilike(articles.title, `%${searchQuery}%`),
+              ilike(articles.excerpt, `%${searchQuery}%`),
+              ilike(articles.slug, `%${searchQuery}%`),
+            )
+          );
+        }
       }
       if (categoryId) {
-        whereConditions.push(eq(articles.categoryId, categoryId));
+        whereConditions.push(eq(articles.categoryId, String(categoryId)));
       }
 
       if (status && status !== "all") {
-        whereConditions.push(eq(articles.status, status));
+        whereConditions.push(eq(articles.status, String(status)));
       }
 
       if (dateFrom) {
-        const fromDate = new Date(dateFrom);
+        const fromDate = new Date(String(dateFrom));
         if (!isNaN(fromDate.getTime())) {
           whereConditions.push(gte(articles.publishedAt, fromDate));
         }
       }
 
       if (dateTo) {
-        const toDate = new Date(dateTo);
+        const toDate = new Date(String(dateTo));
         if (!isNaN(toDate.getTime())) {
           whereConditions.push(lte(articles.publishedAt, toDate));
         }
       }
 
-      // Query articles with aggregated metrics using subqueries
+      // Default browse mode (no filters): published only, newest first.
+      const hasExplicitFilters = whereConditions.length > 0;
+      if (!hasExplicitFilters) {
+        whereConditions.push(eq(articles.status, "published"));
+      }
+
+      const sortKey = String(sortBy || "publishedAt");
+      const orderClause =
+        sortKey === "views"
+          ? desc(articles.views)
+          : desc(articles.publishedAt);
+
+      // Light list query — never select full HTML content here.
       const articlesWithMetrics = await db
         .select({
           id: articles.id,
           title: articles.title,
-        subtitle: articles.subtitle,
+          subtitle: articles.subtitle,
           slug: articles.slug,
           excerpt: articles.excerpt,
           imageUrl: articles.imageUrl,
           imageFocalPoint: articles.imageFocalPoint,
           status: articles.status,
           views: articles.views,
-          content: articles.content,
           publishedAt: articles.publishedAt,
           createdAt: articles.createdAt,
           categoryId: articles.categoryId,
@@ -9499,27 +9513,27 @@ Respond in valid JSON format only:
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .leftJoin(users, eq(articles.authorId, users.id))
-        .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
-        .orderBy(desc(articles.views))
+        .where(and(...whereConditions))
+        .orderBy(orderClause)
         .limit(limitNum + 1)
         .offset(offsetNum);
 
-      // Check if there are more results
       const hasMore = articlesWithMetrics.length > limitNum;
       const articlesToReturn = hasMore ? articlesWithMetrics.slice(0, limitNum) : articlesWithMetrics;
-      
-      // Get article IDs for batch queries
       const articleIds = articlesToReturn.map(a => a.id);
 
       if (articleIds.length === 0) {
         return res.json({
           articles: [],
-          hasMore: false,
-          totalCount: 0
+          pagination: {
+            totalCount: 0,
+            offset: offsetNum,
+            limit: limitNum,
+            hasMore: false,
+          },
         });
       }
 
-      // Batch query for likes count
       const likesCountResult = await db
         .select({
           articleId: reactions.articleId,
@@ -9534,7 +9548,6 @@ Respond in valid JSON format only:
 
       const likesMap = new Map(likesCountResult.map(r => [r.articleId, r.count]));
 
-      // Batch query for saves/bookmarks count
       const savesCountResult = await db
         .select({
           articleId: bookmarks.articleId,
@@ -9546,7 +9559,6 @@ Respond in valid JSON format only:
 
       const savesMap = new Map(savesCountResult.map(r => [r.articleId, r.count]));
 
-      // Batch query for shares count from shortLinks
       const sharesCountResult = await db
         .select({
           articleId: shortLinks.articleId,
@@ -9561,7 +9573,6 @@ Respond in valid JSON format only:
 
       const sharesMap = new Map(sharesCountResult.map(r => [r.articleId, r.count]));
 
-      // Batch query for comments count
       const commentsCountResult = await db
         .select({
           articleId: comments.articleId,
@@ -9573,7 +9584,6 @@ Respond in valid JSON format only:
 
       const commentsMap = new Map(commentsCountResult.map(r => [r.articleId, r.count]));
 
-      // Batch query for average reading time
       const readingTimeResult = await db
         .select({
           articleId: readingHistory.articleId,
@@ -9588,19 +9598,11 @@ Respond in valid JSON format only:
 
       const readingTimeMap = new Map(readingTimeResult.map(r => [r.articleId, r.avgReadingTime]));
 
-      // Calculate word count helper function
-      const calculateWordCount = (content: string | null): number => {
-        if (!content) return 0;
-        const plainText = content.replace(/<[^>]*>/g, '');
-        return plainText.split(/\s+/).filter(Boolean).length;
-      };
-
-      // Build final response with all metrics flattened
-      const articlesWithFullMetrics = articlesToReturn.map(article => ({
+      let articlesWithFullMetrics = articlesToReturn.map(article => ({
         id: article.id,
         title: article.title,
         slug: article.slug,
-              englishSlug: (article as any).englishSlug || undefined,
+        englishSlug: (article as any).englishSlug || undefined,
         excerpt: article.excerpt,
         imageUrl: article.imageUrl,
         status: article.status,
@@ -9613,8 +9615,8 @@ Respond in valid JSON format only:
         } : null,
         author: {
           id: article.authorId,
-          name: article.authorFirstName && article.authorLastName 
-            ? `${article.authorFirstName} ${article.authorLastName}` 
+          name: article.authorFirstName && article.authorLastName
+            ? `${article.authorFirstName} ${article.authorLastName}`
             : article.authorFirstName || article.authorLastName || null
         },
         views: article.views || 0,
@@ -9622,43 +9624,32 @@ Respond in valid JSON format only:
         savesCount: savesMap.get(article.id) || 0,
         sharesCount: sharesMap.get(article.id) || 0,
         commentsCount: commentsMap.get(article.id) || 0,
-        wordCount: calculateWordCount(article.content),
+        wordCount: 0,
         avgReadingTime: Math.round((readingTimeMap.get(article.id) || 0) * 10) / 10
       }));
 
-      // Sort by the requested metric
-      const sortedArticles = [...articlesWithFullMetrics].sort((a, b) => {
-        switch (sortBy) {
-          case "likes":
-            return b.likesCount - a.likesCount;
-          case "comments":
-            return b.commentsCount - a.commentsCount;
-          case "shares":
-            return b.sharesCount - a.sharesCount;
-          case "publishedAt":
-            return new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime();
-          case "views":
-          default:
-            return b.views - a.views;
-        }
-      });
+      // Engagement sorts apply within the current page only (avoids heavy global aggregates).
+      if (sortKey === "likes" || sortKey === "comments" || sortKey === "shares") {
+        articlesWithFullMetrics = [...articlesWithFullMetrics].sort((a, b) => {
+          if (sortKey === "likes") return b.likesCount - a.likesCount;
+          if (sortKey === "comments") return b.commentsCount - a.commentsCount;
+          return b.sharesCount - a.sharesCount;
+        });
+      }
 
-      // Get total count for pagination
-      const [{ count: totalCount }] = await db
-        .select({ count: sql<number>`COUNT(*)::int` })
-        .from(articles)
-        .where(whereConditions.length > 0 ? and(...whereConditions) : undefined);
       res.json({
-        articles: sortedArticles,
+        articles: articlesWithFullMetrics,
         pagination: {
-  
-          totalCount: totalCount || 0,
+          // Intentionally NOT a full table COUNT(*) — that was scanning ~1M rows.
+          totalCount: offsetNum + articlesWithFullMetrics.length + (hasMore ? 1 : 0),
           offset: offsetNum,
-          limit: limitNum
-        }
+          limit: limitNum,
+          hasMore,
+        },
       });
 
     } catch (error) {
+      console.error("[Article Analytics] Search failed:", error);
       res.status(500).json({ message: "Failed to fetch article analytics" });
     }
   });
@@ -9786,7 +9777,7 @@ Respond in valid JSON format only:
         .where(eq(readingHistory.articleId, articleId));
 
       // Get recent comments (last 10 comments)
-      const recentComments = await (db as any)
+      const recentComments = await db
         .select({
           id: comments.id,
           content: comments.content,
@@ -9802,7 +9793,7 @@ Respond in valid JSON format only:
         .leftJoin(users, eq(comments.userId, users.id))
         .where(eq(comments.articleId, articleId))
         .orderBy(desc(comments.createdAt))
-        .orderBy(desc(articles.publishedAt)).limit(10);
+        .limit(10);
 
       // Calculate word count
       const calculateWordCount = (content: string | null): number => {
@@ -9821,7 +9812,6 @@ Respond in valid JSON format only:
         slug: article.slug,
               englishSlug: (article as any).englishSlug || undefined,
         excerpt: article.excerpt,
-        content: article.content,
         imageUrl: article.imageUrl,
         thumbnailUrl: article.thumbnailUrl,
         status: article.status,
