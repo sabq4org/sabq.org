@@ -1,27 +1,31 @@
 import fs from "fs";
 import path from "path";
-import { eq } from "drizzle-orm";
+import { createHash } from "crypto";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articles } from "@shared/schema";
+import { articles, readingHistory } from "@shared/schema";
 
 const BRAND = {
   cyan: "#1BADF8",
-  ink: "#1A1A1A",
-  muted: "#5B6470",
+  ink: "#1F2937",
+  muted: "#6B7280",
   line: "#E5E7EB",
   paper: "#FFFFFF",
-  headerBg: "#F7FBFD",
-  soft: "#F0F7FA",
+  headerBg: "#F8FBFD",
+  soft: "#F3F7F9",
 };
 
 export interface ArticlePrClientReportInput {
   articleId: string;
+  /** Campaign / client name entered at export time */
+  clientName?: string | null;
 }
 
 export interface ArticlePrClientReportResult {
   buffer: Buffer;
   filename: string;
   title: string;
+  reportRef: string;
 }
 
 function htmlToPlainParagraphs(html: string): string[] {
@@ -75,6 +79,45 @@ function formatArabicDateTime(date: Date | string | null): string {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()} · ${hh}:${mm}`;
+}
+
+function formatArabicDate(date: Date | string | null): string {
+  if (!date) return "غير متوفر";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "غير متوفر";
+  const months = [
+    "يناير",
+    "فبراير",
+    "مارس",
+    "أبريل",
+    "مايو",
+    "يونيو",
+    "يوليو",
+    "أغسطس",
+    "سبتمبر",
+    "أكتوبر",
+    "نوفمبر",
+    "ديسمبر",
+  ];
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function buildReportRef(articleId: string, generatedAt: Date): string {
+  const y = generatedAt.getFullYear();
+  const m = String(generatedAt.getMonth() + 1).padStart(2, "0");
+  const d = String(generatedAt.getDate()).padStart(2, "0");
+  const short = createHash("sha1")
+    .update(articleId)
+    .digest("hex")
+    .slice(0, 6)
+    .toUpperCase();
+  return `SABQ-PR-${y}${m}${d}-${short}`;
+}
+
+function sanitizeClientName(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/\s+/g, " ").trim().slice(0, 120);
+  return cleaned || null;
 }
 
 function fileToDataUrl(filePath: string): string | null {
@@ -169,17 +212,27 @@ function resolveFontDataUrls(): { regular: string | null; bold: string | null } 
     path.join(fontsDir, "IBMPlexSansArabic-Bold.ttf"),
     path.join(fontsDir, "NotoSansArabic-Bold.ttf"),
   ];
-  const regular =
-    regularCandidates.map(fileToDataUrl).find(Boolean) ?? null;
+  const regular = regularCandidates.map(fileToDataUrl).find(Boolean) ?? null;
   const bold = boldCandidates.map(fileToDataUrl).find(Boolean) ?? regular;
   return { regular, bold };
 }
 
+type PerformanceSnapshot = {
+  avgReadingMinutes: number | null;
+  avgCompletionRate: number | null;
+  sessions: number;
+};
+
 function buildReportHtml(input: {
   title: string;
+  clientName: string | null;
+  reportRef: string;
   viewsLabel: string;
   publishedLabel: string;
   generatedLabel: string;
+  measurementPeriod: string;
+  articleUrl: string;
+  performance: PerformanceSnapshot;
   paragraphs: string[];
   logoDataUrl: string | null;
   heroDataUrl: string | null;
@@ -208,6 +261,30 @@ function buildReportHtml(input: {
     ? `<img class="hero" src="${input.heroDataUrl}" alt="" />`
     : "";
 
+  const clientRow = input.clientName
+    ? `<div class="client-row"><span class="k">${escapeHtml("للعميل / الحملة")}</span><span class="v">${escapeHtml(input.clientName)}</span></div>`
+    : "";
+
+  const perfCells: string[] = [];
+  if (input.performance.avgReadingMinutes != null) {
+    perfCells.push(`
+      <div class="cell">
+        <div class="label">${escapeHtml("متوسط وقت القراءة")}</div>
+        <div class="value">${escapeHtml(`${input.performance.avgReadingMinutes.toFixed(1)} دقيقة`)}</div>
+      </div>`);
+  }
+  if (input.performance.avgCompletionRate != null) {
+    perfCells.push(`
+      <div class="cell">
+        <div class="label">${escapeHtml("نسبة الإكمال")}</div>
+        <div class="value">${escapeHtml(`${Math.round(input.performance.avgCompletionRate)}%`)}</div>
+      </div>`);
+  }
+  const performanceBlock =
+    perfCells.length > 0
+      ? `<section class="grid grid-2">${perfCells.join("")}</section>`
+      : "";
+
   return `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -216,56 +293,92 @@ function buildReportHtml(input: {
 ${fontFaces}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:${BRAND.paper};color:${BRAND.ink};
-  font-family:'SabqArabic','Segoe UI',Tahoma,Arial,sans-serif;direction:rtl}
-.page{padding:28px 36px 36px}
-.header{background:${BRAND.headerBg};border-radius:14px;border:1px solid ${BRAND.line};
-  text-align:center;padding:18px 16px 14px;margin-bottom:18px}
-.logo{height:52px;width:auto;margin:0 auto 8px;display:block}
-.logo-text{font-size:28px;font-weight:700;color:${BRAND.cyan};margin-bottom:6px}
-.brand{font-size:14px;font-weight:700;margin:0 0 4px}
-.sub{font-size:12px;color:${BRAND.muted};margin:0}
-.accent{height:3px;background:${BRAND.cyan};border-radius:2px;margin:16px 0 18px}
-h1{font-size:20px;line-height:1.5;margin:0 0 16px;font-weight:700;text-align:right}
-.hero{display:block;width:100%;max-height:280px;object-fit:cover;border-radius:12px;margin:0 0 16px}
-.meta{display:grid;grid-template-columns:1fr 1fr;background:${BRAND.soft};border-radius:12px;
-  overflow:hidden;margin:0 0 20px;border:1px solid ${BRAND.line}}
-.meta>div{padding:14px 12px;text-align:center}
-.meta>div+div{border-right:1px solid ${BRAND.line}}
-.meta .label{font-size:12px;color:${BRAND.muted};margin-bottom:6px}
-.meta .value{font-size:14px;font-weight:700}
-.meta .views{font-size:26px;font-weight:700;color:${BRAND.cyan};letter-spacing:0.02em}
-h2{font-size:15px;font-weight:700;margin:0 0 12px;display:inline-block;
-  padding-bottom:6px;border-bottom:2.5px solid ${BRAND.cyan}}
-.body p{font-size:13px;line-height:1.8;margin:0 0 12px;text-align:justify}
+  font-family:'SabqArabic','Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;
+  font-size:11px;line-height:1.55}
+.page{padding:22px 28px 26px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 12px;background:${BRAND.headerBg};border:1px solid ${BRAND.line};border-radius:10px}
+.header-right{display:flex;align-items:center;gap:10px;min-width:0}
+.logo{height:34px;width:auto;display:block}
+.logo-text{font-size:16px;font-weight:700;color:${BRAND.cyan}}
+.brand-block{min-width:0}
+.brand{font-size:11px;font-weight:700;margin:0 0 2px}
+.sub{font-size:9px;color:${BRAND.muted};margin:0}
+.meta-ref{text-align:left;font-size:9px;color:${BRAND.muted};line-height:1.45;white-space:nowrap}
+.meta-ref strong{color:${BRAND.ink};font-weight:700}
+.accent{height:2px;background:${BRAND.cyan};border-radius:2px;margin:12px 0 12px}
+.client-row{display:flex;align-items:baseline;gap:8px;margin:0 0 10px;padding:7px 10px;
+  background:${BRAND.soft};border:1px solid ${BRAND.line};border-radius:8px;font-size:10.5px}
+.client-row .k{color:${BRAND.muted}}
+.client-row .v{font-weight:700;color:${BRAND.ink}}
+h1{font-size:14px;line-height:1.45;margin:0 0 10px;font-weight:700;text-align:right}
+.hero{display:block;width:100%;max-height:180px;object-fit:cover;border-radius:8px;margin:0 0 12px}
+.grid{display:grid;gap:0;border:1px solid ${BRAND.line};border-radius:8px;overflow:hidden;
+  background:${BRAND.soft};margin:0 0 10px}
+.grid-3{grid-template-columns:1fr 1fr 1fr}
+.grid-2{grid-template-columns:1fr 1fr}
+.cell{padding:8px 10px;text-align:center}
+.cell+.cell{border-right:1px solid ${BRAND.line}}
+.label{font-size:8.5px;color:${BRAND.muted};margin-bottom:3px}
+.value{font-size:11px;font-weight:700;color:${BRAND.ink}}
+.value.views{font-size:15px;color:${BRAND.cyan}}
+.value.sm{font-size:10px;font-weight:600;word-break:break-word}
+.note{font-size:8.5px;color:${BRAND.muted};margin:0 0 12px;line-height:1.5;
+  padding:7px 9px;border-right:2.5px solid ${BRAND.cyan};background:#FAFCFE}
+.link-box{border:1px solid ${BRAND.line};border-radius:8px;margin:0 0 12px;padding:7px 10px;
+  text-align:right;background:#fff}
+.link-box .value{color:${BRAND.cyan};font-size:10px;font-weight:600;word-break:break-all}
+h2{font-size:11px;font-weight:700;margin:0 0 8px;display:inline-block;
+  padding-bottom:3px;border-bottom:2px solid ${BRAND.cyan}}
+.body p{font-size:10.5px;line-height:1.7;margin:0 0 8px;text-align:justify}
 .body .empty{color:${BRAND.muted}}
-.footer{margin-top:24px;padding-top:12px;border-top:1px solid ${BRAND.line};
-  text-align:center;font-size:11px;color:${BRAND.muted};line-height:1.6}
+.footer{margin-top:14px;padding-top:8px;border-top:1px solid ${BRAND.line};
+  text-align:center;font-size:8px;color:${BRAND.muted};line-height:1.55}
 </style>
 </head>
 <body>
   <div class="page">
     <header class="header">
-      ${logoHtml}
-      <p class="brand">${escapeHtml("صحيفة سبق الإلكترونية")}</p>
-      <p class="sub">${escapeHtml("تقرير أداء خبر · للإعلام والعلاقات العامة")}</p>
+      <div class="header-right">
+        ${logoHtml}
+        <div class="brand-block">
+          <p class="brand">${escapeHtml("صحيفة سبق الإلكترونية")}</p>
+          <p class="sub">${escapeHtml("تقرير أداء خبر · للإعلام والعلاقات العامة")}</p>
+        </div>
+      </div>
+      <div class="meta-ref">
+        <div><strong>${escapeHtml("المرجع:")}</strong> ${escapeHtml(input.reportRef)}</div>
+        <div><strong>${escapeHtml("تاريخ الإنشاء:")}</strong> ${escapeHtml(input.generatedLabel)}</div>
+      </div>
     </header>
     <div class="accent"></div>
+    ${clientRow}
     <h1>${escapeHtml(input.title)}</h1>
     ${heroHtml}
-    <section class="meta">
-      <div>
+    <section class="grid grid-3">
+      <div class="cell">
         <div class="label">${escapeHtml("عدد المشاهدات")}</div>
-        <div class="views">${escapeHtml(input.viewsLabel)}</div>
+        <div class="value views">${escapeHtml(input.viewsLabel)}</div>
       </div>
-      <div>
+      <div class="cell">
         <div class="label">${escapeHtml("تاريخ ووقت النشر")}</div>
         <div class="value">${escapeHtml(input.publishedLabel)}</div>
       </div>
+      <div class="cell">
+        <div class="label">${escapeHtml("فترة القياس")}</div>
+        <div class="value sm">${escapeHtml(input.measurementPeriod)}</div>
+      </div>
     </section>
+    ${performanceBlock}
+    <p class="note">${escapeHtml("المصدر: منصة سبق الإلكترونية (sabq.org). الأرقام أعلاه من العدّاد الرسمي للمنصة خلال فترة القياس المحددة.")}</p>
+    <div class="link-box">
+      <div class="label">${escapeHtml("رابط الخبر")}</div>
+      <div class="value">${escapeHtml(input.articleUrl)}</div>
+    </div>
     <h2>${escapeHtml("نص الخبر")}</h2>
     <div class="body">${bodyHtml}</div>
     <footer class="footer">
-      ${escapeHtml(`صحيفة سبق الإلكترونية · sabq.org · أُنشئ في ${input.generatedLabel}`)}<br/>
+      ${escapeHtml(`${input.reportRef} · sabq.org · أُنشئ في ${input.generatedLabel}`)}<br/>
       ${escapeHtml("تقرير موجّه لعملاء العلاقات العامة — للاستخدام الداخلي مع العميل.")}
     </footer>
   </div>
@@ -333,17 +446,21 @@ async function renderHtmlToPdf(html: string): Promise<Buffer> {
 }
 
 /**
- * Client-facing PR article report PDF (logo, title, image, body, views, publish time).
- * Rendered via Chromium HTML so Arabic RTL shaping/order are correct.
+ * Client-facing PR article report PDF.
+ * Compact layout: client name, report ref, measurement period, optional reading snapshot.
  */
 export async function buildArticlePrClientReportPdf(
   input: ArticlePrClientReportInput,
 ): Promise<ArticlePrClientReportResult> {
+  const clientName = sanitizeClientName(input.clientName);
+  const generatedAt = new Date();
+
   const [article] = await db
     .select({
       id: articles.id,
       title: articles.title,
       slug: articles.slug,
+      englishSlug: articles.englishSlug,
       content: articles.content,
       excerpt: articles.excerpt,
       imageUrl: articles.imageUrl,
@@ -359,6 +476,27 @@ export async function buildArticlePrClientReportPdf(
     throw Object.assign(new Error("ARTICLE_NOT_FOUND"), { code: "ARTICLE_NOT_FOUND" });
   }
 
+  const [readingStats] = await db
+    .select({
+      avgReadingTime: sql<number>`COALESCE(AVG(${readingHistory.readDuration}) / 60.0, 0)::real`,
+      totalReadSessions: sql<number>`COUNT(*)::int`,
+      avgCompletionRate: sql<number>`COALESCE(AVG(${readingHistory.completionRate}), 0)::real`,
+    })
+    .from(readingHistory)
+    .where(eq(readingHistory.articleId, input.articleId));
+
+  const sessions = Number(readingStats?.totalReadSessions || 0);
+  const avgReading = Number(readingStats?.avgReadingTime || 0);
+  const avgCompletion = Number(readingStats?.avgCompletionRate || 0);
+  // Only surface reading metrics when there is a real sample — avoid noisy zeros.
+  const performance: PerformanceSnapshot = {
+    sessions,
+    avgReadingMinutes:
+      sessions >= 3 && avgReading >= 0.2 ? Math.round(avgReading * 10) / 10 : null,
+    avgCompletionRate:
+      sessions >= 3 && avgCompletion >= 5 ? Math.round(avgCompletion) : null,
+  };
+
   const paragraphs = htmlToPlainParagraphs(article.content || "");
   const bodyParagraphs = (
     paragraphs.length > 0
@@ -371,15 +509,24 @@ export async function buildArticlePrClientReportPdf(
   let heroDataUrl = await fetchImageAsDataUrl(article.imageUrl);
   const viewsLabel = Number(article.views || 0).toLocaleString("en-US");
   const publishedLabel = formatArabicDateTime(article.publishedAt);
-  const generatedLabel = formatArabicDateTime(new Date());
+  const generatedLabel = formatArabicDateTime(generatedAt);
+  const measurementPeriod = `من ${formatArabicDate(article.publishedAt)} حتى ${formatArabicDate(generatedAt)}`;
+  const reportRef = buildReportRef(article.id, generatedAt);
+  const slugPath = article.englishSlug || article.slug || article.id;
+  const articleUrl = `https://sabq.org/article/${slugPath}`;
   const title = article.title || "بدون عنوان";
 
   const buildHtml = (hero: string | null) =>
     buildReportHtml({
       title,
+      clientName,
+      reportRef,
       viewsLabel,
       publishedLabel,
       generatedLabel,
+      measurementPeriod,
+      articleUrl,
+      performance,
       paragraphs: bodyParagraphs,
       logoDataUrl,
       heroDataUrl: hero,
@@ -401,5 +548,6 @@ export async function buildArticlePrClientReportPdf(
     buffer,
     filename: `sabq-pr-report-${safeSlug}.pdf`,
     title: article.title || "تقرير خبر",
+    reportRef,
   };
 }
