@@ -508,6 +508,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 <span>الرئيسية</span>
               </Link>
             </Button>
+            {role !== "opinion_author" && role !== "angle_writer" && (
+              <EditorPresenceBar />
+            )}
             <DashboardThemePickerButton />
             <ThemeToggle />
             <DropdownMenu>
@@ -572,12 +575,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           
           <InternalAnnouncement />
           <AutoPublishBanner />
-          {role !== 'opinion_author' && role !== 'angle_writer' && (
-            <div className="px-3 md:px-6 pt-3">
-              <EditorPresenceBar />
-            </div>
-          )}
-          
+
           <div className="flex-1 overflow-auto p-3 md:p-6">
             <AppBreadcrumbs role={role} flags={flags} />
             {children}

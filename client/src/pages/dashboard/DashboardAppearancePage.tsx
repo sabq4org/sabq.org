@@ -252,7 +252,14 @@ function DashboardAppearanceContent() {
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-bold">سمتي الشخصية</h2>
+          <div>
+            <h2 className="text-base font-bold">الثيمات</h2>
+            {canManageOrg && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                اختر سمتك الشخصية، أو عيّن افتراضي المنظمة لمن لم يختر سمة خاصة.
+              </p>
+            )}
+          </div>
           <Button
             size="sm"
             variant="outline"
@@ -265,22 +272,29 @@ function DashboardAppearanceContent() {
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {presets.map((item) => {
-            const active = !followsOrg && themeId === item.id;
+            const personalActive = !followsOrg && themeId === item.id;
+            const orgActive = orgThemeId === item.id;
+            const cardActive = personalActive || (followsOrg && orgActive);
             return (
               <Card
-                key={`personal-${item.id}`}
+                key={item.id}
                 className={cn(
                   "theme-frame-option overflow-hidden shadow-none transition",
-                  active ? "border-primary bg-primary/[0.06]" : "border-border",
+                  cardActive ? "border-primary bg-primary/[0.06]" : "border-border",
                 )}
-                data-active={active ? "true" : "false"}
+                data-active={cardActive ? "true" : "false"}
               >
                 <CardHeader className="space-y-3 pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-base">
                     {item.nameAr}
                     {item.source && (
                       <Badge variant="secondary" className="gap-1 text-[10px]">
                         <Sparkles className="h-3 w-3" /> من 21st.dev
+                      </Badge>
+                    )}
+                    {orgActive && (
+                      <Badge variant="outline" className="text-[10px]">
+                        افتراضي المنظمة
                       </Badge>
                     )}
                   </CardTitle>
@@ -295,61 +309,41 @@ function DashboardAppearanceContent() {
                     ))}
                   </div>
                 </CardHeader>
-                <CardContent className="pt-0">
+                <CardContent className="flex flex-wrap gap-2 pt-0">
                   <Button
                     size="sm"
-                    variant={active ? "secondary" : "default"}
-                    disabled={active || isSaving}
+                    className="gap-1.5"
+                    variant={personalActive ? "secondary" : "default"}
+                    disabled={personalActive || isSaving}
                     onClick={() => activatePersonal(item.id)}
                     data-testid={`dashboard-theme-personal-${item.id}`}
                   >
-                    {active ? "سمتي الآن" : "اختيار لنفسي"}
+                    {personalActive ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        سمتي الآن
+                      </>
+                    ) : (
+                      "اختيار لنفسي"
+                    )}
                   </Button>
+                  {canManageOrg && (
+                    <Button
+                      size="sm"
+                      variant={orgActive ? "secondary" : "outline"}
+                      disabled={orgActive || isSaving}
+                      onClick={() => activateOrg(item.id)}
+                      data-testid={`dashboard-theme-org-${item.id}`}
+                    >
+                      {orgActive ? "افتراضي المنظمة" : "جعله افتراضي المنظمة"}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             );
           })}
         </div>
       </section>
-
-      {canManageOrg && (
-        <section className="space-y-3">
-          <h2 className="text-base font-bold">افتراضي المنظمة</h2>
-          <p className="text-sm text-muted-foreground">
-            لمن لم يختر سمة شخصية. لا يغيّر اختيار من لديهم سمة خاصة.
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {presets.map((item) => {
-              const active = orgThemeId === item.id;
-              return (
-                <Card
-                  key={`org-${item.id}`}
-                  className={cn(
-                    "theme-frame-option overflow-hidden shadow-none transition",
-                    active ? "border-primary bg-primary/[0.06]" : "border-border",
-                  )}
-                  data-active={active ? "true" : "false"}
-                >
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-base">{item.nameAr}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <Button
-                      size="sm"
-                      variant={active ? "secondary" : "outline"}
-                      disabled={active || isSaving}
-                      onClick={() => activateOrg(item.id)}
-                      data-testid={`dashboard-theme-org-${item.id}`}
-                    >
-                      {active ? "افتراضي المنظمة" : "جعله افتراضي المنظمة"}
-                    </Button>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </section>
-      )}
 
       <Card className="border-border/70 shadow-none">
         <CardContent className="flex flex-col gap-2 p-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
