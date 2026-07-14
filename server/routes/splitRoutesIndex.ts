@@ -61,6 +61,7 @@ import { registerCupPredictionRoutes } from "./cupPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
+import articlePrClientReportRouter from "./articlePrClientReport";
 import keywordRouter from "./keywordRoutes";
 import editorAlertsRouter from "./editorAlerts";
 import audioNewsletterRoutes from "./audioNewsletterRoutes";
@@ -139,6 +140,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(mediaLibraryRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);
+  app.use(articlePrClientReportRouter);
   app.use(keywordRouter);
   app.use(editorAlertsRouter);
   app.use(dashboardPulseRouter);

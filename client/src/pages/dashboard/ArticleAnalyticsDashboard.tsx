@@ -33,11 +33,12 @@ import {
 } from "lucide-react";
 import { format, subDays, subMonths } from "date-fns";
 import { arSA } from "date-fns/locale";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, hasPermission } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { formatNumber } from "@/lib/format";
 import { apiUrl } from "@/lib/queryClient";
+import { PERMISSION_CODES } from "@shared/rbac-constants";
 
 interface Category {
   id: string;
@@ -340,11 +341,15 @@ function IpBreakdownSection({ articleId }: { articleId: string }) {
 function ArticleDetailPanel({
   articleId,
   onClose,
-  onExportPDF
+  onExportPDF,
+  onExportPrClientReport,
+  canExportPrClientReport,
 }: {
-  articleId: string; 
+  articleId: string;
   onClose: () => void;
   onExportPDF: (article: ArticleDetail) => void;
+  onExportPrClientReport: (article: ArticleDetail) => void;
+  canExportPrClientReport: boolean;
 }) {
   const { data: article, isLoading } = useQuery<ArticleDetail>({
     queryKey: ['/api/admin/article-analytics', articleId],
@@ -390,24 +395,37 @@ function ArticleDetailPanel({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onExportPDF(article)}
-              data-testid="button-export-pdf"
-            >
-              <FileDown className="h-4 w-4 ml-1" />
-              تصدير PDF
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              data-testid="button-close-detail"
-            >
-              <X className="h-4 w-4" />
-            </Button>
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            {canExportPrClientReport && (
+              <Button
+                size="sm"
+                onClick={() => onExportPrClientReport(article)}
+                data-testid="button-export-pr-client-pdf"
+                className="gap-1.5"
+              >
+                <FileDown className="h-4 w-4" />
+                تقرير للعميل PDF
+              </Button>
+            )}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onExportPDF(article)}
+                data-testid="button-export-pdf"
+              >
+                <FileDown className="h-4 w-4 ml-1" />
+                تصدير PDF
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onClose}
+                data-testid="button-close-detail"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -546,6 +564,7 @@ function ArticleDetailPanel({
 
 export default function ArticleAnalyticsDashboard() {
   const { user } = useAuth();
+  const canExportPrClientReport = hasPermission(user, PERMISSION_CODES.SYSTEM_MANAGE_SETTINGS);
   const { toast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -644,6 +663,40 @@ export default function ArticleAnalyticsDashboard() {
       toast({
         title: "خطأ في التصدير",
         description: "حدث خطأ أثناء تصدير التقرير. يرجى المحاولة مرة أخرى.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [toast]);
+
+  const handleExportPrClientReport = useCallback(async (article: ArticleDetail) => {
+    setIsExporting(true);
+    try {
+      const response = await fetch(
+        apiUrl(`/api/admin/articles/${article.id}/pr-client-report.pdf`),
+        { method: "GET", credentials: "include" },
+      );
+      if (!response.ok) {
+        throw new Error("فشل في تصدير تقرير العميل");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `تقرير-عميل-${article.slug || article.id}-${format(new Date(), "yyyy-MM-dd")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast({
+        title: "تم إنشاء تقرير العميل",
+        description: "ملف PDF جاهز للمشاركة مع العميل",
+      });
+    } catch {
+      toast({
+        title: "تعذر إنشاء التقرير",
+        description: "حدث خطأ أثناء إنشاء تقرير العميل. حاول مرة أخرى.",
         variant: "destructive",
       });
     } finally {
@@ -886,6 +939,8 @@ export default function ArticleAnalyticsDashboard() {
                     articleId={selectedArticleId}
                     onClose={() => setSelectedArticleId(null)}
                     onExportPDF={handleExportPDF}
+                    onExportPrClientReport={handleExportPrClientReport}
+                    canExportPrClientReport={canExportPrClientReport}
                   />
                 ) : (
                   <div dir="rtl" className="text-center py-12 text-muted-foreground">
