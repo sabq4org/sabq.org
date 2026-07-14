@@ -240,6 +240,7 @@ const RecommendationSettings = lazy(() => retryImport(() => import("@/pages/reco
 const UserNotifications = lazy(() => retryImport(() => import("@/pages/UserNotifications")));
 // === LAZY IMPORTS (Admin) ===
 const AIModerationDashboard = lazy(() => retryImport(() => import("@/pages/admin/AIModerationDashboard")));
+const SentimentInsights = lazy(() => retryImport(() => import("@/pages/admin/SentimentInsights")));
 const PaymentsDashboard = lazy(() => retryImport(() => import("@/pages/admin/PaymentsDashboard")));
 const MediaStoreOrders = lazy(() => retryImport(() => import("@/pages/admin/MediaStoreOrders")));
 const StaffMembers = lazy(() => retryImport(() => import("@/pages/admin/StaffMembers")));
@@ -1038,6 +1039,7 @@ function Router() {
         <Route path="/dashboard/tags">{() => <LazyRoute component={TagsManagement} />}</Route>
         <Route path="/dashboard/smart-links">{() => <LazyRoute component={SmartLinksManagement} />}</Route>
         <Route path="/dashboard/ai-moderation">{() => <LazyRoute component={AIModerationDashboard} />}</Route>
+        <Route path="/dashboard/sentiment-insights">{() => <LazyRoute component={SentimentInsights} />}</Route>
         <Route path="/admin/comments/suspicious-words">{() => <LazyRoute component={SuspiciousWordsManagement} />}</Route>
         <Route path="/dashboard/data-stories">{() => <LazyRoute component={DataStoryGenerator} />}</Route>
         <Route path="/dashboard/prompt-studio">{() => <LazyRoute component={PromptStudio} />}</Route>

@@ -10,11 +10,13 @@
  */
 import { db } from "../db";
 import {
+  articles,
+  categories,
   comments,
   commentSentiments,
   flaggedCommentsLog,
 } from "@shared/schema";
-import { and, desc, eq, gt, isNotNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, isNotNull, lt, ne, sql } from "drizzle-orm";
 import {
   moderateComment,
   getStatusFromClassification,
@@ -501,6 +503,192 @@ export interface SentimentStats {
   neutral: number;
   negative: number;
   avgConfidence: number | null;
+}
+
+// ── Editorial sentiment insights (نبض الجمهور dashboard) ────────────────────
+
+export interface SentimentInsights {
+  period: { days: number; from: string; to: string };
+  totals: {
+    analyzed: number;
+    positive: number;
+    neutral: number;
+    negative: number;
+    /** (positive − negative) / analyzed × 100, rounded. */
+    netIndex: number;
+    /** Same index for the preceding window of equal length. */
+    prevNetIndex: number | null;
+  };
+  daily: { date: string; positive: number; neutral: number; negative: number }[];
+  articles: {
+    articleId: string;
+    title: string;
+    slug: string | null;
+    total: number;
+    positive: number;
+    neutral: number;
+    negative: number;
+    negativeShare: number;
+  }[];
+  categories: {
+    name: string;
+    total: number;
+    positive: number;
+    neutral: number;
+    negative: number;
+  }[];
+  alerts: { message: string; severity: "warning" | "info" }[];
+}
+
+const sentimentCounts = {
+  positive: sql<number>`count(*) filter (where ${comments.currentSentiment} = 'positive')`,
+  neutral: sql<number>`count(*) filter (where ${comments.currentSentiment} = 'neutral')`,
+  negative: sql<number>`count(*) filter (where ${comments.currentSentiment} = 'negative')`,
+};
+
+function netIndexOf(positive: number, negative: number, analyzed: number): number {
+  return analyzed === 0 ? 0 : Math.round(((positive - negative) / analyzed) * 100);
+}
+
+export async function getSentimentInsights(days: number): Promise<SentimentInsights> {
+  const clampedDays = Math.min(365, Math.max(1, days));
+  const now = new Date();
+  const from = new Date(now.getTime() - clampedDays * 24 * 60 * 60 * 1000);
+  const prevFrom = new Date(from.getTime() - clampedDays * 24 * 60 * 60 * 1000);
+  const analyzedInWindow = (start: Date, end?: Date) =>
+    and(
+      isNotNull(comments.currentSentiment),
+      gte(comments.createdAt, start),
+      ...(end ? [lt(comments.createdAt, end)] : [])
+    );
+
+  const [totalsRow] = await db
+    .select({ analyzed: sql<number>`count(*)`, ...sentimentCounts })
+    .from(comments)
+    .where(analyzedInWindow(from));
+
+  const [prevRow] = await db
+    .select({ analyzed: sql<number>`count(*)`, ...sentimentCounts })
+    .from(comments)
+    .where(analyzedInWindow(prevFrom, from));
+
+  const daily = await db
+    .select({
+      date: sql<string>`to_char(date_trunc('day', ${comments.createdAt}), 'YYYY-MM-DD')`,
+      ...sentimentCounts,
+    })
+    .from(comments)
+    .where(analyzedInWindow(from))
+    .groupBy(sql`date_trunc('day', ${comments.createdAt})`)
+    .orderBy(sql`date_trunc('day', ${comments.createdAt})`);
+
+  const articleRows = await db
+    .select({
+      articleId: comments.articleId,
+      title: articles.title,
+      slug: articles.slug,
+      total: sql<number>`count(*)`,
+      ...sentimentCounts,
+    })
+    .from(comments)
+    .innerJoin(articles, eq(comments.articleId, articles.id))
+    .where(analyzedInWindow(from))
+    .groupBy(comments.articleId, articles.title, articles.slug)
+    .having(sql`count(*) >= 3`)
+    .orderBy(
+      sql`count(*) filter (where ${comments.currentSentiment} = 'negative')::float / count(*) desc`
+    )
+    .limit(8);
+
+  const categoryRows = await db
+    .select({
+      name: categories.nameAr,
+      total: sql<number>`count(*)`,
+      ...sentimentCounts,
+    })
+    .from(comments)
+    .innerJoin(articles, eq(comments.articleId, articles.id))
+    .innerJoin(categories, eq(articles.categoryId, categories.id))
+    .where(analyzedInWindow(from))
+    .groupBy(categories.nameAr)
+    .orderBy(sql`count(*) desc`)
+    .limit(8);
+
+  // Alerts: negative-share jump between the last 48h and the 48h before it,
+  // and a single article concentrating the period's negative comments.
+  const alerts: SentimentInsights["alerts"] = [];
+  const h48 = 48 * 60 * 60 * 1000;
+  const [recent] = await db
+    .select({ analyzed: sql<number>`count(*)`, ...sentimentCounts })
+    .from(comments)
+    .where(analyzedInWindow(new Date(now.getTime() - h48)));
+  const [before] = await db
+    .select({ analyzed: sql<number>`count(*)`, ...sentimentCounts })
+    .from(comments)
+    .where(analyzedInWindow(new Date(now.getTime() - 2 * h48), new Date(now.getTime() - h48)));
+
+  const recentAnalyzed = Number(recent?.analyzed ?? 0);
+  const beforeAnalyzed = Number(before?.analyzed ?? 0);
+  if (recentAnalyzed >= 10 && beforeAnalyzed >= 10) {
+    const recentNegShare = Math.round((Number(recent!.negative) / recentAnalyzed) * 100);
+    const beforeNegShare = Math.round((Number(before!.negative) / beforeAnalyzed) * 100);
+    if (recentNegShare - beforeNegShare >= 10) {
+      alerts.push({
+        severity: "warning",
+        message: `قفزة في المشاعر السلبية: من ${beforeNegShare}% إلى ${recentNegShare}% خلال آخر 48 ساعة`,
+      });
+    }
+  }
+
+  const totalNegative = Number(totalsRow?.negative ?? 0);
+  const topNegArticle = articleRows[0];
+  if (totalNegative >= 10 && topNegArticle && Number(topNegArticle.negative) / totalNegative >= 0.3) {
+    alerts.push({
+      severity: "info",
+      message: `مقال واحد جذب ${Math.round((Number(topNegArticle.negative) / totalNegative) * 100)}% من التعليقات السلبية في الفترة: "${topNegArticle.title}"`,
+    });
+  }
+
+  const analyzed = Number(totalsRow?.analyzed ?? 0);
+  const prevAnalyzed = Number(prevRow?.analyzed ?? 0);
+  return {
+    period: { days: clampedDays, from: from.toISOString(), to: now.toISOString() },
+    totals: {
+      analyzed,
+      positive: Number(totalsRow?.positive ?? 0),
+      neutral: Number(totalsRow?.neutral ?? 0),
+      negative: Number(totalsRow?.negative ?? 0),
+      netIndex: netIndexOf(Number(totalsRow?.positive ?? 0), Number(totalsRow?.negative ?? 0), analyzed),
+      prevNetIndex:
+        prevAnalyzed === 0
+          ? null
+          : netIndexOf(Number(prevRow?.positive ?? 0), Number(prevRow?.negative ?? 0), prevAnalyzed),
+    },
+    daily: daily.map((d) => ({
+      date: d.date,
+      positive: Number(d.positive),
+      neutral: Number(d.neutral),
+      negative: Number(d.negative),
+    })),
+    articles: articleRows.map((a) => ({
+      articleId: a.articleId,
+      title: a.title,
+      slug: a.slug ?? null,
+      total: Number(a.total),
+      positive: Number(a.positive),
+      neutral: Number(a.neutral),
+      negative: Number(a.negative),
+      negativeShare: Math.round((Number(a.negative) / Number(a.total)) * 100),
+    })),
+    categories: categoryRows.map((c) => ({
+      name: c.name,
+      total: Number(c.total),
+      positive: Number(c.positive),
+      neutral: Number(c.neutral),
+      negative: Number(c.negative),
+    })),
+    alerts,
+  };
 }
 
 export async function getSentimentStats(): Promise<SentimentStats> {
