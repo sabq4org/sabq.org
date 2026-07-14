@@ -1073,14 +1073,20 @@ export const rssFeeds = pgTable("rss_feeds", {
 export const radarSources = pgTable("radar_sources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
+  // لرصدات إكس الرابط اصطناعي فريد بصيغة x:{xType}:{xValue} — يمنع تكرار الرصدة
   url: text("url").notNull().unique(),
-  type: text("type").notNull().default("rss"), // rss | json
+  type: text("type").notNull().default("rss"), // rss | json | x (رصدة إكس)
   language: text("language").notNull().default("en"), // لغة المصدر (en, es, tr, fr, ...)
   categorySlug: text("category_slug"), // تلميح تصنيف افتراضي لمواد هذا المصدر
   fetchIntervalMinutes: integer("fetch_interval_minutes").notNull().default(15),
   isActive: boolean("is_active").notNull().default(true),
   lastFetchedAt: timestamp("last_fetched_at"),
   lastError: text("last_error"), // null = آخر جلب نجح
+  // ---- رصدات إكس (type = "x") — «نغذيه بكلمة ويبدأ يرصد» ----
+  xType: text("x_type"), // keyword | hashtag | account | query | trend
+  xValue: text("x_value"), // الكلمة/الهاشتاق/الحساب/استعلام البحث، أو woeid للترند
+  xProvider: text("x_provider"), // auto (افتراضي) | official | twitterapiio — القرار الهجين
+  xSinceId: text("x_since_id"), // مؤشر آخر تغريدة — يجلب الجديد فقط فيخفض الفاتورة
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -1154,6 +1160,7 @@ export const insertRadarSourceSchema = createInsertSchema(radarSources).omit({
   id: true,
   lastFetchedAt: true,
   lastError: true,
+  xSinceId: true, // حالة داخلية للجالب لا يحددها العميل
   createdAt: true,
   updatedAt: true,
 });

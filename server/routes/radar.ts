@@ -30,6 +30,7 @@ import { fetchSingleSource, runRadarCycle } from "../services/radar/cycle";
 import { transformItem } from "../services/radar/transformer";
 import { exportItemToArticle } from "../services/radar/exporter";
 import { isTelegramConfigured } from "../services/radar/alerts";
+import { detectWatchType, xProvidersConfigured } from "../services/radar/xProvider";
 
 const canView = requirePermission(PERMISSION_CODES.ARTICLES_VIEW);
 const canWork = requirePermission(PERMISSION_CODES.ARTICLES_CREATE);
@@ -210,6 +211,73 @@ export function registerRadarRoutes(app: Express) {
       }
       console.error("[Radar API] manual fetch failed:", error);
       res.status(502).json({ message: "فشل جلب المصدر — تحقق من الرابط" });
+    }
+  });
+
+  // ---------- رصدات إكس ----------
+  // الرصدة مصدر من نوع "x" — التعديل/الحذف/الجلب اليدوي عبر مسارات المصادر نفسها
+
+  const watchBodySchema = z.object({
+    value: z.string().trim().min(1).max(200),
+    type: z.enum(["keyword", "hashtag", "account", "query", "trend"]).optional(),
+    label: z.string().trim().min(1).max(120).optional(),
+    provider: z.enum(["auto", "official", "twitterapiio"]).optional(),
+    language: z.string().trim().min(2).max(10).optional(),
+    categorySlug: z.string().trim().max(80).optional(),
+    fetchIntervalMinutes: z.coerce.number().int().min(2).max(1440).optional(),
+  });
+
+  app.get("/api/radar/watches", requireAuth, canView, async (_req, res) => {
+    try {
+      const sources = await listSources();
+      res.json({
+        watches: sources.filter((source) => source.type === "x"),
+        providers: xProvidersConfigured(),
+      });
+    } catch (error) {
+      console.error("[Radar API] watches failed:", error);
+      res.status(500).json({ message: "تعذر جلب الرصدات" });
+    }
+  });
+
+  app.post("/api/radar/watches", requireAuth, canManage, async (req, res) => {
+    const parsed = watchBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: "بيانات الرصدة غير صالحة", issues: parsed.error.issues });
+    }
+    const { value, label, provider, language, categorySlug, fetchIntervalMinutes } = parsed.data;
+    const xType = parsed.data.type ?? detectWatchType(value);
+    try {
+      const watch = await createSource({
+        name: label ?? value,
+        // رابط اصطناعي فريد — إضافة نفس الرصدة مرتين تصطدم بقيد url
+        url: `x:${xType}:${value.toLowerCase()}`,
+        type: "x",
+        language: language ?? "ar",
+        categorySlug: categorySlug ?? null,
+        fetchIntervalMinutes: fetchIntervalMinutes ?? (xType === "trend" ? 15 : 5),
+        isActive: true,
+        xType,
+        xValue: value,
+        xProvider: provider ?? "auto",
+      });
+      // جلبة أولى فورية — المحرر يرى النتيجة الآن لا بعد دورة الكرون؛
+      // فشلها (مفتاح ناقص/استعلام خاطئ) لا يلغي الرصدة ويظهر في lastError
+      let inserted: number | null = null;
+      let fetchError: string | null = null;
+      try {
+        inserted = await fetchSingleSource(watch.id);
+      } catch (error) {
+        fetchError = error instanceof Error ? error.message : String(error);
+      }
+      res.status(201).json({ watch, inserted, fetchError });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (/duplicate|unique/i.test(message)) {
+        return res.status(409).json({ message: "هذه الرصدة موجودة مسبقًا" });
+      }
+      console.error("[Radar API] create watch failed:", error);
+      res.status(500).json({ message: "تعذر إضافة الرصدة" });
     }
   });
 

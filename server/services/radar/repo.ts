@@ -60,6 +60,14 @@ export async function sourcesDueForFetch(): Promise<RadarSource[]> {
     );
 }
 
+/** حفظ مؤشر آخر تغريدة لرصدة إكس — الجلبة التالية تطلب الأحدث منه فقط */
+export async function updateSourceCursor(id: string, sinceId: string): Promise<void> {
+  await db
+    .update(radarSources)
+    .set({ xSinceId: sinceId, updatedAt: new Date() })
+    .where(eq(radarSources.id, id));
+}
+
 export async function markSourceFetched(id: string, error: string | null): Promise<void> {
   await db
     .update(radarSources)
