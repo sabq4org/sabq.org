@@ -1693,6 +1693,17 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 15000);
       }
+
+      if (shouldRunBackgroundJobs) {
+        setTimeout(async () => {
+          try {
+            const { startCommentModerationQueueJob } = await import("./jobs/commentModerationQueueJob");
+            startCommentModerationQueueJob();
+          } catch (error) {
+            console.error("[Server] Error starting comment moderation queue job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 17000);
+      }
       
       // Start Audio Newsletter Jobs (scheduled generation and retries) - delayed
       if (shouldRunBackgroundJobs) {

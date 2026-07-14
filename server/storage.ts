@@ -775,6 +775,8 @@ export interface IStorage {
       content: string;
       status: string;
       createdAt: string;
+      sentiment?: string;
+      sentimentConfidence?: number;
       user: { id: string; firstName?: string; lastName?: string; email: string };
       articleId: string;
       articleTitle?: string;
@@ -5231,6 +5233,8 @@ export class DatabaseStorage implements IStorage {
       status: string;
       createdAt: string;
       platform: string;
+      sentiment?: string;
+      sentimentConfidence?: number;
       user: { id: string; firstName?: string; lastName?: string; email: string };
       articleId: string;
       articleTitle?: string;
@@ -5280,6 +5284,8 @@ export class DatabaseStorage implements IStorage {
         status: r.comment.status,
         createdAt: r.comment.createdAt.toISOString(),
         platform: r.comment.platform || "web",
+        sentiment: r.comment.currentSentiment || undefined,
+        sentimentConfidence: r.comment.currentSentimentConfidence ?? undefined,
         user: {
           id: r.user?.id || '',
           firstName: r.user?.firstName || undefined,
