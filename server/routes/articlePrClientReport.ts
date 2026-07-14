@@ -6,7 +6,7 @@ const router: Router = Router();
 
 /**
  * Client-facing PR article PDF for system admins.
- * Isolated from the internal analytics PDF export.
+ * Optional query: clientName (campaign / client label shown on the report).
  */
 router.get(
   "/api/admin/articles/:articleId/pr-client-report.pdf",
@@ -19,13 +19,21 @@ router.get(
         return res.status(400).json({ message: "معرف المقال مطلوب" });
       }
 
-      const report = await buildArticlePrClientReportPdf({ articleId });
+      const clientNameRaw = req.query.clientName ?? req.query.campaignName;
+      const clientName =
+        typeof clientNameRaw === "string" ? clientNameRaw : undefined;
+
+      const report = await buildArticlePrClientReportPdf({
+        articleId,
+        clientName,
+      });
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
         "Content-Disposition",
         `attachment; filename="${report.filename}"`,
       );
       res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("X-Sabq-Report-Ref", report.reportRef);
       res.send(report.buffer);
     } catch (error: any) {
       if (error?.code === "ARTICLE_NOT_FOUND" || error?.message === "ARTICLE_NOT_FOUND") {

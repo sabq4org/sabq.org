@@ -8,6 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { 
   Search, 
   Eye, 
@@ -590,6 +599,9 @@ export default function ArticleAnalyticsDashboard() {
   const [offset, setOffset] = useState(0);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [prClientDialogOpen, setPrClientDialogOpen] = useState(false);
+  const [prClientArticle, setPrClientArticle] = useState<ArticleDetail | null>(null);
+  const [prClientName, setPrClientName] = useState("");
 
   const limit = 20;
 
@@ -685,11 +697,26 @@ export default function ArticleAnalyticsDashboard() {
     }
   }, [toast]);
 
-  const handleExportPrClientReport = useCallback(async (article: ArticleDetail) => {
+  const handleExportPrClientReport = useCallback((article: ArticleDetail) => {
+    setPrClientArticle(article);
+    setPrClientName("");
+    setPrClientDialogOpen(true);
+  }, []);
+
+  const confirmExportPrClientReport = useCallback(async () => {
+    if (!prClientArticle) return;
+    const article = prClientArticle;
+    const clientName = prClientName.trim();
+    setPrClientDialogOpen(false);
     setIsExporting(true);
     try {
+      const params = new URLSearchParams();
+      if (clientName) params.set("clientName", clientName);
+      const qs = params.toString();
       const response = await fetch(
-        apiUrl(`/api/admin/articles/${article.id}/pr-client-report.pdf`),
+        apiUrl(
+          `/api/admin/articles/${article.id}/pr-client-report.pdf${qs ? `?${qs}` : ""}`,
+        ),
         { method: "GET", credentials: "include" },
       );
       if (!response.ok) {
@@ -713,7 +740,9 @@ export default function ArticleAnalyticsDashboard() {
       document.body.removeChild(a);
       toast({
         title: "تم إنشاء تقرير العميل",
-        description: "ملف PDF جاهز للمشاركة مع العميل",
+        description: clientName
+          ? `جاهز للمشاركة مع: ${clientName}`
+          : "ملف PDF جاهز للمشاركة مع العميل",
       });
     } catch (error) {
       toast({
@@ -726,8 +755,9 @@ export default function ArticleAnalyticsDashboard() {
       });
     } finally {
       setIsExporting(false);
+      setPrClientArticle(null);
     }
-  }, [toast]);
+  }, [prClientArticle, prClientName, toast]);
 
   const clearFilters = useCallback(() => {
     setSearchQuery("");
@@ -991,6 +1021,55 @@ export default function ArticleAnalyticsDashboard() {
           </div>
         </div>
       )}
+
+      <Dialog open={prClientDialogOpen} onOpenChange={setPrClientDialogOpen}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle>تقرير للعميل PDF</DialogTitle>
+            <DialogDescription>
+              أدخل اسم العميل أو الحملة ليظهر على التقرير. يمكنك تركه فارغاً.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="pr-client-name">اسم العميل / الحملة</Label>
+            <Input
+              id="pr-client-name"
+              value={prClientName}
+              onChange={(e) => setPrClientName(e.target.value)}
+              placeholder="مثال: حملة موسم العلا — شركة …"
+              maxLength={120}
+              data-testid="input-pr-client-name"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void confirmExportPrClientReport();
+                }
+              }}
+            />
+            {prClientArticle && (
+              <p className="text-xs text-muted-foreground line-clamp-2 pt-1">
+                {prClientArticle.title}
+              </p>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setPrClientDialogOpen(false)}
+              data-testid="button-pr-client-cancel"
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={() => void confirmExportPrClientReport()}
+              data-testid="button-pr-client-confirm"
+            >
+              <FileDown className="h-4 w-4 ml-1" />
+              إنشاء التقرير
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       </div>
     </DashboardLayout>
   );
