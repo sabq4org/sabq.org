@@ -4101,42 +4101,42 @@ router.post("/articles/:slug/comments", async (req: Request, res: Response) => {
         })
         .where(eq(comments.id, created.id));
       await incrementSuspiciousWordFlagCount(wordIds);
+
+      const { logSuspiciousWordMatches, notifyCommentRejected } = await import(
+        "../services/commentInsightsService"
+      );
+      await logSuspiciousWordMatches(created.id, created.content, suspiciousCheck.foundWords, autoReject);
+      if (autoReject) {
+        await notifyCommentRejected({
+          userId: session.userId,
+          commentId: created.id,
+          reason: `كلمات محظورة: ${rejectingWords.join(", ")}`,
+        });
+      }
     }
 
-    // Fire-and-forget AI moderation. The status the mobile client receives
-    // here will be the initial DB default ("pending"); the AI job flips it to
-    // approved/rejected within a few seconds and the next list refresh shows
-    // the final state.
+    // Fire-and-forget AI moderation + sentiment via the unified pipeline. The
+    // status the mobile client receives here will be the initial DB default
+    // ("pending"); the pipeline flips it to approved/rejected within a few
+    // seconds and the next list refresh shows the final state.
     const commentId = created.id;
     const commentContent = created.content;
     void (async () => {
       try {
-        const { moderateComment, getStatusFromClassification } = await import(
-          "../ai/commentModeration"
+        const { runCommentModerationPipeline } = await import(
+          "../services/commentInsightsService"
         );
-        const moderationResult = await moderateComment(commentContent);
-        const aiStatus = getStatusFromClassification(moderationResult.classification);
-        const newStatus = blockedBySuspiciousWords ? "pending" : aiStatus;
-        await db
-          .update(comments)
-          .set({
-            aiModerationScore: moderationResult.score,
-            aiClassification: moderationResult.classification,
-            aiDetectedIssues: moderationResult.detected,
-            aiModerationReason: moderationResult.reason,
-            aiAnalyzedAt: new Date(),
-            ...(newStatus !== "pending"
-              ? {
-                  status: newStatus,
-                  moderatedAt: new Date(),
-                  moderationReason:
-                    moderationResult.classification === "safe"
-                      ? "تم الاعتماد تلقائياً بواسطة الذكاء الاصطناعي"
-                      : `تم الرفض تلقائياً - ${moderationResult.reason}`,
-                }
-              : {}),
-          })
-          .where(eq(comments.id, commentId));
+        await runCommentModerationPipeline({
+          commentId,
+          content: commentContent,
+          userId: session.userId,
+          articleId: article.id,
+          suspiciousHeld: blockedBySuspiciousWords && !suspiciousCheck.shouldAutoReject,
+          suspiciousAutoRejected: blockedBySuspiciousWords && suspiciousCheck.shouldAutoReject,
+          suspiciousWordsNote: suspiciousCheck.foundWords.length
+            ? suspiciousCheck.foundWords.map((w) => w.word).join(", ")
+            : undefined,
+        });
       } catch (error) {
         console.error("[Mobile API] AI moderation failed:", error);
       }

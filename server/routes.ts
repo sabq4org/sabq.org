@@ -13811,6 +13811,16 @@ Respond in valid JSON format only:
 
         await incrementSuspiciousWordFlagCount(wordIds);
 
+        const { logSuspiciousWordMatches, notifyCommentRejected } = await import("./services/commentInsightsService");
+        await logSuspiciousWordMatches(comment.id, comment.content, suspiciousCheck.foundWords, autoReject);
+        if (autoReject) {
+          await notifyCommentRejected({
+            userId,
+            commentId: comment.id,
+            reason: `كلمات محظورة: ${rejectingWords.join(", ")}`,
+          });
+        }
+
         console.log(
           `[Comments] Comment ${comment.id} ${autoReject ? "auto-rejected" : "held for review"} due to suspicious words: ${foundWordsStr}`
         );
@@ -13829,62 +13839,35 @@ Respond in valid JSON format only:
       }
 
 
-      // AI Moderation - تحليل التعليق بالذكاء الاصطناعي (background task)
+      // AI Moderation + sentiment - الخط الموحّد للتحليل (background task)
       const commentId = comment.id;
       const commentContent = comment.content;
       const slugForCache = articleSlug;
       const suspiciousWordsData = blockedBySuspiciousWords ? suspiciousCheck : null;
       const englishSlugForCache = article.englishSlug;
+      const articleIdForPipeline = article.id;
       (async () => {
-    try {
-          const { moderateComment, getStatusFromClassification } = await import("./ai/commentModeration");
-          const moderationResult = await moderateComment(commentContent);
-          
-          // Update moderation data
-          await storage.updateCommentModeration(commentId, {
-            aiModerationScore: moderationResult.score,
-            aiClassification: moderationResult.classification,
-            aiDetectedIssues: moderationResult.detected,
-            aiModerationReason: moderationResult.reason,
-            aiAnalyzedAt: new Date(),
+        try {
+          const { runCommentModerationPipeline } = await import("./services/commentInsightsService");
+          await runCommentModerationPipeline({
+            commentId,
+            content: commentContent,
+            userId,
+            articleId: articleIdForPipeline,
+            suspiciousHeld: !!suspiciousWordsData && !suspiciousWordsData.shouldAutoReject,
+            suspiciousAutoRejected: suspiciousWordsData?.shouldAutoReject,
+            suspiciousWordsNote: suspiciousWordsData?.foundWords.length
+              ? suspiciousWordsData.foundWords.map(w => w.word).join(", ")
+              : undefined,
+            onStatusChange: (newStatus) => {
+              // إبطال كاش التعليقات بعد تحديث الحالة (مهم للاعتماد الأوتوماتيكي)
+              memoryCache.delete(`article:comments:${slugForCache}`);
+              if (englishSlugForCache) {
+                memoryCache.delete(`article:comments:${englishSlugForCache}`);
+              }
+              console.log(`[AI Moderation] Cache invalidated after auto-${newStatus} for article: ${slugForCache}`);
+            },
           });
-          
-          // Update comment status based on AI classification
-          // إذا كان التعليق يحتوي على كلمات محظورة (action=reject) فهو مرفوض بالفعل ولا يُعاد لـ pending
-          // وإذا كان يحتوي على كلمات مشبوهة (action=review) يبقى معلقاً للمراجعة
-          const aiStatus = getStatusFromClassification(moderationResult.classification);
-          const wasAutoRejected = suspiciousWordsData?.shouldAutoReject;
-          const newStatus = wasAutoRejected ? "rejected" : (suspiciousWordsData ? "pending" : aiStatus);
-          if (newStatus !== "pending" && !wasAutoRejected) {
-            await storage.updateCommentStatus(commentId, {
-              status: newStatus,
-              moderatedAt: new Date(),
-              moderationReason: moderationResult.classification === "safe" 
-                ? "تم الاعتماد تلقائياً بواسطة الذكاء الاصطناعي"
-                : `تم الرفض تلقائياً - ${moderationResult.reason}`,
-            });
-            
-            // إبطال كاش التعليقات بعد تحديث الحالة (مهم للاعتماد الأوتوماتيكي)
-            memoryCache.delete(`article:comments:${slugForCache}`);
-            if (englishSlugForCache) {
-              memoryCache.delete(`article:comments:${englishSlugForCache}`);
-            }
-            console.log(`[AI Moderation] Cache invalidated after auto-${newStatus} for article: ${slugForCache}`);
-          }
-          
-          // إذا كان التعليق يحتوي على كلمات مشبوهة، سجل ذلك وزد العداد
-          if (suspiciousWordsData && suspiciousWordsData.foundWords.length > 0) {
-            
-            // تحديث سبب الرقابة ليشمل الكلمات المشبوهة
-            const foundWordsStr = suspiciousWordsData.foundWords.map(w => w.word).join(", ");
-            await storage.updateCommentModeration(commentId, {
-              aiDetectedIssues: [...(moderationResult.detected || []), `كلمات مشبوهة: ${foundWordsStr}`],
-              aiModerationReason: `يحتوي على كلمات مشبوهة: ${foundWordsStr}` + (moderationResult.reason ? ` - ${moderationResult.reason}` : ""),
-            });
-            console.log(`[AI Moderation] Comment ${commentId} held for suspicious words: ${foundWordsStr}`);
-          }
-          
-          console.log(`[AI Moderation] Comment ${commentId} analyzed: ${moderationResult.classification} (${moderationResult.score}%) -> status: ${newStatus}`);
         } catch (error) {
           console.error("[AI Moderation] Error analyzing comment:", error);
         }
