@@ -5,12 +5,21 @@ import { articles } from "@shared/schema";
 import { insertStorySchema, insertStoryLinkSchema } from "@shared/schema";
 import { storage } from "../storage";
 import { requireAuth, requireRole, logActivity } from "../rbac";
+import { withSWR, swrCache, CACHE_TTL } from "../memoryCache";
+import { getActiveStoriesForList } from "../services/storyListService";
+
+const STORIES_LIST_CACHE_KEY = "stories:list:active";
 
 export function registerStoryRoutes(app: Express) {
   // GET /api/stories - جلب جميع القصص
   app.get("/api/stories", async (req, res) => {
     try {
-      const stories = await storage.getAllStories({ status: 'active' });
+      const stories = await withSWR(
+        STORIES_LIST_CACHE_KEY,
+        CACHE_TTL.SHORT,
+        CACHE_TTL.SHORT * 2,
+        getActiveStoriesForList
+      );
       res.json(stories);
     } catch (error) {
       console.error("Error getting stories:", error);
@@ -39,6 +48,7 @@ export function registerStoryRoutes(app: Express) {
     try {
       const data = insertStorySchema.parse(req.body);
       const story = await storage.createStory(data);
+      swrCache.invalidateByPrefix(STORIES_LIST_CACHE_KEY);
       await logActivity({
         userId: req.user?.id,
         action: 'StoryCreated',
@@ -58,6 +68,7 @@ export function registerStoryRoutes(app: Express) {
   app.put("/api/stories/:id", requireAuth, requireRole('admin', 'editor'), async (req: any, res) => {
     try {
       const story = await storage.updateStory(req.params.id, req.body);
+      swrCache.invalidateByPrefix(STORIES_LIST_CACHE_KEY);
       await logActivity({
         userId: req.user?.id,
         action: 'StoryUpdated',
@@ -77,6 +88,7 @@ export function registerStoryRoutes(app: Express) {
   app.delete("/api/stories/:id", requireAuth, requireRole('admin', 'editor'), async (req: any, res) => {
     try {
       await storage.deleteStory(req.params.id);
+      swrCache.invalidateByPrefix(STORIES_LIST_CACHE_KEY);
       await logActivity({
         userId: req.user?.id,
         action: 'StoryDeleted',
