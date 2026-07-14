@@ -4,6 +4,7 @@ export const DASHBOARD_THEME_IDS = [
   "sabq",
   "twitter",
   "claude",
+  "claude-amber-ibm",
   "claude-azure",
   "whatsapp",
   "elegant-luxury",
