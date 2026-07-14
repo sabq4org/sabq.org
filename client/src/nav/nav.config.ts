@@ -62,6 +62,7 @@ import {
   Moon,
   Inbox,
   Radar,
+  HeartPulse,
 } from "lucide-react";
 import type { NavItem } from "./types";
 
@@ -306,6 +307,15 @@ export const navConfig: NavItem[] = [
         icon: ShieldCheck,
         roles: ["admin", "comments_moderator"],
         permissions: ["comments.view", "comments.approve", "comments.reject", "comments.delete"],
+      },
+      {
+        id: "sentiment_insights",
+        labelKey: "nav.sentiment_insights",
+        labelAr: "نبض الجمهور",
+        path: "/dashboard/sentiment-insights",
+        icon: HeartPulse,
+        roles: ["admin", "comments_moderator"],
+        permissions: ["comments.view"],
       },
       {
         id: "muqtarab",

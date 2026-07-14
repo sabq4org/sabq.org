@@ -5,6 +5,7 @@ import {
   persistCommentAnalysis,
   getCalibrationExamples,
   getSentimentStats,
+  getSentimentInsights,
   notifyCommentOwnerRejected,
 } from "../services/commentInsightsService";
 import { z } from "zod";
@@ -88,6 +89,18 @@ router.get("/sentiment-stats", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Moderation API] Sentiment stats error:", error);
     res.status(500).json({ error: "حدث خطأ أثناء جلب إحصائيات المشاعر" });
+  }
+});
+
+// Editorial sentiment insights (نبض الجمهور dashboard)
+router.get("/sentiment-insights", requireModeratorAuth, async (req: Request, res: Response) => {
+  try {
+    const days = parseInt((req.query.days as string) || "7", 10) || 7;
+    const insights = await getSentimentInsights(days);
+    res.json(insights);
+  } catch (error) {
+    console.error("[Moderation API] Sentiment insights error:", error);
+    res.status(500).json({ error: "حدث خطأ أثناء جلب تحليلات المشاعر" });
   }
 });
 
