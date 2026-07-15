@@ -240,6 +240,112 @@ export async function getWcLongPredictions(userId?: string) {
   };
 }
 
+/** لمحة عامة لبطاقات الصفحة الرئيسية — أصوات الجمهور + ملاحظة خروج مرشّح بارز. */
+export type WcStoriesTeaser = {
+  champions: Array<{
+    teamId: number;
+    name: string;
+    logo: string | null;
+    pct: number;
+    eliminated: boolean;
+  }>;
+  /** أبرز منتخب خرج رغم نسبة ترشيح ملحوظة (فرنسا أولوية إن وُجدت) */
+  eliminatedNote: { teamId: number; name: string; pct: number } | null;
+  topScorer: {
+    playerId: number;
+    name: string;
+    photo: string | null;
+    pct: number;
+  } | null;
+};
+
+const FRANCE_TEAM_ID = 2;
+
+export async function getWcStoriesTeaser(): Promise<WcStoriesTeaser | null> {
+  const [champRows, scorerRows, scorerTotalRow, fixtures] = await Promise.all([
+    db
+      .select({
+        teamId: wcLongPredictions.teamId,
+        name: wcLongPredictions.teamName,
+        logo: wcLongPredictions.teamLogo,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(wcLongPredictions)
+      .where(eq(wcLongPredictions.kind, "champion"))
+      .groupBy(
+        wcLongPredictions.teamId,
+        wcLongPredictions.teamName,
+        wcLongPredictions.teamLogo,
+      )
+      .orderBy(sql`count(*) DESC`)
+      .limit(8),
+    db
+      .select({
+        playerId: wcLongPredictions.playerId,
+        name: wcLongPredictions.playerName,
+        photo: wcLongPredictions.playerPhoto,
+        n: sql<number>`count(*)::int`,
+      })
+      .from(wcLongPredictions)
+      .where(eq(wcLongPredictions.kind, "top_scorer"))
+      .groupBy(
+        wcLongPredictions.playerId,
+        wcLongPredictions.playerName,
+        wcLongPredictions.playerPhoto,
+      )
+      .orderBy(sql`count(*) DESC`)
+      .limit(1),
+    db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(wcLongPredictions)
+      .where(eq(wcLongPredictions.kind, "top_scorer")),
+    getFixtures().catch(() => [] as WcFixture[]),
+  ]);
+
+  const champTotal = champRows.reduce((a, r) => a + (r.n ?? 0), 0);
+  const eliminated = eliminatedTeamIds(fixtures);
+
+  const champions = champRows
+    .filter((r) => r.teamId != null && r.name)
+    .slice(0, 3)
+    .map((r) => ({
+      teamId: r.teamId!,
+      name: r.name!,
+      logo: r.logo ?? null,
+      pct: champTotal > 0 ? Math.round(((r.n ?? 0) / champTotal) * 1000) / 10 : 0,
+      eliminated: eliminated.has(r.teamId!),
+    }));
+
+  let eliminatedNote: WcStoriesTeaser["eliminatedNote"] = null;
+  if (champTotal > 0) {
+    const ranked = champRows
+      .filter((r) => r.teamId != null && r.name && eliminated.has(r.teamId))
+      .map((r) => ({
+        teamId: r.teamId!,
+        name: r.name!,
+        pct: Math.round(((r.n ?? 0) / champTotal) * 1000) / 10,
+      }))
+      .filter((r) => r.pct >= 8);
+    const france = ranked.find((r) => r.teamId === FRANCE_TEAM_ID);
+    eliminatedNote = france ?? ranked[0] ?? null;
+  }
+
+  const scorer = scorerRows[0];
+  const scorerTotal = scorerTotalRow[0]?.n ?? 0;
+  const topScorer =
+    scorer?.playerId != null && scorer.name && scorerTotal > 0
+      ? {
+          playerId: scorer.playerId,
+          name: scorer.name,
+          photo: scorer.photo ?? null,
+          pct: Math.round(((scorer.n ?? 0) / scorerTotal) * 1000) / 10,
+        }
+      : null;
+
+  if (champions.length === 0 && !topScorer && !eliminatedNote) return null;
+  return { champions, eliminatedNote, topScorer };
+}
+
 // ---------------------------------------------------------------------------
 // حفظ التوقّع
 // ---------------------------------------------------------------------------

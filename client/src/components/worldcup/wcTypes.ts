@@ -520,6 +520,24 @@ export interface WcChampion {
   source: "auto" | "manual";
 }
 
+/** لمحة بطاقات الستوريز في الصفحة الرئيسية (أصوات الجمهور) */
+export interface WcStoriesTeaser {
+  champions: Array<{
+    teamId: number;
+    name: string;
+    logo: string | null;
+    pct: number;
+    eliminated: boolean;
+  }>;
+  eliminatedNote: { teamId: number; name: string; pct: number } | null;
+  topScorer: {
+    playerId: number;
+    name: string;
+    photo: string | null;
+    pct: number;
+  } | null;
+}
+
 export interface WcOverview {
   live: WcFixture[];
   today: WcFixture[];
@@ -538,6 +556,8 @@ export interface WcOverview {
   champion?: WcChampion | null;
   /** true عندما أُطفئ البلوك من لوحة التحكم — القسم كله يختفي */
   hidden?: boolean;
+  /** نسب توقّع البطل/الهدّاف + ملاحظة خروج مرشّح بارز */
+  storiesTeaser?: WcStoriesTeaser | null;
   updatedAt: string;
 }
 

@@ -46,10 +46,17 @@ export default function WorldCupHomeSection() {
   const isLive =
     (overview?.live?.length ?? 0) > 0 || Boolean(overview?.matchOfTheDay?.fixture?.status.live);
 
+  const motd = overview?.matchOfTheDay ?? null;
+
   return (
     <div className="bg-emerald-50 dark:bg-emerald-950/25 border-y border-emerald-600/10 dark:border-emerald-400/10 py-8">
       <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        <WorldCupStoriesRow isLive={isLive} />
+        <WorldCupStoriesRow
+          isLive={isLive}
+          teaser={overview?.storiesTeaser ?? null}
+          matchFixture={motd?.fixture ?? null}
+          matchPrediction={motd?.prediction ?? null}
+        />
         <WorldCupHomeStrip />
         <WorldCupNewsBlock />
       </div>

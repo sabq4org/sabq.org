@@ -105,6 +105,7 @@ import { cacheControl, noCache, withETag, CACHE_DURATIONS, AUTOSCALE_CACHE } fro
 import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/passkit/PassKitService";
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
+import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
 import { articleCardSelect, articleAdminSelect } from "./selectHelpers";
@@ -568,8 +569,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
   // SETUP ROUTES (Protected, one-time use) — moved to server/routes/setup.ts
   // (mounted centrally via registerSplitRoutes near setupAuth)
-
-  // News Analytics Endpoint - Smart statistics and insights
 
   // ============================================================
   // AUTH ROUTES
@@ -12379,7 +12378,7 @@ Respond in valid JSON format only:
   // News Analytics Endpoint - Smart statistics and insights
   app.get("/api/news/analytics", async (req, res) => {
     try {
-      const analyticsData = await withSWR('news-analytics-ar', CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
+      const analyticsData = await withSWR('news-analytics-ar-v2', CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
         const now = new Date();
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -12413,6 +12412,7 @@ Respond in valid JSON format only:
           categoryId: articles.categoryId,
           count: sql<number>`count(*)::int`,
           name: categories.nameAr,
+          slug: categories.slug,
           icon: categories.icon,
           color: categories.color,
         })
@@ -12424,7 +12424,7 @@ Respond in valid JSON format only:
             eq(articles.hideFromHomepage, false),
             or(isNull(articles.articleType), ne(articles.articleType, 'opinion'))
           ))
-          .groupBy(articles.categoryId, categories.nameAr, categories.icon, categories.color)
+          .groupBy(articles.categoryId, categories.nameAr, categories.slug, categories.icon, categories.color)
           .orderBy(sql`count(*) DESC`)
           .limit(1);
 
@@ -12483,21 +12483,23 @@ Respond in valid JSON format only:
           db.select({ count: sql<number>`count(*)::int` }).from(comments),
         ]);
 
-        const totalInteractions = (totalReactions?.count || 0) + 
-                                  (totalBookmarks?.count || 0) + 
+        const totalInteractions = (totalReactions?.count || 0) +
+                                  (totalBookmarks?.count || 0) +
                                   (totalComments?.count || 0);
 
         const insights = {
           dailySummary: "منصة سبق الذكية تواصل تقديم أحدث الأخبار والتحليلات لقرائها",
-          topTopics: [],
+          topTopics: [] as Array<{ name: string; score: number }>,
           activityTrend: growthPercentage > 5 ? "نمو ملحوظ في النشاط" : growthPercentage < -5 ? "انخفاض في النشاط" : "نشاط مستقر",
           keyHighlights: [
             `تم نشر ${todayC} خبراً اليوم`,
             topCategory[0] ? `تصنيف ${topCategory[0].name} الأكثر نشاطاً` : "تنوع في التصنيفات",
-            `إجمالي ${totalInteractions.toLocaleString('en-US')} تفاعل`
-          ]
+            `إجمالي ${totalInteractions.toLocaleString('en-US')} تفاعل`,
+          ],
         };
 
+        let pulse: Awaited<ReturnType<typeof getNewsPulseExtras>> = { topInterest: null, worldCup: null };
+        try { pulse = await getNewsPulseExtras(monthAgo, prevMonthStart); } catch (e) { console.warn("[news/analytics] pulse extras failed", e); }
         return {
           period: { today: todayC, week: weekC, month: monthC },
           growth: {
@@ -12507,6 +12509,7 @@ Respond in valid JSON format only:
           },
           topCategory: topCategory[0] ? {
             name: topCategory[0].name,
+            slug: topCategory[0].slug,
             icon: topCategory[0].icon,
             color: topCategory[0].color,
             count: topCategory[0].count,
@@ -12519,6 +12522,7 @@ Respond in valid JSON format only:
           totalViews: totalViewsResult.total || 0,
           totalInteractions,
           aiInsights: insights,
+          ...pulse,
         };
       });
 

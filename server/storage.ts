@@ -639,6 +639,16 @@ export interface IStorage {
   getNewsStatistics(): Promise<{
     totalNews: number;
     todayNews: number;
+    topStoriesThisWeek: Array<{
+      id: string;
+      title: string;
+      slug: string;
+      englishSlug?: string | null;
+      imageUrl?: string | null;
+      categoryName?: string | null;
+      categorySlug?: string | null;
+    }>;
+    /** Legacy field kept for older clients — views omitted from public API. */
     topViewedThisWeek: {
       article: ArticleWithDetails | null;
       views: number;
@@ -4648,11 +4658,7 @@ export class DatabaseStorage implements IStorage {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    // Run the independent aggregates in parallel. The first two counts and the
-    // average all read the same published-non-opinion slice; firing them
-    // concurrently instead of awaiting in series cuts the endpoint latency.
-    const [totalNews, todayNews, avgViews, topArticle] = await Promise.all([
-      // Total news (exclude opinion articles)
+    const [totalNews, todayNews, avgViews, topArticles] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(articles)
@@ -4663,7 +4669,6 @@ export class DatabaseStorage implements IStorage {
           )
         ),
 
-      // Today's news
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(articles)
@@ -4675,7 +4680,6 @@ export class DatabaseStorage implements IStorage {
           )
         ),
 
-      // Average views
       db
         .select({ avg: sql<number>`COALESCE(AVG(views), 0)::int` })
         .from(articles)
@@ -4686,11 +4690,18 @@ export class DatabaseStorage implements IStorage {
           )
         ),
 
-      // Top viewed this week
       db
-        .select()
+        .select({
+          id: articles.id,
+          title: articles.title,
+          slug: articles.slug,
+          englishSlug: articles.englishSlug,
+          imageUrl: articles.imageUrl,
+          views: articles.views,
+          categoryName: categories.nameAr,
+          categorySlug: categories.slug,
+        })
         .from(articles)
-        .leftJoin(users, eq(articles.authorId, users.id))
         .leftJoin(categories, eq(articles.categoryId, categories.id))
         .where(
           and(
@@ -4700,23 +4711,37 @@ export class DatabaseStorage implements IStorage {
           )
         )
         .orderBy(desc(articles.views))
-        .limit(1),
+        .limit(5),
     ]);
 
-    const topArticleDetails = topArticle[0]
-      ? {
-          ...topArticle[0].articles,
-          author: topArticle[0].users || undefined,
-          category: topArticle[0].categories || undefined,
-        }
-      : null;
+    const topStoriesThisWeek = topArticles.map((row) => ({
+      id: row.id,
+      title: row.title,
+      slug: row.slug,
+      englishSlug: row.englishSlug,
+      imageUrl: row.imageUrl,
+      categoryName: row.categoryName ?? null,
+      categorySlug: row.categorySlug ?? null,
+    }));
+
+    const lead = topStoriesThisWeek[0] ?? null;
 
     return {
       totalNews: totalNews[0]?.count ?? 0,
       todayNews: todayNews[0]?.count ?? 0,
+      topStoriesThisWeek,
+      // Legacy shape for older clients — do not expand this for public UIs.
       topViewedThisWeek: {
-        article: topArticleDetails,
-        views: topArticleDetails?.views ?? 0,
+        article: lead
+          ? ({
+              id: lead.id,
+              title: lead.title,
+              slug: lead.slug,
+              englishSlug: lead.englishSlug,
+              imageUrl: lead.imageUrl,
+            } as ArticleWithDetails)
+          : null,
+        views: topArticles[0]?.views ?? 0,
       },
       averageViews: Math.round(avgViews[0]?.avg ?? 0),
     };

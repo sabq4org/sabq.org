@@ -2,10 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { NewsAnalyticsHero } from "@/components/NewsAnalyticsHero";
-import { AIInsightsPanel } from "@/components/AIInsightsPanel";
+import { SabqPulseSection } from "@/components/SabqPulseSection";
 import { NewsEnhancedFilterBar } from "@/components/NewsEnhancedFilterBar";
-import { NewsStatsCards } from "@/components/NewsStatsCards";
 import { NewsArticleCard } from "@/components/NewsArticleCard";
 import { ScrollToTopButton } from "@/components/ScrollToTopButton";
 import { PersonalizedFeed } from "@/components/PersonalizedFeed";
@@ -46,11 +44,6 @@ export default function NewsPage() {
   const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string }>({
     queryKey: ["/api/auth/user"],
     retry: false,
-  });
-
-  // Fetch analytics
-  const { data: analytics, isLoading: analyticsLoading } = useQuery<any>({
-    queryKey: ["/api/news/analytics"],
   });
 
   // Fetch categories for filter (excluding AI categories)
@@ -249,9 +242,7 @@ export default function NewsPage() {
         {/* Page Header */}
         <div className="mb-8">
           <h1 className="text-4xl md:text-5xl font-bold mb-3" data-testid="heading-news">
-            <span className="bg-gradient-to-l from-primary to-primary/60 bg-clip-text text-transparent">
-              الأخبار الذكية
-            </span>
+            الأخبار الذكية
           </h1>
           <p className="text-lg text-muted-foreground">
             اكتشف آخر الأخبار مع تحليلات وإحصائيات ذكية مدعومة بالذكاء الاصطناعي
@@ -262,28 +253,7 @@ export default function NewsPage() {
         <DmsLeaderboardAd />
         <DmsMpuAd />
 
-        {/* Statistics Cards */}
-        <NewsStatsCards />
-
-        {/* Analytics Hero Section */}
-        {analyticsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {[1, 2, 3, 4].map((i) => (
-              <Card key={i}>
-                <CardContent className="p-6">
-                  <Skeleton className="h-32 w-full" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : analytics ? (
-          <NewsAnalyticsHero analytics={analytics} />
-        ) : null}
-
-        {/* AI Insights Panel */}
-        {analytics?.aiInsights && (
-          <AIInsightsPanel insights={analytics.aiInsights} />
-        )}
+        <SabqPulseSection />
 
         {/* Enhanced Filter Bar */}
         <NewsEnhancedFilterBar

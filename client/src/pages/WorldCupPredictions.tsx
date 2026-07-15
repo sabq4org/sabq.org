@@ -33,6 +33,10 @@ export default function WorldCupPredictions() {
   const [tab, setTab] = useState<Tab>(tabParam && TAB_VALUES.includes(tabParam) ? tabParam : "today");
 
   useEffect(() => {
+    if (tabParam && TAB_VALUES.includes(tabParam)) setTab(tabParam);
+  }, [tabParam]);
+
+  useEffect(() => {
     document.title = "توقّعات المونديال — توقّع واربح نقاط الولاء | سبق";
   }, []);
 
@@ -76,6 +80,16 @@ export default function WorldCupPredictions() {
     staleTime: 60_000,
   });
   const longAvailable = !!longData;
+
+  // تمرير إلى قسم الهدّاف عند القدوم من بطاقة الصفحة الرئيسية (#wc-long-scorer)
+  useEffect(() => {
+    if (tab !== "tournament" || !longAvailable || typeof window === "undefined") return;
+    if (window.location.hash !== "#wc-long-scorer") return;
+    const t = window.setTimeout(() => {
+      document.getElementById("wc-long-scorer")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => window.clearTimeout(t);
+  }, [tab, longAvailable]);
 
   const tabs: { key: Tab; label: string }[] = [
     { key: "today", label: "المباريات" },
