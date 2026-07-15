@@ -3,11 +3,12 @@ import path from "path";
 import { createHash } from "crypto";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
-import { articles, readingHistory } from "@shared/schema";
+import { articles, enArticles, readingHistory } from "@shared/schema";
 import {
   getArticleReadingOverrides,
   resolveReadingMetrics,
 } from "./adminToolsService";
+import type { AdminArticleLocale } from "./adminToolsService";
 
 const BRAND = {
   cyan: "#1BADF8",
@@ -19,10 +20,14 @@ const BRAND = {
   soft: "#F3F7F9",
 };
 
+export type PrClientReportLang = "ar" | "en";
+
 export interface ArticlePrClientReportInput {
   articleId: string;
   /** Campaign / client name entered at export time */
   clientName?: string | null;
+  /** Report language; EN resolves linked English translation when given an Arabic id */
+  lang?: PrClientReportLang;
 }
 
 export interface ArticlePrClientReportResult {
@@ -104,6 +109,37 @@ function formatArabicDate(date: Date | string | null): string {
     "ديسمبر",
   ];
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+const EN_MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+function formatEnglishDateTime(date: Date | string | null): string {
+  if (!date) return "N/A";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "N/A";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${d.getDate()} ${EN_MONTHS[d.getMonth()]} ${d.getFullYear()} · ${hh}:${mm}`;
+}
+
+function formatEnglishDate(date: Date | string | null): string {
+  if (!date) return "N/A";
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return "N/A";
+  return `${d.getDate()} ${EN_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 function buildReportRef(articleId: string, generatedAt: Date): string {
@@ -227,7 +263,80 @@ type PerformanceSnapshot = {
   sessions: number;
 };
 
+type ReportCopy = {
+  lang: PrClientReportLang;
+  dir: "rtl" | "ltr";
+  brandName: string;
+  reportType: string;
+  refLabel: string;
+  createdLabel: string;
+  clientLabel: string;
+  viewsLabel: string;
+  publishedLabel: string;
+  periodLabel: string;
+  avgReadLabel: string;
+  avgReadUnit: string;
+  completionLabel: string;
+  sourceNote: string;
+  linkLabel: string;
+  bodyHeading: string;
+  emptyBody: string;
+  untitled: string;
+  footerUse: string;
+  noTitle: string;
+};
+
+const COPY_AR: Omit<ReportCopy, "lang" | "dir"> = {
+  brandName: "صحيفة سبق الإلكترونية",
+  reportType: "تقرير أداء خبر · للإعلام والعلاقات العامة",
+  refLabel: "المرجع:",
+  createdLabel: "تاريخ الإنشاء:",
+  clientLabel: "للعميل / الحملة",
+  viewsLabel: "عدد المشاهدات",
+  publishedLabel: "تاريخ ووقت النشر",
+  periodLabel: "فترة القياس",
+  avgReadLabel: "متوسط وقت القراءة",
+  avgReadUnit: "دقيقة",
+  completionLabel: "نسبة الإكمال",
+  sourceNote:
+    "المصدر: منصة سبق الإلكترونية (sabq.org). الأرقام أعلاه من العدّاد الرسمي للمنصة خلال فترة القياس المحددة.",
+  linkLabel: "رابط الخبر",
+  bodyHeading: "نص الخبر",
+  emptyBody: "لا يتوفر نص للعرض.",
+  untitled: "بدون عنوان",
+  footerUse: "تقرير موجّه لعملاء العلاقات العامة — للاستخدام الداخلي مع العميل.",
+  noTitle: "تقرير خبر",
+};
+
+const COPY_EN: Omit<ReportCopy, "lang" | "dir"> = {
+  brandName: "Sabq Digital Newspaper",
+  reportType: "Article performance report · Media & PR",
+  refLabel: "Reference:",
+  createdLabel: "Generated:",
+  clientLabel: "Client / Campaign",
+  viewsLabel: "Views",
+  publishedLabel: "Published",
+  periodLabel: "Measurement period",
+  avgReadLabel: "Avg. reading time",
+  avgReadUnit: "min",
+  completionLabel: "Completion rate",
+  sourceNote:
+    "Source: Sabq digital platform (sabq.org). Figures above are from the official platform counter for the stated measurement period.",
+  linkLabel: "Article URL",
+  bodyHeading: "Article text",
+  emptyBody: "No article text available.",
+  untitled: "Untitled",
+  footerUse: "PR client report — for internal use with the client.",
+  noTitle: "Article report",
+};
+
+function getReportCopy(lang: PrClientReportLang): ReportCopy {
+  if (lang === "en") return { lang: "en", dir: "ltr", ...COPY_EN };
+  return { lang: "ar", dir: "rtl", ...COPY_AR };
+}
+
 function buildReportHtml(input: {
+  copy: ReportCopy;
   title: string;
   clientName: string | null;
   reportRef: string;
@@ -243,6 +352,8 @@ function buildReportHtml(input: {
   fontRegular: string | null;
   fontBold: string | null;
 }): string {
+  const { copy } = input;
+  const isRtl = copy.dir === "rtl";
   const fontFaces = [
     input.fontRegular
       ? `@font-face{font-family:'SabqArabic';src:url('${input.fontRegular}') format('truetype');font-weight:400;font-style:normal;}`
@@ -255,10 +366,10 @@ function buildReportHtml(input: {
   const bodyHtml =
     input.paragraphs.length > 0
       ? input.paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("")
-      : `<p class="empty">${escapeHtml("لا يتوفر نص للعرض.")}</p>`;
+      : `<p class="empty">${escapeHtml(copy.emptyBody)}</p>`;
 
   const logoHtml = input.logoDataUrl
-    ? `<img class="logo" src="${input.logoDataUrl}" alt="سبق" />`
+    ? `<img class="logo" src="${input.logoDataUrl}" alt="Sabq" />`
     : `<div class="logo-text">${escapeHtml("سبق")}</div>`;
 
   const heroHtml = input.heroDataUrl
@@ -266,21 +377,21 @@ function buildReportHtml(input: {
     : "";
 
   const clientRow = input.clientName
-    ? `<div class="client-row"><span class="k">${escapeHtml("للعميل / الحملة")}</span><span class="v">${escapeHtml(input.clientName)}</span></div>`
+    ? `<div class="client-row"><span class="k">${escapeHtml(copy.clientLabel)}</span><span class="v">${escapeHtml(input.clientName)}</span></div>`
     : "";
 
   const perfCells: string[] = [];
   if (input.performance.avgReadingMinutes != null) {
     perfCells.push(`
       <div class="cell">
-        <div class="label">${escapeHtml("متوسط وقت القراءة")}</div>
-        <div class="value">${escapeHtml(`${input.performance.avgReadingMinutes.toFixed(1)} دقيقة`)}</div>
+        <div class="label">${escapeHtml(copy.avgReadLabel)}</div>
+        <div class="value">${escapeHtml(`${input.performance.avgReadingMinutes.toFixed(1)} ${copy.avgReadUnit}`)}</div>
       </div>`);
   }
   if (input.performance.avgCompletionRate != null) {
     perfCells.push(`
       <div class="cell">
-        <div class="label">${escapeHtml("نسبة الإكمال")}</div>
+        <div class="label">${escapeHtml(copy.completionLabel)}</div>
         <div class="value">${escapeHtml(`${Math.round(input.performance.avgCompletionRate)}%`)}</div>
       </div>`);
   }
@@ -289,48 +400,54 @@ function buildReportHtml(input: {
       ? `<section class="grid grid-2">${perfCells.join("")}</section>`
       : "";
 
+  const cellBorderSide = isRtl ? "border-right" : "border-left";
+  const noteBorderSide = isRtl ? "border-right" : "border-left";
+  const titleAlign = isRtl ? "right" : "left";
+  const metaAlign = isRtl ? "left" : "right";
+  const linkAlign = isRtl ? "right" : "left";
+
   return `<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="${copy.lang}" dir="${copy.dir}">
 <head>
 <meta charset="utf-8" />
 <style>
 ${fontFaces}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:${BRAND.paper};color:${BRAND.ink};
-  font-family:'SabqArabic','Segoe UI',Tahoma,Arial,sans-serif;direction:rtl;
+  font-family:'SabqArabic','Segoe UI',Tahoma,Arial,sans-serif;direction:${copy.dir};
   font-size:11px;line-height:1.55}
 .page{padding:22px 28px 26px}
 .header{display:flex;align-items:center;justify-content:space-between;gap:12px;
   padding:10px 12px;background:${BRAND.headerBg};border:1px solid ${BRAND.line};border-radius:10px}
-.header-right{display:flex;align-items:center;gap:10px;min-width:0}
+.header-brand{display:flex;align-items:center;gap:10px;min-width:0}
 .logo{height:34px;width:auto;display:block}
 .logo-text{font-size:16px;font-weight:700;color:${BRAND.cyan}}
 .brand-block{min-width:0}
 .brand{font-size:11px;font-weight:700;margin:0 0 2px}
 .sub{font-size:9px;color:${BRAND.muted};margin:0}
-.meta-ref{text-align:left;font-size:9px;color:${BRAND.muted};line-height:1.45;white-space:nowrap}
+.meta-ref{text-align:${metaAlign};font-size:9px;color:${BRAND.muted};line-height:1.45;white-space:nowrap}
 .meta-ref strong{color:${BRAND.ink};font-weight:700}
 .accent{height:2px;background:${BRAND.cyan};border-radius:2px;margin:12px 0 12px}
 .client-row{display:flex;align-items:baseline;gap:8px;margin:0 0 10px;padding:7px 10px;
   background:${BRAND.soft};border:1px solid ${BRAND.line};border-radius:8px;font-size:10.5px}
 .client-row .k{color:${BRAND.muted}}
 .client-row .v{font-weight:700;color:${BRAND.ink}}
-h1{font-size:14px;line-height:1.45;margin:0 0 10px;font-weight:700;text-align:right}
+h1{font-size:14px;line-height:1.45;margin:0 0 10px;font-weight:700;text-align:${titleAlign}}
 .hero{display:block;width:100%;max-height:180px;object-fit:cover;border-radius:8px;margin:0 0 12px}
 .grid{display:grid;gap:0;border:1px solid ${BRAND.line};border-radius:8px;overflow:hidden;
   background:${BRAND.soft};margin:0 0 10px}
 .grid-3{grid-template-columns:1fr 1fr 1fr}
 .grid-2{grid-template-columns:1fr 1fr}
 .cell{padding:8px 10px;text-align:center}
-.cell+.cell{border-right:1px solid ${BRAND.line}}
+.cell+.cell{${cellBorderSide}:1px solid ${BRAND.line}}
 .label{font-size:8.5px;color:${BRAND.muted};margin-bottom:3px}
 .value{font-size:11px;font-weight:700;color:${BRAND.ink}}
 .value.views{font-size:15px;color:${BRAND.cyan}}
 .value.sm{font-size:10px;font-weight:600;word-break:break-word}
 .note{font-size:8.5px;color:${BRAND.muted};margin:0 0 12px;line-height:1.5;
-  padding:7px 9px;border-right:2.5px solid ${BRAND.cyan};background:#FAFCFE}
+  padding:7px 9px;${noteBorderSide}:2.5px solid ${BRAND.cyan};background:#FAFCFE}
 .link-box{border:1px solid ${BRAND.line};border-radius:8px;margin:0 0 12px;padding:7px 10px;
-  text-align:right;background:#fff}
+  text-align:${linkAlign};background:#fff}
 .link-box .value{color:${BRAND.cyan};font-size:10px;font-weight:600;word-break:break-all}
 h2{font-size:11px;font-weight:700;margin:0 0 8px;display:inline-block;
   padding-bottom:3px;border-bottom:2px solid ${BRAND.cyan}}
@@ -343,16 +460,16 @@ h2{font-size:11px;font-weight:700;margin:0 0 8px;display:inline-block;
 <body>
   <div class="page">
     <header class="header">
-      <div class="header-right">
+      <div class="header-brand">
         ${logoHtml}
         <div class="brand-block">
-          <p class="brand">${escapeHtml("صحيفة سبق الإلكترونية")}</p>
-          <p class="sub">${escapeHtml("تقرير أداء خبر · للإعلام والعلاقات العامة")}</p>
+          <p class="brand">${escapeHtml(copy.brandName)}</p>
+          <p class="sub">${escapeHtml(copy.reportType)}</p>
         </div>
       </div>
       <div class="meta-ref">
-        <div><strong>${escapeHtml("المرجع:")}</strong> ${escapeHtml(input.reportRef)}</div>
-        <div><strong>${escapeHtml("تاريخ الإنشاء:")}</strong> ${escapeHtml(input.generatedLabel)}</div>
+        <div><strong>${escapeHtml(copy.refLabel)}</strong> ${escapeHtml(input.reportRef)}</div>
+        <div><strong>${escapeHtml(copy.createdLabel)}</strong> ${escapeHtml(input.generatedLabel)}</div>
       </div>
     </header>
     <div class="accent"></div>
@@ -361,29 +478,29 @@ h2{font-size:11px;font-weight:700;margin:0 0 8px;display:inline-block;
     ${heroHtml}
     <section class="grid grid-3">
       <div class="cell">
-        <div class="label">${escapeHtml("عدد المشاهدات")}</div>
+        <div class="label">${escapeHtml(copy.viewsLabel)}</div>
         <div class="value views">${escapeHtml(input.viewsLabel)}</div>
       </div>
       <div class="cell">
-        <div class="label">${escapeHtml("تاريخ ووقت النشر")}</div>
+        <div class="label">${escapeHtml(copy.publishedLabel)}</div>
         <div class="value">${escapeHtml(input.publishedLabel)}</div>
       </div>
       <div class="cell">
-        <div class="label">${escapeHtml("فترة القياس")}</div>
+        <div class="label">${escapeHtml(copy.periodLabel)}</div>
         <div class="value sm">${escapeHtml(input.measurementPeriod)}</div>
       </div>
     </section>
     ${performanceBlock}
-    <p class="note">${escapeHtml("المصدر: منصة سبق الإلكترونية (sabq.org). الأرقام أعلاه من العدّاد الرسمي للمنصة خلال فترة القياس المحددة.")}</p>
+    <p class="note">${escapeHtml(copy.sourceNote)}</p>
     <div class="link-box">
-      <div class="label">${escapeHtml("رابط الخبر")}</div>
+      <div class="label">${escapeHtml(copy.linkLabel)}</div>
       <div class="value">${escapeHtml(input.articleUrl)}</div>
     </div>
-    <h2>${escapeHtml("نص الخبر")}</h2>
+    <h2>${escapeHtml(copy.bodyHeading)}</h2>
     <div class="body">${bodyHtml}</div>
     <footer class="footer">
-      ${escapeHtml(`${input.reportRef} · sabq.org · أُنشئ في ${input.generatedLabel}`)}<br/>
-      ${escapeHtml("تقرير موجّه لعملاء العلاقات العامة — للاستخدام الداخلي مع العميل.")}
+      ${escapeHtml(`${input.reportRef} · sabq.org · ${input.generatedLabel}`)}<br/>
+      ${escapeHtml(copy.footerUse)}
     </footer>
   </div>
 </body>
@@ -450,34 +567,102 @@ async function renderHtmlToPdf(html: string): Promise<Buffer> {
 }
 
 /**
- * Client-facing PR article report PDF.
- * Compact layout: client name, report ref, measurement period, optional reading snapshot.
+ * Client-facing PR article report PDF (Arabic RTL or English LTR).
+ * Same compact Sabq design for both locales.
  */
 export async function buildArticlePrClientReportPdf(
   input: ArticlePrClientReportInput,
 ): Promise<ArticlePrClientReportResult> {
+  const lang: PrClientReportLang = input.lang === "en" ? "en" : "ar";
+  const copy = getReportCopy(lang);
   const clientName = sanitizeClientName(input.clientName);
   const generatedAt = new Date();
 
-  const [article] = await db
-    .select({
-      id: articles.id,
-      title: articles.title,
-      slug: articles.slug,
-      englishSlug: articles.englishSlug,
-      content: articles.content,
-      excerpt: articles.excerpt,
-      imageUrl: articles.imageUrl,
-      views: articles.views,
-      publishedAt: articles.publishedAt,
-      status: articles.status,
-    })
-    .from(articles)
-    .where(eq(articles.id, input.articleId))
-    .limit(1);
+  type ArticleRow = {
+    id: string;
+    title: string | null;
+    slug: string | null;
+    englishSlug: string | null;
+    content: string | null;
+    excerpt: string | null;
+    imageUrl: string | null;
+    views: number | null;
+    publishedAt: Date | null;
+  };
 
-  if (!article) {
-    throw Object.assign(new Error("ARTICLE_NOT_FOUND"), { code: "ARTICLE_NOT_FOUND" });
+  let article: ArticleRow | undefined;
+  let metricsLocale: AdminArticleLocale = "ar";
+  let articleUrl: string;
+
+  if (lang === "en") {
+    // Prefer direct EN id; otherwise resolve translation linked from Arabic article.
+    const [directEn] = await db
+      .select({
+        id: enArticles.id,
+        title: enArticles.title,
+        slug: enArticles.slug,
+        englishSlug: enArticles.englishSlug,
+        content: enArticles.content,
+        excerpt: enArticles.excerpt,
+        imageUrl: enArticles.imageUrl,
+        views: enArticles.views,
+        publishedAt: enArticles.publishedAt,
+      })
+      .from(enArticles)
+      .where(eq(enArticles.id, input.articleId))
+      .limit(1);
+
+    if (directEn) {
+      article = directEn;
+    } else {
+      const [linkedEn] = await db
+        .select({
+          id: enArticles.id,
+          title: enArticles.title,
+          slug: enArticles.slug,
+          englishSlug: enArticles.englishSlug,
+          content: enArticles.content,
+          excerpt: enArticles.excerpt,
+          imageUrl: enArticles.imageUrl,
+          views: enArticles.views,
+          publishedAt: enArticles.publishedAt,
+        })
+        .from(enArticles)
+        .where(sql`${enArticles.seoMetadata}->>'sourceArticleId' = ${input.articleId}`)
+        .limit(1);
+      article = linkedEn;
+    }
+
+    if (!article) {
+      throw Object.assign(new Error("EN_ARTICLE_NOT_FOUND"), {
+        code: "EN_ARTICLE_NOT_FOUND",
+      });
+    }
+    metricsLocale = "en";
+    const slugPath = article.slug || article.englishSlug || article.id;
+    articleUrl = `https://sabq.org/en/article/${slugPath}`;
+  } else {
+    const [arArticle] = await db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        slug: articles.slug,
+        englishSlug: articles.englishSlug,
+        content: articles.content,
+        excerpt: articles.excerpt,
+        imageUrl: articles.imageUrl,
+        views: articles.views,
+        publishedAt: articles.publishedAt,
+      })
+      .from(articles)
+      .where(eq(articles.id, input.articleId))
+      .limit(1);
+    article = arArticle;
+    if (!article) {
+      throw Object.assign(new Error("ARTICLE_NOT_FOUND"), { code: "ARTICLE_NOT_FOUND" });
+    }
+    const slugPath = article.englishSlug || article.slug || article.id;
+    articleUrl = `https://sabq.org/article/${slugPath}`;
   }
 
   const [readingStats] = await db
@@ -487,18 +672,17 @@ export async function buildArticlePrClientReportPdf(
       avgCompletionRate: sql<number>`COALESCE(AVG(${readingHistory.completionRate}), 0)::real`,
     })
     .from(readingHistory)
-    .where(eq(readingHistory.articleId, input.articleId));
+    .where(eq(readingHistory.articleId, article.id));
 
   const sessions = Number(readingStats?.totalReadSessions || 0);
   const avgReading = Number(readingStats?.avgReadingTime || 0);
   const avgCompletion = Number(readingStats?.avgCompletionRate || 0);
-  const overrides = await getArticleReadingOverrides(input.articleId, "ar");
+  const overrides = await getArticleReadingOverrides(article.id, metricsLocale);
   const resolved = resolveReadingMetrics({
     avgReadingMinutes: avgReading,
     avgCompletionRate: avgCompletion,
     overrides,
   });
-  // Prefer admin overrides; otherwise only surface metrics with a real sample.
   const performance: PerformanceSnapshot = {
     sessions,
     avgReadingMinutes:
@@ -526,16 +710,24 @@ export async function buildArticlePrClientReportPdf(
   const fonts = resolveFontDataUrls();
   let heroDataUrl = await fetchImageAsDataUrl(article.imageUrl);
   const viewsLabel = Number(article.views || 0).toLocaleString("en-US");
-  const publishedLabel = formatArabicDateTime(article.publishedAt);
-  const generatedLabel = formatArabicDateTime(generatedAt);
-  const measurementPeriod = `من ${formatArabicDate(article.publishedAt)} حتى ${formatArabicDate(generatedAt)}`;
+  const publishedLabel =
+    lang === "en"
+      ? formatEnglishDateTime(article.publishedAt)
+      : formatArabicDateTime(article.publishedAt);
+  const generatedLabel =
+    lang === "en"
+      ? formatEnglishDateTime(generatedAt)
+      : formatArabicDateTime(generatedAt);
+  const measurementPeriod =
+    lang === "en"
+      ? `From ${formatEnglishDate(article.publishedAt)} to ${formatEnglishDate(generatedAt)}`
+      : `من ${formatArabicDate(article.publishedAt)} حتى ${formatArabicDate(generatedAt)}`;
   const reportRef = buildReportRef(article.id, generatedAt);
-  const slugPath = article.englishSlug || article.slug || article.id;
-  const articleUrl = `https://sabq.org/article/${slugPath}`;
-  const title = article.title || "بدون عنوان";
+  const title = article.title || copy.untitled;
 
   const buildHtml = (hero: string | null) =>
     buildReportHtml({
+      copy,
       title,
       clientName,
       reportRef,
@@ -562,10 +754,11 @@ export async function buildArticlePrClientReportPdf(
   }
 
   const safeSlug = (article.slug || article.id).replace(/[^a-zA-Z0-9-_]/g, "_");
+  const langSuffix = lang === "en" ? "-en" : "";
   return {
     buffer,
-    filename: `sabq-pr-report-${safeSlug}.pdf`,
-    title: article.title || "تقرير خبر",
+    filename: `sabq-pr-report${langSuffix}-${safeSlug}.pdf`,
+    title: article.title || copy.noTitle,
     reportRef,
   };
 }

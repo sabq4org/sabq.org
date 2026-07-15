@@ -6,7 +6,7 @@ const router: Router = Router();
 
 /**
  * Client-facing PR article PDF for system admins.
- * Optional query: clientName (campaign / client label shown on the report).
+ * Optional query: clientName, lang=ar|en (EN uses linked English translation).
  */
 router.get(
   "/api/admin/articles/:articleId/pr-client-report.pdf",
@@ -22,10 +22,13 @@ router.get(
       const clientNameRaw = req.query.clientName ?? req.query.campaignName;
       const clientName =
         typeof clientNameRaw === "string" ? clientNameRaw : undefined;
+      const langRaw = String(req.query.lang || req.query.locale || "ar").toLowerCase();
+      const lang = langRaw === "en" || langRaw === "english" ? "en" : "ar";
 
       const report = await buildArticlePrClientReportPdf({
         articleId,
         clientName,
+        lang,
       });
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader(
@@ -34,10 +37,17 @@ router.get(
       );
       res.setHeader("Cache-Control", "private, no-store");
       res.setHeader("X-Sabq-Report-Ref", report.reportRef);
+      res.setHeader("X-Sabq-Report-Lang", lang);
       res.send(report.buffer);
     } catch (error: any) {
       if (error?.code === "ARTICLE_NOT_FOUND" || error?.message === "ARTICLE_NOT_FOUND") {
         return res.status(404).json({ message: "المقال غير موجود" });
+      }
+      if (error?.code === "EN_ARTICLE_NOT_FOUND" || error?.message === "EN_ARTICLE_NOT_FOUND") {
+        return res.status(404).json({
+          message: "لا توجد ترجمة إنجليزية مرتبطة بهذا الخبر",
+          detail: "Create or link an English article first, then export again.",
+        });
       }
       console.error("[PrClientReportPdf] Failed to build report:", error);
       if (!res.headersSent) {
