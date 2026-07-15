@@ -455,8 +455,15 @@ actor APIClient {
     /// public `/api/breaking-ticker/active` route (NOT the v1 mobile root) and
     /// returns `nil` when no topic is active — the endpoint answers `200 null`
     /// in that case, which decodes cleanly into the optional.
-    func fetchBreakingTicker() async throws -> APIBreakingTicker? {
-        try await get(APIBreakingTicker?.self, path: "/breaking-ticker/active", apiRoot: publicAPIBaseURL)
+    /// - Parameter ignoreCache: `true` عند السحب للتحديث / إشارة النشر حتى لا
+    ///   يبقى الشريط الأحمر على نسخة SWR قديمة.
+    func fetchBreakingTicker(ignoreCache: Bool = false) async throws -> APIBreakingTicker? {
+        try await get(
+            APIBreakingTicker?.self,
+            path: "/breaking-ticker/active",
+            ignoreCache: ignoreCache,
+            apiRoot: publicAPIBaseURL
+        )
     }
 
     // MARK: - Search

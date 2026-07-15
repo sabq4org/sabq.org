@@ -238,7 +238,7 @@ struct HomeFeedView: View {
                 await articlesStore.loadArticles(ignoreCache: true)
                 // أعد جلب شريط العاجل أيضاً حتى ينعكس أي تفعيل/تعطيل من لوحة
                 // التحكم فور السحب للتحديث.
-                breakingTicker = (try? await APIClient.shared.fetchBreakingTicker()) ?? nil
+                breakingTicker = (try? await APIClient.shared.fetchBreakingTicker(ignoreCache: true)) ?? nil
                 // الخبر الجديد في الكاروسيل يُدرج في الموضع 0 — نرجع المؤشر
                 // للبطاقة الأولى حتى يراه المحرر فور السحب للتحديث.
                 featuredIndex = 0
@@ -270,6 +270,11 @@ struct HomeFeedView: View {
                         lastForcedHeroCheck = Date()
                     } else if Date().timeIntervalSince(lastForcedHeroCheck) >= 60 {
                         await articlesStore.checkForNewArticles()
+                        if let ticker = try? await APIClient.shared.fetchBreakingTicker(ignoreCache: true) {
+                            breakingTicker = ticker
+                        } else {
+                            breakingTicker = nil
+                        }
                         lastForcedHeroCheck = Date()
                     }
                 }
@@ -360,9 +365,11 @@ struct HomeFeedView: View {
         if heroBefore != heroAfter {
             featuredIndex = 0
         }
-        // شريط العاجل من لوحة التحكم قد يتغيّر مع النشر أيضاً.
-        if let ticker = try? await APIClient.shared.fetchBreakingTicker() {
+        // شريط العاجل من لوحة التحكم — تجاوز الكاش حتى يظهر فور التفعيل/التعديل.
+        if let ticker = try? await APIClient.shared.fetchBreakingTicker(ignoreCache: true) {
             breakingTicker = ticker
+        } else {
+            breakingTicker = nil
         }
         return true
     }

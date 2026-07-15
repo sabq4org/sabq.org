@@ -35589,9 +35589,24 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Public: Get active breaking ticker (cached)
   app.get("/api/breaking-ticker/active", cacheControl({ maxAge: 60, sMaxAge: 120, staleWhileRevalidate: 60 }), async (req, res) => {
     try {
-      const data = await withSWR('breaking-ticker-active', CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, async () => {
-        return await storage.getActiveBreakingTicker();
-      });
+      // Honor pull-to-refresh / Cache-Control: no-cache the same way homepage
+      // does — otherwise iOS keeps a stale SWR copy for CACHE_TTL.MEDIUM even
+      // after the editor updates the red strip.
+      const wantsFresh =
+        req?.query?._nc !== undefined ||
+        req?.query?._t !== undefined ||
+        String(req?.headers?.["cache-control"] ?? "").toLowerCase().includes("no-cache") ||
+        String(req?.headers?.["cache-control"] ?? "").toLowerCase().includes("no-store");
+
+      const data = await withSWR(
+        "breaking-ticker-active",
+        CACHE_TTL.MEDIUM,
+        CACHE_TTL.MEDIUM * 2,
+        async () => {
+          return await storage.getActiveBreakingTicker();
+        },
+        wantsFresh,
+      );
       if (data) {
         res.json(data);
       } else {
@@ -35644,7 +35659,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
       }
       const topic = await storage.createBreakingTickerTopic(parsed.data);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.status(201).json(topic);
     } catch (error) {
       console.error("Error creating breaking ticker topic:", error);
@@ -35659,7 +35674,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       const topic = await storage.updateBreakingTickerTopic(id, req.body);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json(topic);
     } catch (error) {
       console.error("Error updating breaking ticker topic:", error);
@@ -35674,7 +35689,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       await storage.deleteBreakingTickerTopic(id);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json({ success: true, message: "تم حذف الموضوع" });
     } catch (error) {
       console.error("Error deleting breaking ticker topic:", error);
@@ -35689,7 +35704,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       const topic = await storage.activateBreakingTickerTopic(id);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json(topic);
     } catch (error) {
       console.error("Error activating breaking ticker topic:", error);
@@ -35704,7 +35719,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       const topic = await storage.deactivateBreakingTickerTopic(id);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json(topic);
     } catch (error) {
       console.error("Error deactivating breaking ticker topic:", error);
@@ -35722,7 +35737,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         return res.status(400).json({ message: "بيانات غير صالحة", errors: parsed.error.errors });
       }
       const headline = await storage.createBreakingTickerHeadline(parsed.data);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.status(201).json(headline);
     } catch (error) {
       console.error("Error creating breaking ticker headline:", error);
@@ -35737,7 +35752,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       const headline = await storage.updateBreakingTickerHeadline(id, req.body);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json(headline);
     } catch (error) {
       console.error("Error updating breaking ticker headline:", error);
@@ -35752,7 +35767,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     try {
       const { id } = req.params;
       await storage.deleteBreakingTickerHeadline(id);
-      memoryCache.invalidatePatterns(["breaking-ticker"]);
+      invalidatePublishedContent({ isBreaking: true, reason: "breaking-ticker" });
       res.json({ success: true, message: "تم حذف العنوان" });
     } catch (error) {
       console.error("Error deleting breaking ticker headline:", error);
