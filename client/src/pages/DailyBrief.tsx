@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { AccountSectionHeader } from "@/components/AccountSectionHeader";
 import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -191,7 +192,7 @@ export default function DailyBrief() {
       <>
         <Header user={user} />
         <main className="min-h-screen bg-background py-8">
-          <div className="container max-w-6xl mx-auto px-4">
+          <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <Card data-testid="card-no-activity">
               <CardContent className="flex flex-col items-center justify-center py-12 text-center">
                 <Eye className="h-16 w-16 text-muted-foreground mb-4" />
@@ -219,42 +220,37 @@ export default function DailyBrief() {
   return (
     <>
       <Header user={user} />
-      <main className="min-h-screen bg-background py-8">
-        <div className="container max-w-7xl mx-auto px-4">
-          {/* Header Section */}
-          <div className="mb-8" dir="rtl">
-            <div className="flex items-start justify-between gap-4 mb-4 flex-row-reverse">
-              <div className="flex-1">
-                <h1 className="text-3xl md:text-4xl font-bold mb-2 flex items-center gap-3" data-testid="text-daily-brief-title">
-                  <Sun className="h-8 w-8 text-yellow-500" />
-                  {isLoading ? "جاري التحميل..." : `${getGreeting()}${summary?.personalizedGreeting?.userName ? ` ${summary.personalizedGreeting.userName}` : ""}!`}
-                </h1>
-                <div className="flex flex-wrap items-center gap-4 text-muted-foreground">
-                  <div className="flex items-center gap-2" data-testid="text-current-date">
-                    <Calendar className="h-4 w-4" />
-                    <span>{todayInArabic}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <Button 
-                variant="outline" 
-                size="icon"
-                onClick={handleRefresh}
-                disabled={isLoading}
-                data-testid="button-refresh-brief"
-              >
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              </Button>
+      <main className="min-h-screen bg-background">
+        <div className="border-b border-primary/10 bg-ai-gradient-soft">
+          <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+            <div className="scroll-fade-in" dir="rtl">
+              <AccountSectionHeader
+                icon={Sun}
+                title={isLoading ? "جاري التحميل..." : `${getGreeting()}${summary?.personalizedGreeting?.userName ? ` ${summary.personalizedGreeting.userName}` : ""}!`}
+                subtitle={todayInArabic}
+                testId="text-daily-brief-title"
+                action={
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="rounded-full"
+                    onClick={handleRefresh}
+                    disabled={isLoading}
+                    data-testid="button-refresh-brief"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+                  </Button>
+                }
+              />
             </div>
-            
-            <Separator className="my-4" />
           </div>
+        </div>
 
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
           {/* Loading State */}
           {isLoading && (
             <div className="space-y-6" data-testid="loading-state">
-              <Card>
+              <Card className="border-0 dark:border dark:border-card-border">
                 <CardHeader>
                   <Skeleton className="h-8 w-3/4" />
                   <Skeleton className="h-4 w-1/2 mt-2" />
@@ -262,7 +258,7 @@ export default function DailyBrief() {
               </Card>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <Card key={i}>
+                  <Card key={i} className="border-0 dark:border dark:border-card-border">
                     <CardContent className="p-6">
                       <Skeleton className="h-24" />
                     </CardContent>
@@ -277,13 +273,14 @@ export default function DailyBrief() {
             <div className="space-y-10" dir="rtl">
               {/* Statistics KPIs Section */}
               {formattedMetrics && (
-              <div className="grid gap-2 sm:gap-3 md:gap-4 grid-cols-2 md:grid-cols-4">
+              <div className="scroll-fade-in grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4 md:gap-4">
                 <MobileOptimizedKpiCard
                   label="المقالات المقروءة اليوم"
                   value={formattedMetrics.articlesRead}
                   icon={BookOpen}
                   iconColor="text-primary"
                   iconBgColor="bg-primary/10"
+                  className="border-0 dark:border dark:border-card-border"
                   testId="kpi-articles-read"
                   ariaLive={true}
                 />
@@ -292,8 +289,9 @@ export default function DailyBrief() {
                   label="وقت القراءة (دقيقة)"
                   value={formattedMetrics.readingTime}
                   icon={Clock}
-                  iconColor="text-blue-500"
-                  iconBgColor="bg-blue-500/10"
+                  iconColor="text-primary"
+                  iconBgColor="bg-primary/10"
+                  className="border-0 dark:border dark:border-card-border"
                   testId="kpi-reading-time"
                   ariaLive={true}
                 />
@@ -302,8 +300,9 @@ export default function DailyBrief() {
                   label="معدل الإكمال (%)"
                   value={formattedMetrics.completionRate}
                   icon={Target}
-                  iconColor="text-green-500"
-                  iconBgColor="bg-green-500/10"
+                  iconColor="text-primary"
+                  iconBgColor="bg-primary/10"
+                  className="border-0 dark:border dark:border-card-border"
                   testId="kpi-completion-rate"
                   ariaLive={true}
                 />
@@ -312,8 +311,9 @@ export default function DailyBrief() {
                   label="نقاط التفاعل"
                   value={formattedMetrics.engagementScore}
                   icon={Activity}
-                  iconColor="text-red-500"
-                  iconBgColor="bg-red-500/10"
+                  iconColor="text-primary"
+                  iconBgColor="bg-primary/10"
+                  className="border-0 dark:border dark:border-card-border"
                   testId="kpi-engagement"
                   ariaLive={true}
                 />
@@ -322,7 +322,7 @@ export default function DailyBrief() {
 
               {/* Personalized Greeting Card */}
               {summary.personalizedGreeting && (
-              <Card className="bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border-primary/20" data-testid="card-greeting">
+              <Card className="border-0 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent shadow-sm dark:border dark:border-card-border" data-testid="card-greeting">
                 <CardContent className="p-8">
                   <div className="flex items-start gap-6">
                     <div className="flex-shrink-0" data-testid="icon-reading-mood">

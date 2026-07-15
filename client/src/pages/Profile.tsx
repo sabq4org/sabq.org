@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
+import { AccountSectionHeader } from "@/components/AccountSectionHeader";
 import { LoyaltyBlock } from "@/components/loyalty/LoyaltyBlock";
 import { LoyaltyCard } from "@/components/loyalty/LoyaltyCard";
 import { computeTier, tierProgress, nextTier } from "@shared/loyalty";
@@ -29,7 +30,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { 
   Heart, 
   Bookmark, 
@@ -122,7 +123,7 @@ function SavedArticlesList({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
       {articles.map((article) => (
-        <div key={article.id} className="rounded-xl border border-border bg-card">
+        <div key={article.id} className="overflow-hidden rounded-xl border-0 bg-card shadow-sm dark:border dark:border-card-border hover-elevate active-elevate-2 transition-all">
           <ArticleCard article={article} variant="list" />
         </div>
       ))}
@@ -415,7 +416,9 @@ export default function Profile() {
   >({
     queryKey: ['/api/social/followers', user?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/social/followers/${user?.id}?limit=50`);
+      const res = await fetch(apiUrl(`/api/social/followers/${user?.id}?limit=50`), {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error('Failed to fetch followers');
       return res.json();
     },
@@ -435,7 +438,9 @@ export default function Profile() {
   >({
     queryKey: ['/api/social/following', user?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/social/following/${user?.id}?limit=50`);
+      const res = await fetch(apiUrl(`/api/social/following/${user?.id}?limit=50`), {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error('Failed to fetch following');
       return res.json();
     },
@@ -486,7 +491,7 @@ export default function Profile() {
   // Press Card Issuance Mutation
   const issuePressCardMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/wallet/press/issue', {
+      const response = await fetch(apiUrl('/api/wallet/press/issue'), {
         method: 'POST',
         credentials: 'include',
       });
@@ -530,7 +535,7 @@ export default function Profile() {
   // Loyalty Card Issuance Mutation
   const issueLoyaltyCardMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/wallet/loyalty/issue', {
+      const response = await fetch(apiUrl('/api/wallet/loyalty/issue'), {
         method: 'POST',
         credentials: 'include',
       });
@@ -702,7 +707,7 @@ export default function Profile() {
     return (
       <div className="min-h-screen bg-background">
         <Header user={user} />
-        <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-20">
+        <main className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="text-center">
             <h1 className="text-3xl font-bold mb-4">يجب تسجيل الدخول</h1>
             <p className="text-muted-foreground mb-8">
@@ -726,7 +731,7 @@ export default function Profile() {
 
       {/* Email Verification Alert */}
       {user && !user.emailVerified && (
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 pt-4" dir="rtl">
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4" dir="rtl">
           <Alert className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900" data-testid="alert-email-verification">
             <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
             <AlertTitle className="text-yellow-800 dark:text-yellow-300 text-right">
@@ -764,7 +769,7 @@ export default function Profile() {
       )}
 
       {/* Modern Profile Header — Phase 2 loyalty redesign */}
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8" dir="rtl">
+      <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" dir="rtl">
         {(() => {
           const lifetime = loyaltyPoints?.lifetimePoints ?? 0;
           const heroTier = computeTier(lifetime);
@@ -1053,15 +1058,29 @@ export default function Profile() {
         </Card>
           );
         })()}
+      </div>
+
+      <section
+        className="scroll-fade-in border-y border-emerald-600/10 bg-emerald-50/80 py-8 dark:border-emerald-400/10 dark:bg-emerald-950/20"
+        data-testid="profile-account-band"
+      >
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" dir="rtl">
+        <AccountSectionHeader
+          icon={LayoutDashboard}
+          title="مساحتي"
+          subtitle="إحصائياتك السريعة ومحتواك المحفوظ"
+          testId="profile-section-header"
+        />
 
         {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 md:gap-4 mb-6">
+        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3 md:gap-4">
           <MobileOptimizedKpiCard
             label="متابع"
             value={(followStats?.followersCount || 0).toLocaleString('en-US')}
             icon={Users}
             iconColor="text-primary"
             iconBgColor="bg-primary/10"
+            className="border-0 dark:border dark:border-card-border"
             testId="text-stat-followers"
           />
 
@@ -1071,6 +1090,7 @@ export default function Profile() {
             icon={Heart}
             iconColor="text-primary"
             iconBgColor="bg-primary/10"
+            className="border-0 dark:border dark:border-card-border"
             testId="text-stat-likes"
           />
 
@@ -1080,6 +1100,7 @@ export default function Profile() {
             icon={Bookmark}
             iconColor="text-primary"
             iconBgColor="bg-primary/10"
+            className="border-0 dark:border dark:border-card-border"
             testId="text-stat-bookmarks"
           />
 
@@ -1089,6 +1110,7 @@ export default function Profile() {
             icon={Eye}
             iconColor="text-primary"
             iconBgColor="bg-primary/10"
+            className="border-0 dark:border dark:border-card-border"
             testId="text-stat-reads"
           />
 
@@ -1098,19 +1120,20 @@ export default function Profile() {
             icon={Coins}
             iconColor="text-amber-500"
             iconBgColor="bg-amber-500/10"
+            className="border-0 dark:border dark:border-card-border"
             testId="text-stat-points"
           />
         </div>
 
         {/* Main Content with Tabs */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-          <Card>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+          <Card className="border-0 bg-card/90 shadow-sm dark:border dark:border-card-border">
             <CardContent className="p-6">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
                 {/* Responsive 5-column tab grid — icon stacks above the label
                     on mobile, sits inline on sm+. grid-cols-5 guarantees no
                     horizontal scroll and no chaotic wrapping at any width. */}
-                <TabsList dir="rtl" className="grid w-full grid-cols-5 h-auto gap-1 rounded-xl bg-muted p-1 mb-6">
+                <TabsList dir="rtl" className="mb-6 grid h-auto w-full grid-cols-5 gap-1 rounded-xl bg-muted p-1">
                   <TabsTrigger value="journey" data-testid="tab-journey" className="flex-col sm:flex-row gap-1 sm:gap-2 h-auto py-2 px-1 sm:px-3 text-[11px] sm:text-sm rounded-lg data-[state=active]:shadow-sm">
                     <Trophy className="h-4 w-4 shrink-0" />
                     <span>نظرة عامة</span>
@@ -2021,7 +2044,8 @@ export default function Profile() {
             <LoyaltyBlock />
           </aside>
         </div>
-      </div>
+        </div>
+      </section>
     </div>
   );
 }
