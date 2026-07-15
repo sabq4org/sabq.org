@@ -44,6 +44,7 @@ function isRateLimitError(error: any): boolean {
 
 export interface ImageAnalysisRequest {
   imageUrl: string;
+  imageBase64?: string; // Pre-fetched bytes for non-https sources (gs:// private storage); when set, imageUrl is used for logging only
   articleTitle?: string; // For relevance checking
   articleContent?: string; // For relevance checking
   checkQuality?: boolean;
@@ -129,9 +130,9 @@ export async function analyzeImage(request: ImageAnalysisRequest): Promise<Image
   try {
     console.log(`[Visual AI] Analyzing image: ${request.imageUrl}`);
     
-    // Download image to base64
-    const imageBase64 = await downloadImageToBase64(request.imageUrl);
-    console.log(`[Visual AI] Image downloaded, size: ${imageBase64.length} bytes`);
+    // Use pre-fetched bytes when provided (private gs:// storage), otherwise download
+    const imageBase64 = request.imageBase64 ?? await downloadImageToBase64(request.imageUrl);
+    console.log(`[Visual AI] Image ready, size: ${imageBase64.length} bytes`);
     
     // Build comprehensive analysis prompt
     const promptParts: string[] = [];

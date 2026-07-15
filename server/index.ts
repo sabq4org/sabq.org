@@ -1782,6 +1782,21 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 50000);
 
+        // Media pipeline — تحليل وفهرسة أرشيف مكتبة الوسائط ليليًا (مستهلك
+        // لاستدعاءات Gemini، خلف flag مستقل مثل بقية الوظائف المستهلكة للتوكن)
+        if (process.env.ENABLE_MEDIA_PIPELINE !== 'false') {
+          setTimeout(async () => {
+            try {
+              const { startMediaPipelineJob } = await import("./jobs/mediaPipelineJob");
+              startMediaPipelineJob();
+            } catch (error) {
+              console.error("[Server] Error starting media pipeline job:", error);
+            }
+          }, BACKGROUND_JOB_DELAY + 52000);
+        } else {
+          console.log("[Server] Media pipeline job disabled (unset ENABLE_MEDIA_PIPELINE=false to enable)");
+        }
+
         // AI Hub — إعادة فحص النماذج الموقوفة بالقاطع + التجميع اليومي للاستهلاك
         setTimeout(async () => {
           try {

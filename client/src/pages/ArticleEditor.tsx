@@ -103,6 +103,7 @@ import {
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { SeoPreview } from "@/components/SeoPreview";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useAuth, hasAnyPermission, hasPermission } from "@/hooks/useAuth";
 import { useArticleAiTools } from "@/hooks/useArticleAiTools";
 import { TitleProofreadDialog } from "@/components/article-editor/TitleProofreadDialog";
@@ -923,10 +924,33 @@ export default function ArticleEditor() {
       }
     };
   }, [
-    title, subtitle, content, excerpt, categoryId, articleType, 
+    title, subtitle, content, excerpt, categoryId, articleType,
     imageUrl, thumbnailUrl, keywords, newsType, metaTitle, metaDescription,
     saveDraftToLocalStorage
   ]);
+
+  // تذكير فقاعي (مرة واحدة لكل جلسة تحرير): كُتب عنوان ولا توجد صورة بارزة →
+  // ذكّر المحرر بأن مكتبة الوسائط تعرض اقتراحات ذكية لهذا الخبر بدل رفع صورة جديدة
+  const librarySuggestionToastShownRef = useRef(false);
+  useEffect(() => {
+    if (librarySuggestionToastShownRef.current || isOpinionAuthor) return;
+    if (!title || title.trim().length < 20 || imageUrl) return;
+    const timer = setTimeout(() => {
+      if (librarySuggestionToastShownRef.current) return;
+      librarySuggestionToastShownRef.current = true;
+      toast({
+        title: "💡 جرّب اقتراحات المكتبة",
+        description: "مكتبة الوسائط تحتوي آلاف الصور — افتح «اقتراحات ذكية» لترى ما يناسب هذا الخبر قبل رفع صورة جديدة.",
+        duration: 10000,
+        action: (
+          <ToastAction altText="فتح المكتبة" onClick={() => setShowMediaPicker(true)}>
+            فتح المكتبة
+          </ToastAction>
+        ),
+      });
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [title, imageUrl, isOpinionAuthor, toast]);
 
   // Helper function to save uploaded images to media library (memoized to prevent duplicate uploads)
   const saveToMediaLibrary = useCallback(async (imageUrl: string): Promise<string | null> => {
@@ -1383,7 +1407,25 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           typeof data.updatedAt === "string" ? data.updatedAt : new Date(data.updatedAt).toISOString(),
         );
       }
-      
+
+      // تذكير فقاعي بعد النشر: الصورة البارزة بلا نص بديل → اعرض زر التوليد الذكي
+      // (غير مُعطِّل للنشر — الخبر منشور فعلًا، وهذا تحسين لاحق بضغطة واحدة)
+      if (variables?.publishNow && imageUrl) {
+        const heroAsset = (Array.isArray(mediaAssets) ? mediaAssets : []).find((a: any) => a?.displayOrder === 0);
+        if (!heroAsset?.altText) {
+          toast({
+            title: "الصورة البارزة بلا نص بديل",
+            description: "الخبر منشور، ويُنصح بتوليد الوصف الذكي للصورة لتحسين الوصول ونتائج البحث.",
+            duration: 10000,
+            action: (
+              <ToastAction altText="توليد الوصف الذكي" onClick={() => { void handleGenerateHeroCaption(); }}>
+                توليد الوصف
+              </ToastAction>
+            ),
+          });
+        }
+      }
+
       // Sync angles if any are selected and we have an article ID
       if (savedArticleId && selectedAngleIds.length > 0) {
         try {
@@ -4630,10 +4672,30 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             // Save media ID for caption creation
             setHeroImageMediaId(media.id);
             setShowMediaPicker(false);
-            toast({
-              title: "تم اختيار الصورة",
-              description: "تم إضافة الصورة من المكتبة",
-            });
+            // تنبيه فقاعي باكتمال بيانات الصورة: نص بديل، حقوق، محتوى حسّاس —
+            // يظهر لحظة الاختيار حتى لا يتفاجأ المحرر بعد النشر
+            const mediaNotes: string[] = [];
+            if (!media.altText) {
+              mediaNotes.push("بلا نص بديل — بعد حفظ الخبر استخدم زر «وصف وتعليق ذكي»");
+            }
+            if (!media.rightsVerified && !media.creditText) {
+              mediaNotes.push("حقوق الاستخدام غير موثّقة — يمكن توثيقها من مكتبة الوسائط");
+            }
+            if (media.aiHasSensitiveContent) {
+              mediaNotes.push("قد تحتوي محتوى حسّاسًا بحسب التحليل الذكي");
+            }
+            if (mediaNotes.length > 0) {
+              toast({
+                title: "تم اختيار الصورة — يوجد تنبيه",
+                description: mediaNotes.join(" · "),
+                duration: 9000,
+              });
+            } else {
+              toast({
+                title: "تم اختيار الصورة",
+                description: "تم إضافة الصورة من المكتبة",
+              });
+            }
           }}
           articleTitle={title}
           articleContent={content?.substring(0, 500)}

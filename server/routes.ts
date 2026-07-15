@@ -2233,6 +2233,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         .where(eq(mediaFiles.url, url))
         .limit(1);
       if (existing) {
+        // A row registered before the AI pipeline existed may still be
+        // unanalyzed — push it through on re-use so hero images catch up.
+        if (!existing.aiAnalysisStatus || existing.aiAnalysisStatus === "pending") {
+          if (shouldAutoTag({ mimeType: existing.mimeType, url: existing.url, category: existing.category })) {
+            enqueueAutoTag(existing.id);
+          }
+        }
         return res.json(existing);
       }
 
@@ -2257,6 +2264,13 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         category: category || "articles",
         uploadedBy: userId,
       }).returning();
+
+      // Editor-registered hero images must enter the AI pipeline too —
+      // without this they never get analyzed, embedded, or semantically
+      // searchable (they were the biggest gap in library coverage).
+      if (shouldAutoTag({ mimeType, url, category: category || "articles" })) {
+        enqueueAutoTag(mediaFile.id);
+      }
 
       res.json(mediaFile);
     } catch (error) {
@@ -15806,6 +15820,12 @@ Respond in valid JSON format only:
 
       console.log(`🔍 [DASHBOARD CREATE] Article created with status: ${article.status}`);
       console.log(`🔍 [DASHBOARD CREATE] Article ID: ${article.id}, Title: ${article.title}`);
+
+      // Record hero-image usage in the media library (idempotent, best-effort)
+      if (article.imageUrl) {
+        const { recordHeroImageUsage } = await import("./services/mediaUsageService");
+        void recordHeroImageUsage({ articleId: article.id, imageUrl: article.imageUrl, userId });
+      }
       
       // Send notification to editors when a reporter submits a draft
       if (article.status === 'draft' && article.reporterId) {
@@ -16054,7 +16074,13 @@ Respond in valid JSON format only:
 
       console.log(`🔍 [DASHBOARD UPDATE] Article updated - Old status: ${article.status}, New status: ${updated.status}`);
       console.log(`🔍 [DASHBOARD UPDATE] Article ID: ${updated.id}, Title: ${updated.title}`);
-      
+
+      // Record hero-image usage in the media library (idempotent, best-effort)
+      if (updated.imageUrl) {
+        const { recordHeroImageUsage } = await import("./services/mediaUsageService");
+        void recordHeroImageUsage({ articleId: updated.id, imageUrl: updated.imageUrl, userId });
+      }
+
       res.json(updated);
 
       // Broadcast publish event to other editors via SSE (on transition to published)
