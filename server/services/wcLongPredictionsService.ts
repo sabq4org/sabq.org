@@ -134,6 +134,12 @@ function eliminatedTeamIds(fixtures: WcFixture[]): Set<number> {
   return out;
 }
 
+/** للاستهلاك العام (مثل نبض /news) — من خرج من الأدوار الإقصائية. */
+export async function getEliminatedWcTeamIds(): Promise<Set<number>> {
+  const fixtures = await getFixtures().catch(() => [] as WcFixture[]);
+  return eliminatedTeamIds(fixtures);
+}
+
 /**
  * مرشّحو البطل = المنتخبات **المتأهّلة لدور الـ32** (= المتأهّلون للأدوار الإقصائية).
  * القائمة الكاملة تبقى ظاهرة دائمًا — من خرج في أي دور إقصائي حُسم يُعلَّم
