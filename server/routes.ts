@@ -2209,63 +2209,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   });
 
 
-  // POST /api/media/save-existing - Save existing image to media library (JSON endpoint for auto-save from editor)
-  app.post("/api/media/save-existing", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
-    try {
-      const userId = req.user.id;
-      const { url, fileName, title, description, category } = req.body;
-
-      // Validation
-      if (!url || !fileName) {
-        return res.status(400).json({ message: "URL والاسم مطلوبان" });
-      }
-      // Only accept URLs from our own storage origins (prevents storing an
-      // attacker-controlled URL that the media proxy would later redirect to).
-      if (typeof url !== 'string' || !isAllowedMediaUrl(url, req.get('host'))) {
-        return res.status(400).json({ message: "رابط غير صالح" });
-      }
-
-      // Reuse the existing row if this URL is already registered — stops the
-      // unbounded duplicate rows that accumulated on every article edit/save.
-      const [existing] = await db
-        .select()
-        .from(mediaFiles)
-        .where(eq(mediaFiles.url, url))
-        .limit(1);
-      if (existing) {
-        return res.json(existing);
-      }
-
-      // Infer the mime type from the extension instead of hardcoding jpeg.
-      const ext = (String(fileName).split('.').pop() || '').toLowerCase();
-      const extMime: Record<string, string> = {
-        jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png',
-        webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml', avif: 'image/avif',
-      };
-      const mimeType = extMime[ext] || 'image/jpeg';
-
-      // Create media file record
-      const [mediaFile] = await db.insert(mediaFiles).values({
-        fileName,
-        originalName: fileName,
-        url,
-        type: "image",
-        mimeType,
-        size: 0, // Unknown for externally-referenced URLs
-        title: title || fileName,
-        description,
-        category: category || "articles",
-        uploadedBy: userId,
-      }).returning();
-
-      res.json(mediaFile);
-    } catch (error) {
-      console.error("Error saving media metadata:", error);
-      res.status(500).json({ message: "فشل حفظ البيانات" });
-    }
-  });
-
-
   // PUT /api/media/:id - Update media file metadata
   app.put("/api/media/:id", isAuthenticated, requirePermission("media.view"), async (req: any, res) => {
     try {
@@ -15806,6 +15749,12 @@ Respond in valid JSON format only:
 
       console.log(`🔍 [DASHBOARD CREATE] Article created with status: ${article.status}`);
       console.log(`🔍 [DASHBOARD CREATE] Article ID: ${article.id}, Title: ${article.title}`);
+
+      // Record hero-image usage in the media library (idempotent, best-effort)
+      if (article.imageUrl) {
+        const { recordHeroImageUsage } = await import("./services/mediaUsageService");
+        void recordHeroImageUsage({ articleId: article.id, imageUrl: article.imageUrl, userId });
+      }
       
       // Send notification to editors when a reporter submits a draft
       if (article.status === 'draft' && article.reporterId) {
@@ -16054,7 +16003,13 @@ Respond in valid JSON format only:
 
       console.log(`🔍 [DASHBOARD UPDATE] Article updated - Old status: ${article.status}, New status: ${updated.status}`);
       console.log(`🔍 [DASHBOARD UPDATE] Article ID: ${updated.id}, Title: ${updated.title}`);
-      
+
+      // Record hero-image usage in the media library (idempotent, best-effort)
+      if (updated.imageUrl) {
+        const { recordHeroImageUsage } = await import("./services/mediaUsageService");
+        void recordHeroImageUsage({ articleId: updated.id, imageUrl: updated.imageUrl, userId });
+      }
+
       res.json(updated);
 
       // Broadcast publish event to other editors via SSE (on transition to published)
