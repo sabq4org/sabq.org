@@ -135,6 +135,7 @@ import { ImageFocalPointPicker } from "@/components/ImageFocalPointPicker";
 import { SmartLinksPanel } from "@/components/SmartLinksPanel";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
 import { HeroImageSuggestions } from "@/components/dashboard/HeroImageSuggestions";
+import { HeroRightsDialog } from "@/components/dashboard/HeroRightsDialog";
 import { InlineHeadlineSuggestions } from "@/components/InlineHeadlineSuggestions";
 import { PollEditor, type PollData } from "@/components/PollEditor";
 import { WeeklyPhotosEditor } from "@/components/WeeklyPhotosEditor";
@@ -929,6 +930,11 @@ export default function ArticleEditor() {
     imageUrl, thumbnailUrl, keywords, newsType, metaTitle, metaDescription,
     saveDraftToLocalStorage
   ]);
+
+  // حاجز الحقوق: معرّف الصورة التي أوقفت النشر، وتجاوزٌ لمرة واحدة بعد
+  // قرار المحرر (توثيق أو نشر واعٍ بدون توثيق)
+  const [rightsGateMediaId, setRightsGateMediaId] = useState<string | null>(null);
+  const rightsGateBypassRef = useRef(false);
 
   // اختيار صورة من المكتبة (من المنتقي أو من شريط الاقتراحات): يضبط الحالة
   // ويُظهر تنبيهًا فقاعيًا بنواقص الصورة (نص بديل/حقوق/محتوى حسّاس) إن وُجدت
@@ -1771,6 +1777,23 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       });
       return { ok: false };
     }
+
+    // حاجز الحقوق (غير مانع): عند النشر بصورة بارزة بلا حقوق موثّقة، افتح
+    // نموذج التوثيق السريع. فحص best-effort — أي فشل فيه لا يعطّل النشر.
+    if (publishNow && !isOpinionAuthor && imageUrl && heroImageMediaId && !rightsGateBypassRef.current) {
+      try {
+        const gov = (await apiRequest(`/api/media/${heroImageMediaId}/governance`, {
+          method: "GET",
+        })) as { rightsVerified?: boolean; creditText?: string | null } | null;
+        if (gov && !gov.rightsVerified && !gov.creditText) {
+          setRightsGateMediaId(heroImageMediaId);
+          return { ok: false };
+        }
+      } catch (error) {
+        console.warn('[handleSave] rights check failed (non-blocking):', error);
+      }
+    }
+    rightsGateBypassRef.current = false;
 
     let savedArticleIdForReview: string | null = null;
     try {
@@ -4715,6 +4738,18 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           uploadPurpose="article-library"
         />
       )}
+
+      {/* حاجز الحقوق: توثيق سريع لحقوق الصورة البارزة قبل النشر */}
+      <HeroRightsDialog
+        open={!!rightsGateMediaId}
+        mediaId={rightsGateMediaId}
+        onContinue={() => {
+          setRightsGateMediaId(null);
+          rightsGateBypassRef.current = true;
+          void handleSave(true);
+        }}
+        onCancel={() => setRightsGateMediaId(null)}
+      />
 
       {/* Logo Composer Dialog - fit/merge logos on white 16:9 canvas */}
       <LogoComposerDialog
