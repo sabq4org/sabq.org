@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { 
   Heart, 
   Bookmark, 
@@ -416,7 +416,9 @@ export default function Profile() {
   >({
     queryKey: ['/api/social/followers', user?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/social/followers/${user?.id}?limit=50`);
+      const res = await fetch(apiUrl(`/api/social/followers/${user?.id}?limit=50`), {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error('Failed to fetch followers');
       return res.json();
     },
@@ -436,7 +438,9 @@ export default function Profile() {
   >({
     queryKey: ['/api/social/following', user?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/social/following/${user?.id}?limit=50`);
+      const res = await fetch(apiUrl(`/api/social/following/${user?.id}?limit=50`), {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error('Failed to fetch following');
       return res.json();
     },
@@ -487,7 +491,7 @@ export default function Profile() {
   // Press Card Issuance Mutation
   const issuePressCardMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/wallet/press/issue', {
+      const response = await fetch(apiUrl('/api/wallet/press/issue'), {
         method: 'POST',
         credentials: 'include',
       });
@@ -531,7 +535,7 @@ export default function Profile() {
   // Loyalty Card Issuance Mutation
   const issueLoyaltyCardMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/api/wallet/loyalty/issue', {
+      const response = await fetch(apiUrl('/api/wallet/loyalty/issue'), {
         method: 'POST',
         credentials: 'include',
       });

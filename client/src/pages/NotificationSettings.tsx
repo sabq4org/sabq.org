@@ -791,7 +791,6 @@ export default function NotificationSettings() {
           يتم حفظ كل تغيير تلقائياً
         </p>
       </div>
-      </div>
     </div>
   );
 }
