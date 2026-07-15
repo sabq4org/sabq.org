@@ -1,7 +1,8 @@
 // Story Matcher Service - AI-powered automatic article classification to stories
 import OpenAI from "openai";
 import { storage } from "./storage";
-import type { Article, Story, StoryWithDetails } from "@shared/schema";
+import type { Article, Story } from "@shared/schema";
+import { getActiveStoriesForList, type StoryListItem } from "./services/storyListService";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -19,8 +20,8 @@ interface MatchResult {
  */
 export async function findMatchingStories(article: Article): Promise<MatchResult[]> {
   try {
-    // جلب جميع القصص النشطة
-    const stories = await storage.getAllStories({ status: 'active' });
+    // جلب جميع القصص النشطة (الحقول النحيفة فقط — بدون محتوى المقالات الكامل)
+    const stories = await getActiveStoriesForList();
     
     if (stories.length === 0) {
       return [];
@@ -33,7 +34,7 @@ export async function findMatchingStories(article: Article): Promise<MatchResult
       excerpt: article.excerpt,
     };
 
-    const storiesContext = stories.map((s: StoryWithDetails) => ({
+    const storiesContext = stories.map((s: StoryListItem) => ({
       id: s.id,
       title: s.title,
       entities: s.entities || {},
