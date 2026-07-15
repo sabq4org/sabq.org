@@ -81,6 +81,7 @@ interface ArticleAnalytics {
   commentsCount: number;
   wordCount: number;
   avgReadingTime: number;
+  locale?: "ar" | "en";
 }
 
 interface ArticleDetail extends ArticleAnalytics {
@@ -214,13 +215,18 @@ function ArticleCard({
               <h3 className="font-semibold text-sm line-clamp-2" data-testid="article-title">
                 {article.title}
               </h3>
-              <Badge 
-                variant={article.status === 'published' ? 'default' : 'secondary'}
-                className="flex-shrink-0 text-xs"
-              >
-                {article.status === 'published' ? 'منشور' : 
-                 article.status === 'draft' ? 'مسودة' : 'مؤرشف'}
-              </Badge>
+              <div className="flex flex-shrink-0 items-center gap-1">
+                {article.locale === "en" && (
+                  <Badge variant="outline" className="text-xs">EN</Badge>
+                )}
+                <Badge 
+                  variant={article.status === 'published' ? 'default' : 'secondary'}
+                  className="text-xs"
+                >
+                  {article.status === 'published' ? 'منشور' : 
+                   article.status === 'draft' ? 'مسودة' : 'مؤرشف'}
+                </Badge>
+              </div>
             </div>
             
             {article.category && (
@@ -571,7 +577,11 @@ function ArticleDetailPanel({
             asChild
           >
             <a 
-              href={`/article/${article.englishSlug || article.slug}`} 
+              href={
+                article.locale === "en"
+                  ? `/en/article/${article.slug || article.englishSlug}`
+                  : `/article/${article.englishSlug || article.slug}`
+              } 
               target="_blank" 
               rel="noopener noreferrer"
               data-testid="link-view-article"
@@ -709,7 +719,7 @@ export default function ArticleAnalyticsDashboard() {
   const handleExportPrClientReport = useCallback((article: ArticleDetail) => {
     setPrClientArticle(article);
     setPrClientName("");
-    setPrClientLang("ar");
+    setPrClientLang(article.locale === "en" ? "en" : "ar");
     setPrClientDialogOpen(true);
   }, []);
 

@@ -15,6 +15,10 @@ import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
 import { normalizePhone, findOrCreatePhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
 import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
+import {
+  getEnArticleAnalyticsDetail,
+  searchEnArticlesForAnalytics,
+} from "./services/articleAnalyticsSearchService";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
@@ -9568,14 +9572,28 @@ Respond in valid JSON format only:
       const articleIds = articlesToReturn.map(a => a.id);
 
       if (articleIds.length === 0) {
+        const rawQuery = query ? String(query).trim() : "";
+        if (rawQuery) {
+          const enArticlesList = await searchEnArticlesForAnalytics({
+            query: rawQuery,
+            status: status ? String(status) : undefined,
+            limit: limitNum,
+          });
+          if (enArticlesList.length > 0) {
+            return res.json({
+              articles: enArticlesList,
+              pagination: {
+                totalCount: enArticlesList.length,
+                offset: offsetNum,
+                limit: limitNum,
+                hasMore: false,
+              },
+            });
+          }
+        }
         return res.json({
           articles: [],
-          pagination: {
-            totalCount: 0,
-            offset: offsetNum,
-            limit: limitNum,
-            hasMore: false,
-          },
+          pagination: { totalCount: 0, offset: offsetNum, limit: limitNum, hasMore: false },
         });
       }
 
@@ -9679,7 +9697,8 @@ Respond in valid JSON format only:
         sharesCount: sharesMap.get(article.id) || 0,
         commentsCount: commentsMap.get(article.id) || 0,
         wordCount: 0,
-        avgReadingTime: Math.round(resolved.avgReadingMinutes * 10) / 10
+        avgReadingTime: Math.round(resolved.avgReadingMinutes * 10) / 10,
+        locale: "ar" as const,
       };
       });
 
@@ -9755,6 +9774,10 @@ Respond in valid JSON format only:
         .limit(1);
 
       if (!article) {
+        const enDetail = await getEnArticleAnalyticsDetail(articleId);
+        if (enDetail) {
+          return res.json(enDetail);
+        }
         return res.status(404).json({ message: "Article not found" });
       }
 
@@ -9906,6 +9929,7 @@ Respond in valid JSON format only:
           avgScrollDepth: Math.round(readingStats?.avgScrollDepth || 0),
           avgCompletionRate: Math.round(resolvedReading.avgCompletionRate)
         },
+        locale: "ar" as const,
         recentComments: recentComments.map((c: any) => ({
           id: c.id,
           content: c.content,
