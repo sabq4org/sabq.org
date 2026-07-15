@@ -14,6 +14,7 @@ import { recordArticleView, initArticleViewStats } from "./services/articleViewS
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
 import { normalizePhone, findOrCreatePhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
+import { getArticleReadingOverrides } from "./services/adminToolsService";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
@@ -306,7 +307,6 @@ import {
   emailWebhookLogs,
   userSegmentAssignments,
   userSegmentDefinitions,
-  legacyRedirects,
 } from "@shared/schema";
 import {
   insertArticleSchema,
@@ -13412,14 +13412,16 @@ Respond in valid JSON format only:
         ? Math.min(100, (avgReadTime / estimatedReadTime) * 100)
         : 0;
 
+      const overrides = await getArticleReadingOverrides(article.id);
+
       res.json({
-        avgReadTime: Math.round(avgReadTime), // in seconds
+        avgReadTime: overrides?.avgReadTimeOverride ?? Math.round(avgReadTime), // in seconds
         totalReads,
         totalReactions,
         totalComments,
         totalViews,
         engagementRate: parseFloat(engagementRate.toFixed(2)),
-        completionRate: Math.round(completionRate), // percentage
+        completionRate: overrides?.completionRateOverride ?? Math.round(completionRate), // percentage
         totalInteractions: totalReactions + totalComments,
       });
     } catch (error) {
@@ -36283,105 +36285,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
+  // Admin Tools APIs moved to server/routes/adminToolsRoutes.ts (ADR-001).
 
-  // ==================== Admin Tools APIs ====================
-  
-  // Get article ID by slug
-  app.get("/api/admin/article-id/:slug", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
-    try {
-      const { slug } = req.params;
-      
-      const [article] = await db
-        .select({ id: articles.id, title: articles.title })
-        .from(articles)
-        .where(
-          or(
-            eq(articles.slug, slug),
-            eq(articles.englishSlug, slug)
-          )
-        )
-        .limit(1);
-      
-      if (!article) {
-        return res.status(404).json({ message: "الخبر غير موجود" });
-      }
-      
-      res.json({ id: article.id, title: article.title });
-    } catch (error) {
-      console.error("Error getting article ID:", error);
-      res.status(500).json({ message: "فشل في استخراج معرف الخبر" });
-    }
-  });
-
-  // Create legacy redirect
-  app.post("/api/admin/legacy-redirects", requireAuth, requirePermission("system.settings"), async (req: any, res) => {
-    try {
-      const { oldPath, newPath, redirectType } = req.body;
-      
-      if (!oldPath || !newPath) {
-        return res.status(400).json({ message: "الرجاء إدخال الرابط القديم والجديد" });
-      }
-      
-      // Check if redirect already exists
-      const [existing] = await db
-        .select()
-        .from(legacyRedirects)
-        .where(eq(legacyRedirects.oldPath, oldPath))
-        .limit(1);
-      
-      if (existing) {
-        return res.status(409).json({ message: "هذا التحويل موجود مسبقاً" });
-      }
-      
-      const [redirect] = await db
-        .insert(legacyRedirects)
-        .values({
-          id: crypto.randomUUID(),
-          oldPath,
-          newPath,
-          redirectType: redirectType || 301,
-          isActive: true,
-          createdBy: req.user.id
-        })
-        .returning();
-      
-      res.json({ success: true, redirect });
-    } catch (error) {
-      console.error("[LegacyRedirect] Error creating redirect:", error);
-      res.status(500).json({ message: "فشل في إنشاء التحويل" });
-    }
-  });
-
-  // Update article views
-  app.post("/api/admin/update-views", requireAuth, requirePermission("articles.edit"), async (req: any, res) => {
-    try {
-      const { slug, viewCount } = req.body;
-      
-      if (!slug || viewCount === undefined) {
-        return res.status(400).json({ message: "الرجاء إدخال الرابط وعدد المشاهدات" });
-      }
-      
-      const [article] = await db
-        .update(articles)
-        .set({ views: viewCount })
-        .where(
-          or(
-            eq(articles.slug, slug),
-            eq(articles.englishSlug, slug)
-          )
-        )
-        .returning({ id: articles.id, title: articles.title, views: articles.views });
-      
-      if (!article) {
-        return res.status(404).json({ message: "الخبر غير موجود" });
-      }
-      
-      res.json({ success: true, article });
-    } catch (error) {
-      console.error("Error updating views:", error);
-      res.status(500).json({ message: "فشل في تحديث عدد المشاهدات" });
-    }
-  });
   return httpServer;
 }

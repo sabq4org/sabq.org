@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Search, ArrowLeftRight, Eye, Copy, Check, Wrench } from "lucide-react";
+import { Loader2, Search, ArrowLeftRight, Eye, Copy, Check, Wrench, Clock, Percent } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
@@ -28,16 +28,32 @@ export default function AdminTools() {
   const [viewCount, setViewCount] = useState("");
   const [loadingViews, setLoadingViews] = useState(false);
 
+  // Tool 4: Update Average Read Time
+  const [readTimeArticleUrl, setReadTimeArticleUrl] = useState("");
+  const [readTimeSeconds, setReadTimeSeconds] = useState("");
+  const [loadingReadTime, setLoadingReadTime] = useState(false);
+
+  // Tool 5: Update Completion Rate
+  const [completionArticleUrl, setCompletionArticleUrl] = useState("");
+  const [completionRate, setCompletionRate] = useState("");
+  const [loadingCompletion, setLoadingCompletion] = useState(false);
+
   const extractSlugFromUrl = (url: string): string => {
     try {
       const urlObj = new URL(url);
       const pathParts = urlObj.pathname.split('/').filter(Boolean);
-      if (pathParts.length >= 2 && pathParts[0] === 'article') {
-        return pathParts[1];
+      // /article/:slug | /en/article/:slug | /ur/article/:slug
+      const articleIdx = pathParts.findIndex((part) => part === 'article');
+      if (articleIdx >= 0 && pathParts[articleIdx + 1]) {
+        return pathParts[articleIdx + 1];
       }
       return pathParts[pathParts.length - 1] || '';
     } catch {
       const parts = url.split('/').filter(Boolean);
+      const articleIdx = parts.findIndex((part) => part === 'article');
+      if (articleIdx >= 0 && parts[articleIdx + 1]) {
+        return parts[articleIdx + 1];
+      }
       return parts[parts.length - 1] || '';
     }
   };
@@ -147,6 +163,80 @@ export default function AdminTools() {
       toast({ title: "خطأ", description: "فشل في تحديث عدد المشاهدات", variant: "destructive" });
     } finally {
       setLoadingViews(false);
+    }
+  };
+
+  const handleUpdateReadTime = async () => {
+    if (!readTimeArticleUrl.trim() || !readTimeSeconds.trim()) {
+      toast({ title: "خطأ", description: "الرجاء إدخال الرابط ومتوسط زمن القراءة", variant: "destructive" });
+      return;
+    }
+
+    const seconds = parseInt(readTimeSeconds, 10);
+    if (isNaN(seconds) || seconds < 0) {
+      toast({ title: "خطأ", description: "متوسط زمن القراءة يجب أن يكون رقماً صحيحاً بالثواني", variant: "destructive" });
+      return;
+    }
+
+    setLoadingReadTime(true);
+
+    try {
+      const slug = extractSlugFromUrl(readTimeArticleUrl);
+      await apiRequest("/api/admin/update-read-time", {
+        method: "POST",
+        body: JSON.stringify({
+          slug,
+          avgReadTime: seconds
+        })
+      });
+
+      const minutes = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      const formatted = minutes > 0
+        ? `${minutes}:${secs.toString().padStart(2, "0")} دقيقة`
+        : `${secs} ثانية`;
+
+      toast({ title: "تم", description: `تم تحديث متوسط زمن القراءة إلى ${formatted}` });
+      setReadTimeArticleUrl("");
+      setReadTimeSeconds("");
+    } catch (error) {
+      toast({ title: "خطأ", description: "فشل في تحديث متوسط زمن القراءة", variant: "destructive" });
+    } finally {
+      setLoadingReadTime(false);
+    }
+  };
+
+  const handleUpdateCompletionRate = async () => {
+    if (!completionArticleUrl.trim() || !completionRate.trim()) {
+      toast({ title: "خطأ", description: "الرجاء إدخال الرابط ونسبة الإكمال", variant: "destructive" });
+      return;
+    }
+
+    const rate = parseInt(completionRate, 10);
+    if (isNaN(rate) || rate < 0 || rate > 100) {
+      toast({ title: "خطأ", description: "نسبة الإكمال يجب أن تكون رقماً بين 0 و 100", variant: "destructive" });
+      return;
+    }
+
+    setLoadingCompletion(true);
+
+    try {
+      const slug = extractSlugFromUrl(completionArticleUrl);
+      await apiRequest("/api/admin/update-completion-rate", {
+        method: "POST",
+        body: JSON.stringify({
+          slug,
+          completionRate: rate
+        })
+      });
+
+      toast({ title: "تم", description: `تم تحديث نسبة الإكمال إلى ${rate}%` });
+      setCompletionArticleUrl("");
+      setCompletionRate("");
+    } catch (error) {
+      toast({ title: "خطأ", description: "فشل في تحديث نسبة الإكمال", variant: "destructive" });
+    } finally {
+      setLoadingCompletion(false);
     }
   };
 
@@ -265,7 +355,7 @@ export default function AdminTools() {
               تعديل المشاهدات
             </CardTitle>
             <CardDescription>
-              تعديل عدد مشاهدات خبر معين
+              تعديل عدد مشاهدات خبر معيّن (عربي / إنجليزي / أوردو)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -273,7 +363,7 @@ export default function AdminTools() {
               <Label htmlFor="viewArticleUrl">رابط الخبر</Label>
               <Input
                 id="viewArticleUrl"
-                placeholder="https://sabq.org/article/..."
+                placeholder="https://sabq.org/article/... أو /en/article/..."
                 value={viewArticleUrl}
                 onChange={(e) => setViewArticleUrl(e.target.value)}
                 dir="ltr"
@@ -299,6 +389,101 @@ export default function AdminTools() {
               data-testid="button-update-views"
             >
               {loadingViews ? <Loader2 className="h-4 w-4 animate-spin" /> : "تحديث المشاهدات"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Tool 4: Average Read Time */}
+        <Card data-testid="card-update-read-time">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              متوسط زمن القراءة
+            </CardTitle>
+            <CardDescription>
+              تعيين متوسط زمن القراءة لخبر معيّن (بالثواني)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="readTimeArticleUrl">رابط الخبر</Label>
+              <Input
+                id="readTimeArticleUrl"
+                placeholder="https://sabq.org/article/..."
+                value={readTimeArticleUrl}
+                onChange={(e) => setReadTimeArticleUrl(e.target.value)}
+                dir="ltr"
+                data-testid="input-read-time-article-url"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="readTimeSeconds">متوسط الزمن (ثانية)</Label>
+              <Input
+                id="readTimeSeconds"
+                type="number"
+                min={0}
+                placeholder="90"
+                value={readTimeSeconds}
+                onChange={(e) => setReadTimeSeconds(e.target.value)}
+                dir="ltr"
+                data-testid="input-read-time-seconds"
+              />
+            </div>
+            <Button
+              onClick={handleUpdateReadTime}
+              disabled={loadingReadTime}
+              className="w-full"
+              data-testid="button-update-read-time"
+            >
+              {loadingReadTime ? <Loader2 className="h-4 w-4 animate-spin" /> : "تحديث زمن القراءة"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Tool 5: Completion Rate */}
+        <Card data-testid="card-update-completion-rate">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Percent className="h-5 w-5" />
+              نسبة الإكمال
+            </CardTitle>
+            <CardDescription>
+              تعيين نسبة إكمال القراءة لخبر معيّن (0–100)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="completionArticleUrl">رابط الخبر</Label>
+              <Input
+                id="completionArticleUrl"
+                placeholder="https://sabq.org/article/..."
+                value={completionArticleUrl}
+                onChange={(e) => setCompletionArticleUrl(e.target.value)}
+                dir="ltr"
+                data-testid="input-completion-article-url"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="completionRate">نسبة الإكمال (%)</Label>
+              <Input
+                id="completionRate"
+                type="number"
+                min={0}
+                max={100}
+                placeholder="75"
+                value={completionRate}
+                onChange={(e) => setCompletionRate(e.target.value)}
+                dir="ltr"
+                data-testid="input-completion-rate"
+              />
+            </div>
+            <Button
+              onClick={handleUpdateCompletionRate}
+              disabled={loadingCompletion}
+              className="w-full"
+              data-testid="button-update-completion-rate"
+            >
+              {loadingCompletion ? <Loader2 className="h-4 w-4 animate-spin" /> : "تحديث نسبة الإكمال"}
             </Button>
           </CardContent>
         </Card>
