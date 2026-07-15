@@ -63,14 +63,24 @@ export async function sendSMSOTP(phoneNumber: string): Promise<{ success: boolea
     console.log('📱 Sending SMS OTP to:', phoneNumber);
     console.log('📱 Using Verify Service SID:', process.env.TWILIO_VERIFY_SID.substring(0, 10) + '...');
     
-    // Use Twilio Verify API to send OTP
+    // Use Twilio Verify API to send OTP.
+    // Optional TWILIO_VERIFY_TEMPLATE_SID: approved custom template whose
+    // last line is `@sabq.org #{{code}}` so iOS AutoFill (domain-bound)
+    // can suggest the code in the app. Without it, Verify's default
+    // template is used and AutoFill is unreliable (esp. Arabic SMS).
+    const createParams: { to: string; channel: "sms"; templateSid?: string } = {
+      to: phoneNumber,
+      channel: "sms",
+    };
+    const templateSid = process.env.TWILIO_VERIFY_TEMPLATE_SID?.trim();
+    if (templateSid) {
+      createParams.templateSid = templateSid;
+    }
+
     const verification = await client.verify.v2
       .services(process.env.TWILIO_VERIFY_SID)
       .verifications
-      .create({
-        to: phoneNumber,
-        channel: 'sms'
-      });
+      .create(createParams);
 
     console.log('✅ SMS OTP sent successfully:', { 
       to: phoneNumber, 

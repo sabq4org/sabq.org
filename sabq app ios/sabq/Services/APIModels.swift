@@ -360,6 +360,26 @@ nonisolated struct APICategory: Decodable, Identifiable, Hashable {
 
 // MARK: - Homepage Response
 
+/// استجابة `/api/cache-invalidation/check` — طابع زمني يتغيّر عند كل نشر/إبطال.
+/// العميل يستطلعها بدل جلب الرئيسية كاملة كل دورة.
+nonisolated struct APICacheInvalidationCheck: Decodable {
+    let lastUpdate: Double
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: FlexKey.self)
+        if let d = try? c.decode(Double.self, forKey: FlexKey("lastUpdate")) {
+            lastUpdate = d
+        } else if let i = try? c.decode(Int.self, forKey: FlexKey("lastUpdate")) {
+            lastUpdate = Double(i)
+        } else if let s = try? c.decode(String.self, forKey: FlexKey("lastUpdate")),
+                  let d = Double(s) {
+            lastUpdate = d
+        } else {
+            lastUpdate = 0
+        }
+    }
+}
+
 nonisolated struct APIHomepageResponse: Decodable {
     let hero: [APIArticle]
     let forYou: [APIArticle]

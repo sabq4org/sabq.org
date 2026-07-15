@@ -39,5 +39,10 @@
         ]
       }
     ]
+  },
+  "webcredentials": {
+    "apps": [
+      "CBU7MJEC5R.com.sabq.sabqorg"
+    ]
   }
 }
