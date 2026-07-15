@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type SyntheticEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,13 +12,17 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeftRight, Loader2, Upload, X, ZoomIn, ZoomOut } from "lucide-react";
+import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
+import "react-image-crop/dist/ReactCrop.css";
 import { useToast } from "@/hooks/use-toast";
 import {
   detectFaceFocalPoint,
   minPhotoZoom,
+  renderCroppedImage,
   renderFittedLogo,
   renderMergedLogos,
   renderMergedPhotos,
+  type CropRect,
   type FocalPoint,
 } from "@/lib/logoCanvas";
 
@@ -136,7 +140,7 @@ export function LogoComposerDialog({
   onImageReady,
 }: LogoComposerDialogProps) {
   const { toast } = useToast();
-  const [tab, setTab] = useState<"fit" | "merge" | "photos">("fit");
+  const [tab, setTab] = useState<"fit" | "merge" | "photos" | "crop">("fit");
 
   const [fitFile, setFitFile] = useState<File | null>(null);
   const [firstLogo, setFirstLogo] = useState<File | null>(null);
@@ -151,6 +155,13 @@ export function LogoComposerDialog({
   // تكبير نسبةً إلى cover: ‏1 = ملء النصف، أقل = تصغير يُظهر جزءاً أكبر
   const [firstZoom, setFirstZoom] = useState(1);
   const [secondZoom, setSecondZoom] = useState(1);
+
+  // حالة الاقتصاص الحر: التحديد بالنسبة المئوية للعرض + مكافئه ببكسل الصورة الأصلية
+  const [cropFile, setCropFile] = useState<File | null>(null);
+  const [cropImageUrl, setCropImageUrl] = useState<string | null>(null);
+  const [crop, setCrop] = useState<Crop | undefined>(undefined);
+  const [cropRect, setCropRect] = useState<CropRect | null>(null);
+  const cropImgRef = useRef<HTMLImageElement>(null);
 
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -168,7 +179,9 @@ export function LogoComposerDialog({
           ? fitFile !== null
           : tab === "merge"
             ? firstLogo !== null && secondLogo !== null
-            : firstPhoto !== null && secondPhoto !== null;
+            : tab === "crop"
+              ? cropFile !== null && cropRect !== null
+              : firstPhoto !== null && secondPhoto !== null;
       if (!ready) {
         setPreviewBlob(null);
         return;
@@ -182,12 +195,14 @@ export function LogoComposerDialog({
               ? await renderMergedLogos(firstLogo!, secondLogo!, {
                   divider: showDivider,
                 })
-              : await renderMergedPhotos(firstPhoto!, secondPhoto!, {
-                  firstFocal,
-                  secondFocal,
-                  firstZoom,
-                  secondZoom,
-                });
+              : tab === "crop"
+                ? await renderCroppedImage(cropFile!, cropRect!)
+                : await renderMergedPhotos(firstPhoto!, secondPhoto!, {
+                    firstFocal,
+                    secondFocal,
+                    firstZoom,
+                    secondZoom,
+                  });
         if (renderTokenRef.current === token) setPreviewBlob(blob);
       } catch (error) {
         console.error("Logo render error:", error);
@@ -205,7 +220,57 @@ export function LogoComposerDialog({
       }
     };
     generate();
-  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, firstFocal, secondFocal, firstZoom, secondZoom, toast]);
+  }, [tab, fitFile, firstLogo, secondLogo, showDivider, firstPhoto, secondPhoto, firstFocal, secondFocal, firstZoom, secondZoom, cropFile, cropRect, toast]);
+
+  // رابط عرض صورة الاقتصاص داخل أداة التحديد
+  useEffect(() => {
+    if (!cropFile) {
+      setCropImageUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(cropFile);
+    setCropImageUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [cropFile]);
+
+  const selectCropFile = (file: File) => {
+    setCrop(undefined);
+    setCropRect(null);
+    setCropFile(file);
+  };
+
+  const clearCropFile = () => {
+    setCropFile(null);
+    setCrop(undefined);
+    setCropRect(null);
+  };
+
+  // عند تحميل الصورة في أداة التحديد: تحديد افتراضي متمركز يغطي 80%
+  const handleCropImageLoad = (e: SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setCrop({ unit: "%", x: 10, y: 10, width: 80, height: 80 });
+    setCropRect({
+      x: img.naturalWidth * 0.1,
+      y: img.naturalHeight * 0.1,
+      width: img.naturalWidth * 0.8,
+      height: img.naturalHeight * 0.8,
+    });
+  };
+
+  // تحويل تحديد المعاينة (بكسل معروض) إلى بكسل الصورة الأصلية
+  const handleCropComplete = (pixelCrop: PixelCrop) => {
+    const img = cropImgRef.current;
+    if (!img || !img.width || !img.height) return;
+    if (pixelCrop.width < 1 || pixelCrop.height < 1) return;
+    const scaleX = img.naturalWidth / img.width;
+    const scaleY = img.naturalHeight / img.height;
+    setCropRect({
+      x: pixelCrop.x * scaleX,
+      y: pixelCrop.y * scaleY,
+      width: pixelCrop.width * scaleX,
+      height: pixelCrop.height * scaleY,
+    });
+  };
 
   // اكتشاف تلقائي لوجه الشخص عند اختيار صورة (Chrome/Edge — في Safari
   // يبقى التوسيط الافتراضي ويعدّل المحرر الموضع بالسحب داخل المعاينة)
@@ -350,6 +415,9 @@ export function LogoComposerDialog({
     setSecondDims(null);
     setFirstZoom(1);
     setSecondZoom(1);
+    setCropFile(null);
+    setCrop(undefined);
+    setCropRect(null);
     setPreviewBlob(null);
     setTab("fit");
   };
@@ -364,7 +432,14 @@ export function LogoComposerDialog({
     if (!previewBlob) return;
     setIsApplying(true);
     try {
-      const name = tab === "fit" ? "logo-fit" : tab === "merge" ? "logo-merge" : "photo-merge";
+      const name =
+        tab === "fit"
+          ? "logo-fit"
+          : tab === "merge"
+            ? "logo-merge"
+            : tab === "crop"
+              ? "image-crop"
+              : "photo-merge";
       const file = new File([previewBlob], `${name}-${Date.now()}.jpg`, {
         type: "image/jpeg",
       });
@@ -390,8 +465,11 @@ export function LogoComposerDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as "fit" | "merge" | "photos")}>
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as "fit" | "merge" | "photos" | "crop")}
+        >
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="fit" data-testid="tab-fit-logo">
               ضبط شعار
             </TabsTrigger>
@@ -400,6 +478,9 @@ export function LogoComposerDialog({
             </TabsTrigger>
             <TabsTrigger value="photos" data-testid="tab-merge-photos">
               دمج صورتين
+            </TabsTrigger>
+            <TabsTrigger value="crop" data-testid="tab-crop-image">
+              اقتصاص حر
             </TabsTrigger>
           </TabsList>
 
@@ -520,6 +601,62 @@ export function LogoComposerDialog({
               </p>
             </div>
           </TabsContent>
+
+          <TabsContent value="crop" className="space-y-4 pt-2">
+            {!cropFile ? (
+              <LogoSlot
+                label="الصورة"
+                file={null}
+                onSelect={(f) => validateAndSet(f, selectCropFile)}
+                onClear={clearCropFile}
+                testId="slot-crop-image"
+              />
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>اسحب المقابض لتحديد منطقة الاقتصاص</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1"
+                    onClick={clearCropFile}
+                    data-testid="button-clear-crop-image"
+                  >
+                    <X className="h-4 w-4" />
+                    إزالة الصورة
+                  </Button>
+                </div>
+                {/* أداة التحديد تحسب المواضع بإحداثيات فيزيائية — نعزلها عن اتجاه RTL */}
+                <div
+                  dir="ltr"
+                  className="flex justify-center rounded-lg border bg-muted/30 p-2"
+                >
+                  {cropImageUrl && (
+                    <ReactCrop
+                      crop={crop}
+                      onChange={(_, percentCrop) => setCrop(percentCrop)}
+                      onComplete={handleCropComplete}
+                      minWidth={20}
+                      minHeight={20}
+                    >
+                      <img
+                        ref={cropImgRef}
+                        src={cropImageUrl}
+                        alt="صورة للاقتصاص"
+                        className="max-h-[320px]"
+                        onLoad={handleCropImageLoad}
+                        data-testid="img-crop-source"
+                      />
+                    </ReactCrop>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  القصّة توضع متمركزة على لوحة بيضاء 16:9 — القص يتم على أبعاد
+                  الصورة الأصلية فلا تُفقد الجودة.
+                </p>
+              </div>
+            )}
+          </TabsContent>
         </Tabs>
 
         {/* المعاينة النهائية — في دمج الصورتين: اسحب أي نصف لضبط موضع صورته */}
@@ -609,6 +746,8 @@ export function LogoComposerDialog({
                   "اختر الشعار لعرض المعاينة"
                 ) : tab === "merge" ? (
                   "اختر الشعارين لعرض المعاينة"
+                ) : tab === "crop" ? (
+                  "اختر الصورة لعرض المعاينة"
                 ) : (
                   "اختر الصورتين لعرض المعاينة"
                 )}

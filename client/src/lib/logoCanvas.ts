@@ -18,6 +18,14 @@ export interface MergeLogosOptions {
   divider?: boolean;
 }
 
+/** منطقة اقتصاص بإحداثيات بكسل الصورة الأصلية (وليس أبعاد المعاينة) */
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 interface LoadedLogo {
   source: CanvasImageSource;
   width: number;
@@ -111,6 +119,49 @@ export async function renderFittedLogo(file: File): Promise<Blob> {
     const h = logo.height * scale;
     ctx.drawImage(
       logo.source,
+      (LOGO_CANVAS_WIDTH - w) / 2,
+      (LOGO_CANVAS_HEIGHT - h) / 2,
+      w,
+      h,
+    );
+    return await canvasToBlob(canvas);
+  } finally {
+    logo.cleanup();
+  }
+}
+
+/**
+ * اقتصاص حر: قص المنطقة المحددة من الصورة (بإحداثيات البكسل الأصلية)
+ * ثم توسيطها على لوحة 1200×675 بيضاء بنفس منطق ضبط الشعار (contain + هامش).
+ */
+export async function renderCroppedImage(
+  file: File,
+  crop: CropRect,
+): Promise<Blob> {
+  const logo = await loadLogo(file);
+  try {
+    // قصر التحديد على حدود الصورة — إحداثيات المعاينة قد تتجاوزها بكسور
+    const sx = Math.max(0, Math.min(crop.x, logo.width - 1));
+    const sy = Math.max(0, Math.min(crop.y, logo.height - 1));
+    const sw = Math.min(crop.width, logo.width - sx);
+    const sh = Math.min(crop.height, logo.height - sy);
+    if (sw < 1 || sh < 1) {
+      throw new Error("منطقة الاقتصاص خارج حدود الصورة");
+    }
+
+    const { canvas, ctx } = createWhiteCanvas();
+    const pad = LOGO_CANVAS_HEIGHT * PADDING_RATIO;
+    const availW = LOGO_CANVAS_WIDTH - pad * 2;
+    const availH = LOGO_CANVAS_HEIGHT - pad * 2;
+    const scale = Math.min(availW / sw, availH / sh);
+    const w = sw * scale;
+    const h = sh * scale;
+    ctx.drawImage(
+      logo.source,
+      sx,
+      sy,
+      sw,
+      sh,
       (LOGO_CANVAS_WIDTH - w) / 2,
       (LOGO_CANVAS_HEIGHT - h) / 2,
       w,
