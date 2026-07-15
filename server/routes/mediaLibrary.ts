@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { requireAuth, requirePermission, requireAnyPermission } from "../rbac";
-import { bulkMediaOperation, type BulkMediaAction } from "../services/mediaLibraryService";
+import { bulkMediaOperation, saveExistingMedia, type BulkMediaAction } from "../services/mediaLibraryService";
 import { generateSmartCaption } from "../services/mediaCaptionService";
 import { analyzeAndTagMedia, backfillUntagged } from "../services/mediaAutoTagService";
 import { semanticSearchMedia, backfillMediaEmbeddings } from "../services/mediaSearchService";
@@ -173,6 +173,41 @@ router.post(
     } catch (error: any) {
       console.error("Error saving generated image:", error);
       res.status(500).json({ message: "فشل في حفظ الصورة المولّدة" });
+    }
+  },
+);
+
+// POST /api/media/save-existing - register an already-hosted image URL in the
+// library (JSON endpoint the editor auto-saves hero images through). Reuses the
+// row when the URL is known, and enqueues AI auto-tag + embedding either way.
+// Moved out of routes.ts (ADR-001); gated by media.view like before.
+router.post(
+  "/api/media/save-existing",
+  requireAuth,
+  requirePermission("media.view"),
+  async (req: any, res) => {
+    try {
+      const { url, fileName, title, description, category } = req.body || {};
+      if (!url || !fileName) {
+        return res.status(400).json({ message: "URL والاسم مطلوبان" });
+      }
+      // Only accept URLs from our own storage origins (prevents storing an
+      // attacker-controlled URL that the media proxy would later redirect to).
+      if (typeof url !== "string" || !isAllowedMediaUrl(url, req.get("host"))) {
+        return res.status(400).json({ message: "رابط غير صالح" });
+      }
+      const mediaFile = await saveExistingMedia({
+        url,
+        fileName: String(fileName),
+        title: typeof title === "string" ? title : null,
+        description: typeof description === "string" ? description : null,
+        category: typeof category === "string" ? category : null,
+        userId: req.user.id,
+      });
+      res.json(mediaFile);
+    } catch (error: any) {
+      console.error("Error saving media metadata:", error);
+      res.status(500).json({ message: "فشل حفظ البيانات" });
     }
   },
 );

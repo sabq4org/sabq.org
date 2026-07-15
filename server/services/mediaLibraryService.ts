@@ -1,8 +1,9 @@
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { mediaFiles, articleMediaAssets, mediaUsageLog } from "@shared/schema";
+import { mediaFiles, articleMediaAssets, mediaUsageLog, type MediaFile } from "@shared/schema";
 import { userHasPermission } from "../rbac";
 import { deleteMediaBlob } from "./mediaStorage";
+import { shouldAutoTag, enqueueAutoTag } from "./mediaAutoTagService";
 
 export type BulkMediaAction = "move" | "delete" | "favorite" | "unfavorite";
 
@@ -99,4 +100,65 @@ export async function bulkMediaOperation(
     result.processed++;
   }
   return result;
+}
+
+const EXT_MIME: Record<string, string> = {
+  jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png",
+  webp: "image/webp", gif: "image/gif", svg: "image/svg+xml", avif: "image/avif",
+};
+
+export interface SaveExistingMediaInput {
+  url: string;
+  fileName: string;
+  title?: string | null;
+  description?: string | null;
+  category?: string | null;
+  userId: string;
+}
+
+/**
+ * Register an already-hosted image URL in the media library (the editor
+ * auto-saves hero images through this on every article save). Reuses the
+ * existing row when the URL is already registered — stops the unbounded
+ * duplicate rows that used to accumulate on every edit/save — and pushes the
+ * row (new or previously-unanalyzed) into the AI auto-tag + embedding pipeline
+ * so editor-registered images become semantically searchable.
+ */
+export async function saveExistingMedia(input: SaveExistingMediaInput): Promise<MediaFile> {
+  const [existing] = await db
+    .select()
+    .from(mediaFiles)
+    .where(eq(mediaFiles.url, input.url))
+    .limit(1);
+  if (existing) {
+    if (!existing.aiAnalysisStatus || existing.aiAnalysisStatus === "pending") {
+      if (shouldAutoTag({ mimeType: existing.mimeType, url: existing.url, category: existing.category })) {
+        enqueueAutoTag(existing.id);
+      }
+    }
+    return existing;
+  }
+
+  // Infer the mime type from the extension instead of hardcoding jpeg.
+  const ext = (String(input.fileName).split(".").pop() || "").toLowerCase();
+  const mimeType = EXT_MIME[ext] || "image/jpeg";
+  const category = input.category || "articles";
+
+  const [mediaFile] = await db.insert(mediaFiles).values({
+    fileName: input.fileName,
+    originalName: input.fileName,
+    url: input.url,
+    type: "image",
+    mimeType,
+    size: 0, // Unknown for externally-referenced URLs
+    title: input.title || input.fileName,
+    description: input.description ?? undefined,
+    category,
+    uploadedBy: input.userId,
+  }).returning();
+
+  if (shouldAutoTag({ mimeType, url: input.url, category })) {
+    enqueueAutoTag(mediaFile.id);
+  }
+  return mediaFile;
 }
