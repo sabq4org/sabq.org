@@ -15754,6 +15754,10 @@ Respond in valid JSON format only:
       if (article.imageUrl) {
         const { recordHeroImageUsage } = await import("./services/mediaUsageService");
         void recordHeroImageUsage({ articleId: article.id, imageUrl: article.imageUrl, userId });
+        if (article.status === "published") {
+          const { ensureHeroAltText } = await import("./services/mediaGovernanceService");
+          void ensureHeroAltText({ articleId: article.id, imageUrl: article.imageUrl });
+        }
       }
       
       // Send notification to editors when a reporter submits a draft
@@ -16008,6 +16012,10 @@ Respond in valid JSON format only:
       if (updated.imageUrl) {
         const { recordHeroImageUsage } = await import("./services/mediaUsageService");
         void recordHeroImageUsage({ articleId: updated.id, imageUrl: updated.imageUrl, userId });
+        if (updated.status === "published") {
+          const { ensureHeroAltText } = await import("./services/mediaGovernanceService");
+          void ensureHeroAltText({ articleId: updated.id, imageUrl: updated.imageUrl });
+        }
       }
 
       res.json(updated);

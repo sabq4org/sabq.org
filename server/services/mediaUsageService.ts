@@ -10,7 +10,7 @@ const PROXY_URL_RE = /\/api\/media\/proxy\/([0-9a-fA-F-]{16,})/;
  * Resolve an article hero image URL back to its media_files row id.
  * Handles both direct URLs (matched by media_files.url) and proxy URLs.
  */
-async function resolveMediaIdByUrl(imageUrl: string): Promise<string | null> {
+export async function resolveMediaIdByUrl(imageUrl: string): Promise<string | null> {
   const proxyMatch = imageUrl.match(PROXY_URL_RE);
   if (proxyMatch) return proxyMatch[1];
 

@@ -6,6 +6,7 @@ import { analyzeAndTagMedia, backfillUntagged } from "../services/mediaAutoTagSe
 import { semanticSearchMedia, suggestMediaForArticle, backfillMediaEmbeddings } from "../services/mediaSearchService";
 import { saveGeneratedImage } from "../services/mediaGenerationService";
 import { getMediaStats } from "../services/mediaStatsService";
+import { getMediaGovernance } from "../services/mediaGovernanceService";
 import { isAllowedMediaUrl } from "../utils/mediaUrl";
 
 const router: Router = Router();
@@ -235,6 +236,28 @@ router.post(
     } catch (error: any) {
       console.error("Error saving media metadata:", error);
       res.status(500).json({ message: "فشل حفظ البيانات" });
+    }
+  },
+);
+
+// GET /api/media/:id/governance - lightweight pre-publish check for one media
+// file: rights documentation, alt text, quality, sensitive flag. The editor
+// calls this when the writer hits "نشر" to decide whether to show the rights
+// dialog. Gated like suggest-for-article: any writer.
+router.get(
+  "/api/media/:id/governance",
+  requireAuth,
+  requireAnyPermission("articles.create", "articles.edit_own", "articles.edit_any", "media.view"),
+  async (req: any, res) => {
+    try {
+      const info = await getMediaGovernance(req.params.id);
+      if (!info) {
+        return res.status(404).json({ message: "ملف الوسائط غير موجود" });
+      }
+      res.json(info);
+    } catch (error: any) {
+      console.error("Error fetching media governance:", error);
+      res.status(500).json({ message: "فشل في فحص بيانات الصورة" });
     }
   },
 );
