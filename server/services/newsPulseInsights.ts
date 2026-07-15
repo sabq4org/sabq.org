@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "../db";
 import { categories, userInterests, wcLongPredictions } from "@shared/schema";
+import { getEliminatedWcTeamIds } from "./wcLongPredictionsService";
 
 export type NewsPulseExtras = {
   topInterest: {
@@ -19,6 +20,7 @@ export type NewsPulseExtras = {
       logo: string | null;
       votes: number;
       sharePercent: number;
+      eliminated: boolean;
     } | null;
     topScorer: {
       playerId: number;
@@ -40,7 +42,7 @@ export async function getNewsPulseExtras(
   monthAgo: Date,
   prevMonthStart: Date,
 ): Promise<NewsPulseExtras> {
-  const [interestRows, champRows, scorerRows, champTotal, scorerTotal] =
+  const [interestRows, champRows, scorerRows, champTotal, scorerTotal, eliminatedIds] =
     await Promise.all([
       db
         .select({
@@ -98,6 +100,8 @@ export async function getNewsPulseExtras(
         .select({ n: sql<number>`count(*)::int` })
         .from(wcLongPredictions)
         .where(eq(wcLongPredictions.kind, "top_scorer")),
+
+      getEliminatedWcTeamIds().catch(() => new Set<number>()),
     ]);
 
   const top = interestRows[0];
@@ -171,6 +175,7 @@ export async function getNewsPulseExtras(
                     totalChampionVotes > 0
                       ? Math.round(((champ.votes ?? 0) / totalChampionVotes) * 1000) / 10
                       : 0,
+                  eliminated: eliminatedIds.has(champ.teamId),
                 }
               : null,
           topScorer:
