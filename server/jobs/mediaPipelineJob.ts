@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import { backfillUntagged } from '../services/mediaAutoTagService';
 import { backfillMediaEmbeddings } from '../services/mediaSearchService';
+import { backfillPerceptualHashes } from '../services/mediaHashService';
+import { getMediaHealthReport } from '../services/mediaHealthService';
 
 // Nightly media pipeline: drains the analyze + embed backlog in bounded batches
 // so the archive becomes fully tagged and semantically searchable without an
@@ -11,6 +13,8 @@ import { backfillMediaEmbeddings } from '../services/mediaSearchService';
 // env-tunable to speed up or throttle the archive catch-up.
 const ANALYZE_CAP = Math.max(0, parseInt(process.env.MEDIA_PIPELINE_ANALYZE_CAP || '400', 10) || 0);
 const EMBED_CAP = Math.max(0, parseInt(process.env.MEDIA_PIPELINE_EMBED_CAP || '2000', 10) || 0);
+// Hashing costs no AI tokens (bandwidth + CPU only), so its cap can be higher.
+const HASH_CAP = Math.max(0, parseInt(process.env.MEDIA_PIPELINE_HASH_CAP || '3000', 10) || 0);
 const BATCH_SIZE = 20;
 const BATCH_PAUSE_MS = 2000;
 
@@ -25,6 +29,8 @@ export interface MediaPipelineRunResult {
   analyzeRemaining: number;
   embedded: number;
   embedRemaining: number;
+  hashed: number;
+  hashRemaining: number;
 }
 
 /** One full nightly pass. Safe to invoke manually; overlapping runs are skipped. */
@@ -34,7 +40,11 @@ export async function runMediaPipelineOnce(): Promise<MediaPipelineRunResult | n
     return null;
   }
   running = true;
-  const result: MediaPipelineRunResult = { analyzed: 0, analyzeRemaining: -1, embedded: 0, embedRemaining: -1 };
+  const result: MediaPipelineRunResult = {
+    analyzed: 0, analyzeRemaining: -1,
+    embedded: 0, embedRemaining: -1,
+    hashed: 0, hashRemaining: -1,
+  };
 
   try {
     console.log(`[Media Pipeline] Nightly run started (analyze cap ${ANALYZE_CAP}, embed cap ${EMBED_CAP})`);
@@ -59,9 +69,19 @@ export async function runMediaPipelineOnce(): Promise<MediaPipelineRunResult | n
       await sleep(BATCH_PAUSE_MS);
     }
 
+    // 3) Perceptual hashes (Phase 4 dedup) — no AI cost, just bytes + CPU.
+    while (result.hashed < HASH_CAP) {
+      const batch = await backfillPerceptualHashes(Math.min(BATCH_SIZE, HASH_CAP - result.hashed));
+      result.hashed += batch.processed;
+      result.hashRemaining = batch.remaining;
+      if (batch.remaining === 0 || batch.processed === 0) break;
+      await sleep(BATCH_PAUSE_MS);
+    }
+
     console.log(
       `[Media Pipeline] Nightly run finished: analyzed ${result.analyzed} (remaining ${result.analyzeRemaining}), ` +
-      `embedded ${result.embedded} (remaining ${result.embedRemaining})`,
+      `embedded ${result.embedded} (remaining ${result.embedRemaining}), ` +
+      `hashed ${result.hashed} (remaining ${result.hashRemaining})`,
     );
     return result;
   } catch (error: any) {
@@ -75,5 +95,18 @@ export async function runMediaPipelineOnce(): Promise<MediaPipelineRunResult | n
 export function startMediaPipelineJob(): void {
   // 02:45 KSA — after the nightly cleanup jobs, before morning traffic.
   cron.schedule('45 2 * * *', () => { void runMediaPipelineOnce(); }, { timezone: 'Asia/Riyadh' });
-  console.log('[Media Pipeline] Job scheduled (daily 02:45 Asia/Riyadh)');
+
+  // Monthly health report (1st, 06:00 KSA): pipeline/governance coverage,
+  // duplicate groups, unused-over-a-year candidates, reuse leaders. Logged
+  // for ops; the same numbers are served live by GET /api/media/health-report.
+  cron.schedule('0 6 1 * *', async () => {
+    try {
+      const report = await getMediaHealthReport();
+      console.log('[Media Pipeline] Monthly health report:', JSON.stringify(report));
+    } catch (error: any) {
+      console.error('[Media Pipeline] Monthly health report failed:', error?.message || error);
+    }
+  }, { timezone: 'Asia/Riyadh' });
+
+  console.log('[Media Pipeline] Jobs scheduled (nightly 02:45 + monthly report 1st 06:00 Asia/Riyadh)');
 }

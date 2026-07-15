@@ -2076,11 +2076,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const responseUrl = mediaFileWithDetails.url.startsWith('https://') || mediaFileWithDetails.url.startsWith('/uploads/')
         ? mediaFileWithDetails.url
         : `/api/media/proxy/${mediaFile.id}`;
-      
+
+      // Phase 7: perceptual-hash dedup — persist the hash and surface an
+      // existing visually-identical file so the client can warn the uploader.
+      let duplicateOf = null;
+      if (fileType === 'image') {
+        const { assignPerceptualHash } = await import("./services/mediaHashService");
+        duplicateOf = await assignPerceptualHash(mediaFile.id, req.file.buffer);
+      }
+
       res.json({
         ...mediaFileWithDetails,
         url: responseUrl,
         proxyUrl: `/api/media/proxy/${mediaFile.id}`,
+        duplicateOf,
       });
     } catch (error: any) {
       console.error("Error uploading media file:", error);

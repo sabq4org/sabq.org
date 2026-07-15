@@ -261,10 +261,20 @@ export function MediaLibraryPicker({
     },
     onSuccess: (uploadedMedia) => {
       queryClient.invalidateQueries({ queryKey: ["/api/media"] });
-      toast({
-        title: "تم الرفع بنجاح",
-        description: "تم رفع الملف ونجهزه للاختيار",
-      });
+      // كشف التكرار بالبصمة الإدراكية: الصورة نفسها موجودة مسبقًا في المكتبة
+      const dup = (uploadedMedia as any).duplicateOf as { title?: string | null } | null;
+      if (dup) {
+        toast({
+          title: "⚠️ صورة مطابقة موجودة مسبقًا",
+          description: `هذه الصورة موجودة في المكتبة${dup.title ? ` («${dup.title}»)` : ""} — استخدمنا نسختك الجديدة، ويُفضّل مستقبلًا اختيارها من المكتبة بدل إعادة الرفع.`,
+          duration: 9000,
+        });
+      } else {
+        toast({
+          title: "تم الرفع بنجاح",
+          description: "تم رفع الملف ونجهزه للاختيار",
+        });
+      }
       // Auto-select uploaded media and close
       onSelect(uploadedMedia);
       handleClose();
