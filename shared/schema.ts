@@ -899,6 +899,10 @@ export const articles = pgTable("articles", {
   
   isFeatured: boolean("is_featured").default(false).notNull(),
   views: integer("views").default(0).notNull(),
+  /** Manual override for avg read time (seconds); when set, ai-insights uses this instead of reading_history AVG */
+  avgReadTimeOverride: integer("avg_read_time_override"),
+  /** Manual override for completion rate (0–100); when set, ai-insights uses this instead of estimated calculation */
+  completionRateOverride: integer("completion_rate_override"),
   displayOrder: bigint("display_order", { mode: "number" }).default(0).notNull(),
   seo: jsonb("seo").$type<{
     metaTitle?: string;
@@ -3489,6 +3493,8 @@ export const insertArticleSchema = createInsertSchema(articles).omit({
   createdAt: true, 
   updatedAt: true,
   views: true,
+  avgReadTimeOverride: true,
+  completionRateOverride: true,
   aiGenerated: true,
   credibilityScore: true,
   credibilityAnalysis: true,

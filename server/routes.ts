@@ -13412,14 +13412,24 @@ Respond in valid JSON format only:
         ? Math.min(100, (avgReadTime / estimatedReadTime) * 100)
         : 0;
 
+      // Admin overrides (set via /dashboard/admin-tools) take precedence
+      const [overrides] = await db
+        .select({
+          avgReadTimeOverride: articles.avgReadTimeOverride,
+          completionRateOverride: articles.completionRateOverride,
+        })
+        .from(articles)
+        .where(eq(articles.id, article.id))
+        .limit(1);
+
       res.json({
-        avgReadTime: Math.round(avgReadTime), // in seconds
+        avgReadTime: overrides?.avgReadTimeOverride ?? Math.round(avgReadTime), // in seconds
         totalReads,
         totalReactions,
         totalComments,
         totalViews,
         engagementRate: parseFloat(engagementRate.toFixed(2)),
-        completionRate: Math.round(completionRate), // percentage
+        completionRate: overrides?.completionRateOverride ?? Math.round(completionRate), // percentage
         totalInteractions: totalReactions + totalComments,
       });
     } catch (error) {
@@ -36286,28 +36296,46 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // News Analytics Endpoint - Smart statistics and insights
 
   // ==================== Admin Tools APIs ====================
+
+  const adminArticleSlugWhere = (table: typeof articles | typeof enArticles | typeof urArticles, slug: string) =>
+    or(eq(table.slug, slug), eq(table.englishSlug, slug));
   
-  // Get article ID by slug
+  // Get article ID by slug (Arabic, English, or Urdu)
   app.get("/api/admin/article-id/:slug", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
     try {
       const { slug } = req.params;
-      
-      const [article] = await db
+
+      const [arArticle] = await db
         .select({ id: articles.id, title: articles.title })
         .from(articles)
-        .where(
-          or(
-            eq(articles.slug, slug),
-            eq(articles.englishSlug, slug)
-          )
-        )
+        .where(adminArticleSlugWhere(articles, slug))
         .limit(1);
-      
-      if (!article) {
-        return res.status(404).json({ message: "الخبر غير موجود" });
+
+      if (arArticle) {
+        return res.json({ id: arArticle.id, title: arArticle.title, locale: "ar" });
+      }
+
+      const [enArticle] = await db
+        .select({ id: enArticles.id, title: enArticles.title })
+        .from(enArticles)
+        .where(adminArticleSlugWhere(enArticles, slug))
+        .limit(1);
+
+      if (enArticle) {
+        return res.json({ id: enArticle.id, title: enArticle.title, locale: "en" });
+      }
+
+      const [urArticle] = await db
+        .select({ id: urArticles.id, title: urArticles.title })
+        .from(urArticles)
+        .where(adminArticleSlugWhere(urArticles, slug))
+        .limit(1);
+
+      if (urArticle) {
+        return res.json({ id: urArticle.id, title: urArticle.title, locale: "ur" });
       }
       
-      res.json({ id: article.id, title: article.title });
+      return res.status(404).json({ message: "الخبر غير موجود" });
     } catch (error) {
       console.error("Error getting article ID:", error);
       res.status(500).json({ message: "فشل في استخراج معرف الخبر" });
@@ -36353,7 +36381,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   });
 
-  // Update article views
+  // Update article views (Arabic, English, or Urdu)
   app.post("/api/admin/update-views", requireAuth, requirePermission("articles.edit"), async (req: any, res) => {
     try {
       const { slug, viewCount } = req.body;
@@ -36361,26 +36389,116 @@ Sitemap: https://sabq.org/sitemap-news.xml
       if (!slug || viewCount === undefined) {
         return res.status(400).json({ message: "الرجاء إدخال الرابط وعدد المشاهدات" });
       }
-      
-      const [article] = await db
+
+      const views = Number(viewCount);
+      if (!Number.isFinite(views) || !Number.isInteger(views) || views < 0) {
+        return res.status(400).json({ message: "عدد المشاهدات يجب أن يكون رقماً صحيحاً" });
+      }
+
+      const [arArticle] = await db
         .update(articles)
-        .set({ views: viewCount })
-        .where(
-          or(
-            eq(articles.slug, slug),
-            eq(articles.englishSlug, slug)
-          )
-        )
+        .set({ views })
+        .where(adminArticleSlugWhere(articles, slug))
         .returning({ id: articles.id, title: articles.title, views: articles.views });
-      
-      if (!article) {
-        return res.status(404).json({ message: "الخبر غير موجود" });
+
+      if (arArticle) {
+        return res.json({ success: true, article: arArticle, locale: "ar" });
+      }
+
+      const [enArticle] = await db
+        .update(enArticles)
+        .set({ views })
+        .where(adminArticleSlugWhere(enArticles, slug))
+        .returning({ id: enArticles.id, title: enArticles.title, views: enArticles.views });
+
+      if (enArticle) {
+        return res.json({ success: true, article: enArticle, locale: "en" });
+      }
+
+      const [urArticle] = await db
+        .update(urArticles)
+        .set({ views })
+        .where(adminArticleSlugWhere(urArticles, slug))
+        .returning({ id: urArticles.id, title: urArticles.title, views: urArticles.views });
+
+      if (urArticle) {
+        return res.json({ success: true, article: urArticle, locale: "ur" });
       }
       
-      res.json({ success: true, article });
+      return res.status(404).json({ message: "الخبر غير موجود" });
     } catch (error) {
       console.error("Error updating views:", error);
       res.status(500).json({ message: "فشل في تحديث عدد المشاهدات" });
+    }
+  });
+
+  // Update article average read time override (seconds) — Arabic articles only
+  app.post("/api/admin/update-read-time", requireAuth, requirePermission("articles.edit"), async (req: any, res) => {
+    try {
+      const { slug, avgReadTime } = req.body;
+
+      if (!slug || avgReadTime === undefined) {
+        return res.status(400).json({ message: "الرجاء إدخال الرابط ومتوسط زمن القراءة" });
+      }
+
+      const seconds = Number(avgReadTime);
+      if (!Number.isFinite(seconds) || seconds < 0 || !Number.isInteger(seconds)) {
+        return res.status(400).json({ message: "متوسط زمن القراءة يجب أن يكون رقماً صحيحاً بالثواني" });
+      }
+
+      const [article] = await db
+        .update(articles)
+        .set({ avgReadTimeOverride: seconds })
+        .where(adminArticleSlugWhere(articles, slug))
+        .returning({
+          id: articles.id,
+          title: articles.title,
+          avgReadTimeOverride: articles.avgReadTimeOverride,
+        });
+
+      if (!article) {
+        return res.status(404).json({ message: "الخبر غير موجود (هذه الأداة تدعم الأخبار العربية حالياً)" });
+      }
+
+      res.json({ success: true, article });
+    } catch (error) {
+      console.error("Error updating read time:", error);
+      res.status(500).json({ message: "فشل في تحديث متوسط زمن القراءة" });
+    }
+  });
+
+  // Update article completion rate override (0–100) — Arabic articles only
+  app.post("/api/admin/update-completion-rate", requireAuth, requirePermission("articles.edit"), async (req: any, res) => {
+    try {
+      const { slug, completionRate } = req.body;
+
+      if (!slug || completionRate === undefined) {
+        return res.status(400).json({ message: "الرجاء إدخال الرابط ونسبة الإكمال" });
+      }
+
+      const rate = Number(completionRate);
+      if (!Number.isFinite(rate) || !Number.isInteger(rate) || rate < 0 || rate > 100) {
+        return res.status(400).json({ message: "نسبة الإكمال يجب أن تكون رقماً صحيحاً بين 0 و 100" });
+      }
+
+      const [article] = await db
+        .update(articles)
+        .set({ completionRateOverride: rate })
+        .where(adminArticleSlugWhere(articles, slug))
+        .returning({
+          id: articles.id,
+          title: articles.title,
+          completionRateOverride: articles.completionRateOverride,
+        });
+
+      if (!article) {
+        return res.status(404).json({ message: "الخبر غير موجود (هذه الأداة تدعم الأخبار العربية حالياً)" });
+      }
+
+      res.json({ success: true, article });
+    } catch (error) {
+      console.error("Error updating completion rate:", error);
+      res.status(500).json({ message: "فشل في تحديث نسبة الإكمال" });
     }
   });
   return httpServer;
