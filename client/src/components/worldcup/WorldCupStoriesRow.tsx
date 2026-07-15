@@ -54,6 +54,10 @@ export default function WorldCupStoriesRow({
     ? `${scorer.name} ${scorer.pct.toLocaleString("en-US")}%`
     : null;
 
+  const roundEn = (matchFixture?.roundEn ?? "").trim();
+  const isFinalCard =
+    roundEn === "Final" || (roundEn.startsWith("Final") && !roundEn.startsWith("3rd"));
+
   const items = [
     {
       key: "champion",
@@ -68,7 +72,7 @@ export default function WorldCupStoriesRow({
     {
       key: "today",
       href: "/world-cup/predictions?tab=today",
-      label: "مباراة اليوم",
+      label: isFinalCard ? "النهائي" : "مباراة اليوم",
       icon: Goal,
       live: isLive,
       sub: matchSub,

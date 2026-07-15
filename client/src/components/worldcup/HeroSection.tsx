@@ -235,9 +235,15 @@ function MatchHeroCard({
           <span className="font-bold text-emerald-200">
             {fixture.status.live
               ? "تجري الآن"
-              : riyadhDayKey(fixture.date) === todayRiyadhKey()
-                ? "مباراة اليوم"
-                : "المباراة القادمة"}
+              : (() => {
+                  const r = (fixture.roundEn ?? "").trim();
+                  const isFinal =
+                    r === "Final" || (r.startsWith("Final") && !r.startsWith("3rd"));
+                  if (isFinal) return "النهائي";
+                  return riyadhDayKey(fixture.date) === todayRiyadhKey()
+                    ? "مباراة اليوم"
+                    : "المباراة القادمة";
+                })()}
           </span>
           <span>·</span>
           <span>{fixture.round}</span>

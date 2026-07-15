@@ -2986,6 +2986,28 @@ const STAR_WEIGHT: Record<number, number> = {
 const starWeight = (fixture: WcFixture): number =>
   (STAR_WEIGHT[fixture.home.id] ?? 1) + (STAR_WEIGHT[fixture.away.id] ?? 1);
 
+/** النهائي الحقيقي — لا يشمل «3rd Place Final» (المزوّد يسمّيها ببادئة مختلفة). */
+export function isTrueFinal(fixture: WcFixture): boolean {
+  const r = (fixture.roundEn ?? "").trim();
+  return r === "Final" || (r.startsWith("Final") && !r.startsWith("3rd"));
+}
+
+/**
+ * اختيار مباراة اليوم من بركة مرشّحات. النهائي يفوز دائمًا على مباراة المركز
+ * الثالث إن وُجد في نفس البركة (أحيانًا أبكر بساعات في نفس اليوم)، وإلا
+ * الأقرب زمنيًا ثم النجومية كاسر تعادل.
+ */
+function pickMatchOfTheDay(pool: WcFixture[]): WcFixture | null {
+  if (pool.length === 0) return null;
+  const final = pool.find(isTrueFinal);
+  if (final) return final;
+  return (
+    [...pool].sort(
+      (a, b) => a.timestamp - b.timestamp || starWeight(b) - starWeight(a),
+    )[0] ?? null
+  );
+}
+
 /** بطل البطولة — يظهر في بلوك الواجهة بدل مربع المباراة بعد حسم النهائي */
 export interface WcChampion {
   team: WcTeam;
@@ -3102,11 +3124,8 @@ export async function getOverview(): Promise<WcOverview> {
   const nextDayKey = (upcoming[0]?.date ?? "").slice(0, 10);
   const nextDayMatches = upcoming.filter((f) => (f.date ?? "").slice(0, 10) === nextDayKey);
   const fallbackPool = motdPool.length > 0 ? motdPool : nextDayMatches;
-  // الأقرب زمنيًا أولًا — مباراة الفجر لا تتجاوزها مباراة المساء مهما علت
-  // نجوميتها؛ النجومية كاسر تعادل للمباريات المتزامنة (ختام المجموعات)
-  const motdFixture = [...fallbackPool].sort(
-    (a, b) => a.timestamp - b.timestamp || starWeight(b) - starWeight(a)
-  )[0] ?? null;
+  // النهائي أولوية على المركز الثالث في نفس اليوم؛ وإلا الأقرب زمنيًا ثم النجومية
+  const motdFixture = pickMatchOfTheDay(fallbackPool);
 
   // توقعات لكل المباريات التي قد تُعرض كبطاقات Hero كبيرة: الحيّة جميعها +
   // المباراة المميّزة + المباريات القادمة المتزامنة معها (نفس وقت الانطلاق).
