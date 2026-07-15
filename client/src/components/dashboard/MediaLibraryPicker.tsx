@@ -188,7 +188,36 @@ export function MediaLibraryPicker({
     setPage(1);
   }, [debouncedSearch, selectedCategory, selectedFolderId, showFavorites, showRecent]);
 
-  // Fetch AI suggestions (conditional)
+  // Open on the smart-suggestions tab when we know what the article is about —
+  // "library first": the editor sees relevant archive images before browsing
+  // or uploading anything new.
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(articleTitle ? "ai" : "library");
+    }
+  }, [isOpen, articleTitle]);
+
+  // Primary suggestions: semantic (embedding of title + body slice against the
+  // indexed archive). relevanceScore is 0-100.
+  const semanticSuggestUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    if (articleTitle) params.set("title", articleTitle);
+    if (articleContent) params.set("content", articleContent);
+    params.set("limit", "12");
+    return `/api/media/suggest-for-article?${params.toString()}`;
+  }, [articleTitle, articleContent]);
+
+  const { data: semanticSuggestData, isLoading: isLoadingSemanticSuggest } = useQuery<{
+    files: (MediaFile & { relevanceScore: number })[];
+    total: number;
+  }>({
+    queryKey: [semanticSuggestUrl],
+    enabled: isOpen && activeTab === "ai" && !!articleTitle,
+  });
+  const semanticFiles = Array.isArray(semanticSuggestData?.files) ? semanticSuggestData.files : [];
+
+  // Keyword fallback — only consulted when the semantic index returned nothing
+  // (e.g. an archive slice that isn't embedded yet).
   const suggestionsQueryUrl = useMemo(() => {
     const params = new URLSearchParams();
     if (articleTitle) params.set("title", articleTitle);
@@ -198,11 +227,16 @@ export function MediaLibraryPicker({
   }, [articleTitle, articleContent]);
 
   const { data: suggestionsData, isLoading: isLoadingSuggestions } = useQuery<{
-    suggestions: (MediaFile & { relevanceScore: number; keywords: string[] })[];
+    suggestions: (MediaFile & { relevanceScore?: number; keywords?: string[] })[];
     extractedKeywords: string[];
   }>({
     queryKey: [suggestionsQueryUrl],
-    enabled: isOpen && activeTab === "ai" && !!articleTitle,
+    enabled:
+      isOpen &&
+      activeTab === "ai" &&
+      !!articleTitle &&
+      !!semanticSuggestData &&
+      semanticFiles.length === 0,
   });
 
   // Upload mutation
@@ -412,9 +446,27 @@ export function MediaLibraryPicker({
           )}
           {relevanceScore !== undefined && (
             <Badge className="absolute top-1 left-1 text-xs" variant="secondary">
-              {Math.round(relevanceScore * 100)}%
+              ملاءمة {Math.round(relevanceScore)}%
             </Badge>
           )}
+          {/* شارات الحوكمة: تظهر قبل الاختيار حتى لا يتفاجأ المحرر بعد النشر */}
+          <div className="absolute bottom-1 right-1 flex flex-wrap gap-0.5 max-w-[90%]">
+            {typeof media.aiQualityScore === "number" && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-black/60 text-white border-0">
+                جودة {media.aiQualityScore}
+              </Badge>
+            )}
+            {!media.rightsVerified && !media.creditText && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-amber-500/90 text-white border-0">
+                بلا حقوق
+              </Badge>
+            )}
+            {media.aiHasSensitiveContent && (
+              <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-red-600/90 text-white border-0">
+                حسّاس
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="p-2 space-y-1.5">
           <p
@@ -816,26 +868,8 @@ export function MediaLibraryPicker({
           {articleTitle && (
             <TabsContent value="ai" className="flex-1 p-6 pt-4 overflow-y-auto">
               <div className="space-y-4">
-                {/* Extracted Keywords */}
-                {suggestionsData?.extractedKeywords && (
-                  <div>
-                    <p className="text-sm font-medium mb-2">الكلمات المفتاحية:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {suggestionsData.extractedKeywords.map((keyword, i) => (
-                        <Badge
-                          key={i}
-                          variant="secondary"
-                          data-testid={`badge-keyword-${i}`}
-                        >
-                          {keyword}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Suggestions Grid */}
-                {isLoadingSuggestions ? (
+                {/* Semantic suggestions (primary): meaning-ranked archive images */}
+                {isLoadingSemanticSuggest || isLoadingSuggestions ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Array.from({ length: 6 }).map((_, i) => (
                       <Card key={i} className="overflow-hidden">
@@ -848,7 +882,43 @@ export function MediaLibraryPicker({
                       </Card>
                     ))}
                   </div>
-                ) : suggestionsData?.suggestions.length === 0 ? (
+                ) : semanticFiles.length > 0 ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      صور من أرشيف المكتبة مرتّبة حسب ملاءمتها لموضوع الخبر (بحث دلالي):
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {semanticFiles.map((media) =>
+                        renderMediaCard(media, media.relevanceScore)
+                      )}
+                    </div>
+                  </>
+                ) : suggestionsData && suggestionsData.suggestions.length > 0 ? (
+                  <>
+                    {/* Keyword fallback — the semantic index had nothing for this draft */}
+                    {suggestionsData.extractedKeywords?.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium mb-2">الكلمات المفتاحية:</p>
+                        <div className="flex flex-wrap gap-2">
+                          {suggestionsData.extractedKeywords.map((keyword, i) => (
+                            <Badge
+                              key={i}
+                              variant="secondary"
+                              data-testid={`badge-keyword-${i}`}
+                            >
+                              {keyword}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {suggestionsData.suggestions.map((media) =>
+                        renderMediaCard(media)
+                      )}
+                    </div>
+                  </>
+                ) : (
                   <div className="flex flex-col items-center justify-center h-64 text-center">
                     <Sparkles className="h-16 w-16 text-muted-foreground mb-4" />
                     <p className="text-lg font-medium" data-testid="text-no-suggestions">
@@ -857,12 +927,6 @@ export function MediaLibraryPicker({
                     <p className="text-sm text-muted-foreground">
                       جرب المكتبة أو ارفع ملفًا جديدًا
                     </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {suggestionsData?.suggestions.map((media) =>
-                      renderMediaCard(media, media.relevanceScore)
-                    )}
                   </div>
                 )}
               </div>

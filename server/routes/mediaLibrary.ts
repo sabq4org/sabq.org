@@ -3,7 +3,7 @@ import { requireAuth, requirePermission, requireAnyPermission } from "../rbac";
 import { bulkMediaOperation, saveExistingMedia, type BulkMediaAction } from "../services/mediaLibraryService";
 import { generateSmartCaption } from "../services/mediaCaptionService";
 import { analyzeAndTagMedia, backfillUntagged } from "../services/mediaAutoTagService";
-import { semanticSearchMedia, backfillMediaEmbeddings } from "../services/mediaSearchService";
+import { semanticSearchMedia, suggestMediaForArticle, backfillMediaEmbeddings } from "../services/mediaSearchService";
 import { saveGeneratedImage } from "../services/mediaGenerationService";
 import { getMediaStats } from "../services/mediaStatsService";
 import { isAllowedMediaUrl } from "../utils/mediaUrl";
@@ -122,6 +122,33 @@ router.get(
     } catch (error: any) {
       console.error("Error in semantic media search:", error);
       res.status(500).json({ message: "فشل في البحث الدلالي" });
+    }
+  },
+);
+
+// GET /api/media/suggest-for-article - semantic suggestions for an article
+// draft (title + optional body slice → embedding → ranked library images,
+// sensitive-flagged excluded). Powers the editor's hero-image suggestion strip
+// and the picker's "اقتراحات ذكية" tab. Gated like /api/media/analyze: any
+// writer who can edit an article.
+router.get(
+  "/api/media/suggest-for-article",
+  requireAuth,
+  requireAnyPermission("articles.create", "articles.edit_own", "articles.edit_any", "media.view"),
+  async (req: any, res) => {
+    try {
+      const title = typeof req.query.title === "string" ? req.query.title : "";
+      if (!title.trim()) {
+        return res.json({ files: [], total: 0, query: "" });
+      }
+      const content = typeof req.query.content === "string" ? req.query.content : null;
+      const limit = Number(req.query.limit) || 6;
+
+      const result = await suggestMediaForArticle({ title, content, limit });
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error suggesting media for article:", error);
+      res.status(500).json({ message: "فشل في جلب اقتراحات الصور" });
     }
   },
 );

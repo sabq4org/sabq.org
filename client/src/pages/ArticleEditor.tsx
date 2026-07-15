@@ -134,6 +134,7 @@ import {
 import { ImageFocalPointPicker } from "@/components/ImageFocalPointPicker";
 import { SmartLinksPanel } from "@/components/SmartLinksPanel";
 import { MediaLibraryPicker } from "@/components/dashboard/MediaLibraryPicker";
+import { HeroImageSuggestions } from "@/components/dashboard/HeroImageSuggestions";
 import { InlineHeadlineSuggestions } from "@/components/InlineHeadlineSuggestions";
 import { PollEditor, type PollData } from "@/components/PollEditor";
 import { WeeklyPhotosEditor } from "@/components/WeeklyPhotosEditor";
@@ -928,6 +929,38 @@ export default function ArticleEditor() {
     imageUrl, thumbnailUrl, keywords, newsType, metaTitle, metaDescription,
     saveDraftToLocalStorage
   ]);
+
+  // اختيار صورة من المكتبة (من المنتقي أو من شريط الاقتراحات): يضبط الحالة
+  // ويُظهر تنبيهًا فقاعيًا بنواقص الصورة (نص بديل/حقوق/محتوى حسّاس) إن وُجدت
+  const applyLibraryImage = (media: MediaFile) => {
+    // Use url (display URL) which is either https:// or proxy URL —
+    // originalUrl might be gs:// which browsers can't display
+    setImageUrl(media.url);
+    setIsAiGeneratedImage((media as any).isAiGenerated || false);
+    setHeroImageMediaId(media.id);
+    const mediaNotes: string[] = [];
+    if (!media.altText) {
+      mediaNotes.push("بلا نص بديل — بعد حفظ الخبر استخدم زر «وصف وتعليق ذكي»");
+    }
+    if (!media.rightsVerified && !media.creditText) {
+      mediaNotes.push("حقوق الاستخدام غير موثّقة — يمكن توثيقها من مكتبة الوسائط");
+    }
+    if (media.aiHasSensitiveContent) {
+      mediaNotes.push("قد تحتوي محتوى حسّاسًا بحسب التحليل الذكي");
+    }
+    if (mediaNotes.length > 0) {
+      toast({
+        title: "تم اختيار الصورة — يوجد تنبيه",
+        description: mediaNotes.join(" · "),
+        duration: 9000,
+      });
+    } else {
+      toast({
+        title: "تم اختيار الصورة",
+        description: "تم إضافة الصورة من المكتبة",
+      });
+    }
+  };
 
   // تذكير فقاعي (مرة واحدة لكل جلسة تحرير): كُتب عنوان ولا توجد صورة بارزة →
   // ذكّر المحرر بأن مكتبة الوسائط تعرض اقتراحات ذكية لهذا الخبر بدل رفع صورة جديدة
@@ -2815,6 +2848,16 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 <CardTitle>الصورة البارزة</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {/* شريط الاقتراح التلقائي: لا صورة بعد + عنوان مكتوب → أفضل صور
+                    الأرشيف ملاءمةً للخبر، باختيار بنقرة واحدة */}
+                {!imageUrl && !isOpinionAuthor && (
+                  <HeroImageSuggestions
+                    articleTitle={title}
+                    articleContent={content}
+                    onPick={applyLibraryImage}
+                    onOpenLibrary={() => setShowMediaPicker(true)}
+                  />
+                )}
                 {imageUrl && (
                   <div className="relative aspect-video w-full overflow-hidden rounded-lg border">
                     <img
@@ -4663,39 +4706,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           isOpen={showMediaPicker}
           onClose={() => setShowMediaPicker(false)}
           onSelect={(media: MediaFile) => {
-            // Use url (display URL) which is either https:// or proxy URL
-            // originalUrl might be gs:// which browsers can't display
-            const urlToStore = media.url;
-            setImageUrl(urlToStore);
-            // Check if this media is AI generated
-            setIsAiGeneratedImage((media as any).isAiGenerated || false);
-            // Save media ID for caption creation
-            setHeroImageMediaId(media.id);
+            applyLibraryImage(media);
             setShowMediaPicker(false);
-            // تنبيه فقاعي باكتمال بيانات الصورة: نص بديل، حقوق، محتوى حسّاس —
-            // يظهر لحظة الاختيار حتى لا يتفاجأ المحرر بعد النشر
-            const mediaNotes: string[] = [];
-            if (!media.altText) {
-              mediaNotes.push("بلا نص بديل — بعد حفظ الخبر استخدم زر «وصف وتعليق ذكي»");
-            }
-            if (!media.rightsVerified && !media.creditText) {
-              mediaNotes.push("حقوق الاستخدام غير موثّقة — يمكن توثيقها من مكتبة الوسائط");
-            }
-            if (media.aiHasSensitiveContent) {
-              mediaNotes.push("قد تحتوي محتوى حسّاسًا بحسب التحليل الذكي");
-            }
-            if (mediaNotes.length > 0) {
-              toast({
-                title: "تم اختيار الصورة — يوجد تنبيه",
-                description: mediaNotes.join(" · "),
-                duration: 9000,
-              });
-            } else {
-              toast({
-                title: "تم اختيار الصورة",
-                description: "تم إضافة الصورة من المكتبة",
-              });
-            }
           }}
           articleTitle={title}
           articleContent={content?.substring(0, 500)}
