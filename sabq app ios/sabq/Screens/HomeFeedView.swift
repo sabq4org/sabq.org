@@ -33,13 +33,16 @@ struct HomeFeedView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(\.scenePhase) private var scenePhase
 
-    /// فترة الفحص الصامت للأخبار الجديدة (بالثواني)
-    private let newArticlesPollInterval: TimeInterval = 60
+    /// فترة استطلاع إشارة إبطال الكاش (بالثواني) — نفس إيقاع الويب.
+    /// الجلب الثقيل للرئيسية يحدث فقط عند تغيّر `lastUpdate`.
+    private let cacheInvalidationPollInterval: TimeInterval = 30
     /// Mirror of the dark-mode flag in `sabqApp` so the header toggle flips
     /// the scene-level `.preferredColorScheme`. The setting also lives in the
     /// in-app preferences screen; both write to the same UserDefaults key.
     @AppStorage("appAppearance") private var appearanceRaw: String = AppAppearance.system.rawValue
     @State private var isFirstLoad = true
+    /// آخر طابع إبطال كاش رُصد — `0` يعني لم يُبذَر بعد (لا نُعيد الجلب عند أول قراءة).
+    @State private var lastCacheInvalidation: Double = 0
     @State private var todayInsights: [String: String] = [:]
     /// Rich personal-journey insights (member-session only). Drives the
     /// inline metric tiles + interest chips in personalJourneyBlock.
@@ -244,19 +247,31 @@ struct HomeFeedView: View {
             .overlay(alignment: .top) {
                 newArticlesBanner(proxy: scrollProxy)
             }
-            // فحص دوري صامت للأخبار الجديدة طوال ظهور الشاشة وتفعيل
-            // التطبيق. نفحص فوراً عند التفعيل (خصوصاً عند العودة من
-            // الخلفية) حتى يظهر الشريط بسرعة لو نزلت أخبار والمستخدم
-            // برّا. تأخير أولي 3ث يترك شبكة الإقلاع تخلّص أولاً دون تزاحم.
+            // استطلاع خفيف لإشارة إبطال الكاش (نفس نمط الويب):
+            // GET /api/cache-invalidation/check كل 30ث — وجلب الرئيسية فقط
+            // عند تغيّر lastUpdate بعد نشر في الصحيفة. الهيرو يتحدّث فوراً
+            // عبر checkForNewArticles دون إجبار المستخدم على السحب المتكرر.
+            // شبكة أمان: حتى لو لم تتحرك الإشارة، نفحص الهيرو كل 60ث.
             .task(id: scenePhase) {
                 guard scenePhase == .active else { return }
-                try? await Task.sleep(for: .seconds(3))
-                if Task.isCancelled { return }
-                await articlesStore.checkForNewArticles()
+                // تأخير أولي عند أول ظهور يترك شبكة الإقلاع تخلّص؛ عند
+                // العودة من الخلفية نفحص فوراً إن كان lastUpdate مُبذّراً.
+                if lastCacheInvalidation == 0 {
+                    try? await Task.sleep(for: .seconds(3))
+                    if Task.isCancelled { return }
+                }
+                var lastForcedHeroCheck = Date.distantPast
+                _ = await pollCacheInvalidationAndRefreshIfNeeded()
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(newArticlesPollInterval))
+                    try? await Task.sleep(for: .seconds(cacheInvalidationPollInterval))
                     if Task.isCancelled { break }
-                    await articlesStore.checkForNewArticles()
+                    let didRefresh = await pollCacheInvalidationAndRefreshIfNeeded()
+                    if didRefresh {
+                        lastForcedHeroCheck = Date()
+                    } else if Date().timeIntervalSince(lastForcedHeroCheck) >= 60 {
+                        await articlesStore.checkForNewArticles()
+                        lastForcedHeroCheck = Date()
+                    }
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .sabqHomeScrollToTop)) { _ in
@@ -320,6 +335,36 @@ struct HomeFeedView: View {
                     }
             }
         }
+    }
+
+    // MARK: - Cache Invalidation Poll
+
+    /// يستطلع إشارة النشر الخفيفة؛ يجلب الهيرو/الأخبار فقط عند تغيّر الطابع.
+    /// - Returns: `true` إذا أُعيد جلب المحتوى بسبب تغيّر الإشارة.
+    @discardableResult
+    private func pollCacheInvalidationAndRefreshIfNeeded() async -> Bool {
+        guard let check = try? await APIClient.shared.fetchCacheInvalidationCheck() else { return false }
+        let stamp = check.lastUpdate
+        guard stamp > 0 else { return false }
+
+        let previous = lastCacheInvalidation
+        lastCacheInvalidation = stamp
+
+        // أول قراءة: بذر الطابع فقط — الرئيسية محمّلة أصلاً عند الإقلاع.
+        guard previous > 0, stamp > previous else { return false }
+
+        let heroBefore = articlesStore.featuredArticles.prefix(3).map(\.id)
+        await articlesStore.checkForNewArticles()
+        let heroAfter = articlesStore.featuredArticles.prefix(3).map(\.id)
+        // خبر هيرو جديد في الموضع 0 — أعد المؤشر ليظهر فورًا دون سحب.
+        if heroBefore != heroAfter {
+            featuredIndex = 0
+        }
+        // شريط العاجل من لوحة التحكم قد يتغيّر مع النشر أيضاً.
+        if let ticker = try? await APIClient.shared.fetchBreakingTicker() {
+            breakingTicker = ticker
+        }
+        return true
     }
 
     // MARK: - New Articles Banner ("⬆️ X أخبار جديدة")

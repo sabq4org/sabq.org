@@ -2860,15 +2860,13 @@ function formatArticleForMobile(row: any, baseUrl: string) {
   };
 }
 
-const memoryCache = new Map<string, { data: any; expiry: number }>();
+import { memoryCache as sharedMemoryCache } from "../memoryCache";
+
 function getCached(key: string) {
-  const entry = memoryCache.get(key);
-  if (entry && entry.expiry > Date.now()) return entry.data;
-  memoryCache.delete(key);
-  return null;
+  return sharedMemoryCache.get(key);
 }
 function setCache(key: string, data: any, ttlMs: number) {
-  memoryCache.set(key, { data, expiry: Date.now() + ttlMs });
+  sharedMemoryCache.set(key, data, ttlMs);
 }
 
 /**
@@ -3884,6 +3882,9 @@ router.get("/homepage", async (req: Request, res: Response) => {
       if (cached) return res.json(cached);
     }
 
+    // Align hero selection/order with web (`getHeroArticles` / homepage-lite):
+    // editors reorder via displayOrder; sorting by publishedAt alone made
+    // pull-to-refresh look broken — fresh JSON, same carousel order.
     const heroArticles = await db
       .select({
         article: articleCardSelect,
@@ -3899,10 +3900,26 @@ router.get("/homepage", async (req: Request, res: Response) => {
         and(
           eq(articles.status, "published"),
           eq(articles.hideFromHomepage, false),
-          eq(articles.isFeatured, true)
+          or(
+            eq(articles.newsType, "breaking"),
+            eq(articles.isFeatured, true)
+          ),
+          or(
+            isNull(articles.articleType),
+            ne(articles.articleType, "opinion"),
+            eq(articles.isFeatured, true)
+          ),
+          or(
+            isNull(articles.aiGenerated),
+            eq(articles.aiGenerated, false),
+            eq(articles.isFeatured, true)
+          )
         )
       )
-      .orderBy(desc(articles.publishedAt))
+      .orderBy(
+        desc(sql`GREATEST(COALESCE(${articles.displayOrder}, 0), EXTRACT(EPOCH FROM ${articles.publishedAt}))`),
+        desc(articles.publishedAt)
+      )
       .limit(5);
 
     const latestArticles = await db

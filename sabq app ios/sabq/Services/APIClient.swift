@@ -326,6 +326,16 @@ actor APIClient {
         try await get(APIHomepageResponse.self, path: "/homepage-lite")
     }
 
+    /// إشارة خفيفة: هل نُشر محتوى جديد؟ نفس مسار الويب — لا يجلب الرئيسية.
+    func fetchCacheInvalidationCheck() async throws -> APICacheInvalidationCheck {
+        try await get(
+            APICacheInvalidationCheck.self,
+            path: "/cache-invalidation/check",
+            ignoreCache: true,
+            apiRoot: publicAPIBaseURL
+        )
+    }
+
     // MARK: - Articles
 
     func fetchArticles(page: Int = 1, perPage: Int = 20) async throws -> APIPaginatedList<APIArticle> {

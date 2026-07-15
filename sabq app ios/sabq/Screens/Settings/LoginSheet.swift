@@ -542,13 +542,15 @@ private struct PhoneLoginFlow: View {
     }
 }
 
-/// حقل رمز OTP — خانات مرئية + TextField فوقها بشفافية منخفضة جدًا ليفعّل شريط
-/// «من الرسائل» (QuickType) عند وصول SMS مع `.oneTimeCode`.
+/// حقل رمز OTP — خانات مرئية + TextField فوقها ليفعّل شريط «من الرسائل»
+/// (QuickType) عبر `.oneTimeCode`. يتطلّب أيضًا SMS بصيغة domain-bound:
+/// السطر الأخير `@sabq.org #123456` + Associated Domains `webcredentials:sabq.org`.
 private struct LoginOtpBoxes: View {
     @Binding var code: String
     var onComplete: () -> Void
     private let length = 6
     @FocusState private var focused: Bool
+    @State private var didSubmit = false
 
     var body: some View {
         ZStack {
@@ -558,30 +560,49 @@ private struct LoginOtpBoxes: View {
             .environment(\.layoutDirection, .leftToRight)
             .allowsHitTesting(false)
 
-            // فوق الخانات وبشفافية شبه معدومة — iOS يرفض opacity=0 تمامًا لاقتراح الرمز.
+            // حقل حقيقي فوق الخانات — لا تستخدم opacity=0 (iOS يتجاهل الاقتراح).
+            // لا تُصفّر الـ tint/foreground بالكامل؛ بعض إصدارات iOS تحتاج
+            // أن يبقى الحقل «مرئيًا» للنظام حتى يظهر شريط التعبئة.
             TextField("", text: $code)
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(.system(size: 22, weight: .heavy, design: .rounded).monospacedDigit())
-                .foregroundStyle(.clear)
-                .tint(.clear)
+                .foregroundStyle(Color.primary.opacity(0.01))
                 .multilineTextAlignment(.center)
                 .focused($focused)
                 .opacity(0.02)
                 .frame(maxWidth: .infinity)
                 .frame(height: 54)
+                .accessibilityLabel("رمز التحقق")
                 .onChange(of: code) { _, v in
                     let d = String(v.filter(\.isNumber).prefix(length))
-                    if d != code { code = d }
-                    if d.count == length { focused = false; onComplete() }
+                    if d != code { code = d; return }
+                    if d.count < length { didSubmit = false }
+                    guard d.count == length, !didSubmit else { return }
+                    didSubmit = true
+                    // أبقِ التركيز لحظة حتى يكتمل لصق التعبئة التلقائية
+                    // قبل إخفاء الكيبورد واستدعاء التحقق.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(50))
+                        focused = false
+                        onComplete()
+                    }
                 }
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
         .onTapGesture { focused = true }
-        .onAppear { focused = true }
+        .onAppear {
+            didSubmit = false
+            // تأخير بسيط بعد الانتقال من خطوة الجوال حتى يستقر الكيبورد
+            // قبل وصول SMS — يزيد احتمال ظهور شريط التعبئة.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                focused = true
+            }
+        }
     }
 
     private func box(_ i: Int) -> some View {
