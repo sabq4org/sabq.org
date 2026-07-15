@@ -1108,16 +1108,24 @@ export default function ArticleEditor() {
         method: "POST",
         body: formData,
         isFormData: true,
-      })) as { id: string; url: string };
+      })) as { id: string; url: string; duplicateOf?: { title?: string | null } | null };
 
       setImageUrl(uploaded.url);
       setIsAiGeneratedImage(false);
       setHeroImageMediaId(uploaded.id);
 
-      toast({
-        title: "تم الرفع بنجاح",
-        description: `الرابط: ${uploaded.url.substring(0, 50)}...`,
-      });
+      if (uploaded.duplicateOf) {
+        toast({
+          title: "⚠️ صورة مطابقة موجودة مسبقًا في المكتبة",
+          description: `الصورة مرفوعة سابقًا${uploaded.duplicateOf.title ? ` («${uploaded.duplicateOf.title}»)` : ""} — يُفضّل مستقبلًا اختيارها من المكتبة أو من شريط الاقتراحات بدل إعادة الرفع.`,
+          duration: 9000,
+        });
+      } else {
+        toast({
+          title: "تم الرفع بنجاح",
+          description: `الرابط: ${uploaded.url.substring(0, 50)}...`,
+        });
+      }
       return true;
     } catch (error) {
       console.error("Error uploading image:", error);

@@ -3,7 +3,9 @@ import { requireAuth, requirePermission, requireAnyPermission } from "../rbac";
 import { bulkMediaOperation, saveExistingMedia, type BulkMediaAction } from "../services/mediaLibraryService";
 import { generateSmartCaption } from "../services/mediaCaptionService";
 import { analyzeAndTagMedia, backfillUntagged } from "../services/mediaAutoTagService";
-import { semanticSearchMedia, suggestMediaForArticle, backfillMediaEmbeddings } from "../services/mediaSearchService";
+import { semanticSearchMedia, suggestMediaForArticle, similarMedia, backfillMediaEmbeddings } from "../services/mediaSearchService";
+import { getDuplicateGroups } from "../services/mediaHashService";
+import { getMediaHealthReport } from "../services/mediaHealthService";
 import { saveGeneratedImage } from "../services/mediaGenerationService";
 import { getMediaStats } from "../services/mediaStatsService";
 import { getMediaGovernance } from "../services/mediaGovernanceService";
@@ -258,6 +260,61 @@ router.get(
     } catch (error: any) {
       console.error("Error fetching media governance:", error);
       res.status(500).json({ message: "فشل في فحص بيانات الصورة" });
+    }
+  },
+);
+
+// GET /api/media/:id/similar - "صور مشابهة": vector-similar archive images
+// (alternate angles of the same event). Gated by media.view.
+router.get(
+  "/api/media/:id/similar",
+  requireAuth,
+  requirePermission("media.view"),
+  async (req: any, res) => {
+    try {
+      const limit = Number(req.query.limit) || 12;
+      const result = await similarMedia(req.params.id, limit);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching similar media:", error);
+      res.status(500).json({ message: "فشل في جلب الصور المشابهة" });
+    }
+  },
+);
+
+// GET /api/media/duplicates - visually-identical groups (same perceptual hash,
+// 2+ files), largest first — the librarian's cleanup worklist. Gated by
+// media.edit (it's a curation tool, not a browsing surface).
+router.get(
+  "/api/media/duplicates",
+  requireAuth,
+  requirePermission("media.edit"),
+  async (req: any, res) => {
+    try {
+      const limit = Number(req.query.limit) || 20;
+      const result = await getDuplicateGroups(limit);
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error fetching duplicate groups:", error);
+      res.status(500).json({ message: "فشل في جلب مجموعات التكرار" });
+    }
+  },
+);
+
+// GET /api/media/health-report - the monthly-review numbers on demand:
+// pipeline coverage, governance coverage, cleanup candidates, reuse leaders.
+// Gated by media.view.
+router.get(
+  "/api/media/health-report",
+  requireAuth,
+  requirePermission("media.view"),
+  async (_req: any, res) => {
+    try {
+      const report = await getMediaHealthReport();
+      res.json(report);
+    } catch (error: any) {
+      console.error("Error building media health report:", error);
+      res.status(500).json({ message: "فشل في إعداد تقرير صحة المكتبة" });
     }
   },
 );

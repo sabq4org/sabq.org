@@ -6823,6 +6823,11 @@ export const mediaFiles = pgTable("media_files", {
   aiQualityScore: integer("ai_quality_score"), // 0-100
   aiHasSensitiveContent: boolean("ai_has_sensitive_content").default(false).notNull(),
 
+  // Perceptual dedup (Phase 7) — 64-bit dHash as 16-char hex. Identical hash =
+  // visually identical/near-identical image; "unhashable" marks a file whose
+  // bytes couldn't be fetched or decoded so the backfill doesn't reselect it.
+  perceptualHash: varchar("perceptual_hash", { length: 16 }),
+
   // Rights & credibility (Phase 6). isAiGenerated above already records AI
   // provenance; these capture licensing + a librarian's rights clearance.
   licenseType: text("license_type"), // own_work | agency | stock | creative_commons | public_domain | unknown
@@ -6852,6 +6857,7 @@ export const mediaFiles = pgTable("media_files", {
   index("idx_media_files_category").on(table.category),
   index("idx_media_files_ai_status").on(table.aiAnalysisStatus),
   index("idx_media_files_rights_verified").on(table.rightsVerified),
+  index("idx_media_files_perceptual_hash").on(table.perceptualHash),
 ]);
 
 // Media Usage Log - track where and when media is used
