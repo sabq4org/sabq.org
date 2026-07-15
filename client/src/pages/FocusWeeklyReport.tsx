@@ -3,11 +3,28 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { useAuth } from "@/hooks/useAuth";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { getGuestFocusSessions, type GuestSession } from "@/hooks/useFocusSession";
-import { Clock, BookOpenCheck, Flame, Trophy, ArrowUp, ArrowDown, Minus, FolderOpen, Hourglass, FileText } from "lucide-react";
+import {
+  Clock,
+  BookOpenCheck,
+  Flame,
+  Trophy,
+  ArrowUp,
+  ArrowDown,
+  Minus,
+  FolderOpen,
+  Hourglass,
+  FileText,
+  Eye,
+  BookOpen,
+  BarChart3,
+  LogIn,
+} from "lucide-react";
 
 interface DailyAggregate {
   date: string;
@@ -82,6 +99,8 @@ const LABELS = {
     guestNote: "تظهر هنا الجلسات المحفوظة على هذا الجهاز فقط. سجّل الدخول للحصول على تقرير شامل عبر أجهزتك.",
     backHome: "العودة للرئيسية",
     articleLinkPrefix: "/article/",
+    homeHref: "/",
+    loginHref: "/login",
     currentWeek: "هذا الأسبوع",
     previousWeek: "الأسبوع الماضي",
     vsPrevious: "مقابل الأسبوع الماضي",
@@ -92,6 +111,20 @@ const LABELS = {
     longestSessionLabel: "أطول جلسة قراءة",
     noCategory: "لا يوجد بعد",
     highlights: "أبرز ما في الأسبوع",
+    emptyHeadline: "ابدأ أول جلسة تركيز",
+    emptyLead: "اقرأ بلا تشتيت — بلا إعلانات ولا قوائم جانبية — ويُحفظ زمن تركيزك هنا كل أسبوع.",
+    step1Title: "افتح مقالًا",
+    step1Body: "اختر أي خبر يهمّك من القائمة أدناه أو من الرئيسية.",
+    step2Title: "فعّل وضع التركيز",
+    step2Body: "من صفحة المقال اضغط زر «وضع التركيز» وابدأ القراءة بهدوء.",
+    step3Title: "عد إلى تقريرك",
+    step3Body: "بعد الجلسة تظهر إحصائياتك هنا: الزمن، المقالات، ونشاط أيامك.",
+    previewTitle: "هكذا سيبدو تقريرك",
+    previewHint: "معاينة — تُملأ تلقائيًا بعد أول جلسة.",
+    startHere: "ابدأ من هنا",
+    openFocusHint: "من صفحة المقال: زر وضع التركيز",
+    loginCta: "سجّل الدخول لمزامنة أجهزتك",
+    browseHome: "تصفّح الأخبار",
   },
   en: {
     dir: "ltr" as const,
@@ -111,6 +144,8 @@ const LABELS = {
     guestNote: "Showing sessions saved on this device only. Sign in for a unified report across devices.",
     backHome: "Back to home",
     articleLinkPrefix: "/en/article/",
+    homeHref: "/en",
+    loginHref: "/login",
     currentWeek: "This week",
     previousWeek: "Last week",
     vsPrevious: "vs last week",
@@ -121,6 +156,20 @@ const LABELS = {
     longestSessionLabel: "Longest session",
     noCategory: "No category yet",
     highlights: "This week's highlights",
+    emptyHeadline: "Start your first focus session",
+    emptyLead: "Read without distraction — no ads or side rails — and your focus time lands here every week.",
+    step1Title: "Open an article",
+    step1Body: "Pick a story below or from the homepage.",
+    step2Title: "Turn on Focus mode",
+    step2Body: "On the article page, tap “Focus mode” and read in peace.",
+    step3Title: "Come back to your report",
+    step3Body: "After a session, your stats appear here: time, articles, and daily activity.",
+    previewTitle: "Your report will look like this",
+    previewHint: "Preview — fills in after your first session.",
+    startHere: "Start here",
+    openFocusHint: "On the article page: Focus mode button",
+    loginCta: "Sign in to sync across devices",
+    browseHome: "Browse news",
   },
   ur: {
     dir: "rtl" as const,
@@ -140,6 +189,8 @@ const LABELS = {
     guestNote: "صرف اس آلے پر محفوظ سیشنز دکھائے جا رہے ہیں۔ تمام آلات پر مشترکہ رپورٹ کے لیے سائن ان کریں۔",
     backHome: "ہوم پیج",
     articleLinkPrefix: "/ur/article/",
+    homeHref: "/ur",
+    loginHref: "/login",
     currentWeek: "اس ہفتے",
     previousWeek: "گزشتہ ہفتہ",
     vsPrevious: "گزشتہ ہفتے کے مقابلے",
@@ -150,8 +201,31 @@ const LABELS = {
     longestSessionLabel: "سب سے طویل سیشن",
     noCategory: "ابھی کوئی نہیں",
     highlights: "ہفتے کی جھلکیاں",
+    emptyHeadline: "اپنا پہلا فوکس سیشن شروع کریں",
+    emptyLead: "بغیر خلفشار پڑھیں — اور آپ کا مرکوز وقت ہر ہفتے یہاں محفوظ ہوگا۔",
+    step1Title: "مضمون کھولیں",
+    step1Body: "نیچے یا ہوم سے کوئی خبر منتخب کریں۔",
+    step2Title: "فوکس موڈ چالو کریں",
+    step2Body: "مضمون کے صفحے پر «توجہ مرکوز پڑھائی» دبائیں اور پرسکون پڑھیں۔",
+    step3Title: "اپنی رپورٹ دیکھیں",
+    step3Body: "سیشن کے بعد یہاں وقت، مضامین اور روزانہ سرگرمی ظاہر ہوگی۔",
+    previewTitle: "آپ کی رپورٹ ایسی نظر آئے گی",
+    previewHint: "پیش نظارہ — پہلے سیشن کے بعد بھرتی ہے۔",
+    startHere: "یہاں سے شروع کریں",
+    openFocusHint: "مضمون کے صفحے پر: فوکس موڈ بٹن",
+    loginCta: "آلات پر ہم آہنگی کے لیے سائن ان کریں",
+    browseHome: "خبریں دیکھیں",
   },
 };
+
+type Labels = (typeof LABELS)[FocusWeeklyLanguage];
+
+interface SuggestedArticle {
+  id: string;
+  title: string | null;
+  slug: string | null;
+  status?: string | null;
+}
 
 function formatMinutes(totalSeconds: number, locale: string, labels: { minutes: string; seconds: string }) {
   const m = Math.floor(totalSeconds / 60);
@@ -283,49 +357,64 @@ function computeDelta(current: number, previous: number): DeltaInfo {
 export default function FocusWeeklyReport({ language = "ar" }: Props) {
   const labels = LABELS[language];
   const { logBehavior } = useBehaviorTracking();
-
-  const { data: user } = useQuery<{ id: string } | null>({
-    queryKey: ["/api/auth/user"],
-    retry: false,
-  });
-  const isLoggedIn = !!user?.id;
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
 
   const { data: serverReport, isLoading } = useQuery<WeeklyReportPayload>({
     queryKey: ["/api/me/focus-sessions/weekly"],
-    enabled: isLoggedIn,
+    enabled: isAuthenticated,
     retry: false,
   });
 
-  const guestReport = useMemo<WeeklyReportPayload | null>(() => {
-    if (isLoggedIn) return null;
-    return buildGuestReport();
-  }, [isLoggedIn]);
+  const articlesQueryKey =
+    language === "en"
+      ? ["/api/en/articles"]
+      : language === "ur"
+        ? ["/api/ur/articles"]
+        : ["/api/articles"];
 
-  const report: WeeklyReportPayload | null = isLoggedIn ? (serverReport || null) : guestReport;
+  const { data: articlesRaw } = useQuery<SuggestedArticle[]>({
+    queryKey: articlesQueryKey,
+    staleTime: 2 * 60 * 1000,
+    enabled: true,
+  });
+
+  const suggestedArticles = useMemo(() => {
+    const list = Array.isArray(articlesRaw) ? articlesRaw : [];
+    return list
+      .filter((a) => a?.slug && a?.title && (a.status == null || a.status === "published"))
+      .slice(0, 4);
+  }, [articlesRaw]);
+
+  const guestReport = useMemo<WeeklyReportPayload | null>(() => {
+    if (isAuthenticated) return null;
+    return buildGuestReport();
+  }, [isAuthenticated]);
+
+  const report: WeeklyReportPayload | null = isAuthenticated ? (serverReport || null) : guestReport;
   const current = report?.current ?? (report ? { ...report, current: undefined, previous: undefined } as WeekAggregate : null);
   const previous = report?.previous ?? null;
 
   useEffect(() => {
-    logBehavior("weekly_report_view", { language, isLoggedIn });
-  }, [logBehavior, language, isLoggedIn]);
+    logBehavior("weekly_report_view", { language, isLoggedIn: isAuthenticated });
+  }, [logBehavior, language, isAuthenticated]);
 
   const maxDaySeconds = useMemo(() => {
     if (!current || current.daily.length === 0) return 0;
     return Math.max(...current.daily.map((d) => d.focusedSeconds), 1);
   }, [current]);
 
-  const showSkeleton = isLoggedIn && isLoading;
+  const showSkeleton = (authLoading && !guestReport) || (isAuthenticated && isLoading);
   const empty = !showSkeleton && (!current || current.totalSessions === 0);
 
   return (
     <div dir={labels.dir} className="flex min-h-screen flex-col bg-background" data-testid="page-focus-weekly">
-      <Header />
+      <Header user={user || undefined} />
       <main className="flex-1 px-4 py-8">
         <div className="mx-auto max-w-3xl">
           <div className="mb-6">
             <h1 className="text-2xl font-bold sm:text-3xl" data-testid="text-weekly-title">{labels.title}</h1>
             <p className="mt-2 text-muted-foreground">{labels.subtitle}</p>
-            {!isLoggedIn ? (
+            {!isAuthenticated && !authLoading ? (
               <p className="mt-3 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground" data-testid="text-weekly-guest-note">
                 {labels.guestNote}
               </p>
@@ -340,20 +429,11 @@ export default function FocusWeeklyReport({ language = "ar" }: Props) {
               <Skeleton className="h-28" />
             </div>
           ) : empty ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground" data-testid="text-weekly-empty">
-                {labels.noData}
-                <div className="mt-4">
-                  <Link
-                    href={language === "en" ? "/en" : language === "ur" ? "/ur" : "/"}
-                    className="text-primary underline-offset-4 hover:underline"
-                    data-testid="link-weekly-back"
-                  >
-                    {labels.backHome}
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
+            <EmptyActivation
+              labels={labels}
+              isAuthenticated={isAuthenticated}
+              suggestedArticles={suggestedArticles}
+            />
           ) : (
             <>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -547,6 +627,149 @@ export default function FocusWeeklyReport({ language = "ar" }: Props) {
         </div>
       </main>
       <Footer />
+    </div>
+  );
+}
+
+function EmptyActivation({
+  labels,
+  isAuthenticated,
+  suggestedArticles,
+}: {
+  labels: Labels;
+  isAuthenticated: boolean;
+  suggestedArticles: SuggestedArticle[];
+}) {
+  const steps = [
+    { icon: BookOpen, title: labels.step1Title, body: labels.step1Body },
+    { icon: Eye, title: labels.step2Title, body: labels.step2Body },
+    { icon: BarChart3, title: labels.step3Title, body: labels.step3Body },
+  ];
+  const ghostHeights = [28, 55, 18, 72, 40, 60, 35];
+
+  return (
+    <div className="space-y-6" data-testid="weekly-empty-activation">
+      <Card className="overflow-hidden border-primary/15 bg-gradient-to-b from-primary/[0.06] to-background">
+        <CardContent className="space-y-5 py-8 text-center sm:px-10">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Eye className="h-7 w-7" aria-hidden="true" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold sm:text-2xl" data-testid="text-weekly-empty-headline">
+              {labels.emptyHeadline}
+            </h2>
+            <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
+              {labels.emptyLead}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button asChild data-testid="button-weekly-browse-home">
+              <Link href={labels.homeHref}>{labels.browseHome}</Link>
+            </Button>
+            {!isAuthenticated ? (
+              <Button asChild variant="outline" data-testid="button-weekly-login-cta">
+                <Link href={labels.loginHref}>
+                  <LogIn className="me-2 h-4 w-4" aria-hidden="true" />
+                  {labels.loginCta}
+                </Link>
+              </Button>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-3 sm:grid-cols-3" data-testid="list-weekly-empty-steps">
+        {steps.map((step, i) => (
+          <Card key={step.title} className="bg-muted/20">
+            <CardContent className="space-y-2 p-4 text-start">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-bold tabular-nums text-primary">
+                  {(i + 1).toLocaleString(labels.locale)}
+                </span>
+                <step.icon className="h-4 w-4 text-primary" aria-hidden="true" />
+              </div>
+              <p className="text-sm font-semibold">{step.title}</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">{step.body}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">{labels.previewTitle}</CardTitle>
+          <CardDescription>{labels.previewHint}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div
+            className="flex h-28 items-end justify-between gap-2 rounded-lg border border-dashed bg-muted/30 px-3 pb-3 pt-6 opacity-70"
+            aria-hidden="true"
+            data-testid="weekly-empty-ghost-chart"
+          >
+            {ghostHeights.map((h, i) => (
+              <div
+                key={i}
+                className="flex-1 rounded-t-md bg-primary/25"
+                style={{ height: `${h}%` }}
+              />
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 opacity-60">
+            <div className="rounded-md border bg-muted/40 p-3">
+              <div className="h-2 w-12 rounded bg-muted-foreground/20" />
+              <div className="mt-2 h-5 w-10 rounded bg-muted-foreground/15" />
+            </div>
+            <div className="rounded-md border bg-muted/40 p-3">
+              <div className="h-2 w-14 rounded bg-muted-foreground/20" />
+              <div className="mt-2 h-5 w-12 rounded bg-muted-foreground/15" />
+            </div>
+            <div className="rounded-md border bg-muted/40 p-3">
+              <div className="h-2 w-10 rounded bg-muted-foreground/20" />
+              <div className="mt-2 h-5 w-8 rounded bg-muted-foreground/15" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">{labels.startHere}</CardTitle>
+          <CardDescription>{labels.openFocusHint}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {suggestedArticles.length > 0 ? (
+            <ul className="space-y-2" data-testid="list-weekly-suggested-articles">
+              {suggestedArticles.map((a) => (
+                <li key={a.id}>
+                  <Link
+                    href={`${labels.articleLinkPrefix}${a.slug}`}
+                    className="flex items-center gap-3 rounded-lg border bg-background px-3 py-3 text-start transition hover:bg-muted/50"
+                    data-testid={`link-weekly-suggested-${a.id}`}
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <Eye className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{a.title}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground" data-testid="text-weekly-empty-fallback">
+              {labels.noData}
+            </p>
+          )}
+          <div className="mt-4 text-center">
+            <Link
+              href={labels.homeHref}
+              className="text-sm text-primary underline-offset-4 hover:underline"
+              data-testid="link-weekly-back"
+            >
+              {labels.backHome}
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
