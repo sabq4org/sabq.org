@@ -105,6 +105,7 @@ import { cacheControl, noCache, withETag, CACHE_DURATIONS, AUTOSCALE_CACHE } fro
 import { passKitService, type PressPassData, type LoyaltyPassData } from "./lib/passkit/PassKitService";
 import { memoryCache, CACHE_TTL, withCache, sseConnectionManager, withSWR, canAcceptExternalSse, trackExternalSse } from "./memoryCache";
 import { invalidatePublishedContent, invalidateArticleWrite } from "./services/contentInvalidation";
+import { maybeRefreshSocialPreviewOnImageChange } from "./services/socialPreviewRefresh";
 import { getNewsPulseExtras } from "./services/newsPulseInsights";
 import pLimit from 'p-limit';
 import { db, executeWithStatementTimeout } from "./db";
@@ -7622,6 +7623,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         reason: 'admin-patch',
         oldSlug: existingArticle.slug,
         oldEnglishSlug: existingArticle.englishSlug,
+      });
+      maybeRefreshSocialPreviewOnImageChange(existingArticle, updatedArticle, {
+        reason: "admin-patch-image",
       });
       memoryCache.invalidatePattern('^sidebar:');
       memoryCache.delete('lite-feed');
@@ -16011,6 +16015,9 @@ Respond in valid JSON format only:
         reason: 'dashboard-update',
         oldSlug: article.slug,
         oldEnglishSlug: article.englishSlug,
+      });
+      maybeRefreshSocialPreviewOnImageChange(article, updated, {
+        reason: "dashboard-update-image",
       });
       memoryCache.delete('lite-feed');
 

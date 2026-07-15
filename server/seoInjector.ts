@@ -18,6 +18,7 @@ import { withCache, CACHE_TTL } from "./memoryCache";
 import { VALID_PREFIXES } from "./utils/spaRouteMatcher";
 import { isNoindexPath } from "./utils/noindexPaths";
 import { buildNewsArticleSchemaExtras } from "./utils/newsArticleSchema";
+import { withOgImageCacheBust } from "./utils/ogImageUrl";
 import {
   buildPersonJsonLd,
   buildProfilePageJsonLd,
@@ -64,16 +65,24 @@ function getSocialImageFilename(url: string): string | null {
   return storagePath.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9\-_\/]/g, '').replace(/\//g, '_') + '.jpg';
 }
 
-function ensureAbsoluteUrl(url: string, baseUrl: string): string {
+function ensureAbsoluteUrl(
+  url: string,
+  baseUrl: string,
+  version?: Date | string | number | null,
+): string {
   if (!url) return `${baseUrl}/icon.png`;
-  if (url.startsWith('http://') || url.startsWith('https://')) return url;
-
-  const parsed = parseStorageUrl(url);
-  if (parsed) {
-    return `${baseUrl}/social-image/${parsed}.jpg`;
+  let absolute: string;
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    absolute = url;
+  } else {
+    const parsed = parseStorageUrl(url);
+    if (parsed) {
+      absolute = `${baseUrl}/social-image/${parsed}.jpg`;
+    } else {
+      absolute = `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+    }
   }
-
-  return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
+  return withOgImageCacheBust(absolute, version);
 }
 
 function parseStorageUrl(url: string): string | null {
@@ -294,7 +303,7 @@ async function handleArticlePage(slug: string, baseUrl: string, urlPrefix: strin
   // AI-generated `aiSummary` (so the smart summary appears in shares — user
   // request 2026-05-15), then the editor's `excerpt` as a last resort.
   const description = truncate(seoData.metaDescription || a.aiSummary || a.excerpt || '', 220);
-  const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl);
+  const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl, a.updatedAt || a.publishedAt);
   const canonicalSlug = a.englishSlug || a.slug;
   const canonicalUrl = `${baseUrl}/${urlPrefix}/${canonicalSlug}`;
   // Byline prefers the reporter (chosen from a dropdown in the editor) over
@@ -425,7 +434,7 @@ async function handleEnArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   // AI-generated `aiSummary` (so the smart summary appears in shares — user
   // request 2026-05-15), then the editor's `excerpt` as a last resort.
   const description = truncate(seoData.metaDescription || a.aiSummary || a.excerpt || '', 220);
-  const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl);
+  const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl, a.updatedAt || a.publishedAt);
   const articleSlug = a.englishSlug || a.slug;
   const canonicalUrl = `${baseUrl}/en/article/${articleSlug}`;
   const reporterName = [a.reporterFirstName, a.reporterLastName].filter(Boolean).join(' ');
@@ -551,7 +560,7 @@ async function handleUrArticlePage(slug: string, baseUrl: string): Promise<SeoDa
   // AI-generated `aiSummary` (so the smart summary appears in shares — user
   // request 2026-05-15), then the editor's `excerpt` as a last resort.
   const description = truncate(seoData.metaDescription || a.aiSummary || a.excerpt || '', 220);
-  const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl);
+  const image = ensureAbsoluteUrl(a.imageUrl || '', baseUrl, a.updatedAt || a.publishedAt);
   const articleSlug = a.englishSlug || a.slug;
   const canonicalUrl = `${baseUrl}/ur/article/${articleSlug}`;
   const reporterName = [a.reporterFirstName, a.reporterLastName].filter(Boolean).join(' ');

@@ -4409,6 +4409,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                             )}
                           </Button>
                         </div>
+                        {status === "published" && (
+                          <p className="text-xs text-muted-foreground px-1">
+                            إذا أضفت صورة بعد النشر وظهرت معاينة واتساب بالشعار القديم، افتح تبويب
+                            «معاينة SEO» واضغط «تحديث معاينة واتساب/فيسبوك».
+                          </p>
+                        )}
 
                         {/* Generated Social Cards Display */}
                         {generatedSocialCards && Object.keys(generatedSocialCards).length > 0 && (
@@ -4542,6 +4548,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       title={metaTitle || title}
                       description={metaDescription || excerpt}
                       slug={slug}
+                      englishSlug={(article as any)?.englishSlug || undefined}
+                      imageUrl={imageUrl || undefined}
+                      canRefreshSocial={!isNewArticle && status === "published"}
                     />
                   </TabsContent>
 

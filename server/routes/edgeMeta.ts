@@ -114,6 +114,8 @@ function isRedirectCandidate(path: string): boolean {
   return !!seg && LEGACY_ARTICLE_PREFIXES.has(seg[1].toLowerCase());
 }
 
+import { withOgImageCacheBust } from "../utils/ogImageUrl";
+
 const SITE_URL = process.env.PUBLIC_SITE_URL || "https://sabq.org";
 const BRAND_OG_IMAGE = `${SITE_URL}/branding/sabq-og-image.png`;
 const DEFAULT_OG_IMAGE = `${SITE_URL}/icon.png`;
@@ -131,10 +133,15 @@ function safeDecode(s: string): string {
   }
 }
 
-function abs(url: string | null | undefined): string {
+function abs(
+  url: string | null | undefined,
+  version?: Date | string | number | null,
+): string {
   if (!url) return DEFAULT_OG_IMAGE;
-  if (/^https?:\/\//i.test(url)) return url;
-  return `${SITE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+  const absolute = /^https?:\/\//i.test(url)
+    ? url
+    : `${SITE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
+  return withOgImageCacheBust(absolute, version);
 }
 
 // Resolve the 301 target (or null) for a path. Pure DB logic — wrapped by the
@@ -646,7 +653,7 @@ function buildArArticlePayload(
     lang: "ar",
     title,
     description,
-    image: abs(row.imageUrl),
+    image: abs(row.imageUrl, row.updatedAt),
     canonical,
     englishSlug: row.englishSlug,
     slug,
@@ -716,7 +723,7 @@ function buildEnArticlePayload(
     lang: "en",
     title,
     description,
-    image: abs(row.imageUrl),
+    image: abs(row.imageUrl, row.updatedAt),
     canonical: `${SITE_URL}/en/article/${row.englishSlug || slug}`,
     englishSlug: row.englishSlug,
     slug,
@@ -778,7 +785,7 @@ function buildUrArticlePayload(
     lang: "ur",
     title,
     description,
-    image: abs(row.imageUrl),
+    image: abs(row.imageUrl, row.updatedAt),
     canonical: `${SITE_URL}/ur/article/${row.englishSlug || slug}`,
     englishSlug: row.englishSlug,
     slug,
@@ -2386,7 +2393,7 @@ router.get("/api/articles/:slug/seo-bundle", async (req, res) => {
         lang === "ar"
           ? withWorldCupHubLink(stripUnsafeHtml(row.content || ""), row.title)
           : stripUnsafeHtml(row.content || ""),
-      imageUrl: abs(row.imageUrl),
+      imageUrl: abs(row.imageUrl, row.updatedAt),
       publishedAt: row.publishedAt,
       updatedAt: row.updatedAt,
       author: meta.author,

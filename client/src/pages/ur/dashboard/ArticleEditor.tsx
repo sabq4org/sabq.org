@@ -1435,6 +1435,8 @@ export default function UrduArticleEditor() {
                       title={metaTitle || title}
                       description={metaDescription || excerpt}
                       slug={slug}
+                      imageUrl={imageUrl || undefined}
+                      canRefreshSocial={!isNewArticle && status === "published"}
                     />
                   </TabsContent>
                 </Tabs>
