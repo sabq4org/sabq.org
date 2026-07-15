@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Bell, Clock, Sparkles, TrendingUp, BookMarked, Zap, PenTool, MessageCircle, Trophy, Lightbulb, Newspaper, ChevronLeft, Compass, Play, Goal, Square, Video, Flag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Header } from "@/components/Header";
+import { AccountSectionHeader } from "@/components/AccountSectionHeader";
 
 interface NotificationPrefs {
   id: string;
@@ -276,11 +277,11 @@ export default function NotificationSettings() {
     return (
       <div dir="rtl" className="min-h-screen bg-background">
         <Header user={user || undefined} />
-        <div className="container max-w-4xl mx-auto py-8 px-4">
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
           <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-muted rounded w-1/3"></div>
-            <div className="h-32 bg-muted rounded"></div>
-            <div className="h-32 bg-muted rounded"></div>
+            <div className="h-8 w-1/3 rounded bg-muted"></div>
+            <div className="h-32 rounded bg-muted"></div>
+            <div className="h-32 rounded bg-muted"></div>
           </div>
         </div>
       </div>
@@ -290,20 +291,26 @@ export default function NotificationSettings() {
   return (
     <div dir="rtl" className="min-h-screen bg-background">
       <Header user={user || undefined} />
-      <div className="container max-w-4xl mx-auto py-8 px-4">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2" data-testid="text-page-title">إعدادات الإشعارات</h1>
-          <p className="text-muted-foreground">
-            مكان واحد للتحكم في كل إشعاراتك: العام، المباريات، والتوصيات والملخص اليومي
-          </p>
+      <div className="border-b border-primary/10 bg-ai-gradient-soft">
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+          <AccountSectionHeader
+            icon={Bell}
+            title="إعدادات الإشعارات"
+            subtitle="مكان واحد للتحكم في كل إشعاراتك: العام، المباريات، والتوصيات والملخص اليومي"
+            testId="text-page-title"
+          />
         </div>
+      </div>
 
-      <div className="space-y-6">
+      <div className="container mx-auto max-w-7xl space-y-8 px-4 sm:px-6 lg:px-8 py-8">
         {/* === المباريات === */}
-        <Card className="border-primary/30 bg-primary/5">
+        <section className="scroll-fade-in rounded-2xl border border-emerald-600/10 bg-emerald-50/70 p-1 dark:border-emerald-400/10 dark:bg-emerald-950/25">
+        <Card className="border-0 bg-transparent shadow-none">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Trophy className="h-5 w-5 text-primary" />
+              <span className="rounded-lg bg-emerald-600/10 p-2">
+                <Trophy className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />
+              </span>
               المباريات
             </CardTitle>
             <CardDescription>
@@ -328,15 +335,15 @@ export default function NotificationSettings() {
               />
             </div>
 
-            <div className="rounded-lg border border-border p-3 space-y-1">
-              <p className="text-base font-medium mb-1">أنواع تنبيهات المباريات</p>
-              <p className="text-sm text-muted-foreground mb-3">
+            <div className="space-y-1 rounded-lg border border-border/60 bg-background/60 p-3">
+              <p className="mb-1 text-base font-medium">أنواع تنبيهات المباريات</p>
+              <p className="mb-3 text-sm text-muted-foreground">
                 تُطبَّق على كل الفِرق التي تتابعها — اختر الأحداث التي تهمّك فقط
               </p>
               {SPORTS_ALERT_ROWS.map(({ key, icon: Icon, title, desc }) => (
                 <div key={key} className="flex items-center justify-between gap-4 py-2">
                   <div className="flex items-center gap-3">
-                    <Icon className="h-5 w-5 text-primary shrink-0" />
+                    <Icon className="h-5 w-5 shrink-0 text-primary" />
                     <div>
                       <Label htmlFor={`sports-alert-${key}`} className="text-base font-medium">{title}</Label>
                       <p className="text-sm text-muted-foreground">{desc}</p>
@@ -352,9 +359,9 @@ export default function NotificationSettings() {
               ))}
             </div>
 
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-3">
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border/60 bg-background/60 p-3">
               <div className="flex items-center gap-3">
-                <Compass className="h-5 w-5 text-primary shrink-0" />
+                <Compass className="h-5 w-5 shrink-0 text-primary" />
                 <div>
                   <p className="text-base font-medium">الفرق التي تتابعها</p>
                   <p className="text-sm text-muted-foreground">
@@ -365,18 +372,21 @@ export default function NotificationSettings() {
               <Link href="/sports">
                 <Button variant="outline" size="sm" data-testid="link-manage-follows">
                   متابعة الفرق
-                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  <ChevronLeft className="mr-1 h-4 w-4" />
                 </Button>
               </Link>
             </div>
           </CardContent>
         </Card>
+        </section>
 
         {/* === عام === */}
-        <Card>
+        <Card className="scroll-fade-in border-0 shadow-sm dark:border dark:border-card-border">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Bell className="h-5 w-5" />
+              <span className="rounded-lg bg-primary/10 p-2">
+                <Bell className="h-5 w-5 text-primary" />
+              </span>
               عام
             </CardTitle>
             <CardDescription>

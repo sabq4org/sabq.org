@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { AccountSectionHeader } from "@/components/AccountSectionHeader";
 import { useAuth } from "@/hooks/useAuth";
 import { useBehaviorTracking } from "@/hooks/useBehaviorTracking";
 import { getGuestFocusSessions, type GuestSession } from "@/hooks/useFocusSession";
@@ -409,18 +410,23 @@ export default function FocusWeeklyReport({ language = "ar" }: Props) {
   return (
     <div dir={labels.dir} className="flex min-h-screen flex-col bg-background" data-testid="page-focus-weekly">
       <Header user={user || undefined} />
-      <main className="flex-1 px-4 py-8">
-        <div className="mx-auto max-w-3xl">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold sm:text-3xl" data-testid="text-weekly-title">{labels.title}</h1>
-            <p className="mt-2 text-muted-foreground">{labels.subtitle}</p>
-            {!isAuthenticated && !authLoading ? (
-              <p className="mt-3 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground" data-testid="text-weekly-guest-note">
-                {labels.guestNote}
-              </p>
-            ) : null}
-          </div>
-
+      <div className="border-b border-primary/10 bg-ai-gradient-soft">
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+          <AccountSectionHeader
+            icon={Eye}
+            title={labels.title}
+            subtitle={labels.subtitle}
+            testId="text-weekly-title"
+          />
+          {!isAuthenticated && !authLoading ? (
+            <p className="mt-1 rounded-xl border border-border/50 bg-background/60 p-3 text-sm text-muted-foreground" data-testid="text-weekly-guest-note">
+              {labels.guestNote}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <main className="flex-1 py-8">
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           {showSkeleton ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <Skeleton className="h-28" />
@@ -471,7 +477,7 @@ export default function FocusWeeklyReport({ language = "ar" }: Props) {
                 />
               </div>
 
-              <Card className="mt-6">
+              <Card className="mt-6 border-0 shadow-sm dark:border dark:border-card-border">
                 <CardHeader>
                   <CardTitle>{labels.highlights}</CardTitle>
                 </CardHeader>
@@ -509,7 +515,7 @@ export default function FocusWeeklyReport({ language = "ar" }: Props) {
                 </CardContent>
               </Card>
 
-              <Card className="mt-6">
+              <Card className="mt-6 border-0 shadow-sm dark:border dark:border-card-border">
                 <CardHeader>
                   <CardTitle>{labels.daily}</CardTitle>
                   <CardDescription data-testid="text-weekly-current-range">
@@ -542,7 +548,7 @@ export default function FocusWeeklyReport({ language = "ar" }: Props) {
               </Card>
 
               {previous ? (
-                <Card className="mt-6">
+                <Card className="mt-6 border-0 shadow-sm dark:border dark:border-card-border">
                   <CardHeader>
                     <CardTitle>{labels.previousWeek}</CardTitle>
                   </CardHeader>
@@ -586,7 +592,7 @@ export default function FocusWeeklyReport({ language = "ar" }: Props) {
               ) : null}
 
               {current!.topArticles.length > 0 ? (
-                <Card className="mt-6">
+                <Card className="mt-6 border-0 shadow-sm dark:border dark:border-card-border">
                   <CardHeader>
                     <CardTitle>{labels.topArticles}</CardTitle>
                   </CardHeader>
@@ -785,10 +791,10 @@ interface StatCardProps {
 
 function StatCard({ icon, label, value, testId, delta, deltaLabels }: StatCardProps) {
   return (
-    <Card data-testid={testId}>
+    <Card className="border-0 shadow-sm dark:border dark:border-card-border hover-elevate" data-testid={testId}>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
         <CardDescription>{label}</CardDescription>
-        <span className="text-muted-foreground" aria-hidden="true">{icon}</span>
+        <span className="rounded-lg bg-primary/10 p-2 text-primary" aria-hidden="true">{icon}</span>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold tabular-nums">{value}</div>
