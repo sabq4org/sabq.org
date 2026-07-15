@@ -1704,6 +1704,17 @@ if (!(globalThis as any).__sabqServer) {
           }
         }, BACKGROUND_JOB_DELAY + 17000);
       }
+
+      if (shouldRunBackgroundJobs) {
+        setTimeout(async () => {
+          try {
+            const { runOneShotStoriesArchive } = await import("./jobs/oneShotStoriesArchive");
+            await runOneShotStoriesArchive();
+          } catch (error) {
+            console.error("[Server] Error running one-shot stories archive:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 19000);
+      }
       
       // Start Audio Newsletter Jobs (scheduled generation and retries) - delayed
       if (shouldRunBackgroundJobs) {
