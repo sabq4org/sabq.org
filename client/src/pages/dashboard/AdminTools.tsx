@@ -401,7 +401,7 @@ export default function AdminTools() {
               متوسط زمن القراءة
             </CardTitle>
             <CardDescription>
-              تعيين متوسط زمن القراءة لخبر معيّن (بالثواني)
+              تعيين متوسط زمن القراءة لخبر معيّن بالثواني (عربي / إنجليزي / أوردو)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -409,7 +409,7 @@ export default function AdminTools() {
               <Label htmlFor="readTimeArticleUrl">رابط الخبر</Label>
               <Input
                 id="readTimeArticleUrl"
-                placeholder="https://sabq.org/article/..."
+                placeholder="https://sabq.org/article/... أو /en/article/..."
                 value={readTimeArticleUrl}
                 onChange={(e) => setReadTimeArticleUrl(e.target.value)}
                 dir="ltr"
@@ -448,7 +448,7 @@ export default function AdminTools() {
               نسبة الإكمال
             </CardTitle>
             <CardDescription>
-              تعيين نسبة إكمال القراءة لخبر معيّن (0–100)
+              تعيين نسبة إكمال القراءة لخبر معيّن من 0 إلى 100 (عربي / إنجليزي / أوردو)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -456,7 +456,7 @@ export default function AdminTools() {
               <Label htmlFor="completionArticleUrl">رابط الخبر</Label>
               <Input
                 id="completionArticleUrl"
-                placeholder="https://sabq.org/article/..."
+                placeholder="https://sabq.org/article/... أو /en/article/..."
                 value={completionArticleUrl}
                 onChange={(e) => setCompletionArticleUrl(e.target.value)}
                 dir="ltr"

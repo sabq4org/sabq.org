@@ -6349,6 +6349,8 @@ export const enArticles = pgTable("en_articles", {
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
   views: integer("views").default(0).notNull(),
+  avgReadTimeOverride: integer("avg_read_time_override"),
+  completionRateOverride: integer("completion_rate_override"),
   displayOrder: integer("display_order").default(0).notNull(),
   seo: jsonb("seo").$type<{
     metaTitle?: string;
@@ -6455,6 +6457,8 @@ export const insertEnArticleSchema = createInsertSchema(enArticles).omit({
   updatedAt: true,
   publishedAt: true,
   views: true,
+  avgReadTimeOverride: true,
+  completionRateOverride: true,
   authorId: true, // Backend adds this from req.user.id
 }).extend({
   title: z.string().min(1, "Title is required"),
@@ -6556,6 +6560,8 @@ export const urArticles = pgTable("ur_articles", {
   aiGenerated: boolean("ai_generated").default(false),
   isFeatured: boolean("is_featured").default(false).notNull(),
   views: integer("views").default(0).notNull(),
+  avgReadTimeOverride: integer("avg_read_time_override"),
+  completionRateOverride: integer("completion_rate_override"),
   displayOrder: integer("display_order").default(0).notNull(),
   seo: jsonb("seo").$type<{
     metaTitle?: string;
@@ -6661,6 +6667,8 @@ export const insertUrArticleSchema = createInsertSchema(urArticles).omit({
   updatedAt: true,
   publishedAt: true,
   views: true,
+  avgReadTimeOverride: true,
+  completionRateOverride: true,
   authorId: true, // Backend adds this from req.user.id
 }).extend({
   title: z.string().min(1, "Title is required"),

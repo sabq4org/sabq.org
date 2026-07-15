@@ -12,6 +12,11 @@ type ArticleRef = {
 
 type ArticleWithViews = ArticleRef & { views: number };
 
+type ReadingOverrides = {
+  avgReadTimeOverride: number | null;
+  completionRateOverride: number | null;
+};
+
 function slugWhere(
   table: typeof articles | typeof enArticles | typeof urArticles,
   slug: string,
@@ -77,8 +82,8 @@ export async function updateArticleViewsBySlug(
 export async function updateAvgReadTimeOverrideBySlug(
   slug: string,
   avgReadTimeSeconds: number,
-) {
-  const [article] = await db
+): Promise<(ArticleRef & { avgReadTimeOverride: number | null; locale: AdminArticleLocale }) | null> {
+  const [arArticle] = await db
     .update(articles)
     .set({ avgReadTimeOverride: avgReadTimeSeconds })
     .where(slugWhere(articles, slug))
@@ -87,14 +92,38 @@ export async function updateAvgReadTimeOverrideBySlug(
       title: articles.title,
       avgReadTimeOverride: articles.avgReadTimeOverride,
     });
-  return article ?? null;
+  if (arArticle) return { ...arArticle, locale: "ar" };
+
+  const [enArticle] = await db
+    .update(enArticles)
+    .set({ avgReadTimeOverride: avgReadTimeSeconds })
+    .where(slugWhere(enArticles, slug))
+    .returning({
+      id: enArticles.id,
+      title: enArticles.title,
+      avgReadTimeOverride: enArticles.avgReadTimeOverride,
+    });
+  if (enArticle) return { ...enArticle, locale: "en" };
+
+  const [urArticle] = await db
+    .update(urArticles)
+    .set({ avgReadTimeOverride: avgReadTimeSeconds })
+    .where(slugWhere(urArticles, slug))
+    .returning({
+      id: urArticles.id,
+      title: urArticles.title,
+      avgReadTimeOverride: urArticles.avgReadTimeOverride,
+    });
+  if (urArticle) return { ...urArticle, locale: "ur" };
+
+  return null;
 }
 
 export async function updateCompletionRateOverrideBySlug(
   slug: string,
   completionRate: number,
-) {
-  const [article] = await db
+): Promise<(ArticleRef & { completionRateOverride: number | null; locale: AdminArticleLocale }) | null> {
+  const [arArticle] = await db
     .update(articles)
     .set({ completionRateOverride: completionRate })
     .where(slugWhere(articles, slug))
@@ -103,10 +132,61 @@ export async function updateCompletionRateOverrideBySlug(
       title: articles.title,
       completionRateOverride: articles.completionRateOverride,
     });
-  return article ?? null;
+  if (arArticle) return { ...arArticle, locale: "ar" };
+
+  const [enArticle] = await db
+    .update(enArticles)
+    .set({ completionRateOverride: completionRate })
+    .where(slugWhere(enArticles, slug))
+    .returning({
+      id: enArticles.id,
+      title: enArticles.title,
+      completionRateOverride: enArticles.completionRateOverride,
+    });
+  if (enArticle) return { ...enArticle, locale: "en" };
+
+  const [urArticle] = await db
+    .update(urArticles)
+    .set({ completionRateOverride: completionRate })
+    .where(slugWhere(urArticles, slug))
+    .returning({
+      id: urArticles.id,
+      title: urArticles.title,
+      completionRateOverride: urArticles.completionRateOverride,
+    });
+  if (urArticle) return { ...urArticle, locale: "ur" };
+
+  return null;
 }
 
-export async function getArticleReadingOverrides(articleId: string) {
+export async function getArticleReadingOverrides(
+  articleId: string,
+  locale: AdminArticleLocale = "ar",
+): Promise<ReadingOverrides | null> {
+  if (locale === "en") {
+    const [overrides] = await db
+      .select({
+        avgReadTimeOverride: enArticles.avgReadTimeOverride,
+        completionRateOverride: enArticles.completionRateOverride,
+      })
+      .from(enArticles)
+      .where(eq(enArticles.id, articleId))
+      .limit(1);
+    return overrides ?? null;
+  }
+
+  if (locale === "ur") {
+    const [overrides] = await db
+      .select({
+        avgReadTimeOverride: urArticles.avgReadTimeOverride,
+        completionRateOverride: urArticles.completionRateOverride,
+      })
+      .from(urArticles)
+      .where(eq(urArticles.id, articleId))
+      .limit(1);
+    return overrides ?? null;
+  }
+
   const [overrides] = await db
     .select({
       avgReadTimeOverride: articles.avgReadTimeOverride,
@@ -116,6 +196,25 @@ export async function getArticleReadingOverrides(articleId: string) {
     .where(eq(articles.id, articleId))
     .limit(1);
   return overrides ?? null;
+}
+
+/** Admin override is stored in seconds; reports display minutes. */
+export function resolveReadingMetrics(input: {
+  avgReadingMinutes: number;
+  avgCompletionRate: number;
+  overrides?: ReadingOverrides | null;
+}): { avgReadingMinutes: number; avgCompletionRate: number; hasOverride: boolean } {
+  const hasTimeOverride = input.overrides?.avgReadTimeOverride != null;
+  const hasCompletionOverride = input.overrides?.completionRateOverride != null;
+  return {
+    avgReadingMinutes: hasTimeOverride
+      ? Math.round((Number(input.overrides!.avgReadTimeOverride) / 60) * 10) / 10
+      : input.avgReadingMinutes,
+    avgCompletionRate: hasCompletionOverride
+      ? Number(input.overrides!.completionRateOverride)
+      : input.avgCompletionRate,
+    hasOverride: hasTimeOverride || hasCompletionOverride,
+  };
 }
 
 export class LegacyRedirectConflictError extends Error {

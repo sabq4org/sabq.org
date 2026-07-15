@@ -113,12 +113,10 @@ router.post(
 
       const article = await updateAvgReadTimeOverrideBySlug(slug, seconds);
       if (!article) {
-        return res.status(404).json({
-          message: "الخبر غير موجود (هذه الأداة تدعم الأخبار العربية حالياً)",
-        });
+        return res.status(404).json({ message: "الخبر غير موجود" });
       }
 
-      res.json({ success: true, article });
+      res.json({ success: true, article, locale: article.locale });
     } catch (error) {
       console.error("Error updating read time:", error);
       res.status(500).json({ message: "فشل في تحديث متوسط زمن القراءة" });
@@ -144,12 +142,10 @@ router.post(
 
       const article = await updateCompletionRateOverrideBySlug(slug, rate);
       if (!article) {
-        return res.status(404).json({
-          message: "الخبر غير موجود (هذه الأداة تدعم الأخبار العربية حالياً)",
-        });
+        return res.status(404).json({ message: "الخبر غير موجود" });
       }
 
-      res.json({ success: true, article });
+      res.json({ success: true, article, locale: article.locale });
     } catch (error) {
       console.error("Error updating completion rate:", error);
       res.status(500).json({ message: "فشل في تحديث نسبة الإكمال" });

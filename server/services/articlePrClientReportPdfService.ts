@@ -4,6 +4,10 @@ import { createHash } from "crypto";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { articles, readingHistory } from "@shared/schema";
+import {
+  getArticleReadingOverrides,
+  resolveReadingMetrics,
+} from "./adminToolsService";
 
 const BRAND = {
   cyan: "#1BADF8",
@@ -488,13 +492,27 @@ export async function buildArticlePrClientReportPdf(
   const sessions = Number(readingStats?.totalReadSessions || 0);
   const avgReading = Number(readingStats?.avgReadingTime || 0);
   const avgCompletion = Number(readingStats?.avgCompletionRate || 0);
-  // Only surface reading metrics when there is a real sample — avoid noisy zeros.
+  const overrides = await getArticleReadingOverrides(input.articleId, "ar");
+  const resolved = resolveReadingMetrics({
+    avgReadingMinutes: avgReading,
+    avgCompletionRate: avgCompletion,
+    overrides,
+  });
+  // Prefer admin overrides; otherwise only surface metrics with a real sample.
   const performance: PerformanceSnapshot = {
     sessions,
     avgReadingMinutes:
-      sessions >= 3 && avgReading >= 0.2 ? Math.round(avgReading * 10) / 10 : null,
+      overrides?.avgReadTimeOverride != null
+        ? resolved.avgReadingMinutes
+        : sessions >= 3 && avgReading >= 0.2
+          ? Math.round(avgReading * 10) / 10
+          : null,
     avgCompletionRate:
-      sessions >= 3 && avgCompletion >= 5 ? Math.round(avgCompletion) : null,
+      overrides?.completionRateOverride != null
+        ? Math.round(resolved.avgCompletionRate)
+        : sessions >= 3 && avgCompletion >= 5
+          ? Math.round(avgCompletion)
+          : null,
   };
 
   const paragraphs = htmlToPlainParagraphs(article.content || "");
