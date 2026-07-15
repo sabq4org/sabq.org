@@ -337,7 +337,10 @@ export function WcLongPredictions({
       </section>
 
       {/* ═══ الهدّاف ═══ */}
-      <section className="overflow-hidden rounded-2xl border border-emerald-600/25 bg-gradient-to-bl from-emerald-600/[0.06] to-transparent">
+      <section
+        id="wc-long-scorer"
+        className="overflow-hidden rounded-2xl border border-emerald-600/25 bg-gradient-to-bl from-emerald-600/[0.06] to-transparent scroll-mt-24"
+      >
         <div className="flex items-center gap-2 border-b border-emerald-600/15 px-4 py-3">
           <Goal className="h-5 w-5 text-emerald-700 dark:text-emerald-400" />
           <h3 className="text-base font-black">من هدّاف البطولة؟</h3>

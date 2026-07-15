@@ -41,6 +41,7 @@ import {
 } from "../services/worldCupService";
 import { getWorldCupNews } from "../services/worldCupNewsGenerator";
 import { resolveNames } from "../services/worldCupNameTranslator";
+import { getWcStoriesTeaser } from "../services/wcLongPredictionsService";
 import {
   getMomentum,
   getCommentary,
@@ -343,7 +344,8 @@ export function registerWorldCupRoutes(app: Express) {
       };
       // s-maxage=5: النتيجة الحيّة لحظية، فلا نُبقيها على الـCDN أكثر من ٥ ثوانٍ
       res.set("Cache-Control", "public, max-age=0, s-maxage=5, stale-while-revalidate=15");
-      res.json(overlaid);
+      const storiesTeaser = await getWcStoriesTeaser().catch(() => null);
+      res.json({ ...overlaid, storiesTeaser });
     } catch (error) {
       console.error("[WorldCup] overview failed:", error);
       res.status(502).json({ message: "تعذر جلب نظرة المونديال حاليًا" });
