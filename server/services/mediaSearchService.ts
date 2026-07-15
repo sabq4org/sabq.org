@@ -265,3 +265,38 @@ export async function backfillMediaEmbeddings(batchSize = 8): Promise<EmbedBackf
 
   return { processed: rows.length, embedded, remaining };
 }
+
+export interface ArticleMediaSuggestions {
+  files: SemanticSearchItem[];
+  total: number;
+  query: string;
+}
+
+/**
+ * Suggest library images for an article draft: embed the title (+ a plain-text
+ * slice of the body) and rank the semantically-indexed archive against it.
+ * Sensitive-flagged images are excluded — they must be picked deliberately from
+ * the library, never auto-offered. Results keep semanticSearchMedia's shape so
+ * pickers can render them like any other media card (with relevanceScore 0-100).
+ */
+export async function suggestMediaForArticle(opts: {
+  title: string;
+  content?: string | null;
+  limit?: number;
+}): Promise<ArticleMediaSuggestions> {
+  const title = (opts.title || "").trim();
+  if (!title) return { files: [], total: 0, query: "" };
+
+  const limit = Math.min(24, Math.max(1, opts.limit ?? 6));
+  const bodyText = (opts.content || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 400);
+  const query = bodyText ? `${title} — ${bodyText}` : title;
+
+  // Over-fetch so the sensitive-content filter doesn't leave the strip short.
+  const { files } = await semanticSearchMedia(query, { limit: limit * 2 });
+  const safe = files.filter((f) => !f.aiHasSensitiveContent).slice(0, limit);
+  return { files: safe, total: safe.length, query };
+}
