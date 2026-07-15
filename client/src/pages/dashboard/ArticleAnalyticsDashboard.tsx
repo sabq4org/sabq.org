@@ -487,7 +487,7 @@ function ArticleDetailPanel({
 
         <IpBreakdownSection articleId={article.id} />
 
-        {article.readingStats.avgScrollDepth > 0 && (
+        { (article.readingStats.avgScrollDepth > 0 || article.readingStats.avgCompletionRate > 0) && (
           <div>
             <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
               <TrendingUp className="h-4 w-4" />

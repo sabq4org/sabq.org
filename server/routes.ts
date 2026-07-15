@@ -14,7 +14,7 @@ import { recordArticleView, initArticleViewStats } from "./services/articleViewS
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
 import { normalizePhone, findOrCreatePhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
-import { getArticleReadingOverrides } from "./services/adminToolsService";
+import { getArticleReadingOverrides, resolveReadingMetrics } from "./services/adminToolsService";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
@@ -9509,6 +9509,8 @@ Respond in valid JSON format only:
           authorId: articles.authorId,
           authorFirstName: users.firstName,
           authorLastName: users.lastName,
+          avgReadTimeOverride: articles.avgReadTimeOverride,
+          completionRateOverride: articles.completionRateOverride,
         })
         .from(articles)
         .leftJoin(categories, eq(articles.categoryId, categories.id))
@@ -9598,7 +9600,16 @@ Respond in valid JSON format only:
 
       const readingTimeMap = new Map(readingTimeResult.map(r => [r.articleId, r.avgReadingTime]));
 
-      let articlesWithFullMetrics = articlesToReturn.map(article => ({
+      let articlesWithFullMetrics = articlesToReturn.map(article => {
+        const resolved = resolveReadingMetrics({
+          avgReadingMinutes: readingTimeMap.get(article.id) || 0,
+          avgCompletionRate: 0,
+          overrides: {
+            avgReadTimeOverride: article.avgReadTimeOverride,
+            completionRateOverride: article.completionRateOverride,
+          },
+        });
+        return {
         id: article.id,
         title: article.title,
         slug: article.slug,
@@ -9625,8 +9636,9 @@ Respond in valid JSON format only:
         sharesCount: sharesMap.get(article.id) || 0,
         commentsCount: commentsMap.get(article.id) || 0,
         wordCount: 0,
-        avgReadingTime: Math.round((readingTimeMap.get(article.id) || 0) * 10) / 10
-      }));
+        avgReadingTime: Math.round(resolved.avgReadingMinutes * 10) / 10
+      };
+      });
 
       // Engagement sorts apply within the current page only (avoids heavy global aggregates).
       if (sortKey === "likes" || sortKey === "comments" || sortKey === "shares") {
@@ -9776,6 +9788,13 @@ Respond in valid JSON format only:
         .from(readingHistory)
         .where(eq(readingHistory.articleId, articleId));
 
+      const readingOverrides = await getArticleReadingOverrides(articleId, "ar");
+      const resolvedReading = resolveReadingMetrics({
+        avgReadingMinutes: readingStats?.avgReadingTime || 0,
+        avgCompletionRate: readingStats?.avgCompletionRate || 0,
+        overrides: readingOverrides,
+      });
+
       // Get recent comments (last 10 comments)
       const recentComments = await db
         .select({
@@ -9834,15 +9853,15 @@ Respond in valid JSON format only:
         sharesCount,
         commentsCount: totalComments,
         wordCount,
-        avgReadingTime: Math.round((readingStats?.avgReadingTime || 0) * 10) / 10,
+        avgReadingTime: Math.round(resolvedReading.avgReadingMinutes * 10) / 10,
         reactions: reactionsMap,
         commentsBreakdown: commentsStatusMap,
         readingStats: {
-          avgReadingTime: Math.round((readingStats?.avgReadingTime || 0) * 10) / 10,
+          avgReadingTime: Math.round(resolvedReading.avgReadingMinutes * 10) / 10,
           totalReaders: readingStats?.totalReaders || 0,
           totalReadSessions: readingStats?.totalReadSessions || 0,
           avgScrollDepth: Math.round(readingStats?.avgScrollDepth || 0),
-          avgCompletionRate: Math.round(readingStats?.avgCompletionRate || 0)
+          avgCompletionRate: Math.round(resolvedReading.avgCompletionRate)
         },
         recentComments: recentComments.map((c: any) => ({
           id: c.id,
@@ -9940,9 +9959,17 @@ Respond in valid JSON format only:
           avgReadingTime: sql<number>`COALESCE(AVG(${readingHistory.readDuration}) / 60.0, 0)`,
           totalReaders: sql<number>`COUNT(DISTINCT ${readingHistory.userId})::int`,
           avgScrollDepth: sql<number>`COALESCE(AVG(${readingHistory.scrollDepth}), 0)`,
+          avgCompletionRate: sql<number>`COALESCE(AVG(${readingHistory.completionRate}), 0)`,
         })
         .from(readingHistory)
         .where(eq(readingHistory.articleId, articleId));
+
+      const exportOverrides = await getArticleReadingOverrides(articleId, "ar");
+      const exportReading = resolveReadingMetrics({
+        avgReadingMinutes: Number(readingStats?.avgReadingTime || 0),
+        avgCompletionRate: Number(readingStats?.avgCompletionRate || 0),
+        overrides: exportOverrides,
+      });
 
       // Calculate word count from HTML content
       const content = article.content || '';
@@ -10021,7 +10048,7 @@ Respond in valid JSON format only:
           {
             columns: [
               { width: '*', stack: [{ text: 'التعليقات', style: 'statLabel', alignment: 'center' as const }, { text: totalComments.toLocaleString('ar-SA'), style: 'statValue', alignment: 'center' as const, color: '#F97316' }], margin: [0, 0, 10, 0] },
-              { width: '*', stack: [{ text: 'متوسط وقت القراءة', style: 'statLabel', alignment: 'center' as const }, { text: Number(readingStats?.avgReadingTime) > 0 ? `${Number(readingStats.avgReadingTime).toFixed(1)} دقيقة` : 'لا توجد بيانات', style: 'statValue', alignment: 'center' as const, color: '#6366F1' }], margin: [0, 0, 10, 0] },
+              { width: '*', stack: [{ text: 'متوسط وقت القراءة', style: 'statLabel', alignment: 'center' as const }, { text: exportReading.avgReadingMinutes > 0 ? `${exportReading.avgReadingMinutes.toFixed(1)} دقيقة` : 'لا توجد بيانات', style: 'statValue', alignment: 'center' as const, color: '#6366F1' }], margin: [0, 0, 10, 0] },
               { width: '*', stack: [{ text: 'إجمالي القراء', style: 'statLabel', alignment: 'center' as const }, { text: (readingStats?.totalReaders || 0).toLocaleString('ar-SA'), style: 'statValue', alignment: 'center' as const, color: '#0EA5E9' }] }
             ],
             margin: [0, 0, 0, 25]
@@ -27795,14 +27822,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
         ? Math.min(100, (avgReadTime / estimatedReadTime) * 100)
         : 0;
 
+      const overrides = await getArticleReadingOverrides(article.id, "en");
+
       res.json({
-        avgReadTime: Math.round(avgReadTime), // in seconds
+        avgReadTime: overrides?.avgReadTimeOverride ?? Math.round(avgReadTime), // in seconds
         totalReads,
         totalReactions,
         totalComments,
         totalViews,
         engagementRate: parseFloat(engagementRate.toFixed(2)),
-        completionRate: Math.round(completionRate), // percentage
+        completionRate: overrides?.completionRateOverride ?? Math.round(completionRate), // percentage
         totalInteractions: totalReactions + totalComments,
       });
     } catch (error) {
@@ -28907,14 +28936,16 @@ Sitemap: https://sabq.org/sitemap-news.xml
         ? Math.min(100, (avgReadTime / estimatedReadTime) * 100)
         : 0;
 
+      const overrides = await getArticleReadingOverrides(article.id, "ur");
+
       res.json({
-        avgReadTime: Math.round(avgReadTime), // in seconds
+        avgReadTime: overrides?.avgReadTimeOverride ?? Math.round(avgReadTime), // in seconds
         totalReads,
         totalReactions,
         totalComments,
         totalViews,
         engagementRate: parseFloat(engagementRate.toFixed(2)),
-        completionRate: Math.round(completionRate), // percentage
+        completionRate: overrides?.completionRateOverride ?? Math.round(completionRate), // percentage
         totalInteractions: totalReactions + totalComments,
       });
     } catch (error) {
