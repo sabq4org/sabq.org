@@ -9444,14 +9444,57 @@ Respond in valid JSON format only:
       const whereConditions = [];
 
       if (query) {
-        const searchQuery = String(query).trim();
+        let searchQuery = String(query).trim();
+        // Accept pasted article URLs: /article/:slug or /en/article/:slug
+        try {
+          const path = searchQuery.includes("://")
+            ? new URL(searchQuery).pathname
+            : searchQuery;
+          const parts = path.split("/").filter(Boolean);
+          const articleIdx = parts.findIndex((p) => p === "article");
+          if (articleIdx >= 0 && parts[articleIdx + 1]) {
+            searchQuery = parts[articleIdx + 1];
+          }
+        } catch {
+          // keep raw query
+        }
+
         if (searchQuery) {
-          whereConditions.push(
-            or(
-              ilike(articles.title, `%${searchQuery}%`),
-              ilike(articles.excerpt, `%${searchQuery}%`),
-              ilike(articles.slug, `%${searchQuery}%`),
+          const pattern = `%${searchQuery}%`;
+          // EN translations store the Arabic source id in seoMetadata.sourceArticleId
+          const enLinked = await db
+            .select({
+              sourceArticleId: sql<string>`${enArticles.seoMetadata}->>'sourceArticleId'`,
+            })
+            .from(enArticles)
+            .where(
+              and(
+                sql`${enArticles.seoMetadata}->>'sourceArticleId' IS NOT NULL`,
+                or(
+                  ilike(enArticles.title, pattern),
+                  ilike(enArticles.slug, pattern),
+                  ilike(enArticles.englishSlug, pattern),
+                ),
+              ),
             )
+            .limit(20);
+          const linkedArIds = enLinked
+            .map((row) => row.sourceArticleId)
+            .filter((id): id is string => !!id);
+
+          const textMatch = or(
+            ilike(articles.title, pattern),
+            ilike(articles.subtitle, pattern),
+            ilike(articles.excerpt, pattern),
+            ilike(articles.slug, pattern),
+            ilike(articles.englishSlug, pattern),
+            eq(articles.id, searchQuery),
+          );
+
+          whereConditions.push(
+            linkedArIds.length > 0
+              ? or(textMatch, inArray(articles.id, linkedArIds))
+              : textMatch,
           );
         }
       }

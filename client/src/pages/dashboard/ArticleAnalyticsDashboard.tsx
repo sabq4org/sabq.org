@@ -592,6 +592,7 @@ export default function ArticleAnalyticsDashboard() {
   const { toast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("published");
   const [dateRange, setDateRange] = useState<string>("all");
@@ -602,8 +603,16 @@ export default function ArticleAnalyticsDashboard() {
   const [prClientDialogOpen, setPrClientDialogOpen] = useState(false);
   const [prClientArticle, setPrClientArticle] = useState<ArticleDetail | null>(null);
   const [prClientName, setPrClientName] = useState("");
+  const [prClientLang, setPrClientLang] = useState<"ar" | "en">("ar");
 
   const limit = 20;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
   const getDateRange = useCallback(() => {
     const now = new Date();
@@ -623,7 +632,7 @@ export default function ArticleAnalyticsDashboard() {
 
   const buildQueryParams = useCallback(() => {
     const params = new URLSearchParams();
-    if (searchQuery) params.set("query", searchQuery);
+    if (debouncedSearchQuery) params.set("query", debouncedSearchQuery);
     if (selectedCategory !== "all") params.set("categoryId", selectedCategory);
     if (selectedStatus !== "all") params.set("status", selectedStatus);
     if (sortBy) params.set("sortBy", sortBy);
@@ -635,7 +644,7 @@ export default function ArticleAnalyticsDashboard() {
     if (to) params.set("dateTo", to);
     
     return params.toString();
-  }, [searchQuery, selectedCategory, selectedStatus, sortBy, offset, getDateRange]);
+  }, [debouncedSearchQuery, selectedCategory, selectedStatus, sortBy, offset, getDateRange]);
 
   const { data: categoriesRaw } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
@@ -649,16 +658,16 @@ export default function ArticleAnalyticsDashboard() {
 
   useEffect(() => {
     setOffset(0);
-  }, [searchQuery, selectedCategory, selectedStatus, dateRange, sortBy]);
+  }, [debouncedSearchQuery, selectedCategory, selectedStatus, dateRange, sortBy]);
 
   useEffect(() => {
     document.title = "تحليلات المقالات - لوحة التحكم";
   }, []);
 
   const handleSearch = useCallback(() => {
+    setDebouncedSearchQuery(searchQuery.trim());
     setOffset(0);
-    refetch();
-  }, [refetch]);
+  }, [searchQuery]);
 
   const handleExportPDF = useCallback(async (article: ArticleDetail) => {
     setIsExporting(true);
@@ -700,6 +709,7 @@ export default function ArticleAnalyticsDashboard() {
   const handleExportPrClientReport = useCallback((article: ArticleDetail) => {
     setPrClientArticle(article);
     setPrClientName("");
+    setPrClientLang("ar");
     setPrClientDialogOpen(true);
   }, []);
 
@@ -707,11 +717,13 @@ export default function ArticleAnalyticsDashboard() {
     if (!prClientArticle) return;
     const article = prClientArticle;
     const clientName = prClientName.trim();
+    const lang = prClientLang;
     setPrClientDialogOpen(false);
     setIsExporting(true);
     try {
       const params = new URLSearchParams();
       if (clientName) params.set("clientName", clientName);
+      params.set("lang", lang);
       const qs = params.toString();
       const response = await fetch(
         apiUrl(
@@ -733,16 +745,21 @@ export default function ArticleAnalyticsDashboard() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `تقرير-عميل-${article.slug || article.id}-${format(new Date(), "yyyy-MM-dd")}.pdf`;
+      const langTag = lang === "en" ? "EN" : "AR";
+      a.download = `sabq-pr-report-${langTag}-${article.slug || article.id}-${format(new Date(), "yyyy-MM-dd")}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
       toast({
-        title: "تم إنشاء تقرير العميل",
+        title: lang === "en" ? "English client report ready" : "تم إنشاء تقرير العميل",
         description: clientName
-          ? `جاهز للمشاركة مع: ${clientName}`
-          : "ملف PDF جاهز للمشاركة مع العميل",
+          ? lang === "en"
+            ? `Ready to share with: ${clientName}`
+            : `جاهز للمشاركة مع: ${clientName}`
+          : lang === "en"
+            ? "PDF ready to share with the client"
+            : "ملف PDF جاهز للمشاركة مع العميل",
       });
     } catch (error) {
       toast({
@@ -757,7 +774,7 @@ export default function ArticleAnalyticsDashboard() {
       setIsExporting(false);
       setPrClientArticle(null);
     }
-  }, [prClientArticle, prClientName, toast]);
+  }, [prClientArticle, prClientName, prClientLang, toast]);
 
   const clearFilters = useCallback(() => {
     setSearchQuery("");
@@ -801,7 +818,7 @@ export default function ArticleAnalyticsDashboard() {
                   <div className="relative flex-1">
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="ابحث بالعنوان أو الكلمات المفتاحية..."
+                      placeholder="ابحث بالعنوان العربي أو الإنجليزي أو الرابط..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -1027,27 +1044,44 @@ export default function ArticleAnalyticsDashboard() {
           <DialogHeader>
             <DialogTitle>تقرير للعميل PDF</DialogTitle>
             <DialogDescription>
-              أدخل اسم العميل أو الحملة ليظهر على التقرير. يمكنك تركه فارغاً.
+              اختر لغة التقرير وأدخل اسم العميل أو الحملة (اختياري). النسخة الإنجليزية تستخدم الترجمة المرتبطة بنفس التصميم.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="pr-client-name">اسم العميل / الحملة</Label>
-            <Input
-              id="pr-client-name"
-              value={prClientName}
-              onChange={(e) => setPrClientName(e.target.value)}
-              placeholder="مثال: حملة موسم العلا — شركة …"
-              maxLength={120}
-              data-testid="input-pr-client-name"
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void confirmExportPrClientReport();
-                }
-              }}
-            />
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="pr-client-lang">لغة التقرير</Label>
+              <Select
+                value={prClientLang}
+                onValueChange={(value) => setPrClientLang(value === "en" ? "en" : "ar")}
+              >
+                <SelectTrigger id="pr-client-lang" data-testid="select-pr-client-lang">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ar">عربي</SelectItem>
+                  <SelectItem value="en">English</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pr-client-name">اسم العميل / الحملة</Label>
+              <Input
+                id="pr-client-name"
+                value={prClientName}
+                onChange={(e) => setPrClientName(e.target.value)}
+                placeholder="مثال: حملة موسم العلا — شركة …"
+                maxLength={120}
+                data-testid="input-pr-client-name"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void confirmExportPrClientReport();
+                  }
+                }}
+              />
+            </div>
             {prClientArticle && (
-              <p className="text-xs text-muted-foreground line-clamp-2 pt-1">
+              <p className="text-xs text-muted-foreground line-clamp-2">
                 {prClientArticle.title}
               </p>
             )}
@@ -1065,7 +1099,7 @@ export default function ArticleAnalyticsDashboard() {
               data-testid="button-pr-client-confirm"
             >
               <FileDown className="h-4 w-4 ml-1" />
-              إنشاء التقرير
+              {prClientLang === "en" ? "Create English PDF" : "إنشاء التقرير"}
             </Button>
           </DialogFooter>
         </DialogContent>
