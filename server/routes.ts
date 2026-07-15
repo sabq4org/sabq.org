@@ -14,6 +14,7 @@ import { recordArticleView, initArticleViewStats } from "./services/articleViewS
 import { varaSendOtp, varaVerifyOtp } from "./services/varaPhoneOtp";
 import { normalizePhone, findOrCreatePhoneUser } from "./services/phoneAuth";
 import { bufferArticleViewIncrement, initArticleViewCounters } from "./services/articleViewCounterService";
+import { getArticleReadingOverrides } from "./services/adminToolsService";
 import { pickTableColumns } from "./utils/sanitizeBody";
 import { setupAuth, isAuthenticated, invalidateUserSessionCache } from "./auth";
 import { getCsrfToken, validateCsrfToken, ensureCsrfToken } from "./csrf";
@@ -306,7 +307,6 @@ import {
   emailWebhookLogs,
   userSegmentAssignments,
   userSegmentDefinitions,
-  legacyRedirects,
 } from "@shared/schema";
 import {
   insertArticleSchema,
@@ -13412,15 +13412,7 @@ Respond in valid JSON format only:
         ? Math.min(100, (avgReadTime / estimatedReadTime) * 100)
         : 0;
 
-      // Admin overrides (set via /dashboard/admin-tools) take precedence
-      const [overrides] = await db
-        .select({
-          avgReadTimeOverride: articles.avgReadTimeOverride,
-          completionRateOverride: articles.completionRateOverride,
-        })
-        .from(articles)
-        .where(eq(articles.id, article.id))
-        .limit(1);
+      const overrides = await getArticleReadingOverrides(article.id);
 
       res.json({
         avgReadTime: overrides?.avgReadTimeOverride ?? Math.round(avgReadTime), // in seconds
@@ -36293,213 +36285,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
     }
   });
 
-  // News Analytics Endpoint - Smart statistics and insights
+  // Admin Tools APIs moved to server/routes/adminToolsRoutes.ts (ADR-001).
 
-  // ==================== Admin Tools APIs ====================
-
-  const adminArticleSlugWhere = (table: typeof articles | typeof enArticles | typeof urArticles, slug: string) =>
-    or(eq(table.slug, slug), eq(table.englishSlug, slug));
-  
-  // Get article ID by slug (Arabic, English, or Urdu)
-  app.get("/api/admin/article-id/:slug", requireAuth, requirePermission("articles.view"), async (req: any, res) => {
-    try {
-      const { slug } = req.params;
-
-      const [arArticle] = await db
-        .select({ id: articles.id, title: articles.title })
-        .from(articles)
-        .where(adminArticleSlugWhere(articles, slug))
-        .limit(1);
-
-      if (arArticle) {
-        return res.json({ id: arArticle.id, title: arArticle.title, locale: "ar" });
-      }
-
-      const [enArticle] = await db
-        .select({ id: enArticles.id, title: enArticles.title })
-        .from(enArticles)
-        .where(adminArticleSlugWhere(enArticles, slug))
-        .limit(1);
-
-      if (enArticle) {
-        return res.json({ id: enArticle.id, title: enArticle.title, locale: "en" });
-      }
-
-      const [urArticle] = await db
-        .select({ id: urArticles.id, title: urArticles.title })
-        .from(urArticles)
-        .where(adminArticleSlugWhere(urArticles, slug))
-        .limit(1);
-
-      if (urArticle) {
-        return res.json({ id: urArticle.id, title: urArticle.title, locale: "ur" });
-      }
-      
-      return res.status(404).json({ message: "الخبر غير موجود" });
-    } catch (error) {
-      console.error("Error getting article ID:", error);
-      res.status(500).json({ message: "فشل في استخراج معرف الخبر" });
-    }
-  });
-
-  // Create legacy redirect
-  app.post("/api/admin/legacy-redirects", requireAuth, requirePermission("system.settings"), async (req: any, res) => {
-    try {
-      const { oldPath, newPath, redirectType } = req.body;
-      
-      if (!oldPath || !newPath) {
-        return res.status(400).json({ message: "الرجاء إدخال الرابط القديم والجديد" });
-      }
-      
-      // Check if redirect already exists
-      const [existing] = await db
-        .select()
-        .from(legacyRedirects)
-        .where(eq(legacyRedirects.oldPath, oldPath))
-        .limit(1);
-      
-      if (existing) {
-        return res.status(409).json({ message: "هذا التحويل موجود مسبقاً" });
-      }
-      
-      const [redirect] = await db
-        .insert(legacyRedirects)
-        .values({
-          id: crypto.randomUUID(),
-          oldPath,
-          newPath,
-          redirectType: redirectType || 301,
-          isActive: true,
-          createdBy: req.user.id
-        })
-        .returning();
-      
-      res.json({ success: true, redirect });
-    } catch (error) {
-      console.error("[LegacyRedirect] Error creating redirect:", error);
-      res.status(500).json({ message: "فشل في إنشاء التحويل" });
-    }
-  });
-
-  // Update article views (Arabic, English, or Urdu)
-  app.post("/api/admin/update-views", requireAuth, requirePermission("articles.edit"), async (req: any, res) => {
-    try {
-      const { slug, viewCount } = req.body;
-      
-      if (!slug || viewCount === undefined) {
-        return res.status(400).json({ message: "الرجاء إدخال الرابط وعدد المشاهدات" });
-      }
-
-      const views = Number(viewCount);
-      if (!Number.isFinite(views) || !Number.isInteger(views) || views < 0) {
-        return res.status(400).json({ message: "عدد المشاهدات يجب أن يكون رقماً صحيحاً" });
-      }
-
-      const [arArticle] = await db
-        .update(articles)
-        .set({ views })
-        .where(adminArticleSlugWhere(articles, slug))
-        .returning({ id: articles.id, title: articles.title, views: articles.views });
-
-      if (arArticle) {
-        return res.json({ success: true, article: arArticle, locale: "ar" });
-      }
-
-      const [enArticle] = await db
-        .update(enArticles)
-        .set({ views })
-        .where(adminArticleSlugWhere(enArticles, slug))
-        .returning({ id: enArticles.id, title: enArticles.title, views: enArticles.views });
-
-      if (enArticle) {
-        return res.json({ success: true, article: enArticle, locale: "en" });
-      }
-
-      const [urArticle] = await db
-        .update(urArticles)
-        .set({ views })
-        .where(adminArticleSlugWhere(urArticles, slug))
-        .returning({ id: urArticles.id, title: urArticles.title, views: urArticles.views });
-
-      if (urArticle) {
-        return res.json({ success: true, article: urArticle, locale: "ur" });
-      }
-      
-      return res.status(404).json({ message: "الخبر غير موجود" });
-    } catch (error) {
-      console.error("Error updating views:", error);
-      res.status(500).json({ message: "فشل في تحديث عدد المشاهدات" });
-    }
-  });
-
-  // Update article average read time override (seconds) — Arabic articles only
-  app.post("/api/admin/update-read-time", requireAuth, requirePermission("articles.edit"), async (req: any, res) => {
-    try {
-      const { slug, avgReadTime } = req.body;
-
-      if (!slug || avgReadTime === undefined) {
-        return res.status(400).json({ message: "الرجاء إدخال الرابط ومتوسط زمن القراءة" });
-      }
-
-      const seconds = Number(avgReadTime);
-      if (!Number.isFinite(seconds) || seconds < 0 || !Number.isInteger(seconds)) {
-        return res.status(400).json({ message: "متوسط زمن القراءة يجب أن يكون رقماً صحيحاً بالثواني" });
-      }
-
-      const [article] = await db
-        .update(articles)
-        .set({ avgReadTimeOverride: seconds })
-        .where(adminArticleSlugWhere(articles, slug))
-        .returning({
-          id: articles.id,
-          title: articles.title,
-          avgReadTimeOverride: articles.avgReadTimeOverride,
-        });
-
-      if (!article) {
-        return res.status(404).json({ message: "الخبر غير موجود (هذه الأداة تدعم الأخبار العربية حالياً)" });
-      }
-
-      res.json({ success: true, article });
-    } catch (error) {
-      console.error("Error updating read time:", error);
-      res.status(500).json({ message: "فشل في تحديث متوسط زمن القراءة" });
-    }
-  });
-
-  // Update article completion rate override (0–100) — Arabic articles only
-  app.post("/api/admin/update-completion-rate", requireAuth, requirePermission("articles.edit"), async (req: any, res) => {
-    try {
-      const { slug, completionRate } = req.body;
-
-      if (!slug || completionRate === undefined) {
-        return res.status(400).json({ message: "الرجاء إدخال الرابط ونسبة الإكمال" });
-      }
-
-      const rate = Number(completionRate);
-      if (!Number.isFinite(rate) || !Number.isInteger(rate) || rate < 0 || rate > 100) {
-        return res.status(400).json({ message: "نسبة الإكمال يجب أن تكون رقماً صحيحاً بين 0 و 100" });
-      }
-
-      const [article] = await db
-        .update(articles)
-        .set({ completionRateOverride: rate })
-        .where(adminArticleSlugWhere(articles, slug))
-        .returning({
-          id: articles.id,
-          title: articles.title,
-          completionRateOverride: articles.completionRateOverride,
-        });
-
-      if (!article) {
-        return res.status(404).json({ message: "الخبر غير موجود (هذه الأداة تدعم الأخبار العربية حالياً)" });
-      }
-
-      res.json({ success: true, article });
-    } catch (error) {
-      console.error("Error updating completion rate:", error);
-      res.status(500).json({ message: "فشل في تحديث نسبة الإكمال" });
-    }
-  });
   return httpServer;
 }
