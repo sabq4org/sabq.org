@@ -35586,32 +35586,14 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // BREAKING NEWS TICKER API
   // ============================================================
 
-  // Public: Get active breaking ticker (cached)
+  // Public: Get active breaking ticker (cached). `fresh` mirrors homepage
+  // pull-to-refresh so iOS does not keep a stale SWR copy of the red strip.
   app.get("/api/breaking-ticker/active", cacheControl({ maxAge: 60, sMaxAge: 120, staleWhileRevalidate: 60 }), async (req, res) => {
     try {
-      // Honor pull-to-refresh / Cache-Control: no-cache the same way homepage
-      // does — otherwise iOS keeps a stale SWR copy for CACHE_TTL.MEDIUM even
-      // after the editor updates the red strip.
-      const wantsFresh =
-        req?.query?._nc !== undefined ||
-        req?.query?._t !== undefined ||
-        String(req?.headers?.["cache-control"] ?? "").toLowerCase().includes("no-cache") ||
-        String(req?.headers?.["cache-control"] ?? "").toLowerCase().includes("no-store");
-
-      const data = await withSWR(
-        "breaking-ticker-active",
-        CACHE_TTL.MEDIUM,
-        CACHE_TTL.MEDIUM * 2,
-        async () => {
-          return await storage.getActiveBreakingTicker();
-        },
-        wantsFresh,
-      );
-      if (data) {
-        res.json(data);
-      } else {
-        res.json(null);
-      }
+      const cc = String(req.headers?.["cache-control"] ?? "").toLowerCase();
+      const fresh = req.query?._nc != null || req.query?._t != null || cc.includes("no-cache") || cc.includes("no-store");
+      const data = await withSWR("breaking-ticker-active", CACHE_TTL.MEDIUM, CACHE_TTL.MEDIUM * 2, () => storage.getActiveBreakingTicker(), fresh);
+      res.json(data ?? null);
     } catch (error) {
       console.error("Error fetching breaking ticker:", error);
       res.status(500).json({ message: "Failed to fetch breaking ticker" });
