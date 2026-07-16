@@ -104,17 +104,17 @@ const CHARTER = [
 
 function Ticker() {
   return (
-    <div className="flex items-center overflow-hidden bg-[#0E1620] border-y border-[#1B2732]" aria-hidden="true">
-      <span className="relative z-10 shrink-0 bg-primary text-primary-foreground text-xs font-bold px-4 py-2">
+    <div className="flex items-center overflow-hidden max-w-full bg-[#0E1620] border-y border-[#1B2732]" aria-hidden="true">
+      <span className="relative z-10 shrink-0 bg-primary text-primary-foreground text-[11px] sm:text-xs font-bold px-2.5 sm:px-4 py-1.5 sm:py-2">
         من داخل المنظومة
       </span>
       {/* غلاف overflow-hidden مستقل: transform الحزام يرسم خارج صندوقه فينزلق فوق التسمية بدونه */}
-      <div className="flex-1 overflow-hidden">
-        <div className="sabqai-belt flex whitespace-nowrap">
+      <div className="min-w-0 flex-1 overflow-hidden">
+        <div className="sabqai-belt flex w-max whitespace-nowrap">
           {[0, 1].map((half) => (
             <div key={half} className="flex shrink-0">
               {TICKER_ITEMS.map((item, i) => (
-                <span key={i} className="text-[13px] text-slate-300 py-2 pe-12 inline-flex items-center gap-2">
+                <span key={i} className="text-[12px] sm:text-[13px] text-slate-300 py-1.5 sm:py-2 pe-8 sm:pe-12 inline-flex items-center gap-2">
                   <b className="text-primary font-bold">{item.tag}</b>
                   {item.text}
                 </span>
@@ -124,8 +124,8 @@ function Ticker() {
         </div>
       </div>
       <style>{`
-        .sabqai-belt { animation: sabqai-belt 60s linear infinite; }
-        @keyframes sabqai-belt { from { transform: translateX(0); } to { transform: translateX(50%); } }
+        .sabqai-belt { animation: sabqai-belt 60s linear infinite; will-change: transform; }
+        @keyframes sabqai-belt { from { transform: translate3d(0,0,0); } to { transform: translate3d(50%,0,0); } }
         @media (prefers-reduced-motion: reduce) { .sabqai-belt { animation: none; } }
       `}</style>
     </div>
@@ -134,16 +134,16 @@ function Ticker() {
 
 function Hero() {
   return (
-    <section className="text-center px-4 pt-14 pb-10 md:pt-20 md:pb-14">
-      <span className="inline-block text-xs md:text-[13px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-5 py-1.5 mb-5">
+    <section className="text-center px-4 pt-10 pb-7 md:pt-20 md:pb-14">
+      <span className="inline-block max-w-full text-[11px] md:text-[13px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-3 md:px-5 py-1 md:py-1.5 mb-4 md:mb-5 leading-snug">
         عقل سبق — أول منظومة ذكاء تحريري متكاملة في صحيفة سعودية وعربية
       </span>
-      <h1 className="text-3xl md:text-5xl font-extrabold leading-[1.4] max-w-3xl mx-auto text-balance">
+      <h1 className="text-2xl sm:text-3xl md:text-5xl font-extrabold leading-[1.35] max-w-3xl mx-auto text-balance">
         من الإشارة الأولى إلى القصة المنشورة…
         <br />
         <span className="text-primary">في دقائق، وبقرار بشري</span>
       </h1>
-      <p className="text-muted-foreground text-base md:text-lg max-w-2xl mx-auto mt-4">
+      <p className="text-muted-foreground text-sm md:text-lg max-w-2xl mx-auto mt-3 md:mt-4">
         هكذا يعمل الذكاء الاصطناعي في سبق: خط إنتاج واحد يرصد ويحلل ويصوغ —
         ولا يعبر شيء إلى القارئ قبل محطة المحرر.
       </p>
@@ -153,43 +153,43 @@ function Hero() {
 
 function Pipeline() {
   return (
-    <section className="px-4 pb-4" data-testid="sabqai-pipeline">
+    <section className="px-4 pb-3 md:pb-4 overflow-x-hidden" data-testid="sabqai-pipeline">
       {/* عمودي على الجوال حتى تبقى محطة «عين المحرر» ظاهرة بلا تمرير أفقي */}
-      <div className="flex flex-col md:flex-row items-stretch gap-2 max-w-md md:max-w-6xl mx-auto pb-2 pt-3">
+      <div className="flex flex-col md:flex-row items-stretch gap-1.5 md:gap-2 max-w-md md:max-w-6xl mx-auto pb-1 md:pb-2 pt-2 md:pt-3">
         {PIPELINE.map((station, i) => (
           <div key={station.title} className="contents">
             {i > 0 && (
               <>
-                <ArrowDown className="w-5 h-5 shrink-0 self-center text-muted-foreground/50 md:hidden" aria-hidden="true" />
+                <ArrowDown className="w-4 h-4 md:w-5 md:h-5 shrink-0 self-center text-muted-foreground/50 md:hidden" aria-hidden="true" />
                 <ArrowLeft className="hidden md:block w-5 h-5 shrink-0 self-center text-muted-foreground/50" aria-hidden="true" />
               </>
             )}
             <div
-              className={`relative flex-1 min-w-[150px] rounded-xl border p-4 text-center ${
+              className={`relative flex-1 min-w-0 md:min-w-[150px] rounded-lg md:rounded-xl border px-3 py-2.5 md:p-4 text-center ${
                 station.human
                   ? "border-2 border-emerald-500 bg-emerald-500/5"
                   : "border-border bg-muted/30"
               }`}
             >
               {station.human && (
-                <span className="absolute -top-2.5 right-1/2 translate-x-1/2 bg-emerald-600 text-white text-[11px] font-bold rounded-full px-3 py-0.5 whitespace-nowrap">
+                <span className="absolute -top-2 right-1/2 translate-x-1/2 bg-emerald-600 text-white text-[10px] md:text-[11px] font-bold rounded-full px-2.5 md:px-3 py-0.5 whitespace-nowrap">
                   قرار بشري
                 </span>
               )}
               <span
-                className={`mx-auto mb-2.5 flex h-10 w-10 items-center justify-center rounded-lg ${
+                className={`mx-auto mb-1.5 md:mb-2.5 flex h-8 w-8 md:h-10 md:w-10 items-center justify-center rounded-lg ${
                   station.human ? "bg-emerald-500/15 text-emerald-600" : "bg-primary/10 text-primary"
                 }`}
               >
-                <station.icon className="w-5 h-5" aria-hidden="true" />
+                <station.icon className="w-4 h-4 md:w-5 md:h-5" aria-hidden="true" />
               </span>
-              <h3 className="text-sm font-extrabold mb-1">{station.title}</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">{station.desc}</p>
+              <h3 className="text-[13px] md:text-sm font-extrabold mb-0.5 md:mb-1">{station.title}</h3>
+              <p className="text-[11px] md:text-xs text-muted-foreground leading-relaxed">{station.desc}</p>
             </div>
           </div>
         ))}
       </div>
-      <p className="text-center text-[13px] text-muted-foreground pt-2">
+      <p className="text-center text-xs md:text-[13px] text-muted-foreground pt-2 px-1">
         المحطة الرابعة ليست شعارًا: <b className="text-emerald-600">كل مسار توليد في المنظومة يمرّ بها إجباريًا.</b>
       </p>
     </section>
@@ -198,14 +198,14 @@ function Pipeline() {
 
 function StatsBand() {
   return (
-    <section className="px-4 py-8">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-5xl mx-auto">
+    <section className="px-4 py-6 md:py-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3 max-w-5xl mx-auto">
         {STATS.map((s) => (
-          <div key={s.label} className="rounded-xl border border-border bg-card p-5 text-center">
-            <div className="text-2xl md:text-3xl font-extrabold text-primary tabular-nums" dir="ltr">
+          <div key={s.label} className="rounded-lg md:rounded-xl border border-border bg-card p-3 md:p-5 text-center">
+            <div className="text-xl md:text-3xl font-extrabold text-primary tabular-nums" dir="ltr">
               {s.value}
             </div>
-            <div className="text-xs md:text-sm text-muted-foreground mt-1">{s.label}</div>
+            <div className="text-[11px] md:text-sm text-muted-foreground mt-1 leading-snug">{s.label}</div>
           </div>
         ))}
       </div>
@@ -311,13 +311,13 @@ function DailyOpsChart({ daily }: { daily: { date: string; count: number }[] }) 
   const maxIndex = daily.findIndex((d) => d.count === max);
   const lastIndex = daily.length - 1;
   return (
-    <div className="rounded-xl border border-[#1B2732] bg-white/[.045] p-5 pb-3">
-      <h3 className="text-sm font-extrabold">النشاط اليومي للمنظومة — آخر ١٤ يومًا</h3>
-      <p className="text-xs text-[#8FA3B4] mb-3.5">
-        عدد عمليات الذكاء الاصطناعي المنفّذة يوميًا (المصدر: سجل الاستخدام الموحّد)
+    <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] p-3 md:p-5 pb-2.5 md:pb-3 overflow-hidden">
+      <h3 className="text-[13px] md:text-sm font-extrabold leading-snug">النشاط اليومي — آخر ١٤ يومًا</h3>
+      <p className="text-[11px] md:text-xs text-[#8FA3B4] mb-2.5 md:mb-3.5 leading-snug">
+        عمليات الذكاء الاصطناعي يوميًا (سجل الاستخدام الموحّد)
       </p>
       <div
-        className="flex items-end gap-1 h-28 pt-4"
+        className="flex items-end gap-0.5 sm:gap-1 h-20 md:h-28 pt-3 md:pt-4 overflow-hidden"
         dir="ltr"
         role="img"
         aria-label={`رسم أعمدة لعمليات الذكاء الاصطناعي اليومية، الذروة ${max.toLocaleString("en-US")}`}
@@ -326,7 +326,7 @@ function DailyOpsChart({ daily }: { daily: { date: string; count: number }[] }) 
           const isPartial = i === lastIndex;
           const labeled = i === maxIndex || isPartial;
           return (
-            <div key={d.date} className="group relative flex-1 flex items-end h-full">
+            <div key={d.date} className="group relative flex-1 min-w-0 flex items-end h-full">
               <div
                 className={
                   isPartial
@@ -334,28 +334,22 @@ function DailyOpsChart({ daily }: { daily: { date: string; count: number }[] }) 
                     : "w-full rounded-t bg-primary min-h-[3px] group-hover:opacity-75 transition-opacity"
                 }
                 style={{ height: `${Math.max(3, Math.round((d.count / max) * 100))}%` }}
+                title={`${formatArabicDate(d.date)}${isPartial ? " (جارٍ)" : ""} — ${d.count.toLocaleString("en-US")} عملية`}
               />
               {labeled && (
-                <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[10.5px] font-bold tabular-nums whitespace-nowrap">
+                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 text-[9px] md:text-[10.5px] font-bold tabular-nums">
                   {d.count.toLocaleString("en-US")}
                 </span>
               )}
-              <span
-                dir="rtl"
-                className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap rounded-md border border-[#1B2732] bg-[#060A0F] px-2.5 py-1 text-[11.5px] opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                {formatArabicDate(d.date)}
-                {isPartial ? " (جارٍ)" : ""} — <b className="text-primary tabular-nums">{d.count.toLocaleString("en-US")}</b> عملية
-              </span>
             </div>
           );
         })}
       </div>
       <div
-        className="flex justify-between border-t border-[#1B2732] mt-1.5 pt-1.5 text-[10.5px] text-[#8FA3B4] tabular-nums"
+        className="flex justify-between border-t border-[#1B2732] mt-1.5 pt-1.5 text-[10px] md:text-[10.5px] text-[#8FA3B4] tabular-nums"
         dir="ltr"
       >
-        <span>{daily.length > 0 ? formatArabicDate(daily[0].date) : ""}</span>
+        <span className="truncate">{daily.length > 0 ? formatArabicDate(daily[0].date) : ""}</span>
         <span>اليوم</span>
       </div>
     </div>
@@ -384,36 +378,35 @@ function LiveStatsBand() {
   const tokensM = stats.ai.totalTokens / 1_000_000;
 
   return (
-    <section className="bg-[#0E1620] text-[#E7EEF4] px-4 py-10 md:py-11" data-testid="sabqai-live-stats">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 mb-1.5">
-          <h2 className="text-xl md:text-2xl font-extrabold">
+    <section className="bg-[#0E1620] text-[#E7EEF4] px-4 py-7 md:py-11 overflow-x-hidden" data-testid="sabqai-live-stats">
+      <div className="max-w-5xl mx-auto min-w-0">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5 mb-1.5">
+          <h2 className="text-lg md:text-2xl font-extrabold">
             الأرقام <span className="text-primary">تتحدث</span>
           </h2>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 px-3 py-0.5 text-xs font-bold text-emerald-400">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 px-2.5 md:px-3 py-0.5 text-[11px] md:text-xs font-bold text-emerald-400">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
             مباشر من قاعدة البيانات
           </span>
-          <span className="ms-auto text-xs text-[#8FA3B4]">
+          <span className="w-full sm:w-auto sm:ms-auto text-[11px] md:text-xs text-[#8FA3B4]">
             آخر تحديث: {formatUpdatedAgo(stats.generatedAt)}
           </span>
         </div>
-        <p className="text-[13.5px] text-[#8FA3B4] max-w-xl mb-6">
-          لا أرقام تقديرية ولا وهمية — كل رقم في هذا القسم يُقرأ لحظة فتح الصفحة من أنظمة
-          سبق العاملة، ويتحدّث تلقائيًا.
+        <p className="text-xs md:text-[13.5px] text-[#8FA3B4] max-w-xl mb-4 md:mb-6 leading-relaxed">
+          لا أرقام تقديرية ولا وهمية — كل رقم يُقرأ لحظة فتح الصفحة من أنظمة سبق، ويتحدّث تلقائيًا.
         </p>
 
-        <div className="text-center pb-6">
-          <div className="text-primary font-extrabold leading-none text-[clamp(52px,9vw,84px)]">
+        <div className="text-center pb-4 md:pb-6">
+          <div className="text-primary font-extrabold leading-none text-[clamp(36px,11vw,84px)] break-all">
             <CountUp value={stats.ai.totalOps} />
           </div>
-          <div className="text-[15px] font-bold mt-2">عملية ذكاء اصطناعي نفّذتها المنظومة</div>
+          <div className="text-[13px] md:text-[15px] font-bold mt-1.5 md:mt-2">عملية ذكاء اصطناعي نفّذتها المنظومة</div>
           {stats.ai.sinceDate && (
-            <div className="text-[12.5px] text-[#8FA3B4] mt-0.5">
-              منذ إطلاق مركز قياس الذكاء الاصطناعي — {formatArabicDate(stats.ai.sinceDate, true)}
+            <div className="text-[11px] md:text-[12.5px] text-[#8FA3B4] mt-0.5 px-2">
+              منذ إطلاق مركز القياس — {formatArabicDate(stats.ai.sinceDate, true)}
             </div>
           )}
-          <div className="mt-3.5 inline-flex items-center gap-1.5 rounded-full border border-[#1B2732] bg-white/[.045] px-4 py-1 text-[13px]">
+          <div className="mt-2.5 md:mt-3.5 inline-flex items-center gap-1.5 rounded-full border border-[#1B2732] bg-white/[.045] px-3 md:px-4 py-1 text-xs md:text-[13px]">
             اليوم حتى الآن:
             <b className="text-primary">
               <CountUp value={stats.ai.todayOps} />
@@ -422,54 +415,54 @@ function LiveStatsBand() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 mb-6">
-          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
-            <div className="text-2xl font-extrabold text-primary">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-2.5 mb-4 md:mb-6">
+          <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-4 min-w-0">
+            <div className="text-lg md:text-2xl font-extrabold text-primary">
               <CountUp value={stats.ai.successRate} decimals={1} />
-              <span className="text-[15px]">%</span>
+              <span className="text-xs md:text-[15px]">%</span>
             </div>
-            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">معدل نجاح عمليات الذكاء الاصطناعي</div>
+            <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">معدل نجاح العمليات</div>
           </div>
-          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
-            <div className="text-2xl font-extrabold">
+          <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-4 min-w-0">
+            <div className="text-lg md:text-2xl font-extrabold">
               <CountUp value={tokensM} decimals={1} />
-              <span className="text-[15px]">M</span>
+              <span className="text-xs md:text-[15px]">M</span>
             </div>
-            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">توكن معالج منذ إطلاق مركز القياس</div>
+            <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">توكن معالج منذ الإطلاق</div>
           </div>
           {commentsPct !== null && (
-            <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
-              <div className="text-2xl font-extrabold">
+            <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-4 min-w-0">
+              <div className="text-lg md:text-2xl font-extrabold">
                 <CountUp value={commentsPct} />
-                <span className="text-[15px]">%</span>
+                <span className="text-xs md:text-[15px]">%</span>
               </div>
-              <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">من تعليقات القرّاء تُفحص آليًا قبل النشر</div>
+              <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">تعليقات تُفحص آليًا</div>
             </div>
           )}
-          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
-            <div className="text-2xl font-extrabold">
+          <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-4 min-w-0">
+            <div className="text-lg md:text-2xl font-extrabold">
               <CountUp value={stats.stories.total} />
             </div>
-            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">قصة متابعة ذكية تجمع الأخبار المترابطة آليًا</div>
+            <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">قصة متابعة ذكية</div>
           </div>
-          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
-            <div className="text-2xl font-extrabold">
+          <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-4 min-w-0">
+            <div className="text-lg md:text-2xl font-extrabold">
               <CountUp value={stats.articles.todayPublished} />
             </div>
-            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">خبرًا نُشر اليوم عبر خط الإنتاج — بعد عين المحرر</div>
+            <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">خبرًا نُشر اليوم</div>
           </div>
-          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
-            <div className="text-2xl font-extrabold text-primary">
+          <div className="rounded-lg md:rounded-xl border border-[#1B2732] bg-white/[.045] px-3 py-2.5 md:px-4 md:py-4 min-w-0">
+            <div className="text-lg md:text-2xl font-extrabold text-primary">
               <CountUp value={stats.articles.totalPublished} />
             </div>
-            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">خبرًا في أرشيف سبق منذ التأسيس</div>
+            <div className="text-[11px] md:text-xs text-[#8FA3B4] mt-0.5 leading-snug">خبرًا في الأرشيف</div>
           </div>
         </div>
 
         {daily.length >= 3 && <DailyOpsChart daily={daily} />}
 
-        <p className="text-center text-xs text-[#8FA3B4] mt-5">
-          وكل مادة من هذه الأرقام مرّت بمحطة واحدة لا تُتجاوز: <b className="text-[#E7EEF4]">عين المحرر</b>.
+        <p className="text-center text-[11px] md:text-xs text-[#8FA3B4] mt-4 md:mt-5 px-1">
+          وكل مادة مرّت بمحطة واحدة لا تُتجاوز: <b className="text-[#E7EEF4]">عين المحرر</b>.
         </p>
       </div>
     </section>
@@ -478,33 +471,33 @@ function LiveStatsBand() {
 
 function SportsBand() {
   return (
-    <section className="bg-[#0E2233] text-white px-4 py-10 md:py-12" data-testid="sabqai-sports">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex flex-wrap items-baseline justify-between gap-3 mb-3">
-          <h2 className="text-xl md:text-2xl font-extrabold">
+    <section className="bg-[#0E2233] text-white px-4 py-7 md:py-12 overflow-x-hidden" data-testid="sabqai-sports">
+      <div className="max-w-5xl mx-auto min-w-0">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2 md:mb-3">
+          <h2 className="text-lg md:text-2xl font-extrabold leading-snug">
             البطولات نموذجًا: <span className="text-primary">من المونديال إلى دوري روشن</span>
           </h2>
         </div>
-        <p className="text-sm text-slate-300 max-w-2xl mb-5">
+        <p className="text-xs md:text-sm text-slate-300 max-w-2xl mb-4 md:mb-5 leading-relaxed">
           واكبنا كأس العالم بتقارير تصدر مع صافرة النهاية — واليوم تعمل المحرّكات نفسها
           في البطولات القارية والمحلية.
         </p>
-        <div className="flex flex-wrap gap-2 mb-7">
+        <div className="flex flex-wrap gap-1.5 md:gap-2 mb-5 md:mb-7">
           {TOURNAMENTS.map((t) => (
             <Link
               key={t.href}
               href={t.href}
-              className="text-[13px] font-bold border border-white/25 rounded-full px-4 py-1.5 hover:border-primary hover:text-primary transition-colors"
+              className="text-[12px] md:text-[13px] font-bold border border-white/25 rounded-full px-3 md:px-4 py-1 md:py-1.5 hover:border-primary hover:text-primary transition-colors"
             >
               {t.label}
             </Link>
           ))}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
           {SPORT_FACTS.map((f) => (
-            <div key={f.label} className="rounded-xl border border-white/15 bg-white/5 p-4">
-              <div className="text-xl font-extrabold text-primary">{f.value}</div>
-              <p className="text-[13px] text-slate-300 mt-1 leading-relaxed">{f.label}</p>
+            <div key={f.label} className="rounded-lg md:rounded-xl border border-white/15 bg-white/5 p-2.5 md:p-4 min-w-0">
+              <div className="text-base md:text-xl font-extrabold text-primary">{f.value}</div>
+              <p className="text-[11px] md:text-[13px] text-slate-300 mt-0.5 md:mt-1 leading-snug">{f.label}</p>
             </div>
           ))}
         </div>
@@ -515,26 +508,26 @@ function SportsBand() {
 
 function DomainsGrid() {
   return (
-    <section className="px-4 py-10 md:py-12" data-testid="sabqai-domains">
-      <div className="max-w-5xl mx-auto">
-        <h2 className="text-xl md:text-2xl font-extrabold text-center mb-1.5">
+    <section className="px-4 py-7 md:py-12 overflow-x-hidden" data-testid="sabqai-domains">
+      <div className="max-w-5xl mx-auto min-w-0">
+        <h2 className="text-lg md:text-2xl font-extrabold text-center mb-1">
           ثمانية مجالات… أكثر من 40 خدمة
         </h2>
-        <p className="text-sm text-muted-foreground text-center mb-6">
+        <p className="text-xs md:text-sm text-muted-foreground text-center mb-4 md:mb-6">
           منظومة واحدة تخدم غرفة التحرير والقارئ معًا — على مدار الساعة
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
           {DOMAINS.map((d) => (
             <div
               key={d.title}
-              className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary"
+              className="rounded-lg md:rounded-xl border border-border bg-card p-2.5 md:p-4 transition-colors hover:border-primary min-w-0"
             >
-              <span className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <d.icon className="w-[18px] h-[18px]" aria-hidden="true" />
+              <span className="mb-1.5 md:mb-2.5 flex h-7 w-7 md:h-9 md:w-9 items-center justify-center rounded-md md:rounded-lg bg-primary/10 text-primary">
+                <d.icon className="w-3.5 h-3.5 md:w-[18px] md:h-[18px]" aria-hidden="true" />
               </span>
-              <span className="text-[11px] font-bold text-primary tracking-wide">{d.kicker}</span>
-              <h3 className="text-[15px] font-extrabold mt-0.5 mb-1">{d.title}</h3>
-              <p className="text-[13px] text-muted-foreground leading-relaxed">{d.desc}</p>
+              <span className="text-[10px] md:text-[11px] font-bold text-primary tracking-wide">{d.kicker}</span>
+              <h3 className="text-[13px] md:text-[15px] font-extrabold mt-0.5 mb-0.5 md:mb-1 leading-snug">{d.title}</h3>
+              <p className="text-[11px] md:text-[13px] text-muted-foreground leading-snug md:leading-relaxed">{d.desc}</p>
             </div>
           ))}
         </div>
@@ -545,35 +538,37 @@ function DomainsGrid() {
 
 function Charter() {
   return (
-    <section className="bg-muted/30 border-y border-border px-4 py-10 md:py-14" data-testid="sabqai-charter">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center gap-4 mb-2">
-          <span className="h-px flex-1 bg-foreground/60" aria-hidden="true" />
-          <h2 className="text-xl md:text-2xl font-extrabold whitespace-nowrap">ميثاق سبق للذكاء الاصطناعي</h2>
-          <span className="h-px flex-1 bg-foreground/60" aria-hidden="true" />
+    <section className="bg-muted/30 border-y border-border px-4 py-7 md:py-14 overflow-x-hidden" data-testid="sabqai-charter">
+      <div className="max-w-4xl mx-auto min-w-0">
+        <div className="flex items-center gap-2 md:gap-4 mb-2">
+          <span className="h-px flex-1 min-w-4 bg-foreground/60" aria-hidden="true" />
+          <h2 className="text-base sm:text-xl md:text-2xl font-extrabold text-center shrink">
+            ميثاق سبق للذكاء الاصطناعي
+          </h2>
+          <span className="h-px flex-1 min-w-4 bg-foreground/60" aria-hidden="true" />
         </div>
-        <p className="text-sm text-muted-foreground text-center mb-7">
+        <p className="text-xs md:text-sm text-muted-foreground text-center mb-5 md:mb-7 px-1">
           ثماني مواد معلنة للقارئ، ملزمة لغرفة التحرير — تُحدَّث كلما تطوّرت المنظومة
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10">
           {CHARTER.map((art) => (
-            <div key={art.no} className="flex gap-4 py-4 border-b border-border">
-              <span className="text-4xl md:text-5xl font-extrabold text-primary min-w-[3rem] text-center leading-none">
+            <div key={art.no} className="flex gap-3 md:gap-4 py-3 md:py-4 border-b border-border min-w-0">
+              <span className="text-3xl md:text-5xl font-extrabold text-primary w-8 md:min-w-[3rem] shrink-0 text-center leading-none">
                 {art.no}
               </span>
-              <div>
-                <h3 className="text-[15px] font-extrabold mb-0.5">{art.title}</h3>
-                <p className="text-[13.5px] text-muted-foreground leading-relaxed">{art.desc}</p>
+              <div className="min-w-0">
+                <h3 className="text-[14px] md:text-[15px] font-extrabold mb-0.5">{art.title}</h3>
+                <p className="text-[12.5px] md:text-[13.5px] text-muted-foreground leading-relaxed">{art.desc}</p>
               </div>
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-4 mt-9">
-          <span className="inline-flex items-center gap-1.5 border-2 border-emerald-600 text-emerald-600 font-extrabold text-sm rounded-md px-4 py-1.5 -rotate-2">
+        <div className="flex flex-wrap items-center justify-center gap-3 md:gap-4 mt-6 md:mt-9">
+          <span className="inline-flex items-center gap-1.5 border-2 border-emerald-600 text-emerald-600 font-extrabold text-xs md:text-sm rounded-md px-3 md:px-4 py-1 md:py-1.5 -rotate-2">
             <BadgeCheck className="w-4 h-4" aria-hidden="true" />
             أجازه المحرر
           </span>
-          <p className="text-sm text-muted-foreground max-w-md">
+          <p className="text-xs md:text-sm text-muted-foreground max-w-md text-center md:text-start">
             كل تقرير آلي في سبق يحمل هذا المعنى قبل أن يصل إليك — الذكاء يُسرّع الإنتاج،
             وصحفيّونا يملكون القرار الأخير.
           </p>
@@ -592,11 +587,11 @@ export default function SabqAI() {
   useCanonical("https://sabq.org/sabq-ai");
 
   return (
-    <div className="min-h-screen bg-background flex flex-col" dir="rtl">
+    <div className="min-h-screen max-w-[100vw] overflow-x-hidden bg-background flex flex-col" dir="rtl">
       <Header user={user || undefined} />
       <NavigationBar />
 
-      <main className="flex-1">
+      <main className="flex-1 min-w-0 overflow-x-hidden">
         <Hero />
         <Ticker />
         <Pipeline />
