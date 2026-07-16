@@ -6,11 +6,13 @@
  * بنية «من الإشارة إلى القصة» (خط إنتاج من خمس محطات، «عين المحرر» محطة
  * إجبارية بارزة) + ميثاق الذكاء الاصطناعي بثماني مواد + شريط «من داخل المنظومة».
  *
- * قاعدة مصداقية ملزمة: لا أرقام لحظية وهمية — كل الأرقام هنا حقائق ثابتة
- * قابلة للتحقق (عدد الخدمات/البطولات/اللغات). العدّادات الحية تُضاف لاحقًا
- * من واجهات برمجية فعلية فقط.
+ * قاعدة مصداقية ملزمة: لا أرقام لحظية وهمية. قسم «الأرقام تتحدث» يقرأ
+ * أرقامه من /api/public/ai-stats (استعلامات إنتاج حقيقية بكاش 5 دقائق)؛
+ * وإن تعذّر الجلب لأي سبب يظهر شريط الحقائق الثابتة بدلًا منه — لا تقدير
+ * ولا اختلاق.
  */
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   ArrowDown,
@@ -211,6 +213,269 @@ function StatsBand() {
   );
 }
 
+/* ==================== الأرقام تتحدث — عدّادات حية ==================== */
+
+interface AiPublicStats {
+  generatedAt: string;
+  ai: {
+    totalOps: number;
+    todayOps: number;
+    totalTokens: number;
+    successRate: number;
+    sinceDate: string | null;
+    daily: { date: string; count: number }[];
+  };
+  comments: { total: number; aiAnalyzed: number };
+  stories: { total: number };
+  articles: { totalPublished: number; todayPublished: number };
+}
+
+/** عدّاد تصاعدي: يبدأ عند دخوله الشاشة، ويكمل من قيمته الحالية عند كل تحديث */
+function CountUp({ value, decimals = 0 }: { value: number; decimals?: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [started, setStarted] = useState(false);
+  const [display, setDisplay] = useState(0);
+  const currentRef = useRef(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setStarted(true);
+          io.disconnect();
+        }
+      },
+      { threshold: 0.4 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!started) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      currentRef.current = value;
+      setDisplay(value);
+      return;
+    }
+    const from = currentRef.current;
+    const duration = 1400;
+    const t0 = performance.now();
+    let raf = 0;
+    const tick = (t: number) => {
+      const p = Math.min(1, (t - t0) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const n = from + (value - from) * eased;
+      currentRef.current = n;
+      setDisplay(n);
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [started, value]);
+
+  return (
+    <span ref={ref} className="tabular-nums" dir="ltr">
+      {display.toLocaleString("en-US", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })}
+    </span>
+  );
+}
+
+function formatUpdatedAgo(generatedAt: string): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(generatedAt).getTime()) / 60000));
+  if (minutes < 1) return "قبل لحظات";
+  if (minutes === 1) return "قبل دقيقة";
+  if (minutes === 2) return "قبل دقيقتين";
+  if (minutes <= 10) return `قبل ${minutes} دقائق`;
+  return `قبل ${minutes} دقيقة`;
+}
+
+function formatArabicDate(isoDate: string, withYear = false): string {
+  const d = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return isoDate;
+  return d.toLocaleDateString("ar", {
+    day: "numeric",
+    month: "long",
+    ...(withYear ? { year: "numeric" } : {}),
+  });
+}
+
+/** رسم أعمدة النشاط اليومي — عمود اليوم الجاري مفرّغ لأنه غير مكتمل */
+function DailyOpsChart({ daily }: { daily: { date: string; count: number }[] }) {
+  const max = Math.max(...daily.map((d) => d.count), 1);
+  const maxIndex = daily.findIndex((d) => d.count === max);
+  const lastIndex = daily.length - 1;
+  return (
+    <div className="rounded-xl border border-[#1B2732] bg-white/[.045] p-5 pb-3">
+      <h3 className="text-sm font-extrabold">النشاط اليومي للمنظومة — آخر ١٤ يومًا</h3>
+      <p className="text-xs text-[#8FA3B4] mb-3.5">
+        عدد عمليات الذكاء الاصطناعي المنفّذة يوميًا (المصدر: سجل الاستخدام الموحّد)
+      </p>
+      <div
+        className="flex items-end gap-1 h-28 pt-4"
+        dir="ltr"
+        role="img"
+        aria-label={`رسم أعمدة لعمليات الذكاء الاصطناعي اليومية، الذروة ${max.toLocaleString("en-US")}`}
+      >
+        {daily.map((d, i) => {
+          const isPartial = i === lastIndex;
+          const labeled = i === maxIndex || isPartial;
+          return (
+            <div key={d.date} className="group relative flex-1 flex items-end h-full">
+              <div
+                className={
+                  isPartial
+                    ? "w-full rounded-t border-[1.5px] border-b-0 border-primary min-h-[3px]"
+                    : "w-full rounded-t bg-primary min-h-[3px] group-hover:opacity-75 transition-opacity"
+                }
+                style={{ height: `${Math.max(3, Math.round((d.count / max) * 100))}%` }}
+              />
+              {labeled && (
+                <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[10.5px] font-bold tabular-nums whitespace-nowrap">
+                  {d.count.toLocaleString("en-US")}
+                </span>
+              )}
+              <span
+                dir="rtl"
+                className="pointer-events-none absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 z-10 whitespace-nowrap rounded-md border border-[#1B2732] bg-[#060A0F] px-2.5 py-1 text-[11.5px] opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                {formatArabicDate(d.date)}
+                {isPartial ? " (جارٍ)" : ""} — <b className="text-primary tabular-nums">{d.count.toLocaleString("en-US")}</b> عملية
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div
+        className="flex justify-between border-t border-[#1B2732] mt-1.5 pt-1.5 text-[10.5px] text-[#8FA3B4] tabular-nums"
+        dir="ltr"
+      >
+        <span>{daily.length > 0 ? formatArabicDate(daily[0].date) : ""}</span>
+        <span>اليوم</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * الحزام الحي: يقرأ من /api/public/ai-stats ويتحدّث كل دقيقة.
+ * أي فشل أو نقص بيانات → الرجوع لشريط الحقائق الثابتة (StatsBand) — لا أرقام وهمية.
+ */
+function LiveStatsBand() {
+  const { data: statsRaw } = useQuery<AiPublicStats>({
+    queryKey: ["/api/public/ai-stats"],
+    refetchInterval: 60_000,
+    staleTime: 55_000,
+  });
+  const stats = statsRaw && statsRaw.ai ? statsRaw : null;
+
+  if (!stats || stats.ai.totalOps <= 0) return <StatsBand />;
+
+  const daily = Array.isArray(stats.ai.daily) ? stats.ai.daily : [];
+  const commentsPct =
+    stats.comments.total > 0
+      ? Math.round((100 * stats.comments.aiAnalyzed) / stats.comments.total)
+      : null;
+  const tokensM = stats.ai.totalTokens / 1_000_000;
+
+  return (
+    <section className="bg-[#0E1620] text-[#E7EEF4] px-4 py-10 md:py-11" data-testid="sabqai-live-stats">
+      <div className="max-w-5xl mx-auto">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2 mb-1.5">
+          <h2 className="text-xl md:text-2xl font-extrabold">
+            الأرقام <span className="text-primary">تتحدث</span>
+          </h2>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 px-3 py-0.5 text-xs font-bold text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
+            مباشر من قاعدة البيانات
+          </span>
+          <span className="ms-auto text-xs text-[#8FA3B4]">
+            آخر تحديث: {formatUpdatedAgo(stats.generatedAt)}
+          </span>
+        </div>
+        <p className="text-[13.5px] text-[#8FA3B4] max-w-xl mb-6">
+          لا أرقام تقديرية ولا وهمية — كل رقم في هذا القسم يُقرأ لحظة فتح الصفحة من أنظمة
+          سبق العاملة، ويتحدّث تلقائيًا.
+        </p>
+
+        <div className="text-center pb-6">
+          <div className="text-primary font-extrabold leading-none text-[clamp(52px,9vw,84px)]">
+            <CountUp value={stats.ai.totalOps} />
+          </div>
+          <div className="text-[15px] font-bold mt-2">عملية ذكاء اصطناعي نفّذتها المنظومة</div>
+          {stats.ai.sinceDate && (
+            <div className="text-[12.5px] text-[#8FA3B4] mt-0.5">
+              منذ إطلاق مركز قياس الذكاء الاصطناعي — {formatArabicDate(stats.ai.sinceDate, true)}
+            </div>
+          )}
+          <div className="mt-3.5 inline-flex items-center gap-1.5 rounded-full border border-[#1B2732] bg-white/[.045] px-4 py-1 text-[13px]">
+            اليوم حتى الآن:
+            <b className="text-primary">
+              <CountUp value={stats.ai.todayOps} />
+            </b>
+            عملية
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 mb-6">
+          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
+            <div className="text-2xl font-extrabold text-primary">
+              <CountUp value={stats.ai.successRate} decimals={1} />
+              <span className="text-[15px]">%</span>
+            </div>
+            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">معدل نجاح عمليات الذكاء الاصطناعي</div>
+          </div>
+          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
+            <div className="text-2xl font-extrabold">
+              <CountUp value={tokensM} decimals={1} />
+              <span className="text-[15px]">M</span>
+            </div>
+            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">توكن معالج منذ إطلاق مركز القياس</div>
+          </div>
+          {commentsPct !== null && (
+            <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
+              <div className="text-2xl font-extrabold">
+                <CountUp value={commentsPct} />
+                <span className="text-[15px]">%</span>
+              </div>
+              <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">من تعليقات القرّاء تُفحص آليًا قبل النشر</div>
+            </div>
+          )}
+          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
+            <div className="text-2xl font-extrabold">
+              <CountUp value={stats.stories.total} />
+            </div>
+            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">قصة متابعة ذكية تجمع الأخبار المترابطة آليًا</div>
+          </div>
+          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
+            <div className="text-2xl font-extrabold">
+              <CountUp value={stats.articles.todayPublished} />
+            </div>
+            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">خبرًا نُشر اليوم عبر خط الإنتاج — بعد عين المحرر</div>
+          </div>
+          <div className="rounded-xl border border-[#1B2732] bg-white/[.045] px-4 py-4">
+            <div className="text-2xl font-extrabold text-primary">
+              <CountUp value={stats.articles.totalPublished} />
+            </div>
+            <div className="text-xs text-[#8FA3B4] mt-0.5 leading-relaxed">خبرًا في أرشيف سبق منذ التأسيس</div>
+          </div>
+        </div>
+
+        {daily.length >= 3 && <DailyOpsChart daily={daily} />}
+
+        <p className="text-center text-xs text-[#8FA3B4] mt-5">
+          وكل مادة من هذه الأرقام مرّت بمحطة واحدة لا تُتجاوز: <b className="text-[#E7EEF4]">عين المحرر</b>.
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function SportsBand() {
   return (
     <section className="bg-[#0E2233] text-white px-4 py-10 md:py-12" data-testid="sabqai-sports">
@@ -335,7 +600,7 @@ export default function SabqAI() {
         <Hero />
         <Ticker />
         <Pipeline />
-        <StatsBand />
+        <LiveStatsBand />
         <SportsBand />
         <DomainsGrid />
         <Charter />
