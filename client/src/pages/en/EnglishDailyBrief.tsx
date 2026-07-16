@@ -1,56 +1,48 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
-import { EnglishLayout } from "@/components/en/EnglishLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Progress } from "@/components/ui/progress";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { 
-  Sun, 
-  RefreshCw, 
-  Calendar, 
-  Clock, 
-  ArrowRight, 
-  Heart,
-  BookOpen,
-  Bookmark,
-  MessageSquare,
-  TrendingUp,
-  TrendingDown,
-  Target,
-  Lightbulb,
-  BarChart3,
-  Sparkles,
-  Eye,
-  Zap,
-  Brain,
-  Crosshair,
-  Search,
-  Gauge,
-  TargetIcon,
-  ChevronDown,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { enUS } from "date-fns/locale";
-import { queryClient } from "@/lib/queryClient";
-import { Link } from "wouter";
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+  Activity,
+  ArrowRight,
+  BarChart3,
+  BookOpen,
+  Bookmark,
+  ChevronDown,
+  Clock,
+  Gauge,
+  Heart,
+  Lightbulb,
+  MessageSquare,
+  RefreshCw,
+  Sparkles,
+  Sun,
+  Target,
+  Zap,
+} from "lucide-react";
 
+import { EnglishLayout } from "@/components/en/EnglishLayout";
+import { AccountSectionHeader } from "@/components/AccountSectionHeader";
+import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
+import { apiUrl, queryClient } from "@/lib/queryClient";
+import { MoodIcon } from "@/components/daily-brief/MoodIcon";
+import { SuggestionCard } from "@/components/daily-brief/SuggestionCard";
+import { MetricCard } from "@/components/daily-brief/MetricCard";
+import { HourlyActivityChart } from "@/components/daily-brief/HourlyActivityChart";
+import { BriefStateView } from "@/components/daily-brief/BriefStateView";
+import { GuestBriefLanding } from "@/components/daily-brief/GuestBriefLanding";
+
+/** Unified data contract (§18) — suggestedArticles carries categoryName. */
 interface DailySummary {
-  personalizedGreeting: {
+  hasActivity?: boolean;
+  personalizedGreeting?: {
     userName: string;
     articlesReadToday: number;
     readingTimeMinutes: number;
@@ -75,6 +67,7 @@ interface DailySummary {
       slug: string;
       englishSlug?: string | null;
       categoryName: string;
+      imageUrl?: string | null;
     }>;
   };
   timeActivity: {
@@ -83,7 +76,7 @@ interface DailySummary {
     lowActivityPeriod: number;
     aiSuggestion: string;
   };
-  aiInsights: {
+  aiInsights?: {
     readingMood: string;
     dailyGoal: string;
     focusScore: number;
@@ -91,544 +84,645 @@ interface DailySummary {
   generatedAt: string;
 }
 
-export default function EnglishDailyBrief() {
-  const [location, navigate] = useLocation();
-  const [isMetricsExpanded, setIsMetricsExpanded] = useState(true);
-  const [isInterestExpanded, setIsInterestExpanded] = useState(true);
-  const [isTimeActivityExpanded, setIsTimeActivityExpanded] = useState(true);
-  const [isAIInsightsExpanded, setIsAIInsightsExpanded] = useState(true);
+/** Branching result (§14): ok / guest(401) / empty(404 or hasActivity:false). */
+type DailyBriefResult =
+  | { kind: "ok"; data: DailySummary }
+  | { kind: "guest" }
+  | { kind: "empty" };
 
-  // Fetch user for header
-  const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string; profileImageUrl?: string | null }>({
+/** Reading-mood explanation map — accepts Arabic and English keys (§5, §17). */
+const MOOD_EXPLANATIONS: Record<string, string> = {
+  تحليلي: "You're leaning toward in-depth pieces and analysis today.",
+  Analytical: "You're leaning toward in-depth pieces and analysis today.",
+  فضولي: "You're hopping curiously across diverse topics.",
+  Curious: "You're hopping curiously across diverse topics.",
+  سريع: "Fast-paced reading — you grasp the gist quickly.",
+  Fast: "Fast-paced reading — you grasp the gist quickly.",
+  نقدي: "You pause at details and weigh perspectives.",
+  Critical: "You pause at details and weigh perspectives.",
+};
+const DEFAULT_MOOD_EXPLANATION = "A balanced reading pattern today.";
+
+/** EN three-way greeting (§4): 5–12 morning, 12–17 afternoon, else evening. */
+const getGreeting = () => {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 17) return "Good afternoon";
+  return "Good evening";
+};
+
+/** 0→"12 AM", <12→"{h} AM", 12→"12 PM", >12→"{h-12} PM". */
+const formatHour = (hour: number) => {
+  if (hour === 0) return "12 AM";
+  if (hour < 12) return `${hour} AM`;
+  if (hour === 12) return "12 PM";
+  return `${hour - 12} PM`;
+};
+
+export default function EnglishDailyBrief() {
+  const [isInterestsOpen, setIsInterestsOpen] = useState(true);
+  const [isTimeActivityOpen, setIsTimeActivityOpen] = useState(true);
+  const [isMetricsOpen, setIsMetricsOpen] = useState(false);
+  const [isAiInsightsOpen, setIsAiInsightsOpen] = useState(true);
+
+  useQuery<{ id: string; name?: string; email?: string; role?: string; profileImageUrl?: string | null }>({
     queryKey: ["/api/auth/user"],
     retry: false,
   });
 
-  const { data: summary, isLoading, error, refetch } = useQuery<DailySummary>({
+  // Branching mechanism (§14): direct fetch with credentials:"include" because the
+  // default fetcher returns null on 401 and throws a status-less message on 404.
+  const { data: result, isLoading, refetch } = useQuery<DailyBriefResult>({
     queryKey: ["/api/en/ai/daily-summary"],
+    queryFn: async () => {
+      const res = await fetch(apiUrl("/api/en/ai/daily-summary"), { credentials: "include" });
+      if (res.status === 401) return { kind: "guest" };
+      if (res.status === 404) return { kind: "empty" };
+      if (!res.ok) throw new Error(`Failed to load the daily brief (${res.status})`);
+      const data = (await res.json()) as DailySummary;
+      if (data?.hasActivity === false) return { kind: "empty" };
+      return { kind: "ok", data };
+    },
     retry: false,
   });
+
+  const summary = result?.kind === "ok" ? result.data : undefined;
 
   const handleRefresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ["/api/en/ai/daily-summary"] });
     refetch();
   };
 
-  const todayInEnglish = format(new Date(), 'EEEE, MMMM d, yyyy', { locale: enUS });
+  const todayFormatted = format(new Date(), "EEEE, MMMM d, yyyy", { locale: enUS });
 
-  // Get greeting based on local time
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    
-    if (hour >= 5 && hour < 12) {
-      return "Good morning";
-    } else if (hour >= 12 && hour < 17) {
-      return "Good afternoon";
-    } else {
-      return "Good evening";
-    }
-  };
-
-  const getMoodIcon = (mood: string) => {
-    const moods: Record<string, JSX.Element> = {
-      // Arabic keys
-      "تحليلي": <Brain className="h-12 w-12 text-primary" />,
-      "فضولي": <Search className="h-12 w-12 text-primary" />,
-      "سريع": <Zap className="h-12 w-12 text-primary" />,
-      "نقدي": <Crosshair className="h-12 w-12 text-primary" />,
-      // English keys
-      "Analytical": <Brain className="h-12 w-12 text-primary" />,
-      "Curious": <Search className="h-12 w-12 text-primary" />,
-      "Fast": <Zap className="h-12 w-12 text-primary" />,
-      "Critical": <Crosshair className="h-12 w-12 text-primary" />,
+  const formatted = useMemo(() => {
+    const metrics = summary?.metrics;
+    const engagementRaw =
+      (metrics?.articlesLiked ?? 0) + (metrics?.commentsPosted ?? 0) + (metrics?.articlesBookmarked ?? 0);
+    const completionRaw = Math.round(metrics?.completionRate ?? 0);
+    return {
+      articlesReadRaw: metrics?.articlesRead ?? 0,
+      readingTimeRaw: metrics?.readingTimeMinutes ?? 0,
+      completionRaw,
+      engagementRaw,
+      articlesRead: (metrics?.articlesRead ?? 0).toLocaleString("en-US"),
+      readingTime: (metrics?.readingTimeMinutes ?? 0).toLocaleString("en-US"),
+      completionRate: completionRaw.toLocaleString("en-US"),
+      engagement: engagementRaw.toLocaleString("en-US"),
+      bookmarked: (metrics?.articlesBookmarked ?? 0).toLocaleString("en-US"),
+      liked: (metrics?.articlesLiked ?? 0).toLocaleString("en-US"),
+      comments: (metrics?.commentsPosted ?? 0).toLocaleString("en-US"),
+      focusScore: (summary?.aiInsights?.focusScore ?? 0).toLocaleString("en-US"),
     };
-    return moods[mood] || <BookOpen className="h-12 w-12 text-primary" />;
-  };
+  }, [summary]);
 
-  const getChangeIcon = (change: number) => {
-    if (change > 0) return <TrendingUp className="h-4 w-4 text-green-500" />;
-    if (change < 0) return <TrendingDown className="h-4 w-4 text-red-500" />;
-    return null;
-  };
+  const bandTitle = isLoading
+    ? "Loading…"
+    : summary
+      ? `${getGreeting()}${summary.personalizedGreeting?.userName ? ` ${summary.personalizedGreeting.userName}` : ""}!`
+      : "Your Daily Brief";
 
-  const formatHour = (hour: number) => {
-    if (hour === 0) return "12 AM";
-    if (hour < 12) return `${hour} AM`;
-    if (hour === 12) return "12 PM";
-    return `${hour - 12} PM`;
-  };
-
-  if (error) {
-    return (
-      <EnglishLayout>
-        <main className="min-h-screen bg-background py-8">
-          <div className="container max-w-6xl mx-auto px-4">
-            <Card data-testid="card-no-activity">
-              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                <Eye className="h-16 w-16 text-muted-foreground mb-4" />
-                <h2 className="text-2xl font-semibold mb-2" data-testid="text-no-activity-title">
-                  Not Enough Data
-                </h2>
-                <p className="text-muted-foreground mb-6" data-testid="text-no-activity-description">
-                  We couldn't find reading activity in the last 24 hours
-                </p>
-                <Button asChild data-testid="button-explore-news">
-                  <Link href="/en/news">
-                    Explore News
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </main>
-      </EnglishLayout>
-    );
-  }
+  const bandAction = summary ? (
+    <div className="flex items-center gap-3">
+      <span className="text-xs text-muted-foreground tabular-nums" data-testid="text-last-updated">
+        Updated {format(new Date(summary.generatedAt), "HH:mm")}
+      </span>
+      <Button
+        variant="outline"
+        size="icon"
+        className="rounded-full"
+        onClick={handleRefresh}
+        disabled={isLoading}
+        data-testid="button-refresh-brief"
+      >
+        <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+      </Button>
+    </div>
+  ) : undefined;
 
   return (
     <EnglishLayout>
-      <main className="min-h-screen bg-background py-8">
-        <div className="container max-w-7xl mx-auto px-4">
-          {/* Header Section */}
-          <div className="mb-8">
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div className="flex-1">
-                <h1 className="text-3xl md:text-4xl font-bold mb-2 flex items-center gap-3" data-testid="text-daily-brief-title">
-                  <Sun className="h-8 w-8 text-yellow-500" />
-                  {isLoading ? "Loading..." : `${getGreeting()} ${summary?.personalizedGreeting.userName || ""}!`}
-                </h1>
-                <div className="flex flex-wrap items-center gap-4 text-muted-foreground">
-                  <div className="flex items-center gap-2" data-testid="text-current-date">
-                    <Calendar className="h-4 w-4" />
-                    <span>{todayInEnglish}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <Button 
-                variant="outline" 
-                size="icon"
-                onClick={handleRefresh}
-                disabled={isLoading}
-                data-testid="button-refresh-brief"
-              >
-                <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-              </Button>
+      <main className="min-h-screen bg-background">
+        {/* Section 0 — header band (visible in every state) */}
+        <div className="border-b border-primary/10 bg-ai-gradient-soft">
+          <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+            <div className="scroll-fade-in">
+              <AccountSectionHeader
+                icon={Sun}
+                title={bandTitle}
+                subtitle={todayFormatted}
+                testId="text-daily-brief-title"
+                action={bandAction}
+              />
             </div>
-            
-            <Separator className="my-4" />
           </div>
+        </div>
 
-          {/* Loading State */}
-          {isLoading && (
+        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+          {isLoading ? (
+            /* Loading state (§14.1) */
             <div className="space-y-6" data-testid="loading-state">
-              <Card>
-                <CardHeader>
-                  <Skeleton className="h-8 w-3/4" />
-                  <Skeleton className="h-4 w-1/2 mt-2" />
-                </CardHeader>
-              </Card>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {[1, 2, 3, 4, 5, 6].map((i) => (
-                  <Card key={i}>
-                    <CardContent className="p-6">
-                      <Skeleton className="h-24" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Summary Content */}
-          {!isLoading && summary && (
-            <div className="space-y-8">
-              {/* Personalized Greeting Card */}
-              <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20" data-testid="card-greeting">
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <div data-testid="icon-reading-mood">
-                      {getMoodIcon(summary.personalizedGreeting.readingMood)}
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-lg leading-relaxed" data-testid="text-greeting-summary">
-                        In the last 24 hours, you read <strong data-testid="value-articles-today">{summary.personalizedGreeting.articlesReadToday}</strong> articles in{' '}
-                        <strong data-testid="value-reading-minutes">{summary.personalizedGreeting.readingTimeMinutes}</strong> minutes
-                        {summary.personalizedGreeting.topCategories.length > 0 && (
-                          <>
-                            {' '}— including articles about{' '}
-                            {summary.personalizedGreeting.topCategories.map((cat, idx) => (
-                              <span key={idx} data-testid={`text-top-category-${idx}`}>
-                                <strong>{cat}</strong>
-                                {idx < summary.personalizedGreeting.topCategories.length - 1 && ' and '}
-                              </span>
-                            ))}
-                          </>
-                        )}
-                      </p>
-                      <p className="text-muted-foreground mt-2" data-testid="text-mood-description">
-                        Your reading mood today is <strong data-testid="value-reading-mood">"{summary.personalizedGreeting.readingMood}"</strong> based on your article engagement.
-                      </p>
-                    </div>
-                  </div>
+              <Card className="border-0 shadow-sm dark:border dark:border-card-border">
+                <CardContent className="p-6 md:p-8">
+                  <Skeleton className="h-7 w-2/3" />
+                  <Skeleton className="h-4 w-1/2 mt-3" />
+                  <Skeleton className="h-4 w-1/3 mt-2" />
                 </CardContent>
               </Card>
-
-              {/* Performance Metrics */}
-              <Collapsible open={isMetricsExpanded} onOpenChange={setIsMetricsExpanded}>
-                <div className="flex items-center justify-between gap-2 mb-4">
-                  <h2 className="text-2xl font-bold flex items-center gap-2" data-testid="heading-performance-metrics">
-                    <BarChart3 className="h-6 w-6 text-primary" />
-                    Personal Performance Metrics
-                  </h2>
-                  <CollapsibleTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      data-testid="button-toggle-metrics"
-                    >
-                      <ChevronDown 
-                        className={cn(
-                          "h-4 w-4 transition-transform duration-200",
-                          isMetricsExpanded && "rotate-180"
-                        )}
-                      />
-                    </Button>
-                  </CollapsibleTrigger>
-                </div>
-                
-                <CollapsibleContent>
-                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  <Card data-testid="metric-articles-read">
-                    <CardContent className="p-6">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <BookOpen className="h-5 w-5 text-primary" />
-                          <span className="text-sm text-muted-foreground" data-testid="label-articles-read">Articles Read</span>
-                        </div>
-                        <span data-testid="icon-change-articles">{getChangeIcon(summary.metrics.percentChangeFromYesterday)}</span>
-                      </div>
-                      <div className="text-3xl font-bold" data-testid="value-articles-read">{summary.metrics.articlesRead}</div>
-                      {summary.metrics.percentChangeFromYesterday !== 0 && (
-                        <p className="text-xs text-muted-foreground mt-1" data-testid="text-change-articles">
-                          {summary.metrics.percentChangeFromYesterday > 0 ? 'Up' : 'Down'}{' '}
-                          {Math.abs(summary.metrics.percentChangeFromYesterday)}% from yesterday
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card data-testid="metric-reading-time">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Clock className="h-5 w-5 text-primary" />
-                        <span className="text-sm text-muted-foreground" data-testid="label-reading-time">Total Reading Time</span>
-                      </div>
-                      <div className="text-3xl font-bold" data-testid="value-reading-time">{summary.metrics.readingTimeMinutes} minutes</div>
-                      <p className="text-xs text-muted-foreground mt-1" data-testid="text-focus-feedback">Excellent focus</p>
-                    </CardContent>
-                  </Card>
-
-                  <Card data-testid="metric-completion-rate">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Target className="h-5 w-5 text-primary" />
-                        <span className="text-sm text-muted-foreground" data-testid="label-completion-rate">Reading Completion Rate</span>
-                      </div>
-                      <div className="text-3xl font-bold" data-testid="value-completion-rate">{Math.round(summary.metrics.completionRate)}%</div>
-                      <Progress value={summary.metrics.completionRate} className="mt-2" data-testid="progress-completion-rate" />
-                    </CardContent>
-                  </Card>
-
-                  <Card data-testid="metric-bookmarks">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Bookmark className="h-5 w-5 text-primary" />
-                        <span className="text-sm text-muted-foreground" data-testid="label-bookmarks">Bookmarked Articles</span>
-                      </div>
-                      <div className="text-3xl font-bold" data-testid="value-bookmarks">{summary.metrics.articlesBookmarked}</div>
-                      {summary.interestAnalysis.topCategories[0] && (
-                        <p className="text-xs text-muted-foreground mt-1" data-testid="text-bookmark-category">
-                          Mostly about {summary.interestAnalysis.topCategories[0].name}
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card data-testid="metric-likes">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Heart className="h-5 w-5 text-primary" />
-                        <span className="text-sm text-muted-foreground" data-testid="label-likes">Likes</span>
-                      </div>
-                      <div className="text-3xl font-bold" data-testid="value-likes">{summary.metrics.articlesLiked}</div>
-                    </CardContent>
-                  </Card>
-
-                  <Card data-testid="metric-comments">
-                    <CardContent className="p-6">
-                      <div className="flex items-center gap-2 mb-2">
-                        <MessageSquare className="h-5 w-5 text-primary" />
-                        <span className="text-sm text-muted-foreground" data-testid="label-comments">Comments</span>
-                      </div>
-                      <div className="text-3xl font-bold" data-testid="value-comments">{summary.metrics.commentsPosted}</div>
-                    </CardContent>
-                  </Card>
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-
-              {/* Interest Analysis */}
-              <Collapsible open={isInterestExpanded} onOpenChange={setIsInterestExpanded}>
-                <Card data-testid="card-interest-analysis">
-                  <CardHeader>
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="flex items-center gap-2" data-testid="heading-interest-analysis">
-                        <Sparkles className="h-6 w-6 text-primary" />
-                        Interest Analysis (AI Insights)
-                      </CardTitle>
-                      <CollapsibleTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          data-testid="button-toggle-interest"
-                        >
-                          <ChevronDown 
-                            className={cn(
-                              "h-4 w-4 transition-transform duration-200",
-                              isInterestExpanded && "rotate-180"
-                            )}
-                          />
-                        </Button>
-                      </CollapsibleTrigger>
-                    </div>
-                  </CardHeader>
-                  
-                  <CollapsibleContent>
-                    <CardContent className="space-y-4">
-                  <div>
-                    <h3 className="font-semibold mb-2" data-testid="label-today-interest">Your interests today:</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {summary.interestAnalysis.topCategories.map((cat, idx) => (
-                        <Badge 
-                          key={idx} 
-                          variant="secondary" 
-                          className="text-base px-3 py-1"
-                          data-testid={`badge-category-${idx}`}
-                        >
-                          <span data-testid={`text-category-name-${idx}`}>{cat.name}</span>
-                          {' '}(<span data-testid={`value-category-count-${idx}`}>{cat.count}</span>)
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-
-                  {summary.interestAnalysis.topicsThatCatchAttention.length > 0 && (
-                    <div>
-                      <h3 className="font-semibold mb-2" data-testid="label-topics-attention">Topics that catch your attention:</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {summary.interestAnalysis.topicsThatCatchAttention.map((topic, idx) => (
-                          <Badge 
-                            key={idx} 
-                            variant="outline"
-                            data-testid={`badge-topic-${idx}`}
-                          >
-                            {topic}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {summary.interestAnalysis.suggestedArticles.length > 0 && (
-                    <div>
-                      <h3 className="font-semibold mb-3" data-testid="label-system-suggestions">The system suggests:</h3>
-                      <div className="grid gap-3 md:grid-cols-3">
-                        {summary.interestAnalysis.suggestedArticles.map((article, idx) => (
-                          <Link 
-                            key={article.id} 
-                            href={`/en/article/${article.englishSlug || article.slug}`}
-                            data-testid={`link-suggested-article-${idx}`}
-                          >
-                            <Card className="hover-elevate transition-all cursor-pointer h-full">
-                              <CardContent className="p-4">
-                                <Badge 
-                                  variant="secondary" 
-                                  className="mb-2"
-                                  data-testid={`badge-suggestion-category-${idx}`}
-                                >
-                                  {article.categoryName}
-                                </Badge>
-                                <h4 
-                                  className="font-semibold text-sm line-clamp-2"
-                                  data-testid={`text-suggestion-title-${idx}`}
-                                >
-                                  {article.title}
-                                </h4>
-                              </CardContent>
-                            </Card>
-                          </Link>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-
-              {/* Time Activity Chart */}
-              <Collapsible open={isTimeActivityExpanded} onOpenChange={setIsTimeActivityExpanded}>
-                <Card data-testid="card-time-activity">
-                  <CardHeader>
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex-1">
-                        <CardTitle className="flex items-center gap-2" data-testid="heading-time-activity">
-                          <Zap className="h-6 w-6 text-primary" />
-                          Time Activity
-                        </CardTitle>
-                        <CardDescription data-testid="text-activity-summary">
-                          Peak reading time: <strong data-testid="value-peak-time">{formatHour(summary.timeActivity.peakReadingTime)}</strong>
-                          {' '}• Low activity period: <strong data-testid="value-low-time">{formatHour(summary.timeActivity.lowActivityPeriod)}</strong>
-                        </CardDescription>
-                      </div>
-                      <CollapsibleTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          data-testid="button-toggle-time-activity"
-                        >
-                          <ChevronDown 
-                            className={cn(
-                              "h-4 w-4 transition-transform duration-200",
-                              isTimeActivityExpanded && "rotate-180"
-                            )}
-                          />
-                        </Button>
-                      </CollapsibleTrigger>
-                    </div>
-                  </CardHeader>
-                  
-                  <CollapsibleContent>
-                    <CardContent>
-                  <div className="h-64 w-full" data-testid="chart-hourly-activity">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart 
-                        data={summary.timeActivity.hourlyBreakdown}
-                        margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis 
-                          dataKey="hour" 
-                          tickFormatter={formatHour}
-                        />
-                        <YAxis />
-                        <Tooltip 
-                          labelFormatter={(hour) => `${formatHour(Number(hour))}`}
-                          formatter={(value) => [`${value} articles`, 'Article Count']}
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey="count" 
-                          stroke="hsl(var(--primary))" 
-                          fill="hsl(var(--primary) / 0.2)" 
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="mt-4 p-4 bg-primary/5 rounded-lg" data-testid="box-ai-suggestion">
-                    <div className="flex items-start gap-2">
-                      <Lightbulb className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
-                      <p className="text-sm">
-                        <strong>AI Suggestion:</strong>{' '}
-                        <span data-testid="text-ai-suggestion">{summary.timeActivity.aiSuggestion}</span>
-                      </p>
-                    </div>
-                  </div>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-
-              {/* AI Insights */}
-              <Collapsible open={isAIInsightsExpanded} onOpenChange={setIsAIInsightsExpanded}>
-                <Card className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/20" data-testid="card-ai-insights">
-                  <CardHeader>
-                    <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="flex items-center gap-2" data-testid="heading-ai-touches">
-                        <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
-                        AI Insights
-                      </CardTitle>
-                      <CollapsibleTrigger asChild>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          data-testid="button-toggle-ai-insights"
-                        >
-                          <ChevronDown 
-                            className={cn(
-                              "h-4 w-4 transition-transform duration-200",
-                              isAIInsightsExpanded && "rotate-180"
-                            )}
-                          />
-                        </Button>
-                      </CollapsibleTrigger>
-                    </div>
-                  </CardHeader>
-                  
-                  <CollapsibleContent>
-                    <CardContent className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div data-testid="box-reading-mood-report">
-                      <h3 className="font-semibold mb-2 flex items-center gap-2">
-                        <Brain className="h-5 w-5" />
-                        Reading Mood Report
-                      </h3>
-                      <p 
-                        className="text-2xl font-bold text-purple-600 dark:text-purple-400"
-                        data-testid="value-ai-reading-mood"
-                      >
-                        {summary.aiInsights.readingMood}
-                      </p>
-                    </div>
-
-                    <div data-testid="box-focus-score">
-                      <h3 className="font-semibold mb-2 flex items-center gap-2">
-                        <Gauge className="h-5 w-5" />
-                        Today's Focus Score
-                      </h3>
-                      <div className="flex items-center gap-3">
-                        <Progress 
-                          value={summary.aiInsights.focusScore} 
-                          className="flex-1"
-                          data-testid="progress-focus-score"
-                        />
-                        <span 
-                          className="text-2xl font-bold text-purple-600 dark:text-purple-400"
-                          data-testid="value-focus-score"
-                        >
-                          {summary.aiInsights.focusScore}%
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-purple-500/10 rounded-lg" data-testid="box-daily-goal">
-                    <h3 className="font-semibold mb-2 flex items-center gap-2">
-                      <TargetIcon className="h-5 w-5" />
-                      Daily Goal Suggestion
-                    </h3>
-                    <p data-testid="text-daily-goal">{summary.aiInsights.dailyGoal}</p>
-                  </div>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 md:gap-4">
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-20 rounded-2xl" />
+                ))}
+              </div>
+              <Card className="border-0 shadow-sm dark:border dark:border-card-border">
+                <CardContent className="p-6">
+                  <Skeleton className="h-40 w-full rounded-2xl" />
+                </CardContent>
+              </Card>
             </div>
+          ) : result?.kind === "guest" ? (
+            <GuestBriefLanding locale="en" />
+          ) : result?.kind === "empty" ? (
+            <BriefStateView
+              variant="empty"
+              title="No activity yet"
+              description="Start reading and your brief will appear here within 24 hours."
+              action={{ label: "Explore news", href: "/en/news" }}
+              arrowIcon={<ArrowRight className="h-4 w-4" />}
+            />
+          ) : !summary ? (
+            <BriefStateView
+              variant="error"
+              title="We couldn't load your brief"
+              description="Something went wrong while building your summary. Try again."
+              action={{ label: "Try again", onClick: () => refetch() }}
+              arrowIcon={<RefreshCw className="h-4 w-4" />}
+            />
+          ) : (
+            <SuccessContent
+              summary={summary}
+              formatted={formatted}
+              isInterestsOpen={isInterestsOpen}
+              setIsInterestsOpen={setIsInterestsOpen}
+              isTimeActivityOpen={isTimeActivityOpen}
+              setIsTimeActivityOpen={setIsTimeActivityOpen}
+              isMetricsOpen={isMetricsOpen}
+              setIsMetricsOpen={setIsMetricsOpen}
+              isAiInsightsOpen={isAiInsightsOpen}
+              setIsAiInsightsOpen={setIsAiInsightsOpen}
+            />
           )}
         </div>
       </main>
     </EnglishLayout>
+  );
+}
+
+interface FormattedMetrics {
+  articlesReadRaw: number;
+  readingTimeRaw: number;
+  completionRaw: number;
+  engagementRaw: number;
+  articlesRead: string;
+  readingTime: string;
+  completionRate: string;
+  engagement: string;
+  bookmarked: string;
+  liked: string;
+  comments: string;
+  focusScore: string;
+}
+
+interface SuccessContentProps {
+  summary: DailySummary;
+  formatted: FormattedMetrics;
+  isInterestsOpen: boolean;
+  setIsInterestsOpen: (open: boolean) => void;
+  isTimeActivityOpen: boolean;
+  setIsTimeActivityOpen: (open: boolean) => void;
+  isMetricsOpen: boolean;
+  setIsMetricsOpen: (open: boolean) => void;
+  isAiInsightsOpen: boolean;
+  setIsAiInsightsOpen: (open: boolean) => void;
+}
+
+function SuccessContent({
+  summary,
+  formatted,
+  isInterestsOpen,
+  setIsInterestsOpen,
+  isTimeActivityOpen,
+  setIsTimeActivityOpen,
+  isMetricsOpen,
+  setIsMetricsOpen,
+  isAiInsightsOpen,
+  setIsAiInsightsOpen,
+}: SuccessContentProps) {
+  const greeting = summary.personalizedGreeting;
+  const articlesToday = greeting?.articlesReadToday ?? 0;
+  const minutesToday = greeting?.readingTimeMinutes ?? 0;
+  const greetingTopCategories = greeting?.topCategories ?? [];
+  const readingMood = greeting?.readingMood ?? "";
+
+  const topCategories = summary.interestAnalysis.topCategories ?? [];
+  const topics = summary.interestAnalysis.topicsThatCatchAttention ?? [];
+  const suggestedArticles = summary.interestAnalysis.suggestedArticles ?? [];
+
+  const hourlyBreakdown = summary.timeActivity.hourlyBreakdown ?? [];
+  const totalCount = hourlyBreakdown.reduce((sum, point) => sum + (point.count ?? 0), 0);
+  const peakReadingTime = summary.timeActivity.peakReadingTime ?? 0;
+  const lowActivityPeriod = summary.timeActivity.lowActivityPeriod ?? 0;
+
+  const percentChange = summary.metrics.percentChangeFromYesterday ?? 0;
+  // A forced value of 100 means "yesterday was zero" → hidden (§11).
+  const showChange = percentChange !== 0 && percentChange !== 100;
+
+  const hasInterests = topCategories.length > 0 || topics.length > 0;
+
+  return (
+    <div className="space-y-10">
+      {/* Section 1 — greeting/mood hero card */}
+      <Card
+        className="scroll-fade-in border-0 bg-ai-gradient-soft shadow-sm dark:border dark:border-card-border"
+        data-testid="card-greeting"
+      >
+        <CardContent className="p-6 md:p-8">
+          <div className="flex items-start gap-4 md:gap-6">
+            <div
+              className="h-16 w-16 md:h-20 md:w-20 shrink-0 rounded-full bg-primary/10 flex items-center justify-center"
+              data-testid="icon-reading-mood"
+            >
+              <MoodIcon mood={readingMood} className="h-8 w-8 md:h-10 md:w-10 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-base md:text-lg leading-relaxed" data-testid="text-greeting-summary">
+                {articlesToday > 0 ? (
+                  <>
+                    In the last 24 hours you read{" "}
+                    <strong className="tabular-nums" data-testid="value-articles-today">
+                      {articlesToday.toLocaleString("en-US")}
+                    </strong>{" "}
+                    articles
+                    {minutesToday > 0 && (
+                      <>
+                        {" "}
+                        in{" "}
+                        <strong className="tabular-nums" data-testid="value-reading-minutes">
+                          {minutesToday.toLocaleString("en-US")}
+                        </strong>{" "}
+                        minutes
+                      </>
+                    )}
+                  </>
+                ) : (
+                  "No reads logged in the last 24 hours — your reading day starts now."
+                )}
+                {greetingTopCategories.length > 0 && (
+                  <>
+                    {" "}
+                    — including{" "}
+                    {greetingTopCategories.map((category, index) => (
+                      <span key={index} data-testid={`text-top-category-${index}`}>
+                        {index > 0 && " and "}
+                        <strong>{category}</strong>
+                      </span>
+                    ))}
+                  </>
+                )}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1" data-testid="text-mood-description">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm">
+                  Your reading mood today:{" "}
+                  <strong data-testid="value-reading-mood">"{readingMood}"</strong>
+                </span>
+                <span className="text-sm text-muted-foreground" data-testid="text-mood-explanation">
+                  {MOOD_EXPLANATIONS[readingMood] ?? DEFAULT_MOOD_EXPLANATION}
+                </span>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section 2 — KPI row (the only numbers row) */}
+      <div className="scroll-fade-in grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4 md:gap-4">
+        <MobileOptimizedKpiCard
+          label="Articles read today"
+          value={formatted.articlesReadRaw === 0 ? "Start your first article" : formatted.articlesRead}
+          icon={BookOpen}
+          iconColor="text-primary"
+          iconBgColor="bg-primary/10"
+          className="border-0 dark:border dark:border-card-border"
+          testId="kpi-articles-read"
+          ariaLive
+        />
+        <MobileOptimizedKpiCard
+          label="Reading time (min)"
+          value={formatted.readingTimeRaw === 0 ? "Your minutes await" : formatted.readingTime}
+          icon={Clock}
+          iconColor="text-primary"
+          iconBgColor="bg-primary/10"
+          className="border-0 dark:border dark:border-card-border"
+          testId="kpi-reading-time"
+          ariaLive
+        />
+        <MobileOptimizedKpiCard
+          label="Completion rate (%)"
+          value={formatted.completionRaw === 0 ? "Finish one article" : formatted.completionRate}
+          icon={Target}
+          iconColor="text-primary"
+          iconBgColor="bg-primary/10"
+          className="border-0 dark:border dark:border-card-border"
+          testId="kpi-completion-rate"
+          ariaLive
+        />
+        <MobileOptimizedKpiCard
+          label="Engagement points"
+          value={formatted.engagementRaw === 0 ? "Engage with a story" : formatted.engagement}
+          icon={Activity}
+          iconColor="text-primary"
+          iconBgColor="bg-primary/10"
+          className="border-0 dark:border dark:border-card-border"
+          testId="kpi-engagement"
+          ariaLive
+        />
+      </div>
+
+      {/* Section 3 — interests (fully hidden when no categories and no topics) */}
+      {hasInterests && (
+        <Collapsible open={isInterestsOpen} onOpenChange={setIsInterestsOpen}>
+          <Card className="border-0 shadow-sm dark:border dark:border-card-border" data-testid="card-interest-analysis">
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1">
+                  <CardTitle className="flex items-center gap-2 text-2xl" data-testid="heading-interest-analysis">
+                    <Sparkles className="h-6 w-6 text-primary" />
+                    Your interests today
+                  </CardTitle>
+                  <CardDescription className="mt-1 text-sm">
+                    Categories and topics that topped your reading in 24 hours
+                  </CardDescription>
+                </div>
+                <CollapsibleTrigger asChild>
+                  <Button size="sm" variant="ghost" data-testid="button-toggle-interest">
+                    <ChevronDown
+                      className={cn("h-4 w-4 transition-transform duration-200", isInterestsOpen && "rotate-180")}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-4">
+                {topCategories.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {topCategories.map((category, index) => (
+                      <Badge
+                        key={index}
+                        variant="outline"
+                        className="text-sm px-3 py-1 bg-primary/10 text-primary border-primary/20"
+                        data-testid={`badge-category-${index}`}
+                      >
+                        {category.name}{" "}
+                        (
+                        <span className="tabular-nums" data-testid={`value-category-count-${index}`}>
+                          {(category.count ?? 0).toLocaleString("en-US")}
+                        </span>
+                        )
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                {topics.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold mb-2" data-testid="label-topics-attention">
+                      Topics that caught your attention
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {topics.map((topic, index) => (
+                        <Badge key={index} variant="outline" data-testid={`badge-topic-${index}`}>
+                          {topic}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
+
+      {/* Section 4 — suggestions (fully hidden when absent) */}
+      {suggestedArticles.length > 0 && (
+        <div>
+          <h2 className="text-2xl font-bold flex items-center gap-2" data-testid="heading-suggestions">
+            <Lightbulb className="h-6 w-6 text-primary" />
+            Suggested for you
+          </h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {suggestedArticles.map((article, index) => (
+              <SuggestionCard
+                key={article.id}
+                title={article.title}
+                categoryName={article.categoryName}
+                imageUrl={article.imageUrl}
+                href={`/en/article/${article.englishSlug || article.slug}`}
+                index={index}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Section 5 — time activity */}
+      <Collapsible open={isTimeActivityOpen} onOpenChange={setIsTimeActivityOpen}>
+        <Card className="border-0 shadow-sm dark:border dark:border-card-border" data-testid="card-time-activity">
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1">
+                <CardTitle className="flex items-center gap-2 text-2xl" data-testid="heading-time-activity">
+                  <Zap className="h-6 w-6 text-primary" />
+                  Your activity through the day
+                </CardTitle>
+                {totalCount > 0 && (
+                  <CardDescription className="mt-1 text-sm" data-testid="text-activity-summary">
+                    Peak reading time:{" "}
+                    <strong data-testid="value-peak-time">{formatHour(peakReadingTime)}</strong>
+                    {lowActivityPeriod !== 0 && (
+                      <>
+                        {" "}
+                        • Lowest activity period:{" "}
+                        <strong data-testid="value-low-time">{formatHour(lowActivityPeriod)}</strong>
+                      </>
+                    )}
+                  </CardDescription>
+                )}
+              </div>
+              <CollapsibleTrigger asChild>
+                <Button size="sm" variant="ghost" data-testid="button-toggle-time-activity">
+                  <ChevronDown
+                    className={cn("h-4 w-4 transition-transform duration-200", isTimeActivityOpen && "rotate-180")}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+          </CardHeader>
+          <CollapsibleContent>
+            <CardContent>
+              {totalCount > 0 && (
+                <HourlyActivityChart
+                  data={hourlyBreakdown}
+                  reversed={false}
+                  isRTL={false}
+                  formatHour={formatHour}
+                  tooltipTitle={(hour) => formatHour(hour)}
+                  seriesName="Articles"
+                  valueSuffix="articles"
+                />
+              )}
+              <div className="mt-6 p-4 bg-primary/10 rounded-lg border border-primary/20" data-testid="box-ai-suggestion">
+                <div className="flex items-start gap-3">
+                  <Lightbulb className="h-5 w-5 shrink-0 mt-0.5 text-primary" />
+                  <p className="text-sm leading-relaxed">
+                    <strong>AI suggestion:</strong>{" "}
+                    <span data-testid="text-ai-suggestion">{summary.timeActivity.aiSuggestion}</span>
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </CollapsibleContent>
+        </Card>
+      </Collapsible>
+
+      {/* Section 6 — detailed performance metrics (collapsed by default) */}
+      <Collapsible open={isMetricsOpen} onOpenChange={setIsMetricsOpen}>
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <h2 className="text-2xl font-bold flex items-center gap-2" data-testid="heading-performance-metrics">
+            <BarChart3 className="h-6 w-6 text-primary" />
+            Detailed performance metrics
+          </h2>
+          <CollapsibleTrigger asChild>
+            <Button size="sm" variant="ghost" data-testid="button-toggle-metrics">
+              <ChevronDown
+                className={cn("h-4 w-4 transition-transform duration-200", isMetricsOpen && "rotate-180")}
+              />
+            </Button>
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent>
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 md:gap-4">
+            <MetricCard
+              testId="metric-articles-read"
+              label="Articles read"
+              value={formatted.articlesRead}
+              icon={BookOpen}
+              change={
+                showChange
+                  ? {
+                      direction: percentChange > 0 ? "up" : "down",
+                      text: `${percentChange > 0 ? "Up" : "Down"} ${Math.abs(percentChange)}% from yesterday`,
+                      testId: "text-change-articles",
+                      iconTestId: "icon-change-articles",
+                    }
+                  : undefined
+              }
+            />
+            <MetricCard
+              testId="metric-reading-time"
+              label="Total reading time"
+              value={`${formatted.readingTime} min`}
+              icon={Clock}
+              subtext="Total minutes in the last 24 hours"
+            />
+            <MetricCard
+              testId="metric-completion-rate"
+              label="Reading completion"
+              value={`${formatted.completionRate}%`}
+              icon={Target}
+              progress={summary.metrics.completionRate ?? 0}
+            />
+            <MetricCard
+              testId="metric-bookmarks"
+              label="Bookmarked articles"
+              value={formatted.bookmarked}
+              icon={Bookmark}
+              subtext={topCategories[0] ? `Mostly about ${topCategories[0].name}` : undefined}
+            />
+            <MetricCard
+              testId="metric-likes"
+              label="Likes"
+              value={formatted.liked}
+              icon={Heart}
+            />
+            <MetricCard
+              testId="metric-comments"
+              label="Comments"
+              value={formatted.comments}
+              icon={MessageSquare}
+            />
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      {/* Section 7 — AI insights (mood moved to the hero) */}
+      {summary.aiInsights && (
+        <Collapsible open={isAiInsightsOpen} onOpenChange={setIsAiInsightsOpen}>
+          <Card
+            className="border-0 bg-ai-gradient-soft shadow-sm dark:border dark:border-card-border"
+            data-testid="card-ai-insights"
+          >
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex-1">
+                  <CardTitle className="flex items-center gap-2 text-2xl" data-testid="heading-ai-touches">
+                    <Sparkles className="h-6 w-6 text-primary" />
+                    AI insights
+                  </CardTitle>
+                  <CardDescription className="mt-1 text-sm">Smart analysis of your daily reading</CardDescription>
+                </div>
+                <CollapsibleTrigger asChild>
+                  <Button size="sm" variant="ghost" data-testid="button-toggle-ai-insights">
+                    <ChevronDown
+                      className={cn("h-4 w-4 transition-transform duration-200", isAiInsightsOpen && "rotate-180")}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </CardHeader>
+            <CollapsibleContent>
+              <CardContent className="space-y-4">
+                <div className="rounded-lg bg-card p-4 md:p-6 shadow-sm" data-testid="box-focus-score">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Gauge className="h-5 w-5 text-primary" />
+                    Your focus score today
+                  </h3>
+                  <div className="mt-3 flex items-center gap-3">
+                    <Progress
+                      value={summary.aiInsights.focusScore ?? 0}
+                      className="flex-1"
+                      data-testid="progress-focus-score"
+                    />
+                    <span className="text-2xl font-bold tabular-nums text-ai-gradient" data-testid="value-focus-score">
+                      {formatted.focusScore}%
+                    </span>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-card p-4 md:p-6 shadow-sm" data-testid="box-daily-goal">
+                  <h3 className="font-semibold flex items-center gap-2">
+                    <Target className="h-5 w-5 text-primary" />
+                    Your suggested daily goal
+                  </h3>
+                  <p className="mt-2 text-sm leading-relaxed text-foreground/90" data-testid="text-daily-goal">
+                    {summary.aiInsights.dailyGoal}
+                  </p>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
+      )}
+    </div>
   );
 }
