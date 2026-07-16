@@ -2603,7 +2603,12 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             <Card>
               <CardHeader className="py-3 sm:py-6">
                 <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-base sm:text-lg">العنوان الرئيسي</CardTitle>
+                  <CardTitle className="flex min-w-0 items-center gap-2 text-base sm:text-lg">
+                    <span>العنوان الرئيسي</span>
+                    <span className="text-xs font-normal tabular-nums text-muted-foreground" data-testid="title-char-count">
+                      {(title || "").length}/200
+                    </span>
+                  </CardTitle>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {isInfographic && (
                       <InfographicAiDialog
@@ -2630,9 +2635,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 {!titleCardOpen && (
                   <p className="mt-2 truncate text-sm text-muted-foreground lg:hidden" data-testid="title-card-collapsed-preview">
                     {(title || "").trim() || "عنوان…"}
-                    <span className="ms-2 tabular-nums text-xs">
-                      {(title || "").length}/200
-                    </span>
                   </p>
                 )}
               </CardHeader>
@@ -2647,9 +2649,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     disabled={isLockedByOther}
                     data-testid="input-title"
                   />
-                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground" data-testid="title-char-count">
-                    {(title || "").length}/200
-                  </span>
                   {!isOpinionAuthor && <Button
                     variant="outline"
                     size="icon"
@@ -2695,23 +2694,22 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             {articleType !== "opinion" && !isOpinionAuthor && (
               <Card className="order-[30] lg:order-none">
                 <CardHeader className="py-3 sm:py-6">
-                  <CardTitle className="text-base sm:text-lg">العنوان الفرعي</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={subtitle}
-                      onChange={(e) => setSubtitle(e.target.value)}
-                      placeholder="عنوان فرعي (اختياري)..."
-                      maxLength={120}
-                      disabled={isLockedByOther}
-                      className="min-w-0 flex-1"
-                      data-testid="input-subtitle"
-                    />
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                    <span>العنوان الفرعي</span>
+                    <span className="text-xs font-normal tabular-nums text-muted-foreground" data-testid="subtitle-char-count">
                       {(subtitle || "").length}/120
                     </span>
-                  </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Input
+                    value={subtitle}
+                    onChange={(e) => setSubtitle(e.target.value)}
+                    placeholder="عنوان فرعي (اختياري)..."
+                    maxLength={120}
+                    disabled={isLockedByOther}
+                    data-testid="input-subtitle"
+                  />
                   {(subtitle || "").length > 100 && (
                     <p className="text-xs text-amber-500 mt-2">قريب من الحد الأقصى</p>
                   )}
