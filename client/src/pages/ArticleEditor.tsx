@@ -3532,6 +3532,117 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </CardContent>
             </Card>}
 
+            {/* البريد الذكي — تحت الملخص */}
+            {articleType !== "opinion" && !isOpinionAuthor && (
+              <Collapsible open={newsletterOpen} onOpenChange={setNewsletterOpen}>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        data-testid="collapsible-newsletter-content"
+                      >
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            <Mail className="h-4 w-4" />
+                            البريد الذكي
+                          </CardTitle>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            عنوان فرعي وملخص مخصص للنشرة الإخبارية
+                          </p>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${newsletterOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    </CollapsibleTrigger>
+                    <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (!title || !content) {
+                        toast({
+                          title: "تنبيه",
+                          description: "يجب إدخال العنوان والمحتوى أولاً",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setIsGeneratingNewsletterContent(true);
+                      try {
+                        // apiRequest يرفق رمز CSRF تلقائيًا — fetch الخام كان يُرفض 403
+                        const data = await apiRequest("/api/smart-classification/newsletter-subtitle", {
+                          method: "POST",
+                          body: JSON.stringify({ title, content, excerpt }),
+                        });
+                        if (data.success) {
+                          setNewsletterSubtitle(data.subtitle);
+                          setNewsletterExcerpt(data.excerpt);
+                          toast({
+                            title: "تم التوليد بنجاح",
+                            description: "تم إنشاء العنوان والملخص للنشرة الإخبارية",
+                          });
+                        } else {
+                          throw new Error(data.message);
+                        }
+                      } catch (error: any) {
+                        toast({
+                          title: "خطأ",
+                          description: error.message || "فشل توليد محتوى النشرة",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsGeneratingNewsletterContent(false);
+                      }
+                    }}
+                    disabled={isGeneratingNewsletterContent || !title || !content}
+                    data-testid="button-generate-newsletter-content"
+                  >
+                    {isGeneratingNewsletterContent ? (
+                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 ml-2" />
+                    )}
+                    توليد ذكي
+                    </Button>
+                  </CardHeader>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">العنوان الفرعي للنشرة</label>
+                    <Input
+                      value={newsletterSubtitle}
+                      onChange={(e) => setNewsletterSubtitle(e.target.value)}
+                      placeholder="عنوان جذاب للنشرة الإخبارية..."
+                      maxLength={150}
+                      disabled={isLockedByOther}
+                      data-testid="input-newsletter-subtitle"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(newsletterSubtitle || "").length}/150 حرف
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">ملخص النشرة</label>
+                    <Textarea
+                      value={newsletterExcerpt}
+                      onChange={(e) => setNewsletterExcerpt(e.target.value)}
+                      placeholder="ملخص مختصر يظهر في النشرة..."
+                      rows={3}
+                      maxLength={300}
+                      disabled={isLockedByOther}
+                      data-testid="input-newsletter-excerpt"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(newsletterExcerpt || "").length}/300 حرف
+                    </p>
+                  </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            )}
+
+
             {/* Poll Editor */}
             {!isOpinionAuthor && canUsePolls && (
               <PollEditor 
@@ -3692,117 +3803,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </button>
                 ))}
               </div>
-            {/* البريد الذكي — عمود الإعدادات (خارج مسار الكتابة) */}
-            {articleType !== "opinion" && !isOpinionAuthor && (
-              <Collapsible open={newsletterOpen} onOpenChange={setNewsletterOpen}>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                    <CollapsibleTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        data-testid="collapsible-newsletter-content"
-                      >
-                        <div>
-                          <CardTitle className="flex items-center gap-2">
-                            <Mail className="h-4 w-4" />
-                            البريد الذكي
-                          </CardTitle>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            عنوان فرعي وملخص مخصص للنشرة الإخبارية
-                          </p>
-                        </div>
-                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${newsletterOpen ? 'rotate-180' : ''}`} />
-                      </button>
-                    </CollapsibleTrigger>
-                    <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      if (!title || !content) {
-                        toast({
-                          title: "تنبيه",
-                          description: "يجب إدخال العنوان والمحتوى أولاً",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      setIsGeneratingNewsletterContent(true);
-                      try {
-                        // apiRequest يرفق رمز CSRF تلقائيًا — fetch الخام كان يُرفض 403
-                        const data = await apiRequest("/api/smart-classification/newsletter-subtitle", {
-                          method: "POST",
-                          body: JSON.stringify({ title, content, excerpt }),
-                        });
-                        if (data.success) {
-                          setNewsletterSubtitle(data.subtitle);
-                          setNewsletterExcerpt(data.excerpt);
-                          toast({
-                            title: "تم التوليد بنجاح",
-                            description: "تم إنشاء العنوان والملخص للنشرة الإخبارية",
-                          });
-                        } else {
-                          throw new Error(data.message);
-                        }
-                      } catch (error: any) {
-                        toast({
-                          title: "خطأ",
-                          description: error.message || "فشل توليد محتوى النشرة",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        setIsGeneratingNewsletterContent(false);
-                      }
-                    }}
-                    disabled={isGeneratingNewsletterContent || !title || !content}
-                    data-testid="button-generate-newsletter-content"
-                  >
-                    {isGeneratingNewsletterContent ? (
-                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                    ) : (
-                      <Sparkles className="h-4 w-4 ml-2" />
-                    )}
-                    توليد ذكي
-                    </Button>
-                  </CardHeader>
-                  <CollapsibleContent>
-                    <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">العنوان الفرعي للنشرة</label>
-                    <Input
-                      value={newsletterSubtitle}
-                      onChange={(e) => setNewsletterSubtitle(e.target.value)}
-                      placeholder="عنوان جذاب للنشرة الإخبارية..."
-                      maxLength={150}
-                      disabled={isLockedByOther}
-                      data-testid="input-newsletter-subtitle"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {(newsletterSubtitle || "").length}/150 حرف
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">ملخص النشرة</label>
-                    <Textarea
-                      value={newsletterExcerpt}
-                      onChange={(e) => setNewsletterExcerpt(e.target.value)}
-                      placeholder="ملخص مختصر يظهر في النشرة..."
-                      rows={3}
-                      maxLength={300}
-                      disabled={isLockedByOther}
-                      data-testid="input-newsletter-excerpt"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {(newsletterExcerpt || "").length}/300 حرف
-                    </p>
-                  </div>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            )}
-
             </div>
+
             {/* Article Type - Hidden for opinion authors and users without content type permission */}
             {!isOpinionAuthor && canUseContentTypeSelector && (
               <Card>
