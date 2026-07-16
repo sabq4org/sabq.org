@@ -124,7 +124,8 @@ export default function PublisherArticleEditor() {
     content: "",
     editorProps: {
       attributes: {
-        class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl focus:outline-none min-h-[300px] p-4",
+        class: "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl dark:prose-invert text-foreground focus:outline-none min-h-[300px] p-4",
+        "data-testid": "publisher-rich-text-editor-content",
       },
     },
     onUpdate: ({ editor }) => {
