@@ -27,8 +27,10 @@ interface PublishedEvent {
 
 function prettifyName(name: string) {
   if (!name) return "محرر";
-  const at = name.indexOf("@");
-  return at > 0 ? name.slice(0, at) : name;
+  const trimmed = name.trim();
+  const at = trimmed.indexOf("@");
+  // Email local-part fallback only — keep Arabic/full names as-is
+  return at > 0 ? trimmed.slice(0, at) : trimmed;
 }
 
 function initials(name: string) {

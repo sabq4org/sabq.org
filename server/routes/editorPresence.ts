@@ -318,8 +318,11 @@ router.post("/api/editor-presence/heartbeat", requireAuth, (req: Request, res: R
     return res.status(401).json({ message: "Unauthorized" });
   }
 
+  // Prefer Arabic/full name from session. Session used to omit firstName/lastName
+  // and presence fell back to the email local-part (e.g. alawijan1).
   const userName =
     [user.firstName, user.lastName].filter(Boolean).join(" ").trim() ||
+    (typeof user.name === "string" ? user.name.trim() : "") ||
     (user.displayName as string | undefined)?.trim() ||
     (typeof user.email === "string" ? user.email.split("@")[0] : "") ||
     "محرر";
