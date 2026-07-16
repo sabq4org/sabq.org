@@ -128,7 +128,6 @@ export function InlineHeadlineSuggestions({
     if (onSlugChange) {
       const newSlug = generateSlug(suggestion);
       onSlugChange(newSlug);
-      console.log('[InlineHeadlineSuggestions] Auto-generated slug:', newSlug);
       
       // Show toast notification
       toast({
