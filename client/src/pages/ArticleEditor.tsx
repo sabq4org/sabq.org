@@ -287,6 +287,7 @@ export default function ArticleEditor() {
   const [showStoryCardsDialog, setShowStoryCardsDialog] = useState(false);
   const [showAlbumUploadDialog, setShowAlbumUploadDialog] = useState(false);
   const [showAttachmentUploadDialog, setShowAttachmentUploadDialog] = useState(false);
+  const [showFeaturedImageHint, setShowFeaturedImageHint] = useState(true);
   const [albumImages, setAlbumImages] = useState<string[]>([]);
   const [isUploadingAlbumImage, setIsUploadingAlbumImage] = useState(false);
   const [uploadingAlbumProgress, setUploadingAlbumProgress] = useState(0);
@@ -318,9 +319,8 @@ export default function ArticleEditor() {
   const [thumbnailOpen, setThumbnailOpen] = useState(false);
   const [smartLinksOpen, setSmartLinksOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
-  
-  // Muqtarab angles state
-  const [selectedAngleIds, setSelectedAngleIds] = useState<string[]>([]);
+  const [newsletterOpen, setNewsletterOpen] = useState(false);
+  const [seoOptimizationOpen, setSeoOptimizationOpen] = useState(false);
   
   // Use ref for immediate lock with URL tracking (prevents concurrent uploads even in StrictMode)
   const savingMediaMapRef = useRef<Map<string, Promise<string | null>>>(new Map());
@@ -457,7 +457,6 @@ export default function ArticleEditor() {
   const canGenerateImages = user && hasPermission(user, PERMISSION_CODES.ARTICLES_GENERATE_IMAGES);
   const canUseInfographics = user && hasPermission(user, PERMISSION_CODES.ARTICLES_INFOGRAPHICS);
   const canUseNewsType = user && hasPermission(user, PERMISSION_CODES.ARTICLES_NEWS_TYPE);
-  const canUseMuqtarabAngles = user && hasPermission(user, PERMISSION_CODES.ARTICLES_MUQTARAB_ANGLES);
   const canUseComprehensiveEdit = user && hasPermission(user, PERMISSION_CODES.ARTICLES_COMPREHENSIVE_EDIT);
   const canUseContentTypeSelector = user && hasPermission(user, PERMISSION_CODES.ARTICLES_CONTENT_TYPE_SELECTOR);
   const canHideFromHomepage = user && hasPermission(user, PERMISSION_CODES.ARTICLES_HIDE_HOMEPAGE);
@@ -590,37 +589,6 @@ export default function ArticleEditor() {
       setGeneratedSocialCards(cardsMap);
     }
   }, [existingSocialCards]);
-
-  // Fetch available Muqtarab angles (use public endpoint)
-  const { data: availableAnglesRaw } = useQuery<{ id: string; nameAr: string; colorHex: string; iconKey: string }[]>({
-    queryKey: ["/api/muqtarab/angles"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl("/api/muqtarab/angles"));
-      if (!res.ok) return [];
-      const data = await res.json();
-      return data.angles || data || [];
-    },
-  });
-  const availableAngles = Array.isArray(availableAnglesRaw) ? availableAnglesRaw : [];
-
-  // Fetch article's linked angles when editing
-  const { data: articleAnglesRaw } = useQuery<{ id: string; nameAr: string; colorHex: string }[]>({
-    queryKey: ["/api/admin/articles", id, "angles"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl(`/api/admin/articles/${id}/angles`));
-      if (!res.ok) return [];
-      return res.json();
-    },
-    enabled: !isNewArticle && !!id,
-  });
-  const articleAngles = Array.isArray(articleAnglesRaw) ? articleAnglesRaw : [];
-
-  // Sync article angles to state when loaded
-  useEffect(() => {
-    if (articleAngles.length > 0) {
-      setSelectedAngleIds(articleAngles.map(a => a.id));
-    }
-  }, [articleAngles]);
 
   // ===== Article Edit Lock Management =====
   // Extracted to hooks/useArticleEditLock.ts (refactor: article-editor-split)
@@ -1473,51 +1441,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         }
       }
 
-      // Sync angles if any are selected and we have an article ID
-      if (savedArticleId && selectedAngleIds.length > 0) {
-        try {
-          // Get current angles for comparison
-          const currentAnglesRes = await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles`));
-          const currentAngles = currentAnglesRes.ok ? await currentAnglesRes.json() : [];
-          const currentAngleIds = currentAngles.map((a: any) => a.id);
-
-          // Add new angles
-          for (const angleId of selectedAngleIds) {
-            if (!currentAngleIds.includes(angleId)) {
-              await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles`), {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ angleId }),
-              });
-            }
-          }
-          
-          // Remove unselected angles
-          for (const angleId of currentAngleIds) {
-            if (!selectedAngleIds.includes(angleId)) {
-              await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles/${angleId}`), {
-                method: "DELETE",
-              });
-            }
-          }
-        } catch (err) {
-          console.error("Error syncing angles:", err);
-        }
-      } else if (savedArticleId && selectedAngleIds.length === 0) {
-        // Remove all angles if none selected
-        try {
-          const currentAnglesRes = await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles`));
-          const currentAngles = currentAnglesRes.ok ? await currentAnglesRes.json() : [];
-          for (const angle of currentAngles) {
-            await fetch(apiUrl(`/api/admin/articles/${savedArticleId}/angles/${angle.id}`), {
-              method: "DELETE",
-            });
-          }
-        } catch (err) {
-          console.error("Error removing angles:", err);
-        }
-      }
-
       // Create poll if enabled
       if (savedArticleId && pollData && pollData.enabled && pollData.question && pollData.options.filter(o => o.trim()).length >= 2) {
         try {
@@ -1549,12 +1472,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       queryClient.invalidateQueries({ queryKey: ["/api/homepage-lite"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/muqtarab"] });
       
       // If updating existing article, also invalidate its specific query
       if (!isNewArticle && id) {
         queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id] });
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/articles", id, "angles"] });
       }
       
       // Determine the correct success message
@@ -2778,18 +2699,28 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* Newsletter Content - البريد الذكي */}
             {articleType !== "opinion" && !isOpinionAuthor && (
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-2">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <Mail className="h-4 w-4" />
-                      البريد الذكي
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      عنوان فرعي وملخص مخصص للنشرة الإخبارية
-                    </p>
-                  </div>
-                  {!isOpinionAuthor && <Button
+              <Collapsible open={newsletterOpen} onOpenChange={setNewsletterOpen}>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        data-testid="collapsible-newsletter-content"
+                      >
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            <Mail className="h-4 w-4" />
+                            البريد الذكي
+                          </CardTitle>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            عنوان فرعي وملخص مخصص للنشرة الإخبارية
+                          </p>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${newsletterOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    </CollapsibleTrigger>
+                    <Button
                     variant="outline"
                     size="sm"
                     onClick={async () => {
@@ -2837,9 +2768,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       <Sparkles className="h-4 w-4 ml-2" />
                     )}
                     توليد ذكي
-                  </Button>}
-                </CardHeader>
-                <CardContent className="space-y-4">
+                    </Button>
+                  </CardHeader>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-4">
                   <div>
                     <label className="text-sm font-medium mb-2 block">العنوان الفرعي للنشرة</label>
                     <Input
@@ -2869,11 +2801,36 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       {(newsletterExcerpt || "").length}/300 حرف
                     </p>
                   </div>
-                </CardContent>
-              </Card>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
             )}
 
             {/* Featured Image */}
+            {!isOpinionAuthor && showFeaturedImageHint && (
+              <div
+                className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm"
+                role="note"
+                data-testid="featured-image-guidance"
+              >
+                <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <p className="min-w-0 flex-1 leading-6 text-muted-foreground">
+                  بعد كتابة العنوان والمحتوى، ستظهر لك صور مقترحة من مكتبة الوسائط؛ اختر الأنسب أو ارفع صورة جديدة.
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="-ml-2 -mt-1 h-8 w-8 shrink-0 text-muted-foreground"
+                  onClick={() => setShowFeaturedImageHint(false)}
+                  aria-label="إخفاء إرشاد الصورة البارزة"
+                  data-testid="button-dismiss-featured-image-guidance"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             <Card>
               <CardHeader>
                 <CardTitle>الصورة البارزة</CardTitle>
@@ -3962,48 +3919,23 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </SelectContent>
                   </Select>
                 )}
-                
-                {/* Muqtarab Angles - Compact inline section (hidden for opinion authors and users without muqtarab_angles permission) */}
-                {!isOpinionAuthor && canUseMuqtarabAngles && availableAngles.length > 0 && (
-                  <div className="pt-3 border-t">
-                    <Label className="text-xs text-muted-foreground mb-2 block">زوايا مُقترب</Label>
-                    <div className="flex flex-wrap gap-1.5" data-testid="angles-selector">
-                      {availableAngles.map((angle) => {
-                        const isSelected = selectedAngleIds.includes(angle.id);
-                        return (
-                          <Badge
-                            key={angle.id}
-                            variant={isSelected ? "default" : "outline"}
-                            className="cursor-pointer text-xs transition-all"
-                            style={{
-                              backgroundColor: isSelected ? angle.colorHex : 'transparent',
-                              borderColor: angle.colorHex,
-                              color: isSelected ? 'white' : angle.colorHex,
-                            }}
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedAngleIds(prev => prev.filter(id => id !== angle.id));
-                              } else {
-                                setSelectedAngleIds(prev => [...prev, angle.id]);
-                              }
-                            }}
-                            data-testid={`badge-angle-${angle.id}`}
-                          >
-                            {angle.nameAr}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
             {/* SEO Optimization */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>تحسين محركات البحث (SEO)</span>
+            <Collapsible open={seoOptimizationOpen} onOpenChange={setSeoOptimizationOpen}>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      data-testid="collapsible-seo-optimization"
+                    >
+                      <CardTitle>تحسين محركات البحث (SEO)</CardTitle>
+                      <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${seoOptimizationOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </CollapsibleTrigger>
                   <Button
                     variant="ghost"
                     size="sm"
@@ -4015,9 +3947,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     <Sparkles className={`h-4 w-4 ml-1 ${generateSeoMutation.isPending ? 'text-muted-foreground animate-pulse' : 'text-primary'}`} />
                     <span className="text-sm">{generateSeoMutation.isPending ? 'جاري التوليد...' : 'توليد SEO'}</span>
                   </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
+                </CardHeader>
+                <CollapsibleContent>
+                  <CardContent className="space-y-3">
                 <div>
                   <Label>عنوان Meta (50-60 حرف) - {metaTitle.length}/60</Label>
                   <Input
@@ -4048,8 +3980,10 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     data-testid="input-keywords"
                   />
                 </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
 
             {/* Reporter - Hidden for opinion articles */}
             {articleType !== "opinion" && (
