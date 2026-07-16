@@ -564,18 +564,30 @@ final class SpCompetitionFavorites {
         persist()
     }
 
+    /// يحدّث لقطات المفضّلة من السجل، و**يحذف** أي بطولة أُزيلت من الاشتراك
+    /// (مثل المؤتمر/الدرجات الإسبانية الدنيا) حتى لا تبقى في فلتر المباريات.
     func sync(with competitions: [SpCompetition]) {
-        guard !items.isEmpty else { return }
         let bySlug = Dictionary(uniqueKeysWithValues: competitions.map { ($0.slug, $0) })
         var changed = false
-        items = items.map { stored in
-            if let fresh = bySlug[stored.slug], fresh != stored {
+        var next: [SpCompetition] = items.compactMap { stored in
+            guard let fresh = bySlug[stored.slug] else {
                 changed = true
-                return fresh
+                return nil
             }
-            return stored
+            if fresh != stored { changed = true }
+            return fresh
         }
-        if changed { persist() }
+        // بعد إضافة السوبر الأوروبي للسجل: ألحقه تلقائيًا لمن لديه أبطال أوروبا.
+        if let superCup = bySlug["uefa-super-cup"],
+           next.contains(where: { $0.slug == "champions-league" }),
+           !next.contains(where: { $0.slug == "uefa-super-cup" }) {
+            next.append(superCup)
+            changed = true
+        }
+        if changed {
+            items = next
+            persist()
+        }
     }
 
     private func persist() {
