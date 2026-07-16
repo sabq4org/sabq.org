@@ -4168,35 +4168,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                     </SelectContent>
                   </Select>
                 )}
-                <div className="space-y-2 pt-1 border-t border-border/60">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="article-slug">رابط الخبر (Slug)</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSlug(generateSlug(title))}
-                      disabled={!title?.trim()}
-                      className="h-auto py-1 px-2 text-xs"
-                      data-testid="button-generate-slug"
-                    >
-                      توليد تلقائي
-                    </Button>
-                  </div>
-                  <Input
-                    id="article-slug"
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    placeholder="article-slug"
-                    dir="ltr"
-                    maxLength={150}
-                    className="font-mono text-sm"
-                    data-testid="input-slug"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    {(slug || "").length}/150 — يظهر في رابط الصفحة
-                  </p>
-                </div>
               </CardContent>
             </Card>
 
