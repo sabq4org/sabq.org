@@ -463,7 +463,7 @@ struct CachedAsyncImage<Placeholder: View>: View {
             image = nil
             return
         }
-        if let cached = ImageCache.shared.object(forKey: requestedURL as NSURL) {
+        if let cached = ImageCache.cached(requestedURL, minPixelSize: self.maxPixelSize) {
             image = cached
             return
         }
@@ -496,11 +496,7 @@ struct CachedAsyncImage<Placeholder: View>: View {
         // the next mount is instant, but only update UI when we're still the
         // current request.
         if let loaded {
-            ImageCache.shared.setObject(
-                loaded,
-                forKey: requestedURL as NSURL,
-                cost: ImageCache.byteCost(of: loaded)
-            )
+            ImageCache.store(loaded, for: requestedURL, budget: maxPx)
         }
         guard !Task.isCancelled, url == requestedURL else { return }
         if let loaded {
@@ -609,7 +605,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
             shown = false
             return
         }
-        if let cached = ImageCache.shared.object(forKey: requestedURL as NSURL) {
+        if let cached = ImageCache.cached(requestedURL, minPixelSize: 2400) {
             // صورة مخبّأة: ضعها بموضعها النهائي فورًا بلا أنيميشن هندسة، ثم
             // لاشِ الشفافية فقط — فلا تنزلق ولا يظهر فراغ على الشاشات العريضة.
             image = cached
@@ -640,11 +636,7 @@ struct FocalCachedAsyncImage<Placeholder: View>: View {
         }
 
         if let loaded {
-            ImageCache.shared.setObject(
-                loaded,
-                forKey: requestedURL as NSURL,
-                cost: ImageCache.byteCost(of: loaded)
-            )
+            ImageCache.store(loaded, for: requestedURL, budget: 2400)
         }
         guard !Task.isCancelled, url == requestedURL else { return }
         if let loaded {
@@ -685,12 +677,54 @@ nonisolated enum ImageCDN {
 }
 
 nonisolated enum ImageCache {
-    nonisolated(unsafe) static let shared: NSCache<NSURL, UIImage> = {
-        let c = NSCache<NSURL, UIImage>()
+    /// قيمة الكاش: الصورة + «ميزانية» الجلب (maxPixelSize وقت التنزيل).
+    /// المفتاح يبقى الرابط الأصلي (مشاركة البطاقة/الهيرو/اللايتبوكس)، لكن
+    /// القبول صار «ترقية فقط»: طالب دقّة أعلى لا يقبل نسخة البطاقة الصغيرة —
+    /// كان prefetch البطاقات (1200px) يسبق الهيرو فيملأ مفتاحه ويظهر الهيرو
+    /// ضبابيًّا على الشاشات العريضة. الميزانية تمنع أيضًا إعادة جلب عبثية
+    /// لأصلٍ أصغر من المطلوب (جُلب بميزانية كافية وبقي صغيرًا = هذا أفضل المتاح).
+    final class Entry {
+        let image: UIImage
+        let budget: CGFloat
+        init(image: UIImage, budget: CGFloat) {
+            self.image = image
+            self.budget = budget
+        }
+    }
+
+    nonisolated(unsafe) static let shared: NSCache<NSURL, Entry> = {
+        let c = NSCache<NSURL, Entry>()
         c.countLimit = 150
         c.totalCostLimit = 100 * 1024 * 1024
         return c
     }()
+
+    /// النسخة المخبّأة إن كانت كافية للدقّة المطلوبة (بميزانيتها أو بأبعادها
+    /// الفعلية ≥ 85% من المطلوب — التقريب يمنع إعادة جلب بلا فرق بصري).
+    static func cached(_ url: URL, minPixelSize: CGFloat) -> UIImage? {
+        guard let entry = shared.object(forKey: url as NSURL) else { return nil }
+        if entry.budget + 0.5 >= minPixelSize { return entry.image }
+        let maxDim = max(entry.image.size.width, entry.image.size.height) * entry.image.scale
+        return maxDim >= minPixelSize * 0.85 ? entry.image : nil
+    }
+
+    /// النسخة المخبّأة بأي دقّة — للعرض الفوري ريثما تصل الأعلى (اللايتبوكس).
+    static func cachedAny(_ url: URL) -> UIImage? {
+        shared.object(forKey: url as NSURL)?.image
+    }
+
+    /// يخزّن نسخة — ولا يستبدل نسخة بميزانية أكبر بأخرى أصغر (سباق
+    /// prefetch البطاقات مع تحميل الهيرو المتزامن).
+    static func store(_ image: UIImage, for url: URL, budget: CGFloat) {
+        if let existing = shared.object(forKey: url as NSURL), existing.budget >= budget {
+            return
+        }
+        shared.setObject(
+            Entry(image: image, budget: budget),
+            forKey: url as NSURL,
+            cost: byteCost(of: image)
+        )
+    }
 
     /// Dedicated URLSession for image downloads. The default
     /// `URLSession.shared` caps `httpMaximumConnectionsPerHost` at 4 —
@@ -727,12 +761,12 @@ nonisolated enum ImageCache {
             // Cache key is always the ORIGINAL url so the lightbox and the
             // on-mount loaders all hit the same entry. Only the network
             // fetch uses the width-bounded CF variant.
-            if shared.object(forKey: url as NSURL) != nil { continue }
+            if cached(url, minPixelSize: maxPixelSize) != nil { continue }
             let fetchURL = ImageCDN.sized(url, width: width)
             Task.detached(priority: .utility) {
                 guard let (data, _) = try? await imageSession.data(from: fetchURL) else { return }
                 guard let img = decodedImage(data: data, maxPixelSize: maxPixelSize) else { return }
-                shared.setObject(img, forKey: url as NSURL, cost: byteCost(of: img))
+                store(img, for: url, budget: maxPixelSize)
             }
         }
     }
@@ -763,6 +797,40 @@ nonisolated enum ImageCache {
     /// memory ceiling.
     static func byteCost(of image: UIImage) -> Int {
         Int(image.size.width * image.scale * image.size.height * image.scale * 4)
+    }
+}
+
+// MARK: - Upload image preparation
+
+/// تجهيز صورة للرفع: تصغير الضلع الأطول إلى حدّ معقول ثم JPEG — مشترك بين
+/// المشاركة الجديدة (ArticleSubmissionView) وإعادة الإرسال (ArticleRevisionView)
+/// التي كانت ترفع الأصل الخام (4-8MB × عدة صور × 1.33 base64 = تجاوز حدّ
+/// جسم JSON وذروة ذاكرة بلا داعٍ).
+nonisolated enum SabqImageUpload {
+    static func prepare(
+        _ image: UIImage,
+        maxDimension: CGFloat = 2000,
+        quality: CGFloat = 0.7
+    ) -> (data: Data, image: UIImage) {
+        let size = image.size
+        let longest = max(size.width, size.height)
+        let scaled: UIImage
+        if longest > maxDimension {
+            let factor = maxDimension / longest
+            let newSize = CGSize(width: size.width * factor, height: size.height * factor)
+            let format = UIGraphicsImageRendererFormat.default()
+            format.scale = 1
+            let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
+            scaled = renderer.image { _ in
+                image.draw(in: CGRect(origin: .zero, size: newSize))
+            }
+        } else {
+            scaled = image
+        }
+        let data = scaled.jpegData(compressionQuality: quality)
+            ?? image.jpegData(compressionQuality: quality)
+            ?? Data()
+        return (data, scaled)
     }
 }
 
@@ -927,7 +995,7 @@ struct ImageLightbox: View {
         // stays sharp. NSCache hit short-circuits to the already-loaded
         // bitmap; otherwise we download once and seed both `image` and
         // the cache.
-        if let cached = ImageCache.shared.object(forKey: url as NSURL) {
+        if let cached = ImageCache.cachedAny(url) {
             // Show the cached (lower-res) bitmap immediately so the user
             // never sees a blank lightbox, then upgrade if a higher-res
             // version is available below.

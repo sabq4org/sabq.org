@@ -246,7 +246,7 @@ struct ArticleDetailView: View {
                 url: displayArticle.imageURL.flatMap(URL.init(string:)),
                 placeholderImage: displayArticle.imageURL
                     .flatMap(URL.init(string:))
-                    .flatMap { ImageCache.shared.object(forKey: $0 as NSURL) }
+                    .flatMap { ImageCache.cachedAny($0) }
             )
         }
         .fullScreenCover(item: Binding(
@@ -255,7 +255,7 @@ struct ArticleDetailView: View {
         )) { holder in
             ImageLightbox(
                 url: holder.url,
-                placeholderImage: ImageCache.shared.object(forKey: holder.url as NSURL)
+                placeholderImage: ImageCache.cachedAny(holder.url)
             )
         }
         // Behavior + analytics fire keyed off displayArticle.id so a

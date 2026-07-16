@@ -209,6 +209,10 @@ private struct WCPredTodayTab: View {
             await MainActor.run {
                 matches = r
                 for m in r {
+                    // بذر المدخل لمن لا مدخل محليًّا له فقط — إعادة البناء غير
+                    // المشروطة كانت تمسح توقّعات المستخدم غير المُرسلة لبقية
+                    // المباريات كلما أرسل توقّع مباراة واحدة (submit ينادي load).
+                    guard inputs[m.fixture.id] == nil else { continue }
                     let seed = m.myPrediction
                     inputs[m.fixture.id] = ScoreInput(home: seed?.predHome ?? 0, away: seed?.predAway ?? 0)
                 }

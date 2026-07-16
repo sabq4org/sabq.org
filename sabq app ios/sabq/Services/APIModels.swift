@@ -10,6 +10,21 @@ nonisolated struct FlexKey: CodingKey, Sendable {
     init?(intValue: Int) { stringValue = "\(intValue)"; self.intValue = intValue }
 }
 
+/// معرّف احتياطي مشتق ثابت عندما يغيب `id` من الخادم — `UUID()` عشوائي جديد
+/// مع كل فكّ ترميز كان يمنح المادة نفسها معرّفًا مختلفًا في كل جلبة، فيكسر
+/// التمييز بالمعرّف (تكرار في القوائم وفقدان حالة الحفظ/الإعجاب).
+/// FNV-1a صراحةً لأن `hashValue` في Swift عشوائي البذرة لكل إقلاع.
+nonisolated enum StableID {
+    static func fnv1a(_ s: String) -> String {
+        var h: UInt64 = 0xcbf29ce484222325
+        for b in s.utf8 {
+            h ^= UInt64(b)
+            h = h &* 0x100000001b3
+        }
+        return String(h, radix: 16)
+    }
+}
+
 // MARK: - API Article
 
 /// One photo inside a `weekly_photos` article — image + Arabic caption +
@@ -110,13 +125,8 @@ nonisolated struct APIArticle: Decodable {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
 
-        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
-            id = strId
-        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
-            id = String(intId)
-        } else {
-            id = UUID().uuidString
-        }
+        let rawId: String? = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
 
         title = (try? c.decode(String.self, forKey: FlexKey("title"))) ?? ""
 
@@ -134,6 +144,7 @@ nonisolated struct APIArticle: Decodable {
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
         englishSlug = (try? c.decode(String.self, forKey: FlexKey("englishSlug")))
             ?? (try? c.decode(String.self, forKey: FlexKey("english_slug")))
+        id = rawId ?? slug ?? "derived-\(StableID.fnv1a(title))"
 
         if let cat = try? c.nestedContainer(keyedBy: FlexKey.self, forKey: FlexKey("category")) {
             categoryName = (try? cat.decode(String.self, forKey: FlexKey("nameAr")))
@@ -339,17 +350,13 @@ nonisolated struct APICategory: Decodable, Identifiable, Hashable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
-            id = strId
-        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
-            id = String(intId)
-        } else {
-            id = UUID().uuidString
-        }
+        let rawId: String? = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         name = (try? c.decode(String.self, forKey: FlexKey("nameAr")))
             ?? (try? c.decode(String.self, forKey: FlexKey("name")))
             ?? ""
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
+        id = rawId ?? slug ?? "derived-\(StableID.fnv1a(name))"
         description = try? c.decode(String.self, forKey: FlexKey("description"))
         articlesCount = (try? c.decode(Int.self, forKey: FlexKey("articles_count")))
             ?? (try? c.decode(Int.self, forKey: FlexKey("count")))
@@ -618,15 +625,11 @@ nonisolated struct APIOpinion: Decodable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
-            id = strId
-        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
-            id = String(intId)
-        } else {
-            id = UUID().uuidString
-        }
+        let rawId: String? = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         title = (try? c.decode(String.self, forKey: FlexKey("title"))) ?? ""
         slug = try? c.decode(String.self, forKey: FlexKey("slug"))
+        id = rawId ?? slug ?? "derived-\(StableID.fnv1a(title))"
         englishSlug = (try? c.decode(String.self, forKey: FlexKey("englishSlug")))
             ?? (try? c.decode(String.self, forKey: FlexKey("english_slug")))
         excerpt = try? c.decode(String.self, forKey: FlexKey("excerpt"))
@@ -1160,13 +1163,8 @@ nonisolated struct APIUser: Decodable, Identifiable {
 
     nonisolated init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: FlexKey.self)
-        if let strId = try? c.decode(String.self, forKey: FlexKey("id")) {
-            id = strId
-        } else if let intId = try? c.decode(Int.self, forKey: FlexKey("id")) {
-            id = String(intId)
-        } else {
-            id = UUID().uuidString
-        }
+        let rawId: String? = (try? c.decode(String.self, forKey: FlexKey("id")))
+            ?? (try? c.decode(Int.self, forKey: FlexKey("id"))).map(String.init)
         firstName = (try? c.decode(String.self, forKey: FlexKey("firstName")))
             ?? (try? c.decode(String.self, forKey: FlexKey("first_name")))
         lastName = (try? c.decode(String.self, forKey: FlexKey("lastName")))
@@ -1176,6 +1174,7 @@ nonisolated struct APIUser: Decodable, Identifiable {
         lastNameEn = (try? c.decode(String.self, forKey: FlexKey("lastNameEn")))
             ?? (try? c.decode(String.self, forKey: FlexKey("last_name_en")))
         email = try? c.decode(String.self, forKey: FlexKey("email"))
+        id = rawId ?? email.map { "derived-\(StableID.fnv1a($0))" } ?? UUID().uuidString
         let rawAvatar = (try? c.decode(String.self, forKey: FlexKey("profileImageUrl")))
             ?? (try? c.decode(String.self, forKey: FlexKey("profile_image_url")))
             ?? (try? c.decode(String.self, forKey: FlexKey("avatar")))

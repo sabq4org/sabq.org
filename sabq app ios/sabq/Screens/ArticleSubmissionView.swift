@@ -19,6 +19,9 @@ struct ArticleSubmissionView: View {
     @State private var title: String = ""
     @State private var articleContent: String = ""
     @State private var pickerItems: [PhotosPickerItem] = []
+    /// العناصر المحمّلة فعلًا (بترتيب مصفوفتَي المعاينة/البيانات) — أساس
+    /// التحميل التفاضلي في loadImages.
+    @State private var loadedItems: [PhotosPickerItem] = []
     @State private var showImagePicker = false
     @State private var previewImages: [UIImage] = []
     @State private var imageData: [Data] = []
@@ -410,61 +413,50 @@ struct ArticleSubmissionView: View {
         guard !items.isEmpty else {
             previewImages = []
             imageData = []
+            loadedItems = []
             return
         }
 
-        loadingImages = true
-        defer { loadingImages = false }
+        // خريطة المحمَّل سابقًا — الحذف/الإضافة يعيدان استخدام الجاهز ويفكّان
+        // ترميز الجديد فقط. قبلها كان حذف صورة واحدة (يُعدِّل pickerItems
+        // فيُطلق onChange) يعيد تحميل وتصغير وضغط كل الصور المتبقية.
+        var known: [PhotosPickerItem: (data: Data, image: UIImage)] = [:]
+        for (i, item) in loadedItems.enumerated()
+        where i < imageData.count && i < previewImages.count {
+            known[item] = (imageData[i], previewImages[i])
+        }
+
+        let hasNew = items.contains { known[$0] == nil }
+        if hasNew { loadingImages = true }
+        defer { if hasNew { loadingImages = false } }
 
         var loadedData: [Data] = []
         var loadedImages: [UIImage] = []
+        var successfulItems: [PhotosPickerItem] = []
         for item in items {
-            if let data = try? await item.loadTransferable(type: Data.self),
-               let img = UIImage(data: data) {
+            if let existing = known[item] {
+                loadedData.append(existing.data)
+                loadedImages.append(existing.image)
+                successfulItems.append(item)
+            } else if let data = try? await item.loadTransferable(type: Data.self),
+                      let img = UIImage(data: data) {
                 // Downscale + recompress before we ship base64 to the server.
                 // Raw phone photos are 4-8 MB each; base64 inflates them ~33%
                 // and the server JSON body cap is 10 MB. Two originals could
                 // blow the limit AND drag the upload past the timeout. A
                 // 2000px / 0.7 JPEG keeps print-grade quality for web display
                 // while cutting payload to a few hundred KB per image.
-                let prepared = Self.prepareForUpload(img)
+                let prepared = SabqImageUpload.prepare(img)
                 loadedData.append(prepared.data)
                 loadedImages.append(prepared.image)
+                successfulItems.append(item)
             }
         }
         await MainActor.run {
             imageData = loadedData
             previewImages = loadedImages
+            loadedItems = successfulItems
         }
-    }
-
-    /// Resize so the longest edge is <= maxDimension, then JPEG-encode at
-    /// `quality`. Returns both the bytes we'll upload and a UIImage for the
-    /// preview so what the user sees matches what we send.
-    private static func prepareForUpload(
-        _ image: UIImage,
-        maxDimension: CGFloat = 2000,
-        quality: CGFloat = 0.7
-    ) -> (data: Data, image: UIImage) {
-        let size = image.size
-        let longest = max(size.width, size.height)
-        let scaled: UIImage
-        if longest > maxDimension {
-            let factor = maxDimension / longest
-            let newSize = CGSize(width: size.width * factor, height: size.height * factor)
-            let format = UIGraphicsImageRendererFormat.default()
-            format.scale = 1
-            let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
-            scaled = renderer.image { _ in
-                image.draw(in: CGRect(origin: .zero, size: newSize))
-            }
-        } else {
-            scaled = image
-        }
-        let data = scaled.jpegData(compressionQuality: quality)
-            ?? image.jpegData(compressionQuality: quality)
-            ?? Data()
-        return (data, scaled)
     }
 
     private func removeImage(at index: Int) {

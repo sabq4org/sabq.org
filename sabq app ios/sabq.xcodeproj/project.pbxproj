@@ -526,7 +526,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026071501;
+				CURRENT_PROJECT_VERSION = 2026071601;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -583,7 +583,7 @@
 				CODE_SIGN_ENTITLEMENTS = sabq/sabq.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026071501;
+				CURRENT_PROJECT_VERSION = 2026071601;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -739,7 +739,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026071501;
+				CURRENT_PROJECT_VERSION = 2026071601;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SabqWidgets/Info.plist;
@@ -750,7 +750,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 10.1.6;
+				MARKETING_VERSION = 10.1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg.SabqWidgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -769,7 +769,7 @@
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2026071501;
+				CURRENT_PROJECT_VERSION = 2026071601;
 				DEVELOPMENT_TEAM = CBU7MJEC5R;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = SabqWidgets/Info.plist;
@@ -780,7 +780,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 10.1.6;
+				MARKETING_VERSION = 10.1.8;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sabq.sabqorg.SabqWidgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;

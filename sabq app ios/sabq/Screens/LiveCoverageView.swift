@@ -4,8 +4,10 @@ struct LiveCoverageView: View {
     @State private var liveData: APILiveResponse?
     @State private var allEvents: [APILiveEvent] = []
     @State private var isLoading = true
+    @State private var loadFailed = false
     @State private var selectedCountry: String? = nil
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -14,6 +16,21 @@ struct LiveCoverageView: View {
 
                 if isLoading {
                     loadingSection
+                } else if liveData == nil, loadFailed {
+                    // فشل الجلب الأول كان يترك الشاشة بيضاء بلا تفسير ولا زر —
+                    // السحب للتحديث ليس مسارًا مكتشفًا لصفحة فارغة.
+                    EmptyStateView(
+                        icon: "wifi.exclamationmark",
+                        tint: SabqTheme.coral,
+                        title: "تعذر تحميل التغطية",
+                        subtitle: "تحقق من اتصالك بالإنترنت ثم أعد المحاولة",
+                        action: {
+                            isLoading = true
+                            Task { await loadData() }
+                        },
+                        actionTitle: "إعادة المحاولة"
+                    )
+                    .padding(.top, 60)
                 } else if let data = liveData {
                     if !data.isLive {
                         EmptyStateView(
@@ -61,6 +78,18 @@ struct LiveCoverageView: View {
             }
         }
         .task { await loadData() }
+        // «لحظة بلحظة» كانت ثابتة تمامًا رغم شارة «مباشر» النابضة — لا تلتقط
+        // أي حدث جديد إلا بسحب يدوي. استطلاع كل 30ث أثناء البث الحي فقط
+        // (بلا شبكة وهو خامل أو بالخلفية)، مع تحديث فوري عند العودة للمقدمة.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                if Task.isCancelled { break }
+                guard liveData?.isLive == true else { continue }
+                await loadData()
+            }
+        }
     }
 
     // MARK: - Header
@@ -431,9 +460,13 @@ struct LiveCoverageView: View {
                 liveData = response
                 allEvents = response.events
                 isLoading = false
+                loadFailed = false
             }
         } catch {
-            await MainActor.run { isLoading = false }
+            await MainActor.run {
+                isLoading = false
+                loadFailed = true
+            }
         }
     }
 }

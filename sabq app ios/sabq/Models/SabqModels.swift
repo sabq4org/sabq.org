@@ -91,8 +91,30 @@ nonisolated enum SabqFormatters {
         return f
     }()
 
+    /// طوابع «ساذجة» بلا منطقة زمنية (شائعة من Postgres: ‎2026-07-16T09:00:00‎)
+    /// — محلّلا ISO8601 يرفضانها فكانت تسقط إلى Date() «الآن» وتطفو المادة
+    /// زورًا لقمة الترتيب الزمني. نفترض UTC (ما يرسله الخادم فعليًّا).
+    private static let naiveFractional: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSS"
+        return f
+    }()
+
+    private static let naiveBasic: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "UTC")
+        f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
+        return f
+    }()
+
     static func parseISO8601(_ string: String) -> Date? {
-        iso8601Fractional.date(from: string) ?? iso8601Basic.date(from: string)
+        iso8601Fractional.date(from: string)
+            ?? iso8601Basic.date(from: string)
+            ?? naiveFractional.date(from: string)
+            ?? naiveBasic.date(from: string)
     }
 }
 

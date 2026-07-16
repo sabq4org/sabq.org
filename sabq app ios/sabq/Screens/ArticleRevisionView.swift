@@ -516,12 +516,16 @@ struct ArticleRevisionView: View {
     private func loadPickedImages(_ items: [PhotosPickerItem]) async {
         guard !items.isEmpty else { return }
         // Hero: single image; album mode (news): up to 10
+        // التصغير قبل الرفع (نفس مسار المشاركة الجديدة) — كانت إعادة الإرسال
+        // ترفع الأصل الخام: 4-8MB للصورة × 1.33 بعد base64 يتجاوز حدّ جسم
+        // JSON ويرفع ذروة الذاكرة بلا أي مكسب جودة منشورة.
         if isOpinion {
             if let first = items.first {
                 if let data = try? await first.loadTransferable(type: Data.self),
                    let img = UIImage(data: data) {
-                    newHeroData = data
-                    newHeroPreview = img
+                    let prepared = SabqImageUpload.prepare(img)
+                    newHeroData = prepared.data
+                    newHeroPreview = prepared.image
                     replacedHero = true
                 }
             }
@@ -531,8 +535,9 @@ struct ArticleRevisionView: View {
             for item in items {
                 if let data = try? await item.loadTransferable(type: Data.self),
                    let img = UIImage(data: data) {
-                    datas.append(data)
-                    previews.append(img)
+                    let prepared = SabqImageUpload.prepare(img)
+                    datas.append(prepared.data)
+                    previews.append(prepared.image)
                 }
             }
             if let firstData = datas.first, let firstPreview = previews.first {
