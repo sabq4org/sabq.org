@@ -2398,7 +2398,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         )}
 
         {/* Page Header with Actions - Mobile Optimized */}
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-border/70 bg-card/90 backdrop-blur supports-[backdrop-filter]:bg-card/70 p-4 shadow-sm lg:sticky lg:top-16 lg:z-20">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-border/70 bg-card/90 backdrop-blur supports-[backdrop-filter]:bg-card/70 p-4 shadow-sm">
           {/* Title Row */}
           <div className="flex items-center gap-3 min-w-0">
             <Button
@@ -2557,7 +2557,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
         {/* Mobile editor tabs — content / media / publish */}
         {!isOpinionAuthor && (
           <div
-            className="mb-4 lg:hidden sticky top-0 z-30 -mx-1 px-1 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/60"
+            className="mb-4 lg:hidden"
             data-testid="editor-mobile-tabs"
           >
             <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-border/70 bg-muted/40 p-1">
