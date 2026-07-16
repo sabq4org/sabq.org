@@ -2245,49 +2245,26 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           editor matches the rest of the dashboard. */}
       <div className="article-editor-stage" dir="rtl">
         <style>{`
-          /* Flat, no-shadow cards with sharp 1px borders and a very
-             faint cool tint. Inputs / selects / textareas / the
-             editor surface stay white so they pop out of the card
-             instead of blending into it. */
+          /* محايد: بطاقات بيضاء مضغوطة — بدون تلوين عشوائي يضيّع المساحة والمعنى */
           .article-editor-stage .shadcn-card {
             box-shadow: none !important;
             border-width: 1px;
-            border-color: hsl(var(--border));
+            border-color: hsl(var(--border) / 0.9);
+            background-color: hsl(var(--card));
           }
-
-          /* Cool palette — sky / slate / mint / cyan / lavender / teal.
-             Direct-child Cards of each grid column rotate through these.
-             Opacity is tiny so the colour reads as "paper of a different
-             stock" rather than a coloured panel. */
-          .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+1),
-          .article-editor-stage [data-editor-panel="publish"] > .shadcn-card:nth-of-type(6n+1) {
-            background-color: hsl(210 40% 97.5%);
-            border-color: hsl(210 25% 88%);
+          .article-editor-stage .shadcn-card > div:first-child {
+            padding: 0.875rem 1.25rem 0.5rem;
           }
-          .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+2) {
-            background-color: hsl(205 70% 97%);
-            border-color: hsl(205 50% 88%);
+          .article-editor-stage .shadcn-card > div:first-child .text-2xl {
+            font-size: 0.975rem;
+            font-weight: 700;
+            letter-spacing: -0.01em;
           }
-          .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+3) {
-            background-color: hsl(160 45% 97%);
-            border-color: hsl(160 30% 86%);
+          .article-editor-stage .shadcn-card > div:last-child {
+            padding-left: 1.25rem;
+            padding-right: 1.25rem;
+            padding-bottom: 1.1rem;
           }
-          .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+4) {
-            background-color: hsl(190 55% 97%);
-            border-color: hsl(190 40% 86%);
-          }
-          .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+5) {
-            background-color: hsl(240 35% 97.5%);
-            border-color: hsl(240 25% 88%);
-          }
-          .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+6) {
-            background-color: hsl(180 35% 97%);
-            border-color: hsl(180 25% 86%);
-          }
-
-          /* Force every interactive surface inside a tinted card back to
-             white so they read as distinct fields, not as part of the
-             card itself. */
           .article-editor-stage .shadcn-card input:not([type="checkbox"]):not([type="radio"]),
           .article-editor-stage .shadcn-card textarea,
           .article-editor-stage .shadcn-card select,
@@ -2297,43 +2274,20 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           .article-editor-stage .shadcn-card [contenteditable="true"] {
             background-color: hsl(var(--background)) !important;
           }
-          /* The rich-text editor wrapper (toolbar + surface) — keep its
-             outer wrapper neutral so the giant editor block doesn't
-             flood the page with one tint. */
-          .article-editor-stage .shadcn-card .tiptap,
-          .article-editor-stage .shadcn-card .editor-shell,
-          .article-editor-stage .shadcn-card [data-editor-shell] {
+          .article-editor-stage .shadcn-card [data-editor-shell],
+          .article-editor-stage .shadcn-card .tiptap {
             background-color: hsl(var(--background)) !important;
             border-radius: 0.5rem;
+            width: 100%;
+            max-width: none !important;
           }
-
-          /* Dark mode — cool tones at low lightness, sharp borders. */
-          .dark .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+1) {
-            background-color: hsl(210 25% 12%);
-            border-color: hsl(210 15% 22%);
-          }
-          .dark .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+2) {
-            background-color: hsl(205 30% 13%);
-            border-color: hsl(205 20% 23%);
-          }
-          .dark .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+3) {
-            background-color: hsl(160 20% 12%);
-            border-color: hsl(160 15% 22%);
-          }
-          .dark .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+4) {
-            background-color: hsl(190 25% 12%);
-            border-color: hsl(190 18% 22%);
-          }
-          .dark .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+5) {
-            background-color: hsl(240 20% 13%);
-            border-color: hsl(240 15% 23%);
-          }
-          .dark .article-editor-stage [data-editor-panel] > .shadcn-card:nth-of-type(6n+6) {
-            background-color: hsl(180 20% 12%);
-            border-color: hsl(180 15% 22%);
+          .article-editor-stage .shadcn-card .ProseMirror,
+          .article-editor-stage .shadcn-card .rich-text-editor__content {
+            width: 100% !important;
+            max-width: none !important;
           }
         `}</style>
-       <div className="container mx-auto">
+       <div className="w-full min-w-0">
         {/* Concurrent Editors Alert - Warns when other editors are working on the same article */}
         {coEditors.length > 0 && (
           <div
@@ -2591,9 +2545,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
         )}
 
-        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "grid grid-cols-1 lg:grid-cols-10 gap-6 pb-24 lg:pb-0"}>
-          {/* Main Content Area - 70% */}
-          <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-6" : "lg:col-span-7 flex flex-col gap-6"}>
+        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "grid grid-cols-1 lg:grid-cols-12 gap-5 pb-24 lg:pb-0"}>
+          {/* Main Content Area */}
+          <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-5" : "lg:col-span-8 flex min-w-0 flex-col gap-5"}>
             {isOpinionAuthor && (
               <div className="lg:hidden">
                 <WriterEditorialNoticesMobile />
@@ -2764,115 +2718,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Card>
             )}
 
-            {/* Newsletter Content - البريد الذكي */}
-            {articleType !== "opinion" && !isOpinionAuthor && (
-              <Collapsible open={newsletterOpen} onOpenChange={setNewsletterOpen}>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-                    <CollapsibleTrigger asChild>
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        data-testid="collapsible-newsletter-content"
-                      >
-                        <div>
-                          <CardTitle className="flex items-center gap-2">
-                            <Mail className="h-4 w-4" />
-                            البريد الذكي
-                          </CardTitle>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            عنوان فرعي وملخص مخصص للنشرة الإخبارية
-                          </p>
-                        </div>
-                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${newsletterOpen ? 'rotate-180' : ''}`} />
-                      </button>
-                    </CollapsibleTrigger>
-                    <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      if (!title || !content) {
-                        toast({
-                          title: "تنبيه",
-                          description: "يجب إدخال العنوان والمحتوى أولاً",
-                          variant: "destructive",
-                        });
-                        return;
-                      }
-                      setIsGeneratingNewsletterContent(true);
-                      try {
-                        // apiRequest يرفق رمز CSRF تلقائيًا — fetch الخام كان يُرفض 403
-                        const data = await apiRequest("/api/smart-classification/newsletter-subtitle", {
-                          method: "POST",
-                          body: JSON.stringify({ title, content, excerpt }),
-                        });
-                        if (data.success) {
-                          setNewsletterSubtitle(data.subtitle);
-                          setNewsletterExcerpt(data.excerpt);
-                          toast({
-                            title: "تم التوليد بنجاح",
-                            description: "تم إنشاء العنوان والملخص للنشرة الإخبارية",
-                          });
-                        } else {
-                          throw new Error(data.message);
-                        }
-                      } catch (error: any) {
-                        toast({
-                          title: "خطأ",
-                          description: error.message || "فشل توليد محتوى النشرة",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        setIsGeneratingNewsletterContent(false);
-                      }
-                    }}
-                    disabled={isGeneratingNewsletterContent || !title || !content}
-                    data-testid="button-generate-newsletter-content"
-                  >
-                    {isGeneratingNewsletterContent ? (
-                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                    ) : (
-                      <Sparkles className="h-4 w-4 ml-2" />
-                    )}
-                    توليد ذكي
-                    </Button>
-                  </CardHeader>
-                  <CollapsibleContent>
-                    <CardContent className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">العنوان الفرعي للنشرة</label>
-                    <Input
-                      value={newsletterSubtitle}
-                      onChange={(e) => setNewsletterSubtitle(e.target.value)}
-                      placeholder="عنوان جذاب للنشرة الإخبارية..."
-                      maxLength={150}
-                      disabled={isLockedByOther}
-                      data-testid="input-newsletter-subtitle"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {(newsletterSubtitle || "").length}/150 حرف
-                    </p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium mb-2 block">ملخص النشرة</label>
-                    <Textarea
-                      value={newsletterExcerpt}
-                      onChange={(e) => setNewsletterExcerpt(e.target.value)}
-                      placeholder="ملخص مختصر يظهر في النشرة..."
-                      rows={3}
-                      maxLength={300}
-                      disabled={isLockedByOther}
-                      data-testid="input-newsletter-excerpt"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {(newsletterExcerpt || "").length}/300 حرف
-                    </p>
-                  </div>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            )}
 
             </div>
 
@@ -3760,7 +3605,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           {/* Settings Sidebar - 30% */}
           {!isOpinionAuthor && <div
             className={cn(
-              "lg:col-span-3 space-y-6 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2",
+              "lg:col-span-4 space-y-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2",
               editorMobileTab !== "publish" && "max-lg:hidden",
             )}
             data-editor-panel="publish"
@@ -3847,6 +3692,116 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </button>
                 ))}
               </div>
+            {/* البريد الذكي — عمود الإعدادات (خارج مسار الكتابة) */}
+            {articleType !== "opinion" && !isOpinionAuthor && (
+              <Collapsible open={newsletterOpen} onOpenChange={setNewsletterOpen}>
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                    <CollapsibleTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md text-right focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        data-testid="collapsible-newsletter-content"
+                      >
+                        <div>
+                          <CardTitle className="flex items-center gap-2">
+                            <Mail className="h-4 w-4" />
+                            البريد الذكي
+                          </CardTitle>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            عنوان فرعي وملخص مخصص للنشرة الإخبارية
+                          </p>
+                        </div>
+                        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${newsletterOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                    </CollapsibleTrigger>
+                    <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (!title || !content) {
+                        toast({
+                          title: "تنبيه",
+                          description: "يجب إدخال العنوان والمحتوى أولاً",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setIsGeneratingNewsletterContent(true);
+                      try {
+                        // apiRequest يرفق رمز CSRF تلقائيًا — fetch الخام كان يُرفض 403
+                        const data = await apiRequest("/api/smart-classification/newsletter-subtitle", {
+                          method: "POST",
+                          body: JSON.stringify({ title, content, excerpt }),
+                        });
+                        if (data.success) {
+                          setNewsletterSubtitle(data.subtitle);
+                          setNewsletterExcerpt(data.excerpt);
+                          toast({
+                            title: "تم التوليد بنجاح",
+                            description: "تم إنشاء العنوان والملخص للنشرة الإخبارية",
+                          });
+                        } else {
+                          throw new Error(data.message);
+                        }
+                      } catch (error: any) {
+                        toast({
+                          title: "خطأ",
+                          description: error.message || "فشل توليد محتوى النشرة",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setIsGeneratingNewsletterContent(false);
+                      }
+                    }}
+                    disabled={isGeneratingNewsletterContent || !title || !content}
+                    data-testid="button-generate-newsletter-content"
+                  >
+                    {isGeneratingNewsletterContent ? (
+                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                    ) : (
+                      <Sparkles className="h-4 w-4 ml-2" />
+                    )}
+                    توليد ذكي
+                    </Button>
+                  </CardHeader>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">العنوان الفرعي للنشرة</label>
+                    <Input
+                      value={newsletterSubtitle}
+                      onChange={(e) => setNewsletterSubtitle(e.target.value)}
+                      placeholder="عنوان جذاب للنشرة الإخبارية..."
+                      maxLength={150}
+                      disabled={isLockedByOther}
+                      data-testid="input-newsletter-subtitle"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(newsletterSubtitle || "").length}/150 حرف
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium mb-2 block">ملخص النشرة</label>
+                    <Textarea
+                      value={newsletterExcerpt}
+                      onChange={(e) => setNewsletterExcerpt(e.target.value)}
+                      placeholder="ملخص مختصر يظهر في النشرة..."
+                      rows={3}
+                      maxLength={300}
+                      disabled={isLockedByOther}
+                      data-testid="input-newsletter-excerpt"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {(newsletterExcerpt || "").length}/300 حرف
+                    </p>
+                  </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            )}
+
             </div>
             {/* Article Type - Hidden for opinion authors and users without content type permission */}
             {!isOpinionAuthor && canUseContentTypeSelector && (
