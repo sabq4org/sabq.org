@@ -28486,7 +28486,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
       // 3. INTEREST ANALYSIS
       // ============================================================
 
-      const categoryBreakdown = Object.entries(categoryCounts)
+      const categoryAnalysis = Object.entries(categoryCounts)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 3)
         .map(([name, count]) => ({
@@ -28513,32 +28513,46 @@ Sitemap: https://sabq.org/sitemap-news.xml
         .slice(0, 5)
         .map(([word]) => word);
 
-      // Get suggested categories based on user's reading patterns
+      // Get user categories to suggest articles (matches Arabic contract)
       const userCategoryIds = Array.from(new Set(
         todayEvents.filter(e => e.categoryId).map(e => e.categoryId!)
       ));
 
-      const suggestedCategoriesData = userCategoryIds.length > 0
+      const suggestedArticlesData = userCategoryIds.length > 0
         ? await db
             .select({
-              name: enCategories.name,
+              id: enArticles.id,
+              title: enArticles.title,
+              slug: enArticles.slug,
+              englishSlug: enArticles.englishSlug,
+              categoryName: enCategories.name,
+              imageUrl: enArticles.imageUrl,
             })
-            .from(enCategories)
+            .from(enArticles)
+            .leftJoin(enCategories, eq(enArticles.categoryId, enCategories.id))
             .where(
               and(
-                eq(enCategories.status, 'active'),
-                sql`${enCategories.id} IN (${sql.join(userCategoryIds, sql`, `)})`
+                eq(enArticles.status, 'published'),
+                sql`${enArticles.categoryId} IN (${sql.join(userCategoryIds, sql`, `)})`
               )
             )
+            .orderBy(desc(enArticles.publishedAt))
             .limit(3)
         : [];
 
-      const suggestedCategories = suggestedCategoriesData.map(cat => cat.name);
+      const suggestedArticles = suggestedArticlesData.map((article) => ({
+        id: article.id,
+        title: article.title,
+        slug: article.slug,
+        englishSlug: article.englishSlug || undefined,
+        categoryName: article.categoryName || '',
+        imageUrl: article.imageUrl,
+      }));
 
       const interestAnalysis = {
-        categoryBreakdown,
+        topCategories: categoryAnalysis,
         topicsThatCatchAttention,
-        suggestedCategories,
+        suggestedArticles,
       };
 
       // ============================================================
