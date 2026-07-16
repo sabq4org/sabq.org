@@ -1521,10 +1521,6 @@ private struct SpCenterMatchRow: View {
         }
     }
 
-    private var rowBackground: Color {
-        fixture.status.live ? SpTheme.crimson.opacity(0.035) : Color.clear
-    }
-
     private var rowLabel: some View {
         HStack(spacing: 6) {
             Color.clear.frame(width: 24, height: 24) // فراغ محجوز لنجمة المتابعة
@@ -1535,7 +1531,6 @@ private struct SpCenterMatchRow: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 8)
-        .background(rowBackground)
         .contentShape(Rectangle())
     }
 
