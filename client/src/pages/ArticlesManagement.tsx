@@ -867,97 +867,93 @@ export default function ArticlesManagement() {
           ) : undefined}
         />
 
-        {/* Status Cards - Matching Dashboard Style */}
-        <div className="space-y-3">
+        {/* Status filter chips — compact; selected = darker filled */}
+        <div className="space-y-2">
           <SectionHeader title="إحصائيات المقالات" />
         {metricsLoading ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
             {[1, 2, 3, 4].map((i) => (
-              <Card key={i} className="h-24 rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15">
-                <CardContent className="pt-4">
-                  <Skeleton className="h-4 w-16 mb-2" />
-                  <Skeleton className="h-8 w-20" />
+              <Card key={i} className="rounded-xl border-border/60">
+                <CardContent className="p-2.5 sm:p-3">
+                  <Skeleton className="mb-1.5 h-3 w-10" />
+                  <Skeleton className="h-5 w-12" />
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : metrics ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            {/* Published Card */}
-            <Card
-              onClick={() => setActiveStatus('published')}
-              className={`cursor-pointer rounded-2xl border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-emerald-900/35 dark:from-emerald-950/15 ${
-                activeStatus === 'published' ? 'ring-1 ring-emerald-200 dark:ring-emerald-800' : ''
-              }`}
-              data-testid="card-stat-published"
-            >
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">منشورة</CardTitle>
-                <span className="rounded-lg bg-emerald-100/80 p-1.5 dark:bg-emerald-950/40">
-                  <Newspaper className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold tabular-nums">{metrics.published.toLocaleString("en-US")}</div>
-              </CardContent>
-            </Card>
-
-            {/* Scheduled Card */}
-            <Card
-              onClick={() => setActiveStatus('scheduled')}
-              className={`cursor-pointer rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-sky-900/35 dark:from-sky-950/15 ${
-                activeStatus === 'scheduled' ? 'ring-1 ring-sky-200 dark:ring-sky-800' : ''
-              }`}
-              data-testid="card-stat-scheduled"
-            >
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">مجدولة</CardTitle>
-                <span className="rounded-lg bg-sky-100/80 p-1.5 dark:bg-sky-950/40">
-                  <Clock className="h-4 w-4 text-sky-700 dark:text-sky-300" />
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold tabular-nums">{metrics.scheduled.toLocaleString("en-US")}</div>
-              </CardContent>
-            </Card>
-
-            {/* Draft Card */}
-            <Card
-              onClick={() => setActiveStatus('draft')}
-              className={`cursor-pointer rounded-2xl border-amber-200/55 bg-gradient-to-br from-amber-50/50 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-amber-900/35 dark:from-amber-950/15 ${
-                activeStatus === 'draft' ? 'ring-1 ring-amber-200 dark:ring-amber-800' : ''
-              }`}
-              data-testid="card-stat-draft"
-            >
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">مسودة</CardTitle>
-                <span className="rounded-lg bg-amber-100/80 p-1.5 dark:bg-amber-950/40">
-                  <FilePenLine className="h-4 w-4 text-amber-700 dark:text-amber-300" />
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold tabular-nums">{metrics.draft.toLocaleString("en-US")}</div>
-              </CardContent>
-            </Card>
-
-            {/* Archived Card */}
-            <Card
-              onClick={() => setActiveStatus('archived')}
-              className={`cursor-pointer rounded-2xl border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card shadow-sm transition-shadow hover:shadow-md dark:border-rose-900/35 dark:from-rose-950/15 ${
-                activeStatus === 'archived' ? 'ring-1 ring-rose-200 dark:ring-rose-800' : ''
-              }`}
-              data-testid="card-stat-archived"
-            >
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">مؤرشفة</CardTitle>
-                <span className="rounded-lg bg-rose-100/80 p-1.5 dark:bg-rose-950/40">
-                  <Archive className="h-4 w-4 text-rose-700 dark:text-rose-300" />
-                </span>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold tabular-nums">{metrics.archived.toLocaleString("en-US")}</div>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-4 gap-1.5 sm:gap-2" role="tablist" aria-label="تصفية حسب الحالة">
+            {([
+              {
+                key: "published" as const,
+                label: "منشورة",
+                value: metrics.published,
+                Icon: Newspaper,
+                idle: "border-emerald-200/70 bg-emerald-50/40 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100",
+                active: "border-emerald-700 bg-emerald-700 text-white shadow-sm dark:border-emerald-500 dark:bg-emerald-600",
+                iconIdle: "bg-emerald-100/90 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300",
+                iconActive: "bg-white/20 text-white",
+                testId: "card-stat-published",
+              },
+              {
+                key: "scheduled" as const,
+                label: "مجدولة",
+                value: metrics.scheduled,
+                Icon: Clock,
+                idle: "border-sky-200/70 bg-sky-50/40 text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100",
+                active: "border-sky-700 bg-sky-700 text-white shadow-sm dark:border-sky-500 dark:bg-sky-600",
+                iconIdle: "bg-sky-100/90 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300",
+                iconActive: "bg-white/20 text-white",
+                testId: "card-stat-scheduled",
+              },
+              {
+                key: "draft" as const,
+                label: "مسودة",
+                value: metrics.draft,
+                Icon: FilePenLine,
+                idle: "border-amber-200/70 bg-amber-50/40 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
+                active: "border-amber-700 bg-amber-700 text-white shadow-sm dark:border-amber-500 dark:bg-amber-600",
+                iconIdle: "bg-amber-100/90 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300",
+                iconActive: "bg-white/20 text-white",
+                testId: "card-stat-draft",
+              },
+              {
+                key: "archived" as const,
+                label: "مؤرشفة",
+                value: metrics.archived,
+                Icon: Archive,
+                idle: "border-rose-200/70 bg-rose-50/40 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
+                active: "border-rose-800 bg-rose-800 text-white shadow-sm dark:border-rose-500 dark:bg-rose-700",
+                iconIdle: "bg-rose-100/90 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300",
+                iconActive: "bg-white/20 text-white",
+                testId: "card-stat-archived",
+              },
+            ]).map((card) => {
+              const isActive = activeStatus === card.key;
+              return (
+                <button
+                  key={card.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveStatus(card.key)}
+                  className={`rounded-xl border px-2 py-2 text-start transition-colors sm:px-3 sm:py-2.5 ${
+                    isActive ? card.active : card.idle
+                  }`}
+                  data-testid={card.testId}
+                >
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="truncate text-[11px] font-semibold sm:text-xs">{card.label}</span>
+                    <span className={`rounded-md p-1 ${isActive ? card.iconActive : card.iconIdle}`}>
+                      <card.Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" aria-hidden="true" />
+                    </span>
+                  </div>
+                  <div className="mt-1 text-base font-bold tabular-nums sm:text-lg">
+                    {card.value.toLocaleString("en-US")}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         ) : (
           <div className="p-4 bg-destructive/10 text-destructive rounded-lg">
