@@ -173,6 +173,9 @@ struct MatchesCenterView: View {
     @State private var wcBracket: SpWcBracket?
     @State private var visibleDays: [SpCenterDay] = []
     @State private var loading = true
+    /// لا نطلب الجدول قبل وصول سجل البطولات ومزامنة المفضّلة؛ سابقًا كان يبدأ
+    /// طلب أول فارغ ثم يُلغى ويُعاد بعد 120ms، فتطول الشاشة البيضاء عند الفتح.
+    @State private var registryReady = false
     @State private var loadError: String?
     @State private var liveOnly = false
     /// نبضة موجز/دورة استطلاع وصلت والتبويب مخفي — تُصرف بتحميل واحد عند العودة.
@@ -230,14 +233,12 @@ struct MatchesCenterView: View {
                 .toolbar(.hidden, for: .navigationBar)
         }
         .task {
-            await Task.yield()
-            try? await Task.sleep(nanoseconds: 120_000_000)
             await loadCompetitions()
+            registryReady = true
         }
         // إعادة التحميل تلقائيًّا مع كل تغيير فلتر أو تعديل للمفضّلة (المهمة السابقة تُلغى).
         .task(id: reloadKey) {
-            await Task.yield()
-            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard registryReady else { return }
             await load()
         }
         .sheet(isPresented: $showCompsManager) { compsManagerSheet }
@@ -248,13 +249,16 @@ struct MatchesCenterView: View {
         }
         .onChange(of: liveOnly) { _, _ in rebuildDays(keepSelection: true) }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active, router.selectedTab == .matches { Task { await load(force: true) } }
+            if phase == .active, router.selectedTab == .matches, registryReady, !fixtures.isEmpty {
+                Task { await load(force: true) }
+            }
         }
         // البث الحيّ (SSE): الجدول يضم بطولات عامة + المونديال — مراقب واحد لمجموع
         // النسختين (مراقبان منفصلان كانا يطلقان تحميلين كاملين متزامنين للنبضة
         // المختلطة). والتبويب المخفي لا يعيد التحميل مع كل نبضة (TabView يُبقي
         // التبويبات المزارة حيّة) — يؤجَّل التحديث لعودة الظهور.
         .onChange(of: liveStream.sportsVersion &+ liveStream.wcVersion) { _, _ in
+            guard registryReady, !fixtures.isEmpty else { pendingLiveReload = true; return }
             guard router.selectedTab == .matches else { pendingLiveReload = true; return }
             Task { await load(force: true) }
         }
@@ -440,7 +444,7 @@ struct MatchesCenterView: View {
 
     /// مفتاح إعادة التحميل: الاختيار + بصمة المفضّلة (تبديل بطولة = تحديث فوري).
     private var reloadKey: String {
-        selection + "|" + favorites.items.map(\.slug).sorted().joined(separator: ",")
+        "\(registryReady)|" + selection + "|" + favorites.items.map(\.slug).sorted().joined(separator: ",")
     }
 
     // صفّ فلترة واحد: حبّة «العدسة» (قائمة النطاق) تتصدّره، يليها فاصل رفيع ثم
@@ -612,7 +616,12 @@ struct MatchesCenterView: View {
 
     @ViewBuilder private var bodyContent: some View {
         if loading && fixtures.isEmpty {
-            SpLoading().frame(maxWidth: .infinity, maxHeight: .infinity)
+            // افتح هيكل الشاشة وأدواتها فورًا، ثم حمّل الجدول داخلها. إخفاء الترويسة
+            // كاملة كان يجعل التطبيق يبدو عالقًا رغم أن التنقّل نفسه اكتمل.
+            VStack(spacing: 0) {
+                pinnedTopBar
+                SpLoading().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         } else if let loadError, fixtures.isEmpty {
             SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

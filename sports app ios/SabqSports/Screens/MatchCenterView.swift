@@ -2085,17 +2085,11 @@ struct SpMatchCenter: View {
     // MARK: - التحميل
 
     private func load() async {
-        // التفاصيل أساسية؛ إثراء SportMonks أفضل جهد بالتوازي. مباريات «عالمية»
-        // (id سالب) تُحلّ خادميًّا من لوحة TheSports الحيّة عبر النقطة نفسها.
-        async let detailRes = APIClient.shared.fetchMatchDetail(id: fixtureId)
-        async let xgOpt = (try? APIClient.shared.fetchXg(matchId: fixtureId))
-        async let momOpt = (try? APIClient.shared.fetchMomentum(matchId: fixtureId))
-        async let presOpt = (try? APIClient.shared.fetchPressure(matchId: fixtureId))
-        async let factsOpt = (try? APIClient.shared.fetchMatchFacts(matchId: fixtureId))
-        async let ratingsOpt = (try? APIClient.shared.fetchMatchPlayers(matchId: fixtureId))
-        async let commentaryOpt = (try? APIClient.shared.fetchCommentary(matchId: fixtureId))
+        // التفاصيل أساسية؛ نعطيها الاتصال أولًا ثم نفتح المركز قبل إطلاق طلبات
+        // SportMonks الاختيارية. تشغيل السبعة معًا كان يزاحم الطلب الأساسي على
+        // الشبكات البطيئة ويُبقي المؤشر الظاهر في لقطات البلاغ مدة أطول.
         do {
-            self.detail = try await detailRes
+            self.detail = try await APIClient.shared.fetchMatchDetail(id: fixtureId)
             self.loadError = nil
             // حدّث نشاط شاشة القفل بأحدث نتيجة وآخر حدث (no-op إن لم يكن قائمًا).
             if let d = self.detail {
@@ -2118,6 +2112,17 @@ struct SpMatchCenter: View {
                 self.loadError = error.localizedDescription
             }
         }
+        self.loading = false
+        if Task.isCancelled { return }
+
+        // بعد ظهور المحتوى الأساسي فقط نبدأ الإثراءات المتوازية.
+        async let xgOpt = (try? APIClient.shared.fetchXg(matchId: fixtureId))
+        async let momOpt = (try? APIClient.shared.fetchMomentum(matchId: fixtureId))
+        async let presOpt = (try? APIClient.shared.fetchPressure(matchId: fixtureId))
+        async let factsOpt = (try? APIClient.shared.fetchMatchFacts(matchId: fixtureId))
+        async let ratingsOpt = (try? APIClient.shared.fetchMatchPlayers(matchId: fixtureId))
+        async let commentaryOpt = (try? APIClient.shared.fetchCommentary(matchId: fixtureId))
+
         self.xg = await xgOpt
         self.momentum = await momOpt
         self.pressure = await presOpt
@@ -2178,7 +2183,6 @@ struct SpMatchCenter: View {
         if let f = detail?.fixture ?? preview, !f.started {
             VaraPickArchive.save(fixtureId: f.id, pick: varaPick(f))
         }
-        self.loading = false
         await recordMatchViewIfNeeded()
     }
 

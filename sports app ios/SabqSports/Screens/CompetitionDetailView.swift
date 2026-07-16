@@ -1346,6 +1346,18 @@ struct CompetitionDetailView: View {
         }
         if !force { loading = true }
 
+        // المباراة/الجدول هما محتوى الفتح الأساسي. نمنحهما الاتصال أولًا بدل
+        // منافستهما بستة طلبات إثراء؛ ما إن يصلا تُفتح الصفحة ثم تُملأ بقية
+        // التبويبات في الخلفية خلال استمرار هذه المهمة.
+        do {
+            self.matches = try await APIClient.shared.fetchMatches(comp: comp.slug, ignoreCache: force)
+            self.loadError = nil
+        } catch {
+            self.loadError = error.localizedDescription
+        }
+        self.loading = false
+        if Task.isCancelled { return }
+
         async let standingsT: [SpStandingRow]? = comp.hasStandings
             ? (try? await APIClient.shared.fetchStandings(comp: comp.slug, ignoreCache: force))?.standings : nil
         async let scorersT: [SpScorer]? = comp.hasScorers
@@ -1356,15 +1368,9 @@ struct CompetitionDetailView: View {
         async let insightsT: SpLeagueInsightsResponse? = try? await APIClient.shared.fetchLeagueInsights(comp: comp.slug, ignoreCache: force)
         async let transfersT: SpLeagueTransfersResponse? = supportsTransfers
             ? (try? await APIClient.shared.fetchLeagueTransfers(ignoreCache: force)) : nil
+        async let roundsT = try? APIClient.shared.fetchRounds(comp: comp.slug, ignoreCache: force)
 
-        do {
-            self.matches = try await APIClient.shared.fetchMatches(comp: comp.slug, ignoreCache: force)
-            self.loadError = nil
-        } catch {
-            self.loadError = error.localizedDescription
-        }
-
-        let roundsResponse = try? await APIClient.shared.fetchRounds(comp: comp.slug, ignoreCache: force)
+        let roundsResponse = await roundsT
         self.rounds = roundsResponse?.rounds ?? []
         self.currentRound = roundsResponse?.current
         let preferredRound = selectedRound ?? roundsResponse?.current ?? roundsResponse?.rounds.first?.key
@@ -1382,7 +1388,6 @@ struct CompetitionDetailView: View {
         self.insights = await insightsT
         let tr = await transfersT
         self.leagueTransfers = (tr?.topDeals ?? tr?.transfers) ?? []
-        self.loading = false
     }
 
     private func selectRound(_ round: String) async {
@@ -1435,27 +1440,31 @@ struct CompetitionDetailView: View {
     private func loadWorldCup(force: Bool = false) async {
         if !force { loading = true }
 
+        // الترتيب والمباريات هما سطح الفتح؛ لا نحبسهما خلف الهدّافين والبطاقات.
         async let fixturesOpt = try? APIClient.shared.fetchWorldCupFixtures(ignoreCache: force)
         async let groupsOpt = try? APIClient.shared.fetchWorldCupStandings(ignoreCache: force)
-        async let bracketOpt = try? APIClient.shared.fetchWorldCupBracket(ignoreCache: true)
+        let fixturesRes = await fixturesOpt
+        let groupsRes = await groupsOpt
+        self.wcFixtures = fixturesRes?.fixtures ?? []
+        self.wcGroups = groupsRes?.groups ?? []
+        self.loadError = hasAnyData ? nil : L("تعذّر الاتصال بخادم بيانات كأس العالم")
+        self.loading = false
+        if Task.isCancelled { return }
+
+        async let bracketOpt = try? APIClient.shared.fetchWorldCupBracket(ignoreCache: force)
         async let scorersOpt = try? APIClient.shared.fetchWorldCupScorers(ignoreCache: force)
         async let assistsOpt = try? APIClient.shared.fetchWorldCupAssists(ignoreCache: force)
         async let cardsOpt = try? APIClient.shared.fetchWorldCupCards(ignoreCache: force)
 
-        let fixturesRes = await fixturesOpt
-        let groupsRes = await groupsOpt
         let bracketRes = await bracketOpt
         let scorersRes = await scorersOpt
         let assistsRes = await assistsOpt
         let cardsRes = await cardsOpt
 
-        self.wcFixtures = fixturesRes?.fixtures ?? []
-        self.wcGroups = groupsRes?.groups ?? []
         self.wcBracket = bracketRes
         self.wcScorers = scorersRes?.scorers ?? []
         self.wcAssists = assistsRes?.leaders ?? []
         self.wcCards = cardsRes?.leaders ?? []
         self.loadError = hasAnyData ? nil : L("تعذّر الاتصال بخادم بيانات كأس العالم")
-        self.loading = false
     }
 }
