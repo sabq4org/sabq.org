@@ -1133,10 +1133,12 @@ struct TransferCenterView: View {
 
     private func loadGlobalIfNeeded(force: Bool = false) async {
         guard showGlobalConfirmed, !loadedGlobal || force else { return }
+        // العلم يُرفع عند النجاح فقط — كان يُرفع دائمًا فيتحوّل فشل الشبكة
+        // العابر إلى «لا نتائج» دائمة لا يصلحها إلا سحب-للتحديث.
         if let res = try? await APIClient.shared.fetchTransferGlobalConfirmed(ignoreCache: force) {
             self.globalConfirmed = res.transfers ?? []
+            loadedGlobal = true
         }
-        loadedGlobal = true
     }
 }
 

@@ -80,6 +80,56 @@ nonisolated struct SpFixture: Codable, Identifiable, Hashable {
     }
 }
 
+// فكّ ترميز متسامح — فكّ المصفوفات «كل أو لا شيء»: عنصر واحد ناقص الحقول من
+// المزوّد (مباراة عالمية بلا ملعب/جولة مثلًا) كان يُفشل القائمة كلها فتظهر
+// «مباشر» فارغة. الأساسيات (المعرّف/الفريقان) تبقى إلزامية؛ الزينة تسقط
+// لقيم افتراضية. المُهيّئات العضوية محفوظة لأن init(from:) في امتداد.
+extension SpVenue {
+    private enum DKeys: String, CodingKey { case name, city }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: DKeys.self)
+        name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
+        city = (try? c.decodeIfPresent(String.self, forKey: .city)) ?? ""
+    }
+}
+
+extension SpStatus {
+    private enum DKeys: String, CodingKey { case code, label, elapsed, extra, live, finished, clockStartEpoch }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: DKeys.self)
+        code = (try? c.decodeIfPresent(String.self, forKey: .code)) ?? "NS"
+        label = (try? c.decodeIfPresent(String.self, forKey: .label)) ?? ""
+        elapsed = try? c.decodeIfPresent(Int.self, forKey: .elapsed)
+        extra = try? c.decodeIfPresent(Int.self, forKey: .extra)
+        live = (try? c.decodeIfPresent(Bool.self, forKey: .live)) ?? false
+        finished = (try? c.decodeIfPresent(Bool.self, forKey: .finished)) ?? false
+        clockStartEpoch = try? c.decodeIfPresent(Double.self, forKey: .clockStartEpoch)
+    }
+}
+
+extension SpFixture {
+    private enum DKeys: String, CodingKey {
+        case id, date, timestamp, status, round, venue, home, away, goals
+        case penalties, competition, competitionSlug
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: DKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        home = try c.decode(SpTeam.self, forKey: .home)
+        away = try c.decode(SpTeam.self, forKey: .away)
+        date = (try? c.decodeIfPresent(String.self, forKey: .date)) ?? ""
+        timestamp = (try? c.decodeIfPresent(Int.self, forKey: .timestamp)) ?? 0
+        status = (try? c.decodeIfPresent(SpStatus.self, forKey: .status))
+            ?? SpStatus(code: "NS", label: "", elapsed: nil, extra: nil, live: false, finished: false)
+        round = (try? c.decodeIfPresent(String.self, forKey: .round)) ?? ""
+        venue = (try? c.decodeIfPresent(SpVenue.self, forKey: .venue)) ?? SpVenue(name: "", city: "")
+        goals = (try? c.decodeIfPresent(SpScore.self, forKey: .goals)) ?? SpScore(home: nil, away: nil)
+        penalties = try? c.decodeIfPresent(SpScore.self, forKey: .penalties)
+        competition = try? c.decodeIfPresent(String.self, forKey: .competition)
+        competitionSlug = try? c.decodeIfPresent(String.self, forKey: .competitionSlug)
+    }
+}
+
 nonisolated struct SpStandingRow: Decodable, Identifiable, Hashable {
     let rank: Int
     let team: SpTeam

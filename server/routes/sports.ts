@@ -61,6 +61,7 @@ import {
   overlayLiveBoardList,
   overlayLiveFixturesForComp,
   overlayLiveMatchDetail,
+  startCompetitionsMetaWarmer,
   type SaudiCompetition,
   type SplFixture,
 } from "../services/saudiLeagueService";
@@ -175,6 +176,10 @@ function bucketFixtures(fixtures: SplFixture[]) {
 }
 
 export function registerSportsRoutes(app: Express) {
+  // تسخين كاش معلومات البطولات على كل pod — يمنع دفع أول مستخدم بعد deploy
+  // كلفة المسار البارد (~35 نداء AF) في شاشة «الأقسام». no-op بلا مفتاح API.
+  startCompetitionsMetaWarmer();
+
   // Middleware: يضبط لغة الاستجابة (ar/en) لكل الطلب عبر AsyncLocalStorage —
   // فتقرؤها دوال التعريب المنخفضة، ويفصل withSWR كاش الإنجليزية تلقائيًا (:en).
   // نضيف Vary: Accept-Language كي تُفصل الوسائط بين اللغتين. مسجَّل قبل تعريفات
