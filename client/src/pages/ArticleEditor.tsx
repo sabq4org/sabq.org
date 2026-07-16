@@ -328,6 +328,19 @@ export default function ArticleEditor() {
   const [newsletterOpen, setNewsletterOpen] = useState(false);
   const [imageToolsOpen, setImageToolsOpen] = useState(false);
   const [autoImageOpen, setAutoImageOpen] = useState(false);
+  const [titleCardOpen, setTitleCardOpen] = useState(true);
+
+  // على الديسكتوب أبقِ بطاقة العنوان مفتوحة دائماً
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const forceOpen = () => {
+      if (mq.matches) setTitleCardOpen(true);
+    };
+    forceOpen();
+    mq.addEventListener("change", forceOpen);
+    return () => mq.removeEventListener("change", forceOpen);
+  }, []);
   
   // Use ref for immediate lock with URL tracking (prevents concurrent uploads even in StrictMode)
   const savingMediaMapRef = useRef<Map<string, Promise<string | null>>>(new Map());
@@ -2406,7 +2419,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
 
           {/* Actions Row */}
-          <div className={isOpinionAuthor ? "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end" : "flex items-center justify-between gap-2 sm:justify-end"}>
+          <div className={isOpinionAuthor ? "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end" : "flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end"}>
             {/* Auto-save indicator - visible on mobile only */}
             {(autoSaveStatus === "saving" || autoSaveStatus === "saved") && (
               <div className="flex sm:hidden items-center gap-1.5 text-xs text-muted-foreground" data-testid="autosave-indicator-mobile">
@@ -2428,13 +2441,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 )}
               </div>
             )}
-            <div className={isOpinionAuthor ? "grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center" : "flex items-center gap-2"}>
+            <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
               {!isNewArticle && id && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => window.open(`/dashboard/article/${id}/preview`, '_blank')}
-                  className="gap-1.5 sm:gap-2"
+                  className="gap-1.5 sm:gap-2 w-full sm:w-auto justify-center"
                   data-testid="button-preview"
                 >
                   <Eye className="h-4 w-4" />
@@ -2446,7 +2459,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 size="sm"
                 onClick={() => handleSave(false)}
                 disabled={isSaving || isLockedByOther}
-                className="gap-1.5 sm:gap-2"
+                className="gap-1.5 sm:gap-2 w-full sm:w-auto justify-center"
                 data-testid="button-save-draft"
               >
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -2484,7 +2497,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   void handleSave(true);
                 }}
                 disabled={isSaving || submitReviewMutation.isPending || isLockedByOther}
-                className="gap-1.5 sm:gap-2"
+                className="gap-1.5 sm:gap-2 w-full sm:w-auto justify-center"
                 data-testid="button-publish"
               >
                 {isSaving ? (
@@ -2506,9 +2519,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
         </div>
 
-        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "grid grid-cols-1 lg:grid-cols-12 gap-5 pb-24 lg:pb-0"}>
-          {/* Main Content Area */}
-          <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-5" : "lg:col-span-8 flex min-w-0 flex-col gap-5"}>
+        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "flex flex-col gap-5 pb-24 lg:grid lg:grid-cols-12 lg:pb-0"}>
+          {/* Main Content Area — contents على الموبايل لدمج الترتيب مع الشريط الجانبي */}
+          <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-5" : "contents lg:col-span-8 lg:flex lg:min-w-0 lg:flex-col lg:gap-5"}>
             {isOpinionAuthor && (
               <div className="lg:hidden">
                 <WriterEditorialNoticesMobile />
@@ -2579,33 +2592,64 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 </div>
               );
             })()}
-            {/* Content panel — title first; body uses order so it sits above media on desktop */}
-            <div className="space-y-5" data-editor-panel="content-head">
+            {/* Content panel — title/subtitle; order يتحكم بترتيب الموبايل */}
+            <div className="contents" data-editor-panel="content-head">
             {/* Title with AI */}
+            <Collapsible
+              open={titleCardOpen}
+              onOpenChange={setTitleCardOpen}
+              className="order-[20] lg:order-none"
+            >
             <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>العنوان الرئيسي</CardTitle>
-                  {isInfographic && (
-                    <InfographicAiDialog
-                      content={content}
-                      title={title}
-                      category={categories?.find(c => c.id === categoryId)?.nameAr}
-                      onApplySuggestions={handleApplyInfographicSuggestions}
-                    />
-                  )}
+              <CardHeader className="py-3 sm:py-6">
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-base sm:text-lg">العنوان الرئيسي</CardTitle>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isInfographic && (
+                      <InfographicAiDialog
+                        content={content}
+                        title={title}
+                        category={categories?.find(c => c.id === categoryId)?.nameAr}
+                        onApplySuggestions={handleApplyInfographicSuggestions}
+                      />
+                    )}
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 lg:hidden"
+                        data-testid="button-toggle-title-card"
+                        aria-label={titleCardOpen ? "طي العنوان" : "فتح العنوان"}
+                      >
+                        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${titleCardOpen ? "rotate-180" : ""}`} />
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
                 </div>
+                {!titleCardOpen && (
+                  <p className="mt-2 truncate text-sm text-muted-foreground lg:hidden" data-testid="title-card-collapsed-preview">
+                    {(title || "").trim() || "عنوان…"}
+                    <span className="ms-2 tabular-nums text-xs">
+                      {(title || "").length}/200
+                    </span>
+                  </p>
+                )}
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex gap-2">
+              <CollapsibleContent>
+              <CardContent className="space-y-3 pt-0 sm:pt-0">
+                <div className="flex items-center gap-2">
                   <Input
                     value={title}
                     onChange={(e) => handleTitleChange(e.target.value)}
                     placeholder="اكتب عنوان المقال..."
-                    className="flex-1"
+                    className="min-w-0 flex-1"
                     disabled={isLockedByOther}
                     data-testid="input-title"
                   />
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground" data-testid="title-char-count">
+                    {(title || "").length}/200
+                  </span>
                   {!isOpinionAuthor && <Button
                     variant="outline"
                     size="icon"
@@ -2642,33 +2686,35 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   onTitleChange={setTitle}
                   onSlugChange={setSlug}
                 />}
-                <p className="text-xs text-muted-foreground">
-                  {(title || "").length}/200 حرف
-                </p>
               </CardContent>
+              </CollapsibleContent>
             </Card>
+            </Collapsible>
 
             {/* Subtitle - Hidden for opinion articles */}
             {articleType !== "opinion" && !isOpinionAuthor && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>العنوان الفرعي</CardTitle>
+              <Card className="order-[30] lg:order-none">
+                <CardHeader className="py-3 sm:py-6">
+                  <CardTitle className="text-base sm:text-lg">العنوان الفرعي</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Input
-                    value={subtitle}
-                    onChange={(e) => setSubtitle(e.target.value)}
-                    placeholder="عنوان فرعي (اختياري)..."
-                    maxLength={120}
-                    disabled={isLockedByOther}
-                    data-testid="input-subtitle"
-                  />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {(subtitle || "").length}/120 حرف
-                    {(subtitle || "").length > 100 && (
-                      <span className="text-amber-500 mr-2">قريب من الحد الأقصى</span>
-                    )}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={subtitle}
+                      onChange={(e) => setSubtitle(e.target.value)}
+                      placeholder="عنوان فرعي (اختياري)..."
+                      maxLength={120}
+                      disabled={isLockedByOther}
+                      className="min-w-0 flex-1"
+                      data-testid="input-subtitle"
+                    />
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {(subtitle || "").length}/120
+                    </span>
+                  </div>
+                  {(subtitle || "").length > 100 && (
+                    <p className="text-xs text-amber-500 mt-2">قريب من الحد الأقصى</p>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -2677,7 +2723,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </div>
 
             {/* Media panel — مباشرة بعد العنوان وقبل المحتوى */}
-            <div className="space-y-5" data-editor-panel="media">
+            <div className="order-[40] space-y-5 lg:order-none" data-editor-panel="media">
             {/* Featured Image */}
             {!isOpinionAuthor && showFeaturedImageHint && (
               <div
@@ -3326,9 +3372,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             </div>
 
-            <div className="space-y-5" data-editor-panel="content-body">
+            <div className="contents" data-editor-panel="content-body">
             {/* Content Editor */}
-            <Card>
+            <Card className="order-[50] lg:order-none">
               <CardHeader className="space-y-3">
                 <CardTitle>محتوى المقال</CardTitle>
                 {/* AI Buttons - stacked on mobile, inline on desktop */}
@@ -3441,7 +3487,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </Card>
 
             {/* Excerpt */}
-            {!isOpinionAuthor && <Card>
+            {!isOpinionAuthor && <Card className="order-[55] lg:order-none">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle>الملخص</CardTitle>
@@ -3475,9 +3521,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </CardContent>
             </Card>}
 
-            {/* البريد الذكي — تحت الملخص */}
+            {/* البريد الذكي — أسفل الصفحة على الموبايل (order عالي) */}
             {articleType !== "opinion" && !isOpinionAuthor && (
-              <Collapsible open={newsletterOpen} onOpenChange={setNewsletterOpen}>
+              <Collapsible open={newsletterOpen} onOpenChange={setNewsletterOpen} className="order-[90] lg:order-none">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
                     <CollapsibleTrigger asChild>
@@ -3586,19 +3632,21 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
 
-            {/* Poll Editor */}
+            {/* Poll Editor — أسفل الصفحة على الموبايل */}
             {!isOpinionAuthor && canUsePolls && (
+              <div className="order-[91] lg:order-none">
               <PollEditor 
                 poll={pollData} 
                 onChange={setPollData}
                 articleContent={content}
                 articleTitle={title}
               />
+              </div>
             )}
 
             {/* Smart Links Panel - Collapsible - Hidden for infographics */}
             {!isOpinionAuthor && canUseSmartLinks && articleType !== "infographic" && (
-              <Collapsible open={smartLinksOpen} onOpenChange={setSmartLinksOpen}>
+              <Collapsible open={smartLinksOpen} onOpenChange={setSmartLinksOpen} className="order-[92] lg:order-none">
                 <Card>
                   <CollapsibleTrigger asChild>
                     <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-smart-links">
@@ -3628,7 +3676,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* Article Timeline - Collapsible - Only shown when editing existing articles */}
             {!isOpinionAuthor && !isNewArticle && id && (
-              <Collapsible open={timelineOpen} onOpenChange={setTimelineOpen}>
+              <Collapsible open={timelineOpen} onOpenChange={setTimelineOpen} className="order-[93] lg:order-none">
                 <Card>
                   <CollapsibleTrigger asChild>
                     <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-timeline">
@@ -3656,13 +3704,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
           {isOpinionAuthor && <WriterEditorialNoticesAside />}
 
-          {/* Settings Sidebar - 30% */}
+          {/* Settings Sidebar — contents على الموبايل لدمج الترتيب مع المحتوى */}
           {!isOpinionAuthor && <div
-            className="lg:col-span-4 space-y-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2"
+            className="contents lg:col-span-4 lg:flex lg:flex-col lg:gap-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2"
             data-editor-panel="publish"
           >
             <div
-              className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm"
+              className="order-[10] rounded-2xl border border-border/70 bg-card p-4 shadow-sm lg:order-none"
               data-testid="publish-readiness"
             >
               <div className="flex items-center gap-3">
@@ -3741,7 +3789,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* Article Type - Hidden for opinion authors and users without content type permission */}
             {!isOpinionAuthor && canUseContentTypeSelector && (
-              <Card>
+              <Card className="order-[60] lg:order-none">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Hash className="h-4 w-4" />
@@ -3836,7 +3884,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             
             {/* Data Infographic Editor - shown when infographic type is 'data' - hidden for opinion authors */}
             {!isOpinionAuthor && canUseInfographics && isInfographic && infographicType === "data" && (
-              <Card>
+              <Card className="order-[70] lg:order-none">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" />
@@ -3855,7 +3903,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* News Type - Hidden for opinion articles and users without news_type permission */}
             {articleType !== "opinion" && canUseNewsType && (
-              <Card>
+              <Card className="order-[63] lg:order-none">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Zap className="h-4 w-4" />
@@ -3927,7 +3975,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* Video Template - Hidden for opinion authors */}
             {!isOpinionAuthor && (
-            <Card>
+            <Card className="order-[70] lg:order-none">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Play className="h-4 w-4" />
@@ -4156,7 +4204,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
             {/* Category */}
-            <Card>
+            <Card className="order-[61] lg:order-none">
               <CardHeader>
                 <CardTitle className="flex items-center justify-between">
                   <span>التصنيف</span>
@@ -4228,7 +4276,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* Reporter - Hidden for opinion articles */}
             {articleType !== "opinion" && (
-              <Card>
+              <Card className="order-[62] lg:order-none">
                 <CardHeader>
                   <CardTitle>المراسل</CardTitle>
                 </CardHeader>
@@ -4243,7 +4291,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* Opinion Author - Shown only for opinion articles */}
             {articleType === "opinion" && (
-              <Card>
+              <Card className="order-[62] lg:order-none">
                 <CardHeader>
                   <CardTitle>كاتب المقال</CardTitle>
                 </CardHeader>
@@ -4263,7 +4311,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
             {/* Publishing */}
-            <Card>
+            <Card className="order-[64] lg:order-none">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
@@ -4416,7 +4464,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             {/* Article Media Attachments - Visible in Sidebar for editing articles */}
             {!isNewArticle && (
-              <Card>
+              <Card className="order-[71] lg:order-none">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <span className="flex items-center gap-2">
@@ -4502,7 +4550,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
             {/* SEO Settings — حقول + معاينة + أدوات متقدمة (تحليل/سوشال). الألبوم نُقل لقسم الوسائط */}
-            <Card>
+            <Card className="order-[72] lg:order-none">
               <CardHeader className="space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <CardTitle className="flex items-center gap-2">

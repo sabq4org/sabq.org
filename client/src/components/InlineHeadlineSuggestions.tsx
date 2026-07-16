@@ -3,7 +3,12 @@ import { Editor } from "@tiptap/react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Sparkles, Loader2 } from "lucide-react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Sparkles, Loader2, ChevronDown } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -65,6 +70,7 @@ export function InlineHeadlineSuggestions({
 }: InlineHeadlineSuggestionsProps) {
   const [suggestions, setSuggestions] = useState<HeadlineSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
+  const [resultsOpen, setResultsOpen] = useState(false);
   const { toast } = useToast();
 
   const isRTL = language === 'ar' || language === 'ur';
@@ -94,6 +100,7 @@ export function InlineHeadlineSuggestions({
 
       const validSuggestions = response?.suggestions?.filter(s => !s.error);
       setSuggestions(validSuggestions);
+      setResultsOpen(false);
 
       if (validSuggestions.length === 0) {
         toast({
@@ -133,6 +140,14 @@ export function InlineHeadlineSuggestions({
     setSuggestions([]);
   };
 
+  const suggestionsCount = suggestions.length;
+  const showSuggestionsLabel =
+    language === "ar"
+      ? `عرض الاقتراحات (${suggestionsCount})`
+      : language === "ur"
+        ? `تجاویز دکھائیں (${suggestionsCount})`
+        : `Show suggestions (${suggestionsCount})`;
+
   return (
     <div className="space-y-2" dir={isRTL ? 'rtl' : 'ltr'}>
       <Button
@@ -142,7 +157,7 @@ export function InlineHeadlineSuggestions({
         onClick={handleSuggest}
         disabled={!hasContent || loading}
         data-testid="button-suggest-headlines"
-        className="gap-2"
+        className="h-8 gap-1.5 px-2.5 text-xs"
       >
         {loading ? (
           <>
@@ -157,40 +172,58 @@ export function InlineHeadlineSuggestions({
         )}
       </Button>
 
-      <AnimatePresence>
-        {suggestions.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            <Card className="border">
-              <CardContent className="p-3">
-                <div className="flex flex-wrap gap-2">
-                  {suggestions.map((suggestion, index) => (
-                    <motion.div
-                      key={index}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.1 }}
-                    >
-                      <Badge
-                        variant="outline"
-                        className="cursor-pointer hover-elevate active-elevate-2 py-2 px-3 text-sm"
-                        onClick={() => handleSelectSuggestion(suggestion.title)}
-                        data-testid={`headline-suggestion-${index}`}
-                      >
-                        {suggestion.title}
-                      </Badge>
-                    </motion.div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {suggestionsCount > 0 && (
+        <Collapsible open={resultsOpen} onOpenChange={setResultsOpen}>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 gap-1.5 px-2.5 text-xs w-full justify-between"
+              data-testid="button-toggle-headline-suggestions"
+            >
+              <span>{showSuggestionsLabel}</span>
+              <ChevronDown
+                className={`h-4 w-4 shrink-0 transition-transform ${resultsOpen ? "rotate-180" : ""}`}
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <AnimatePresence>
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <Card className="border">
+                  <CardContent className="p-3">
+                    <div className="flex flex-wrap gap-2">
+                      {suggestions.map((suggestion, index) => (
+                        <motion.div
+                          key={index}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: index * 0.1 }}
+                        >
+                          <Badge
+                            variant="outline"
+                            className="cursor-pointer hover-elevate active-elevate-2 py-2 px-3 text-sm"
+                            onClick={() => handleSelectSuggestion(suggestion.title)}
+                            data-testid={`headline-suggestion-${index}`}
+                          >
+                            {suggestion.title}
+                          </Badge>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </AnimatePresence>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </div>
   );
 }
