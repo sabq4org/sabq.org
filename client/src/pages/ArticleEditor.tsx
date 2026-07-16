@@ -3899,78 +3899,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Card>
             )}
 
-            {/* News Type - Hidden for opinion articles and users without news_type permission */}
-            {articleType !== "opinion" && canUseNewsType && (
-              <Card className="order-[63] lg:order-none">
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Zap className="h-4 w-4" />
-                    نوع الخبر
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <RadioGroup value={newsType} onValueChange={(value: any) => setNewsType(value)}>
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <RadioGroupItem value="breaking" id="breaking" />
-                      <Label htmlFor="breaking" className="flex items-center gap-2 cursor-pointer">
-                        خبر عاجل
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <RadioGroupItem value="regular" id="regular" />
-                      <Label htmlFor="regular" className="flex items-center gap-2 cursor-pointer">
-                        خبر عادي
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                  
-                  {/* Featured Article Checkbox - Independent from newsType */}
-                  <div className="pt-4 border-t mt-4">
-                    <div className="flex items-center space-x-2 space-x-reverse">
-                      <Checkbox 
-                        id="isFeatured"
-                        checked={isFeatured}
-                        onCheckedChange={(checked) => setIsFeatured(checked as boolean)}
-                        data-testid="checkbox-is-featured"
-                      />
-                      <Label htmlFor="isFeatured" className="flex items-center gap-2 cursor-pointer text-sm">
-                        <Star className="h-4 w-4 text-yellow-500" />
-                        <div>
-                          <div className="font-medium">خبر مميز</div>
-                          <div className="text-xs text-muted-foreground">
-                            سيظهر المقال في قسم الأخبار المميزة
-                          </div>
-                        </div>
-                      </Label>
-                    </div>
-                  </div>
-                  
-                  {/* Hide from Homepage Option - Requires permission */}
-                  {canHideFromHomepage && (
-                    <div className="pt-4 border-t mt-4">
-                      <div className="flex items-center space-x-2 space-x-reverse">
-                        <Checkbox 
-                          id="hideFromHomepage"
-                          checked={hideFromHomepage}
-                          onCheckedChange={(checked) => setHideFromHomepage(checked as boolean)}
-                          data-testid="checkbox-hide-from-homepage"
-                        />
-                        <Label htmlFor="hideFromHomepage" className="flex items-center gap-2 cursor-pointer text-sm">
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <div className="font-medium">إخفاء من الواجهة الرئيسية</div>
-                            <div className="text-xs text-muted-foreground">
-                              المقال سينشر لكن لن يظهر في الصفحة الرئيسية
-                            </div>
-                          </div>
-                        </Label>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
             {/* Video Template - Hidden for opinion authors */}
             {!isOpinionAuthor && (
             <Card className="order-[70] lg:order-none">
@@ -4459,6 +4387,78 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 )}
               </CardContent>
             </Card>
+
+            {/* News Type — تحت بطاقة النشر */}
+            {articleType !== "opinion" && canUseNewsType && (
+              <Card className="order-[65] lg:order-none">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    نوع الخبر
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <RadioGroup value={newsType} onValueChange={(value: any) => setNewsType(value)}>
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <RadioGroupItem value="breaking" id="breaking" />
+                      <Label htmlFor="breaking" className="flex items-center gap-2 cursor-pointer">
+                        خبر عاجل
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <RadioGroupItem value="regular" id="regular" />
+                      <Label htmlFor="regular" className="flex items-center gap-2 cursor-pointer">
+                        خبر عادي
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                  
+                  {/* Featured Article Checkbox - Independent from newsType */}
+                  <div className="pt-4 border-t mt-4">
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <Checkbox 
+                        id="isFeatured"
+                        checked={isFeatured}
+                        onCheckedChange={(checked) => setIsFeatured(checked as boolean)}
+                        data-testid="checkbox-is-featured"
+                      />
+                      <Label htmlFor="isFeatured" className="flex items-center gap-2 cursor-pointer text-sm">
+                        <Star className="h-4 w-4 text-yellow-500" />
+                        <div>
+                          <div className="font-medium">خبر مميز</div>
+                          <div className="text-xs text-muted-foreground">
+                            سيظهر المقال في قسم الأخبار المميزة
+                          </div>
+                        </div>
+                      </Label>
+                    </div>
+                  </div>
+                  
+                  {/* Hide from Homepage Option - Requires permission */}
+                  {canHideFromHomepage && (
+                    <div className="pt-4 border-t mt-4">
+                      <div className="flex items-center space-x-2 space-x-reverse">
+                        <Checkbox 
+                          id="hideFromHomepage"
+                          checked={hideFromHomepage}
+                          onCheckedChange={(checked) => setHideFromHomepage(checked as boolean)}
+                          data-testid="checkbox-hide-from-homepage"
+                        />
+                        <Label htmlFor="hideFromHomepage" className="flex items-center gap-2 cursor-pointer text-sm">
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium">إخفاء من الواجهة الرئيسية</div>
+                            <div className="text-xs text-muted-foreground">
+                              المقال سينشر لكن لن يظهر في الصفحة الرئيسية
+                            </div>
+                          </div>
+                        </Label>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Article Media Attachments - Visible in Sidebar for editing articles */}
             {!isNewArticle && (
