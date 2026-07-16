@@ -235,33 +235,41 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 {item.children?.map((child) => {
                   const ChildIcon = child.icon;
                   const isChildActive = activeItem?.id === child.id;
-                  
+                  const isFavorite = favoriteIds.includes(child.id);
+
                   return (
-                    <SidebarMenuSubItem key={child.id} className="group/nav-favorite relative">
-                      <SidebarMenuSubButton
-                        asChild
-                        isActive={isChildActive}
-                        className="pl-8"
-                      >
-                        <Link 
-                          href={child.path || "#"}
-                          onClick={() => handleNavClick(child)}
+                    <SidebarMenuSubItem key={child.id} className="group/nav-favorite">
+                      <div className="flex min-w-0 items-center gap-0.5">
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={isChildActive}
+                          className="min-w-0 flex-1"
                         >
-                          <span className="flex items-center gap-3">
-                            {ChildIcon && <ChildIcon className="h-4 w-4" />}
-                            <span>{child.labelAr || child.labelKey}</span>
-                          </span>
-                        </Link>
-                      </SidebarMenuSubButton>
-                      <button
-                        type="button"
-                        onClick={() => toggleFavorite(child)}
-                        className="absolute left-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:opacity-100 sm:opacity-0 sm:group-hover/nav-favorite:opacity-100"
-                        aria-label={favoriteIds.includes(child.id) ? `إزالة ${child.labelAr || child.labelKey} من المفضلة` : `إضافة ${child.labelAr || child.labelKey} إلى المفضلة`}
-                        title={favoriteIds.includes(child.id) ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}
-                      >
-                        <Star className={`h-3.5 w-3.5 ${favoriteIds.includes(child.id) ? "fill-current text-warning" : ""}`} />
-                      </button>
+                          <Link
+                            href={child.path || "#"}
+                            onClick={() => handleNavClick(child)}
+                          >
+                            <span className="flex min-w-0 items-center gap-3">
+                              {ChildIcon && <ChildIcon className="h-4 w-4 shrink-0" />}
+                              <span className="truncate">{child.labelAr || child.labelKey}</span>
+                            </span>
+                          </Link>
+                        </SidebarMenuSubButton>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            toggleFavorite(child);
+                          }}
+                          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-warning focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+                          aria-label={isFavorite ? `إزالة ${child.labelAr || child.labelKey} من المفضلة` : `إضافة ${child.labelAr || child.labelKey} إلى المفضلة`}
+                          title={isFavorite ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}
+                          data-testid={`sidebar-favorite-toggle-${child.id}`}
+                        >
+                          <Star className={`h-4 w-4 ${isFavorite ? "fill-current text-warning" : ""}`} />
+                        </button>
+                      </div>
                     </SidebarMenuSubItem>
                   );
                 })}
@@ -272,23 +280,43 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       );
     }
 
+    const isFavorite = favoriteIds.includes(item.id);
     return (
       <SidebarMenuItem key={item.id}>
-        <SidebarMenuButton
-          asChild
-          isActive={isActive}
-          tooltip={item.labelAr || item.labelKey}
-        >
-          <Link 
-            href={item.path || "#"}
-            onClick={() => handleNavClick(item)}
+        <div className="flex min-w-0 items-center gap-0.5">
+          <SidebarMenuButton
+            asChild
+            isActive={isActive}
+            tooltip={item.labelAr || item.labelKey}
+            className="min-w-0 flex-1"
           >
-            <span className="flex items-center gap-3">
-              {Icon && <Icon className="h-4 w-4" />}
-              <span>{item.labelAr || item.labelKey}</span>
-            </span>
-          </Link>
-        </SidebarMenuButton>
+            <Link
+              href={item.path || "#"}
+              onClick={() => handleNavClick(item)}
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                {Icon && <Icon className="h-4 w-4 shrink-0" />}
+                <span className="truncate">{item.labelAr || item.labelKey}</span>
+              </span>
+            </Link>
+          </SidebarMenuButton>
+          {item.path && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                toggleFavorite(item);
+              }}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-warning focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+              aria-label={isFavorite ? `إزالة ${item.labelAr || item.labelKey} من المفضلة` : `إضافة ${item.labelAr || item.labelKey} إلى المفضلة`}
+              title={isFavorite ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}
+              data-testid={`sidebar-favorite-toggle-${item.id}`}
+            >
+              <Star className={`h-4 w-4 ${isFavorite ? "fill-current text-warning" : ""}`} />
+            </button>
+          )}
+        </div>
       </SidebarMenuItem>
     );
   };
@@ -382,22 +410,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         {favoriteItems.map((item) => {
                           const FavoriteIcon = item.icon;
                           return (
-                            <div key={item.id} className="group/favorite-item flex items-center rounded-md hover:bg-sidebar-accent">
+                            <div key={item.id} className="flex items-center rounded-md hover:bg-sidebar-accent">
                               <Link
                                 href={item.path || "#"}
                                 onClick={() => handleNavClick(item)}
-                                className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-xs"
+                                className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-xs"
                               >
                                 {FavoriteIcon && <FavoriteIcon className="h-3.5 w-3.5 shrink-0" />}
                                 <span className="truncate">{item.labelAr || item.labelKey}</span>
                               </Link>
                               <button
                                 type="button"
-                                onClick={() => toggleFavorite(item)}
-                                className="ml-1 rounded p-1 text-muted-foreground opacity-0 hover:text-foreground focus:opacity-100 group-hover/favorite-item:opacity-100"
+                                onClick={(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  toggleFavorite(item);
+                                }}
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-warning hover:bg-sidebar-accent"
                                 aria-label={`إزالة ${item.labelAr || item.labelKey} من المفضلة`}
+                                data-testid={`sidebar-favorite-remove-${item.id}`}
                               >
-                                <Star className="h-3 w-3 fill-current" />
+                                <Star className="h-3.5 w-3.5 fill-current" />
                               </button>
                             </div>
                           );
@@ -436,11 +469,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                             </Link>
                             <button
                               type="button"
-                              onClick={() => toggleFavorite(item)}
-                              className="ml-1 rounded p-1.5 text-muted-foreground hover:text-warning"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                toggleFavorite(item);
+                              }}
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-warning"
                               aria-label={isFavorite ? `إزالة ${item.labelAr || item.labelKey} من المفضلة` : `إضافة ${item.labelAr || item.labelKey} إلى المفضلة`}
                             >
-                              <Star className={`h-3.5 w-3.5 ${isFavorite ? "fill-current text-warning" : ""}`} />
+                              <Star className={`h-4 w-4 ${isFavorite ? "fill-current text-warning" : ""}`} />
                             </button>
                           </div>
                         );
