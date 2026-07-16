@@ -330,6 +330,7 @@ export default function ArticleEditor() {
   const [newsletterOpen, setNewsletterOpen] = useState(false);
   const [editorMobileTab, setEditorMobileTab] = useState<"content" | "media" | "publish">("content");
   const [imageToolsOpen, setImageToolsOpen] = useState(false);
+  const [autoImageOpen, setAutoImageOpen] = useState(false);
   
   // Use ref for immediate lock with URL tracking (prevents concurrent uploads even in StrictMode)
   const savingMediaMapRef = useRef<Map<string, Promise<string | null>>>(new Map());
@@ -2666,7 +2667,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             {/* Content panel — title first; body uses order so it sits above media on desktop */}
             <div
               className={cn(
-                "space-y-6 order-1",
+                "space-y-6",
                 !isOpinionAuthor && editorMobileTab !== "content" && "max-lg:hidden",
               )}
               data-editor-panel="content-head"
@@ -2875,10 +2876,230 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             </div>
 
-            {/* Media panel — after writing on desktop (order-20); own tab on mobile */}
             <div
               className={cn(
-                "space-y-6 order-20",
+                "space-y-6",
+                !isOpinionAuthor && editorMobileTab !== "content" && "max-lg:hidden",
+              )}
+              data-editor-panel="content-body"
+            >
+            {/* Content Editor */}
+            <Card>
+              <CardHeader className="space-y-3">
+                <CardTitle>محتوى المقال</CardTitle>
+                {/* AI Buttons - stacked on mobile, inline on desktop */}
+                {!isOpinionAuthor && canUseAIGenerate && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center sm:justify-end gap-2">
+                      {/* Edit + Generate Button - Rewrites content then generates metadata - requires comprehensive_edit permission */}
+                      {canUseComprehensiveEdit && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => editAndGenerateMutation.mutate()}
+                        disabled={isGeneratingAI || editAndGenerateMutation.isPending || !content || content.length < 100}
+                        className="gap-2 w-full sm:w-auto justify-center"
+                        data-testid="button-edit-and-generate"
+                        title={
+                          !content 
+                            ? "يجب كتابة المحتوى أولاً (100+ حرف)"
+                            : content.length < 100
+                            ? `المحتوى قصير جداً (${content.length}/100 حرف)`
+                            : "إعادة تحرير المحتوى بأسلوب صحفي احترافي ثم توليد العنوان والكلمات المفتاحية والموجز وبيانات SEO"
+                        }
+                      >
+                        {editAndGenerateMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Wand2 className="h-4 w-4" />
+                        )}
+                        تحرير وتوليد شامل
+                      </Button>
+                      )}
+                      
+                      {/* Proofread Button - Spell check only, no auto-modification */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => proofreadMutation.mutate()}
+                        disabled={isGeneratingAI || proofreadMutation.isPending || !content || content.length < 20}
+                        className="gap-2 w-full sm:w-auto justify-center"
+                        data-testid="button-proofread"
+                        title={
+                          !content
+                            ? "يجب كتابة المحتوى أولاً"
+                            : content.length < 20
+                            ? "النص قصير جداً للتدقيق"
+                            : "تدقيق إملائي للنص — يعرض الأخطاء فقط دون تعديل المعنى"
+                        }
+                      >
+                        {proofreadMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <SpellCheck className="h-4 w-4" />
+                        )}
+                        تدقيق لغوي
+                      </Button>
+
+                      {/* All-in-One AI Button - Only generates metadata */}
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleGenerateAllInOne}
+                        disabled={isGeneratingAI || !content || content.length < 100}
+                        className="gap-2 w-full sm:w-auto justify-center"
+                        data-testid="button-generate-all-in-one"
+                        title={
+                          !content 
+                            ? "يجب كتابة المحتوى أولاً (100+ حرف)"
+                            : content.length < 100
+                            ? `المحتوى قصير جداً (${content.length}/100 حرف)`
+                            : "توليد جميع التوليدات الذكية دفعة واحدة: العناوين، التصنيف، SEO، والموجز"
+                        }
+                      >
+                        {generateAllInOneMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                        توليد ذكي شامل
+                      </Button>
+                    </div>
+                    {(!content || content.length < 100) && (
+                      <p className="text-xs text-muted-foreground text-center sm:text-end">
+                        {!content 
+                          ? "يجب كتابة المحتوى أولاً"
+                          : `المحتوى: ${content.length}/100 حرف`
+                        }
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <RichTextEditor
+                  content={content}
+                  onChange={setContent}
+                  placeholder="ابدأ بكتابة المقال..."
+                  editorRef={setEditorInstance}
+                  disabled={isLockedByOther}
+                  imageUploadPurpose="article-inline"
+                />
+                {articleType === "weekly_photos" && (
+                  <div className="border-t pt-6">
+                    <WeeklyPhotosEditor
+                      photos={weeklyPhotosData.photos}
+                      onChange={(photos) => setWeeklyPhotosData({ photos })}
+                    />
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Excerpt */}
+            {!isOpinionAuthor && <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>الملخص</CardTitle>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateSummary}
+                    disabled={isGeneratingAI || !content || typeof content !== 'string' || !content.trim()}
+                    className="gap-2"
+                    data-testid="button-ai-summary"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    توليد تلقائي
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  value={excerpt}
+                  onChange={(e) => {
+                    setExcerpt(e.target.value);
+                    if (!metaDescription) {
+                      setMetaDescription(e.target.value);
+                    }
+                  }}
+                  placeholder="ملخص قصير للمقال..."
+                  rows={4}
+                  disabled={isLockedByOther}
+                  data-testid="textarea-excerpt"
+                />
+              </CardContent>
+            </Card>}
+
+            {/* Poll Editor */}
+            {!isOpinionAuthor && canUsePolls && (
+              <PollEditor 
+                poll={pollData} 
+                onChange={setPollData}
+                articleContent={content}
+                articleTitle={title}
+              />
+            )}
+
+            {/* Smart Links Panel - Collapsible - Hidden for infographics */}
+            {!isOpinionAuthor && canUseSmartLinks && articleType !== "infographic" && (
+              <Collapsible open={smartLinksOpen} onOpenChange={setSmartLinksOpen}>
+                <Card>
+                  <CollapsibleTrigger asChild>
+                    <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-smart-links">
+                      <CardTitle className="flex items-center justify-between text-base">
+                        <span className="flex items-center gap-2">
+                          <Link2 className="h-4 w-4" />
+                          الروابط الذكية
+                        </span>
+                        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${smartLinksOpen ? 'rotate-180' : ''}`} />
+                      </CardTitle>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="pt-0">
+                      <div className="h-[min(320px,50vh)] sm:h-[420px] lg:h-[500px]" data-testid="smart-links-container">
+                        <SmartLinksPanel
+                          articleContent={content}
+                          articleId={isNewArticle ? undefined : id}
+                          onAddLink={handleAddLink}
+                        />
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            )}
+
+            {/* Article Timeline - Collapsible - Only shown when editing existing articles */}
+            {!isOpinionAuthor && !isNewArticle && id && (
+              <Collapsible open={timelineOpen} onOpenChange={setTimelineOpen}>
+                <Card>
+                  <CollapsibleTrigger asChild>
+                    <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-timeline">
+                      <CardTitle className="flex items-center justify-between text-base">
+                        <span className="flex items-center gap-2">
+                          <Clock className="h-4 w-4" />
+                          السجل الزمني
+                        </span>
+                        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${timelineOpen ? 'rotate-180' : ''}`} />
+                      </CardTitle>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="pt-0">
+                      <ArticleTimeline articleId={id} />
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+            )}
+            </div>
+
+            {/* Media panel — after title/content */}
+            <div
+              className={cn(
+                "space-y-6",
                 !isOpinionAuthor && editorMobileTab !== "media" && "max-lg:hidden",
               )}
               data-editor-panel="media"
@@ -3183,27 +3404,52 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </Collapsible>
             )}
             
-            {/* Auto Image Generation - Hidden for infographics */}
+            {/* Auto Image Generation — مطوي افتراضياً حتى لا يزاحم مسار الكتابة */}
             {!isOpinionAuthor && canGenerateImages && articleType !== "infographic" && (
-              <AutoImageGenerator
-                articleId={id}
-                title={title}
-                content={content}
-                excerpt={excerpt}
-                category={categories.find(c => c.id === categoryId)?.nameAr}
-                language="ar"
-                articleType={articleType}
-                hasImage={!!imageUrl}
-                onImageGenerated={(url, altText) => {
-                  setImageUrl(url);
-                  setIsAiGeneratedImage(true);
-                  // Update alt text in SEO if needed
-                  toast({
-                    title: "تم توليد الصورة بنجاح",
-                    description: `${altText}`,
-                  });
-                }}
-              />
+              <Collapsible open={autoImageOpen} onOpenChange={setAutoImageOpen}>
+                {!autoImageOpen ? (
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:border-primary/30 hover:bg-muted/40 hover:text-foreground"
+                      data-testid="collapsible-auto-image"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Sparkles className="h-4 w-4 text-primary" />
+                        التوليد التلقائي للصور
+                      </span>
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                  </CollapsibleTrigger>
+                ) : null}
+                <CollapsibleContent>
+                  <AutoImageGenerator
+                    articleId={id}
+                    title={title}
+                    content={content}
+                    excerpt={excerpt}
+                    category={categories.find(c => c.id === categoryId)?.nameAr}
+                    language="ar"
+                    articleType={articleType}
+                    hasImage={!!imageUrl}
+                    onImageGenerated={(url, altText) => {
+                      setImageUrl(url);
+                      setIsAiGeneratedImage(true);
+                      toast({
+                        title: "تم توليد الصورة بنجاح",
+                        description: `${altText}`,
+                      });
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAutoImageOpen(false)}
+                    className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    طي القسم
+                  </button>
+                </CollapsibleContent>
+              </Collapsible>
             )}
             
             {/* Thumbnail Generation - Collapsible - Hidden for infographics */}
@@ -3506,225 +3752,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             </div>
 
-            <div
-              className={cn(
-                "space-y-6 order-10",
-                !isOpinionAuthor && editorMobileTab !== "content" && "max-lg:hidden",
-              )}
-              data-editor-panel="content-body"
-            >
-            {/* Content Editor */}
-            <Card>
-              <CardHeader className="space-y-3">
-                <CardTitle>محتوى المقال</CardTitle>
-                {/* AI Buttons - stacked on mobile, inline on desktop */}
-                {!isOpinionAuthor && canUseAIGenerate && (
-                  <div className="space-y-2">
-                    <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center sm:justify-end gap-2">
-                      {/* Edit + Generate Button - Rewrites content then generates metadata - requires comprehensive_edit permission */}
-                      {canUseComprehensiveEdit && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => editAndGenerateMutation.mutate()}
-                        disabled={isGeneratingAI || editAndGenerateMutation.isPending || !content || content.length < 100}
-                        className="gap-2 w-full sm:w-auto justify-center"
-                        data-testid="button-edit-and-generate"
-                        title={
-                          !content 
-                            ? "يجب كتابة المحتوى أولاً (100+ حرف)"
-                            : content.length < 100
-                            ? `المحتوى قصير جداً (${content.length}/100 حرف)`
-                            : "إعادة تحرير المحتوى بأسلوب صحفي احترافي ثم توليد العنوان والكلمات المفتاحية والموجز وبيانات SEO"
-                        }
-                      >
-                        {editAndGenerateMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Wand2 className="h-4 w-4" />
-                        )}
-                        تحرير وتوليد شامل
-                      </Button>
-                      )}
-                      
-                      {/* Proofread Button - Spell check only, no auto-modification */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => proofreadMutation.mutate()}
-                        disabled={isGeneratingAI || proofreadMutation.isPending || !content || content.length < 20}
-                        className="gap-2 w-full sm:w-auto justify-center"
-                        data-testid="button-proofread"
-                        title={
-                          !content
-                            ? "يجب كتابة المحتوى أولاً"
-                            : content.length < 20
-                            ? "النص قصير جداً للتدقيق"
-                            : "تدقيق إملائي للنص — يعرض الأخطاء فقط دون تعديل المعنى"
-                        }
-                      >
-                        {proofreadMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <SpellCheck className="h-4 w-4" />
-                        )}
-                        تدقيق لغوي
-                      </Button>
-
-                      {/* All-in-One AI Button - Only generates metadata */}
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={handleGenerateAllInOne}
-                        disabled={isGeneratingAI || !content || content.length < 100}
-                        className="gap-2 w-full sm:w-auto justify-center"
-                        data-testid="button-generate-all-in-one"
-                        title={
-                          !content 
-                            ? "يجب كتابة المحتوى أولاً (100+ حرف)"
-                            : content.length < 100
-                            ? `المحتوى قصير جداً (${content.length}/100 حرف)`
-                            : "توليد جميع التوليدات الذكية دفعة واحدة: العناوين، التصنيف، SEO، والموجز"
-                        }
-                      >
-                        {generateAllInOneMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="h-4 w-4" />
-                        )}
-                        توليد ذكي شامل
-                      </Button>
-                    </div>
-                    {(!content || content.length < 100) && (
-                      <p className="text-xs text-muted-foreground text-center sm:text-end">
-                        {!content 
-                          ? "يجب كتابة المحتوى أولاً"
-                          : `المحتوى: ${content.length}/100 حرف`
-                        }
-                      </p>
-                    )}
-                  </div>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <RichTextEditor
-                  content={content}
-                  onChange={setContent}
-                  placeholder="ابدأ بكتابة المقال..."
-                  editorRef={setEditorInstance}
-                  disabled={isLockedByOther}
-                  imageUploadPurpose="article-inline"
-                />
-                {articleType === "weekly_photos" && (
-                  <div className="border-t pt-6">
-                    <WeeklyPhotosEditor
-                      photos={weeklyPhotosData.photos}
-                      onChange={(photos) => setWeeklyPhotosData({ photos })}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Excerpt */}
-            {!isOpinionAuthor && <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>الملخص</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleGenerateSummary}
-                    disabled={isGeneratingAI || !content || typeof content !== 'string' || !content.trim()}
-                    className="gap-2"
-                    data-testid="button-ai-summary"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    توليد تلقائي
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Textarea
-                  value={excerpt}
-                  onChange={(e) => {
-                    setExcerpt(e.target.value);
-                    if (!metaDescription) {
-                      setMetaDescription(e.target.value);
-                    }
-                  }}
-                  placeholder="ملخص قصير للمقال..."
-                  rows={4}
-                  disabled={isLockedByOther}
-                  data-testid="textarea-excerpt"
-                />
-              </CardContent>
-            </Card>}
-
-            {/* Poll Editor */}
-            {!isOpinionAuthor && canUsePolls && (
-              <PollEditor 
-                poll={pollData} 
-                onChange={setPollData}
-                articleContent={content}
-                articleTitle={title}
-              />
-            )}
-
-            {/* Smart Links Panel - Collapsible - Hidden for infographics */}
-            {!isOpinionAuthor && canUseSmartLinks && articleType !== "infographic" && (
-              <Collapsible open={smartLinksOpen} onOpenChange={setSmartLinksOpen}>
-                <Card>
-                  <CollapsibleTrigger asChild>
-                    <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-smart-links">
-                      <CardTitle className="flex items-center justify-between text-base">
-                        <span className="flex items-center gap-2">
-                          <Link2 className="h-4 w-4" />
-                          الروابط الذكية
-                        </span>
-                        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${smartLinksOpen ? 'rotate-180' : ''}`} />
-                      </CardTitle>
-                    </CardHeader>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <CardContent className="pt-0">
-                      <div className="h-[min(320px,50vh)] sm:h-[420px] lg:h-[500px]" data-testid="smart-links-container">
-                        <SmartLinksPanel
-                          articleContent={content}
-                          articleId={isNewArticle ? undefined : id}
-                          onAddLink={handleAddLink}
-                        />
-                      </div>
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            )}
-
-            {/* Article Timeline - Collapsible - Only shown when editing existing articles */}
-            {!isOpinionAuthor && !isNewArticle && id && (
-              <Collapsible open={timelineOpen} onOpenChange={setTimelineOpen}>
-                <Card>
-                  <CollapsibleTrigger asChild>
-                    <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" data-testid="collapsible-timeline">
-                      <CardTitle className="flex items-center justify-between text-base">
-                        <span className="flex items-center gap-2">
-                          <Clock className="h-4 w-4" />
-                          السجل الزمني
-                        </span>
-                        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${timelineOpen ? 'rotate-180' : ''}`} />
-                      </CardTitle>
-                    </CardHeader>
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <CardContent className="pt-0">
-                      <ArticleTimeline articleId={id} />
-                    </CardContent>
-                  </CollapsibleContent>
-                </Card>
-              </Collapsible>
-            )}
-            </div>
           </div>
 
           {isOpinionAuthor && <WriterEditorialNoticesAside />}
@@ -3737,28 +3764,89 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
             data-editor-panel="publish"
           >
-            <Card className="border-primary/20 bg-primary/[0.03]">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center justify-between text-base">
-                  <span>جاهزية النشر</span>
-                  <Badge variant={readinessReady === readinessTotal ? "default" : "secondary"} className="text-xs">
+            <div
+              className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm"
+              data-testid="publish-readiness"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className="relative flex h-12 w-12 shrink-0 items-center justify-center"
+                  aria-hidden
+                >
+                  <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15.5"
+                      fill="none"
+                      className="stroke-muted"
+                      strokeWidth="3"
+                    />
+                    <circle
+                      cx="18"
+                      cy="18"
+                      r="15.5"
+                      fill="none"
+                      className={cn(
+                        "transition-[stroke-dashoffset] duration-500",
+                        readinessReady === readinessTotal ? "stroke-emerald-500" : "stroke-primary",
+                      )}
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeDasharray={`${2 * Math.PI * 15.5}`}
+                      strokeDashoffset={`${2 * Math.PI * 15.5 * (1 - readinessReady / readinessTotal)}`}
+                    />
+                  </svg>
+                  <span className="absolute text-[11px] font-bold tabular-nums">
                     {readinessReady}/{readinessTotal}
-                  </Badge>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
+                  </span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold tracking-tight">جاهزية النشر</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {readinessReady === readinessTotal
+                      ? "كل العناصر الأساسية جاهزة"
+                      : `${readinessTotal - readinessReady} متبقية قبل اكتمال المسار`}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    readinessReady === readinessTotal ? "bg-emerald-500" : "bg-primary",
+                  )}
+                  style={{ width: `${(readinessReady / readinessTotal) * 100}%` }}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
                 {publishReadiness.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between text-sm">
-                    <span className={item.ok ? "text-foreground" : "text-muted-foreground"}>{item.label}</span>
-                    {item.ok ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-amber-500" />
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      if (item.id === "image") setEditorMobileTab("media");
+                      else if (item.id === "category" || item.id === "seo") setEditorMobileTab("publish");
+                      else setEditorMobileTab("content");
+                    }}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors",
+                      item.ok
+                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                        : "border-border/70 bg-muted/40 text-muted-foreground hover:border-primary/30 hover:text-foreground",
                     )}
-                  </div>
+                    data-testid={`readiness-chip-${item.id}`}
+                  >
+                    {item.ok ? (
+                      <Check className="h-3 w-3" />
+                    ) : (
+                      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-50" />
+                    )}
+                    {item.label}
+                  </button>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
             {/* Article Type - Hidden for opinion authors and users without content type permission */}
             {!isOpinionAuthor && canUseContentTypeSelector && (
               <Card>
