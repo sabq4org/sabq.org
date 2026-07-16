@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -203,7 +203,7 @@ export function MediaLibraryPicker({
     const params = new URLSearchParams();
     if (articleTitle) params.set("title", articleTitle);
     if (articleContent) params.set("content", articleContent);
-    params.set("limit", "12");
+    params.set("limit", "24");
     return `/api/media/suggest-for-article?${params.toString()}`;
   }, [articleTitle, articleContent]);
 
@@ -212,7 +212,10 @@ export function MediaLibraryPicker({
     total: number;
   }>({
     queryKey: [semanticSuggestUrl],
-    enabled: isOpen && activeTab === "ai" && !!articleTitle,
+    enabled: isOpen && !!articleTitle,
+    staleTime: 15 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
   const semanticFiles = Array.isArray(semanticSuggestData?.files) ? semanticSuggestData.files : [];
 
@@ -222,7 +225,7 @@ export function MediaLibraryPicker({
     const params = new URLSearchParams();
     if (articleTitle) params.set("title", articleTitle);
     if (articleContent) params.set("content", articleContent);
-    params.set("limit", "12");
+    params.set("limit", "24");
     return `/api/media/suggestions?${params.toString()}`;
   }, [articleTitle, articleContent]);
 
@@ -233,10 +236,12 @@ export function MediaLibraryPicker({
     queryKey: [suggestionsQueryUrl],
     enabled:
       isOpen &&
-      activeTab === "ai" &&
       !!articleTitle &&
       !!semanticSuggestData &&
       semanticFiles.length === 0,
+    staleTime: 15 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   // Upload mutation
@@ -421,27 +426,32 @@ export function MediaLibraryPicker({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen]);
 
-  const renderMediaCard = (media: MediaFile, relevanceScore?: number) => {
+  const renderMediaCard = (
+    media: MediaFile,
+    relevanceScore?: number,
+    compact = false,
+  ) => {
     const isSelected = selectedMediaId === media.id;
     const isCurrent = currentImageUrl === media.url;
 
     return (
       <Card
         key={media.id}
-        className={`overflow-hidden cursor-pointer transition-all hover-elevate ${
+        className={`group overflow-hidden cursor-pointer transition-[border-color,box-shadow,transform] duration-150 hover-elevate ${
           isSelected || isCurrent ? "border-primary border-2" : ""
         }`}
         onClick={() => handleMediaClick(media.id)}
         onDoubleClick={() => handleMediaDoubleClick(media)}
         data-testid={`card-media-${media.id}`}
       >
-        <div className="aspect-square bg-muted relative">
+        <div className={`${compact ? "aspect-[4/3]" : "aspect-square"} bg-muted relative overflow-hidden`}>
           {media.type === "image" ? (
             <img
               src={media.thumbnailUrl || media.url}
               alt={media.altText || media.title || media.fileName}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.02]"
               loading="lazy"
+              decoding="async"
               data-testid={`img-media-${media.id}`}
             />
           ) : (
@@ -455,7 +465,7 @@ export function MediaLibraryPicker({
             </div>
           )}
           {relevanceScore !== undefined && (
-            <Badge className="absolute top-1 left-1 text-xs" variant="secondary">
+            <Badge className="absolute top-1.5 left-1.5 h-5 px-1.5 text-[10px] shadow-sm" variant="secondary">
               ملاءمة {Math.round(relevanceScore)}%
             </Badge>
           )}
@@ -478,7 +488,7 @@ export function MediaLibraryPicker({
             )}
           </div>
         </div>
-        <div className="p-2 space-y-1.5">
+        <div className={`${compact ? "p-1.5 sm:p-2" : "p-2"} space-y-1.5`}>
           <p
             className="text-xs font-medium truncate"
             title={media.title || media.fileName}
@@ -488,7 +498,7 @@ export function MediaLibraryPicker({
           </p>
           <Button
             size="sm"
-            className="w-full h-7 text-xs"
+            className="h-7 w-full text-xs"
             variant={isSelected || isCurrent ? "default" : "outline"}
             onClick={(e) => {
               e.stopPropagation();
@@ -506,15 +516,15 @@ export function MediaLibraryPicker({
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent
-        className="max-w-4xl max-h-[80vh] p-0 gap-0"
+        className="h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] max-w-none grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden rounded-xl p-0 sm:h-[88dvh] sm:max-h-[88dvh] sm:max-w-6xl sm:rounded-2xl xl:max-w-7xl"
         dir="rtl"
         data-testid="dialog-media-picker"
       >
-        <DialogHeader className="p-6 pb-4">
-          <DialogTitle data-testid="heading-media-picker">
+        <DialogHeader className="border-b px-4 pb-3 pt-4 text-right sm:px-6 sm:pb-4 sm:pt-5">
+          <DialogTitle className="text-base sm:text-lg" data-testid="heading-media-picker">
             اختر من مكتبة الوسائط
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs sm:text-sm">
             تصفح المكتبة أو ارفع ملفًا جديدًا أو احصل على اقتراحات ذكية
           </DialogDescription>
         </DialogHeader>
@@ -522,27 +532,27 @@ export function MediaLibraryPicker({
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className="flex-1 flex flex-col"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
         >
-          <TabsList className="mx-6 grid w-auto grid-cols-3">
-            <TabsTrigger value="library" data-testid="tab-library">
-              <ImageIcon className="h-4 w-4 ml-2" />
+          <TabsList className="mx-4 mt-3 grid h-10 w-auto shrink-0 grid-cols-3 sm:mx-6 sm:mt-4">
+            <TabsTrigger value="library" className="px-2 text-xs sm:text-sm" data-testid="tab-library">
+              <ImageIcon className="ml-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" />
               المكتبة
             </TabsTrigger>
-            <TabsTrigger value="upload" data-testid="tab-upload">
-              <Upload className="h-4 w-4 ml-2" />
+            <TabsTrigger value="upload" className="px-2 text-xs sm:text-sm" data-testid="tab-upload">
+              <Upload className="ml-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" />
               رفع جديد
             </TabsTrigger>
             {articleTitle && (
-              <TabsTrigger value="ai" data-testid="tab-ai">
-                <Sparkles className="h-4 w-4 ml-2" />
+              <TabsTrigger value="ai" className="px-2 text-xs sm:text-sm" data-testid="tab-ai">
+                <Sparkles className="ml-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 اقتراحات ذكية
               </TabsTrigger>
             )}
           </TabsList>
 
           {/* Tab 1: Library Browser */}
-          <TabsContent value="library" className="flex-1 p-6 pt-4 space-y-4">
+          <TabsContent value="library" className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 sm:gap-4 sm:p-6 sm:pt-4">
             {/* Search Bar */}
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -649,7 +659,7 @@ export function MediaLibraryPicker({
             </div>
 
             {/* Media Grid - with fixed height and scroll */}
-            <div className="overflow-y-auto" style={{ maxHeight: 'calc(80vh - 280px)' }}>
+            <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain scroll-smooth pb-1 [-webkit-overflow-scrolling:touch]">
               {isLoadingMedia ? (
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
                   {Array.from({ length: 12 }).map((_, i) => (
@@ -695,7 +705,7 @@ export function MediaLibraryPicker({
           </TabsContent>
 
           {/* Tab 2: Upload New */}
-          <TabsContent value="upload" className="flex-1 p-6 pt-4 overflow-y-auto">
+          <TabsContent value="upload" className="mt-0 min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain scroll-smooth p-4 [-webkit-overflow-scrolling:touch] sm:p-6 sm:pt-4">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onUploadSubmit)} className="space-y-4">
                 {/* Drag & Drop Zone */}
@@ -876,69 +886,74 @@ export function MediaLibraryPicker({
 
           {/* Tab 3: AI Suggestions */}
           {articleTitle && (
-            <TabsContent value="ai" className="flex-1 p-6 pt-4 overflow-y-auto">
-              <div className="space-y-4">
-                {/* Semantic suggestions (primary): meaning-ranked archive images */}
-                {isLoadingSemanticSuggest || isLoadingSuggestions ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <Card key={i} className="overflow-hidden">
-                        <Skeleton className="aspect-video" />
-                        <div className="p-3 space-y-2">
-                          <Skeleton className="h-4 w-3/4" />
-                          <Skeleton className="h-3 w-1/2" />
-                          <Skeleton className="h-8 w-full" />
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                ) : semanticFiles.length > 0 ? (
-                  <>
-                    <p className="text-sm text-muted-foreground">
-                      صور من أرشيف المكتبة مرتّبة حسب ملاءمتها لموضوع الخبر (بحث دلالي):
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {semanticFiles.map((media) =>
-                        renderMediaCard(media, media.relevanceScore)
-                      )}
-                    </div>
-                  </>
-                ) : suggestionsData && suggestionsData.suggestions.length > 0 ? (
-                  <>
-                    {/* Keyword fallback — the semantic index had nothing for this draft */}
-                    {suggestionsData.extractedKeywords?.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium mb-2">الكلمات المفتاحية:</p>
-                        <div className="flex flex-wrap gap-2">
-                          {suggestionsData.extractedKeywords.map((keyword, i) => (
-                            <Badge
-                              key={i}
-                              variant="secondary"
-                              data-testid={`badge-keyword-${i}`}
-                            >
-                              {keyword}
-                            </Badge>
-                          ))}
-                        </div>
+            <TabsContent value="ai" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-3 sm:px-6 sm:pb-6 sm:pt-4">
+              <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4">
+                {!isLoadingSemanticSuggest && semanticFiles.length > 0 && (
+                  <p className="shrink-0 text-xs text-muted-foreground sm:text-sm">
+                    صور من أرشيف المكتبة مرتّبة حسب ملاءمتها لموضوع الخبر (بحث دلالي).
+                  </p>
+                )}
+
+                {!isLoadingSemanticSuggest && semanticFiles.length === 0 && suggestionsData?.extractedKeywords && suggestionsData.extractedKeywords.length > 0 && (
+                  <div className="shrink-0 rounded-lg border bg-muted/35 px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <p className="shrink-0 text-xs font-medium text-muted-foreground sm:text-sm">الكلمات المفتاحية</p>
+                      <div className="scrollbar-hide flex min-w-0 flex-1 gap-1.5 overflow-x-auto overscroll-x-contain pb-0.5">
+                        {suggestionsData.extractedKeywords.map((keyword, i) => (
+                          <Badge
+                            key={i}
+                            variant="secondary"
+                            className="shrink-0 px-2 py-0.5 text-[10px] sm:text-xs"
+                            data-testid={`badge-keyword-${i}`}
+                          >
+                            {keyword}
+                          </Badge>
+                        ))}
                       </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {suggestionsData.suggestions.map((media) =>
-                        renderMediaCard(media)
-                      )}
                     </div>
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-64 text-center">
-                    <Sparkles className="h-16 w-16 text-muted-foreground mb-4" />
-                    <p className="text-lg font-medium" data-testid="text-no-suggestions">
-                      لم يتم العثور على اقتراحات مناسبة
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      جرب المكتبة أو ارفع ملفًا جديدًا
-                    </p>
                   </div>
                 )}
+
+                <div
+                  className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain scroll-smooth pr-0.5 [-webkit-overflow-scrolling:touch]"
+                  data-testid="smart-suggestions-scroll-area"
+                >
+                  {isLoadingSemanticSuggest || isLoadingSuggestions ? (
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      {Array.from({ length: 18 }).map((_, i) => (
+                        <Card key={i} className="overflow-hidden">
+                          <Skeleton className="aspect-[4/3]" />
+                          <div className="space-y-1.5 p-1.5 sm:p-2">
+                            <Skeleton className="h-3 w-3/4" />
+                            <Skeleton className="h-7 w-full" />
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  ) : semanticFiles.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2 pb-1 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      {semanticFiles.map((media) =>
+                        renderMediaCard(media, media.relevanceScore, true)
+                      )}
+                    </div>
+                  ) : suggestionsData && suggestionsData.suggestions.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2 pb-1 sm:grid-cols-3 sm:gap-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+                      {suggestionsData.suggestions.map((media) =>
+                        renderMediaCard(media, media.relevanceScore, true)
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex min-h-56 flex-col items-center justify-center text-center">
+                      <Sparkles className="mb-3 h-12 w-12 text-muted-foreground sm:h-16 sm:w-16" />
+                      <p className="text-base font-medium sm:text-lg" data-testid="text-no-suggestions">
+                        لم يتم العثور على اقتراحات مناسبة
+                      </p>
+                      <p className="text-xs text-muted-foreground sm:text-sm">
+                        جرب المكتبة أو ارفع ملفًا جديدًا
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             </TabsContent>
           )}
