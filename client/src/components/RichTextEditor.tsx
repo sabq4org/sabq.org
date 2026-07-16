@@ -178,7 +178,7 @@ export function RichTextEditor({
     editable: !disabled,
     editorProps: {
       attributes: {
-        class: "rich-text-editor__content prose prose-sm sm:prose lg:prose-lg xl:prose-xl dark:prose-invert max-w-none focus:outline-none min-h-[300px] px-4 py-3",
+        class: "rich-text-editor__content prose prose-sm sm:prose lg:prose-lg dark:prose-invert !max-w-none w-full focus:outline-none min-h-[300px] px-4 py-3",
         dir: dir,
         "data-testid": "rich-text-editor-content",
       },
