@@ -219,7 +219,11 @@ actor APIClient {
             let isCredentialCheck = path.contains("/auth/") || path.hasSuffix("/members/account")
             if request.value(forHTTPHeaderField: "Authorization") != nil && !isCredentialCheck {
                 authToken = nil
-                NotificationCenter.default.post(name: .spSessionUnauthorized, object: nil)
+                // البثّ من داخل الـactor يصل onReceive على خيط الخلفية فيعدّل
+                // حالة @MainActor (signOut) خارج الخيط الرئيسي — نقفز للرئيسي.
+                Task { @MainActor in
+                    NotificationCenter.default.post(name: .spSessionUnauthorized, object: nil)
+                }
             }
             throw APIError.unauthorized
         case 403: throw APIError.forbidden

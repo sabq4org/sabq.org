@@ -51,9 +51,12 @@ final class SpLiveStream {
                     throw URLError(.badServerResponse)
                 }
                 connected = true
-                backoff = 1
+                // لا نصفّر التراجع عند 200 قبل قراءة أي سطر — خادم/وسيط يقبل
+                // الاتصال ثم يقطعه فورًا كان يعني إعادة اتصال كل ثانية بلا حدّ.
+                // التصفير بعد أول سطر فعلي فقط.
                 for try await line in bytes.lines {
                     if Task.isCancelled { break }
+                    backoff = 1
                     guard line.hasPrefix("data:") else { continue }
                     apply(String(line.dropFirst(5)).trimmingCharacters(in: .whitespaces))
                 }

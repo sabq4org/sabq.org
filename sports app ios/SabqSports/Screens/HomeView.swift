@@ -41,6 +41,8 @@ struct HomeView: View {
     @State private var featuredCommentary: SpCommentary?
     /// نبضة هيرو وصلت والتبويب مخفي — تُصرف بتحديث واحد عند العودة.
     @State private var pendingHeroReload = false
+    /// آخر جلب لحظي للترتيب أثناء البث — خانق 30ث (كاش الخادم 5ث وقتها فلا داعي لأسرع).
+    @State private var lastLiveStandingsAt: Date = .distantPast
 
     @State private var scorerMode: ScorerMode = .goals
     @State private var selectedMatch: SpFixture?
@@ -61,7 +63,10 @@ struct HomeView: View {
     /// قادم/آخر نتيجة)، وإلا فمباراة الدوري الأبرز بنفس الترتيب.
     private var featured: SpFixture? {
         guard let m = matches else { return nil }
-        if let favId = favorites.team?.id, let fm = favoriteLastResult(m, favId) { return fm }
+        // كانت تقرأ favoriteLastResult (النتائج فقط) فيعلق الهيرو على آخر نتيجة
+        // منتهية بينما الفريق يلعب الآن مباشرةً — وسلك البث الحيّ يراقب المباراة
+        // الخطأ. الدلاء بالأولوية هي الصحيحة: مباشر ← اليوم ← قادم ← آخر نتيجة.
+        if let favId = favorites.team?.id, let fm = favoriteMatch(m, favId) { return fm }
         return m.live.first ?? m.today.first ?? m.upcoming.first ?? m.results.first
     }
 
@@ -71,14 +76,6 @@ struct HomeView: View {
             if let f = bucket.first(where: { $0.home.id == favId || $0.away.id == favId }) { return f }
         }
         return nil
-    }
-
-    /// بطاقة «فريقي المفضّل» الكبيرة تعرض آخر مباراة خاضها الفريق فقط.
-    private func favoriteLastResult(_ m: SpMatchesResponse, _ favId: Int) -> SpFixture? {
-        m.results
-            .filter { $0.home.id == favId || $0.away.id == favId }
-            .sorted { $0.timestamp > $1.timestamp }
-            .first
     }
 
     /// هل الهيرو الحالي مباراة الفريق المفضّل؟ (لإظهار شارة «فريقي» وإخفاء البطاقة المكرّرة)
@@ -168,7 +165,9 @@ struct HomeView: View {
     private func pollHero() async {
         while !Task.isCancelled {
             let f = featured
-            let live = f?.status.live == true
+            // صفوف live متبقية في الجدول بعد نهاية المباراة = جولة تنظيف أخيرة
+            // حتى لا تبقى شارة «مباشر» والأسهم عالقة بعد الصافرة.
+            let live = f?.status.live == true || standings.contains { $0.live == true }
             let secsToKickoff = f.map { $0.kickoff.timeIntervalSinceNow } ?? .greatestFiniteMagnitude
             let near = !live && secsToKickoff > 0 && secsToKickoff <= 1800
             let delay: UInt64 = live ? 10_000_000_000 : (near ? 30_000_000_000 : 60_000_000_000)
@@ -184,11 +183,19 @@ struct HomeView: View {
     }
 
     /// تحديث حيّ خفيف: قائمة المباريات (تُحرّك النتيجة/الحالة في الهيرو وبقية اللوحة)
-    /// + تفاصيل وتعليق مباراة الهيرو الجارية. التحليل الأثقل (xG/زخم/ضغط) يبقى
-    /// على loadAll (السحب اليدوي) — الأرقام الحيوية هنا هي النتيجة والأحداث.
+    /// + الترتيب اللحظي (خانق 30ث) + تفاصيل وتعليق مباراة الهيرو الجارية. التحليل
+    /// الأثقل (xG/زخم/ضغط) يبقى على loadAll (السحب اليدوي) — الأرقام الحيوية هنا
+    /// هي النتيجة والأحداث وحراك الجدول.
     private func refreshHero() async {
         if let m = try? await APIClient.shared.fetchMatches(comp: SportsConstants.defaultComp, ignoreCache: true) {
             matches = m
+        }
+        // الترتيب اللحظي: الجدول المصغّر وسباق اللقب يتحرّكان مع الأهداف بدل
+        // التجمّد حتى السحب اليدوي — الطبقة اللحظية نفسها يحسبها الخادم.
+        if Date().timeIntervalSince(lastLiveStandingsAt) >= 30,
+           let s = try? await APIClient.shared.fetchStandings(comp: SportsConstants.defaultComp, ignoreCache: true) {
+            standings = s.standings
+            lastLiveStandingsAt = Date()
         }
         if let f = featured, f.started {
             async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: true)

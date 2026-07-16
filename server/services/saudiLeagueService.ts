@@ -8,8 +8,8 @@
  * كل ما يصل للواجهة معرَّب، وكل نقطة بيانات خلف كاش SWR ليخدم آلاف الزوار
  * من طلب واحد للمزود.
  */
-import { withSWR, CACHE_TTL } from "../memoryCache";
-import { isEnglishSports } from "./sportsLang";
+import { withSWR, swrCache, CACHE_TTL } from "../memoryCache";
+import { isEnglishSports, runWithSportsLang } from "./sportsLang";
 import pLimit from "p-limit";
 import { apiFootballGet } from "./apiFootballClient";
 import { aiManager, AI_MODELS } from "../ai-manager";
@@ -81,6 +81,8 @@ const LIVE_BOARD_TTL = 8 * 1000;
 const FIXTURES_TTL = 60 * 1000;
 const TODAY_TTL = 60 * 1000; // قائمة مباريات اليوم — تتغيّر ببطء (الجاري يُحدَّث بكاش live)
 const MATCH_DETAIL_TTL = 10 * 1000;
+// مباراة منتهية منذ > 3 ساعات: الأحداث/الإحصاءات/التشكيلات صارت ثابتة.
+const FINISHED_MATCH_DETAIL_TTL = 6 * 60 * 60 * 1000;
 const SEASON_TTL = 6 * 60 * 60 * 1000; // الموسم الحالي شبه ثابت
 const ROUNDS_TTL = 30 * 60 * 1000; // قائمة الجولات تتغيّر نادرًا
 const H2H_TTL = 60 * 60 * 1000; // المواجهات التاريخية شبه ثابتة
@@ -1434,7 +1436,18 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
     if (!fx) return null;
     return { fixture: fx, events: [], statistics: null, lineups: [], leagueId: 1 };
   }
-  return withSWR(`spl:match:${fixtureId}`, MATCH_DETAIL_TTL, MATCH_DETAIL_TTL * 2, async () => {
+  // المنتهية المستقرّة (> 3 ساعات بعد الانطلاق) لا تتغيّر — طبقة كاش طويلة
+  // منفصلة توفّر 4 نداءات AF على كل فتح لمركز مباراة أرشيفية (كان TTL الوحيد
+  // 10ث فيدفع كل فتحٍ ثانيةً كاملة). المفتاح بلغة صريحة لأننا خارج withSWR
+  // الذي يضيف ‎:en تلقائيًّا.
+  const doneKey = `spl:match:done:${fixtureId}${isEnglishSports() ? ":en" : ""}`;
+  const done = swrCache.get<SplMatchDetail>(doneKey);
+  if (done.data) return done.data;
+
+  let fetchedFresh = false;
+  let namesComplete = true;
+  const detail = await withSWR(`spl:match:${fixtureId}`, MATCH_DETAIL_TTL, MATCH_DETAIL_TTL * 2, async () => {
+    fetchedFresh = true;
     const rows = await apiGet("fixtures", { id: fixtureId, timezone: TIMEZONE });
     const item = rows[0];
     if (!item) return null;
@@ -1452,7 +1465,13 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
       for (const p of t.startXI ?? []) rawNames.push(p.player?.name);
       for (const p of t.substitutes ?? []) rawNames.push(p.player?.name);
     }
-    const tr = await resolveNames(rawNames);
+    // لا ننتظر ترجمة الـAI داخل الطلب — كانت تعلّق أول فتح لمركز المباراة ثوانيَ
+    // كاملة أيام المباريات (تشكيلتان جديدتان = دفعة gpt-4o-mini قبل الاستجابة).
+    // نرجع بالمتاح فورًا، ونداءٌ خلفي يُكمل الترجمة فتظهر معرّبة خلال دورة
+    // التحديث اللحظي التالية (TTL هنا 10ث).
+    const tr = await resolveNames(rawNames, { skipAi: true });
+    namesComplete = !rawNames.some((n) => n && tr(n) === n);
+    if (!namesComplete) void resolveNames(rawNames).catch(() => {});
     const events = eventsRaw.map((e: any) => localizeEventRow(e, tr));
     return {
       fixture,
@@ -1462,6 +1481,18 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
       leagueId: item.league?.id ?? null,
     };
   });
+
+  // نرقّي للكاش الطويل فقط ما جُلب طازجًا بأسماء مكتملة التعريب — كي لا تتجمّد
+  // أسماء لاتينية (بانتظار الترجمة الخلفية) أو نسخة كاش قديمة لساعات.
+  if (
+    fetchedFresh &&
+    namesComplete &&
+    detail?.fixture.status.finished &&
+    Date.now() / 1000 - detail.fixture.timestamp > 3 * 3600
+  ) {
+    swrCache.set(doneKey, detail, FINISHED_MATCH_DETAIL_TTL, FINISHED_MATCH_DETAIL_TTL);
+  }
+  return detail;
 }
 
 const MATCH_EVENTS_TTL = 12 * 1000; // أحداث المباراة المباشرة — تحديث متكرّر لكشف الكروت/الفار
@@ -3143,6 +3174,28 @@ export async function listCompetitionsWithMeta() {
     end: metas[i]?.end ?? null,
     status: metas[i]?.status ?? ("unknown" as CompetitionStatus),
   }));
+}
+
+/**
+ * تسخين كاش معلومات البطولات (شعار/موسم/حالة) — المسار البارد يكلّف ~35 نداء
+ * AF خلف حدّ تزامن 3، فكان أول من يفتح «الأقسام» بعد كل deploy يدفع 6-15 ثانية.
+ * يعمل على كل pod (كاش SWR في ذاكرة كل عملية) ويجدّد قبل انتهاء TTL (6 ساعات)
+ * فيبقى الجدول دافئًا دائمًا. باللغتين لأن مفاتيح الكاش تنفصل بلاحقة ‎:en.
+ */
+let compMetaWarmerStarted = false;
+export function startCompetitionsMetaWarmer(): void {
+  if (compMetaWarmerStarted || !isSaudiLeagueConfigured()) return;
+  compMetaWarmerStarted = true;
+  const warm = async () => {
+    for (const lang of ["ar", "en"] as const) {
+      await runWithSportsLang(lang, () => listCompetitionsWithMeta()).catch((err) =>
+        console.warn(`[SaudiLeague] فشل تسخين كاش البطولات (${lang}):`, (err as Error)?.message),
+      );
+    }
+  };
+  // بعد 20 ثانية من الإقلاع (الزيارات أولًا)، ثم كل 5 ساعات (TTL الكاش 6).
+  setTimeout(() => void warm(), 20_000).unref();
+  setInterval(() => void warm(), 5 * 60 * 60 * 1000).unref();
 }
 
 // ---------- نظرة الموسم (Season Outlook) — جاهزية ما قبل الموسم/العطلة ----------

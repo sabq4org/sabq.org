@@ -87,12 +87,26 @@ struct CompetitionDetailView: View {
     }
     private var effectiveSegment: Segment { segments.contains(segment) ? segment : .overview }
     private var seasonValue: Int? { outlook?.season ?? comp.season }
-    /// مفتاح استطلاع الترتيب الحي: يتغيّر عند دخول/خروج صفوف live فيُعاد تشغيل الـ task.
-    private var standingsLiveKey: String {
-        let leagueLive = standings.filter { $0.live == true }.map(\.team.id)
-        let wcLive = wcGroups.flatMap(\.rows).filter { $0.live == true }.map(\.team.id)
-        let ids = (leagueLive + wcLive).sorted()
-        return ids.isEmpty ? "0" : ids.map(String.init).joined(separator: ",")
+    /// حالة الاستطلاع الحيّ للترتيب — نفس سياسة الرئيسية الموحّدة:
+    /// live = صفوف live في الجدول أو مباراة جارية، near = انطلاقة خلال ≤ 30 دقيقة
+    /// (أو حانت ولم يقلبها المزوّد بعد — حتى 3 ساعات)، idle = لا شيء قريب.
+    private enum LivePoll { case live, near, idle }
+    private func nearKickoff(timestamp: Double, live: Bool, finished: Bool) -> Bool {
+        let now = Date().timeIntervalSince1970
+        return !live && !finished && timestamp - now <= 1800 && now - timestamp <= 3 * 3600
+    }
+    private var livePollState: LivePoll {
+        let liveRows = standings.contains { $0.live == true }
+            || wcGroups.contains { $0.rows.contains { $0.live == true } }
+        let liveFixture = regularFixtures.contains { $0.status.live }
+            || wcFixtures.contains { $0.status.live }
+        if liveRows || liveFixture { return .live }
+        let anyNear = regularFixtures.contains {
+            nearKickoff(timestamp: Double($0.timestamp), live: $0.status.live, finished: $0.status.finished)
+        } || wcFixtures.contains {
+            nearKickoff(timestamp: $0.timestamp, live: $0.status.live, finished: $0.status.finished)
+        }
+        return anyNear ? .near : .idle
     }
     private var regularFixtures: [SpFixture] {
         guard let matches else { return [] }
@@ -156,14 +170,7 @@ struct CompetitionDetailView: View {
         .navigationTitle(comp.name)
         .navigationBarTitleDisplayMode(.inline)
         .task { await loadAll() }
-        .task(id: standingsLiveKey) {
-            guard standingsLiveKey != "0" else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 8_000_000_000)
-                if Task.isCancelled { break }
-                await loadAll(force: true)
-            }
-        }
+        .task { await pollLive() }
         .refreshable { await loadAll(force: true) }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }
         .navigationDestination(item: $selectedPlayer) { box in SpPlayerPage(playerId: box.id) }
@@ -1165,8 +1172,10 @@ struct CompetitionDetailView: View {
     private var wcMatchesContent: some View {
         let now = Date()
         let live = wcFixtures.filter { $0.status.live }.sorted { $0.timestamp < $1.timestamp }
+        // بتقويم الرياض الموحّد (matchCalendar) لا تقويم الجهاز — مسافرٌ خارج
+        // المنطقة كان يرى مباراة قرب منتصف الليل في اليوم الخطأ.
         let today = wcFixtures.filter {
-            !$0.status.live && !$0.status.finished && Calendar(identifier: .gregorian).isDate(Date(timeIntervalSince1970: $0.timestamp), inSameDayAs: now)
+            !$0.status.live && !$0.status.finished && matchCalendar.isDate(Date(timeIntervalSince1970: $0.timestamp), inSameDayAs: now)
         }.sorted { $0.timestamp < $1.timestamp }
         let upcoming = wcFixtures.filter { !$0.status.live && !$0.status.finished && Date(timeIntervalSince1970: $0.timestamp) > now }
             .sorted { $0.timestamp < $1.timestamp }
@@ -1387,6 +1396,40 @@ struct CompetitionDetailView: View {
         let response = try? await APIClient.shared.fetchRoundFixtures(comp: comp.slug, round: round, ignoreCache: force)
         roundFixtures = response?.fixtures ?? []
         roundLoading = false
+    }
+
+    // MARK: - الاستطلاع الحيّ للترتيب والمباريات
+
+    /// حلقة دائمة بسياسة الرئيسية الموحّدة: مباشر = 8ث، قرب الانطلاق = 30ث،
+    /// وإلا فحص خامل كل 60ث بلا شبكة. الحلقة السابقة كانت تبدأ فقط إن وُجدت صفوف
+    /// live مسبقًا — فمن يفتح الشاشة قبل الانطلاقة يتجمّد جدوله حتى سحب يدوي.
+    private func pollLive() async {
+        while !Task.isCancelled {
+            let state = livePollState
+            let delay: UInt64 = state == .live ? 8_000_000_000
+                : state == .near ? 30_000_000_000 : 60_000_000_000
+            try? await Task.sleep(nanoseconds: delay)
+            if Task.isCancelled { break }
+            if livePollState != .idle { await refreshLive() }
+        }
+    }
+
+    /// تحديث حيّ خفيف: الترتيب + المباريات فقط — الحلقة السابقة كانت تعيد loadAll
+    /// كاملًا كل 8ث (هدّافون وانتقالات وتحليلات بلا داعٍ). الأثقل يبقى على
+    /// الدخول والسحب اليدوي.
+    private func refreshLive() async {
+        if isWorldCup {
+            async let groupsOpt = try? APIClient.shared.fetchWorldCupStandings(ignoreCache: true)
+            async let fixturesOpt = try? APIClient.shared.fetchWorldCupFixtures(ignoreCache: true)
+            if let groups = (await groupsOpt)?.groups { wcGroups = groups }
+            if let fixtures = (await fixturesOpt)?.fixtures { wcFixtures = fixtures }
+            return
+        }
+        async let standingsOpt: [SpStandingRow]? = comp.hasStandings
+            ? (try? await APIClient.shared.fetchStandings(comp: comp.slug, ignoreCache: true))?.standings : nil
+        async let matchesOpt = try? APIClient.shared.fetchMatches(comp: comp.slug, ignoreCache: true)
+        if let rows = await standingsOpt { standings = rows }
+        if let m = await matchesOpt { matches = m }
     }
 
     private func loadWorldCup(force: Bool = false) async {

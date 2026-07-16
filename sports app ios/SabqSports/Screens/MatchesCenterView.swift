@@ -1290,15 +1290,18 @@ struct MatchesCenterView: View {
         .joined(separator: "|")
     }
 
-    // السياسة الموحّدة: حيّ/انطلاقة وشيكة = 10ث، وإلا 45ث (نفس المونديال).
+    // السياسة الموحّدة: حيّ = 10ث، قرب الانطلاق = 30ث، وإلا 45ث. النافذة كانت
+    // ±120ث فقط (بقية الشاشات 30 دقيقة) فتتأخّر ملاحظة صافرة البداية حتى 45ث؛
+    // وتمتدّ الآن 3 ساعات بعد الموعد لالتقاط انطلاقة تأخّر المزوّد في إعلانها.
     private func pollLive() async {
         while !Task.isCancelled {
             let now = Date().timeIntervalSince1970
             let hasLive = fixtures.contains { $0.status.live }
             let nearKickoff = fixtures.contains {
-                !$0.status.finished && !$0.status.live && abs(Double($0.timestamp) - now) <= 120
+                !$0.status.finished && !$0.status.live
+                    && Double($0.timestamp) - now <= 1800 && now - Double($0.timestamp) <= 3 * 3600
             }
-            let delay: UInt64 = (hasLive || nearKickoff) ? 10_000_000_000 : 45_000_000_000
+            let delay: UInt64 = hasLive ? 10_000_000_000 : nearKickoff ? 30_000_000_000 : 45_000_000_000
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
             // التبويب مخفي: لا شبكة — نبضة الموجز/عودة الظهور تتكفّلان بالتحديث.

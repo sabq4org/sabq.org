@@ -980,7 +980,14 @@ enum SpKeychain {
         SecItemDelete(base as CFDictionary)
         var attrs = base
         attrs[kSecValueData as String] = data
-        SecItemAdd(attrs as CFDictionary, nil)
+        // بدون سمة وصول صريحة كان الافتراضي WhenUnlocked: إقلاع خلفي (دفعة/
+        // prewarm) قبل أول فتح قفل بعد إعادة التشغيل يفشل القراءة فيبدو العضو
+        // مسجَّل الخروج وتسقط إعادة تسجيل الدفع بصمت.
+        attrs[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(attrs as CFDictionary, nil)
+        #if DEBUG
+        if status != errSecSuccess { print("[SpKeychain] فشل الحفظ (\(key)): \(status)") }
+        #endif
     }
 
     static func load(_ key: String) -> String? {
