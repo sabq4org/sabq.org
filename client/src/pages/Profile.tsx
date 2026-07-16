@@ -56,6 +56,7 @@ import {
   Clock,
   Eye,
   Lock,
+  ChevronDown,
 } from "lucide-react";
 import { ArticleCard } from "@/components/ArticleCard";
 import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
@@ -93,6 +94,9 @@ function SavedArticlesList({
   emptyText: string;
   emptyHint?: string;
 }) {
+  const initialVisibleCount = 10;
+  const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -113,13 +117,55 @@ function SavedArticlesList({
     );
   }
 
+  const visibleArticles = articles.slice(0, visibleCount);
+  const remainingCount = Math.max(0, articles.length - visibleCount);
+
   return (
-    <div className="divide-y divide-border/60 rounded-none border-y border-border/50">
-      {articles.map((article) => (
-        <div key={article.id} className="py-2 first:pt-0 last:pb-0">
-          <ArticleCard article={article} variant="list" />
-        </div>
-      ))}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>{articles.length.toLocaleString("en-US")} مادة</span>
+        {remainingCount > 0 && (
+          <span>
+            عرض {visibleArticles.length.toLocaleString("en-US")} من {articles.length.toLocaleString("en-US")}
+          </span>
+        )}
+      </div>
+      <div className="divide-y divide-border/60 rounded-none border-y border-border/50">
+        {visibleArticles.map((article) => (
+          <div key={article.id} className="py-2 first:pt-0 last:pb-0">
+            <ArticleCard article={article} variant="list" />
+          </div>
+        ))}
+      </div>
+      {remainingCount > 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-center gap-2 sm:w-auto"
+          onClick={() => setVisibleCount((count) => count + initialVisibleCount)}
+          data-testid="button-show-more-saved"
+        >
+          عرض المزيد
+          <span className="text-xs text-muted-foreground">({Math.min(initialVisibleCount, remainingCount)})</span>
+        </Button>
+      )}
+      {visibleCount > initialVisibleCount && (
+        <button
+          type="button"
+          className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          onClick={() => {
+            setVisibleCount(initialVisibleCount);
+            window.requestAnimationFrame(() => {
+              document.querySelector('[data-testid="profile-saved-heading"]')?.scrollIntoView({
+                behavior: "smooth",
+                block: "start",
+              });
+            });
+          }}
+        >
+          العودة إلى البداية
+        </button>
+      )}
     </div>
   );
 }
@@ -130,6 +176,7 @@ export default function Profile() {
   const [savedView, setSavedView] = useState<"bookmarks" | "likes" | "history">("bookmarks");
   const [networkView, setNetworkView] = useState<"followers" | "following">("followers");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [isLoyaltyCardExpanded, setIsLoyaltyCardExpanded] = useState(false);
 
   const { data: user } = useQuery<UserType>({
     queryKey: ["/api/auth/user"],
@@ -770,11 +817,11 @@ export default function Profile() {
               dir="rtl"
             >
               <div className="pointer-events-none absolute inset-0 opacity-[0.035]" style={{ backgroundImage: "repeating-linear-gradient(-12deg, currentColor 0 1px, transparent 1px 14px)" }} />
-              <div className="container relative mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
-                <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+              <div className="container relative mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-10">
+                <div className="flex flex-col gap-5 sm:gap-8 lg:flex-row lg:items-end lg:justify-between">
                   {/* Identity — editorial masthead */}
-                  <div className="flex min-w-0 flex-1 flex-col gap-5 sm:flex-row sm:items-center">
-                    <div className="relative mx-auto shrink-0 sm:mx-0">
+                  <div className="flex min-w-0 flex-1 items-start gap-4 sm:items-center sm:gap-5">
+                    <div className="relative shrink-0">
                       <div
                         className="rounded-full p-[3px]"
                         style={{ background: `linear-gradient(145deg, ${heroTier.color}, ${heroTier.color}55)` }}
@@ -814,12 +861,12 @@ export default function Profile() {
                       </Button>
                     </div>
 
-                    <div className="min-w-0 space-y-2 text-center sm:text-right">
+                    <div className="min-w-0 flex-1 space-y-1.5 text-right sm:space-y-2">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/80">
                         سبق · ملفي
                       </p>
                       <h1
-                        className="truncate text-3xl font-black tracking-tight sm:text-4xl"
+                        className="truncate text-2xl font-black tracking-tight sm:text-4xl"
                         data-testid="text-profile-name"
                       >
                         {getUserDisplayName()}
@@ -827,7 +874,7 @@ export default function Profile() {
                       <p className="truncate text-sm text-muted-foreground" data-testid="text-profile-email">
                         {user.email}
                       </p>
-                      <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                      <div className="flex flex-wrap items-center gap-2">
                         {getRoleBadge(user.role)}
                         {user.hasPressCard && (
                           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="badge-press-card">
@@ -837,15 +884,15 @@ export default function Profile() {
                         )}
                       </div>
                       {user.bio && !isEditingProfile && (
-                        <p className="mx-auto max-w-xl text-sm leading-relaxed text-foreground/75 sm:mx-0">
+                        <p className="max-w-xl text-sm leading-relaxed text-foreground/75">
                           {user.bio}
                         </p>
                       )}
-                      <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-start">
+                      <div className="flex flex-wrap gap-2 pt-1">
                         <Button
                           variant="default"
                           size="sm"
-                          className="gap-2"
+                          className="min-w-0 flex-1 gap-2 sm:flex-none"
                           onClick={() => setIsEditingProfile(!isEditingProfile)}
                           data-testid="button-edit-profile"
                         >
@@ -864,8 +911,8 @@ export default function Profile() {
                     </div>
                   </div>
 
-                  {/* LoyaltyCard — sole visual card hero (design unchanged) */}
-                  <div className="mx-auto w-full max-w-md shrink-0 lg:mx-0 lg:w-[380px]">
+                  {/* Desktop loyalty card */}
+                  <div className="mx-auto hidden w-full max-w-md shrink-0 lg:mx-0 lg:block lg:w-[380px]">
                     <LoyaltyCard
                       userName={getUserDisplayName()}
                       userId={user.id}
@@ -874,10 +921,60 @@ export default function Profile() {
                       rankLevel={heroLevel}
                     />
                   </div>
+
+                  {/* Compact mobile summary keeps the profile content within easy reach. */}
+                  <div className="w-full lg:hidden">
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-3 rounded-2xl border border-border/60 bg-background/80 px-4 py-3 text-right shadow-sm backdrop-blur transition-colors hover:bg-muted/40"
+                      onClick={() => setIsLoyaltyCardExpanded((expanded) => !expanded)}
+                      aria-expanded={isLoyaltyCardExpanded}
+                      aria-controls="mobile-loyalty-card"
+                      data-testid="button-toggle-loyalty-card"
+                    >
+                      <span
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
+                        style={{ backgroundColor: heroTier.color }}
+                      >
+                        <Trophy className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-bold">{heroTier.nameAr}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {heroLifetime.toLocaleString("en-US")} نقطة تاريخية
+                        </span>
+                      </span>
+                      <span className="flex items-center gap-1 text-xs font-medium text-primary">
+                        {isLoyaltyCardExpanded ? "إخفاء البطاقة" : "عرض البطاقة"}
+                        <ChevronDown
+                          className={cn("h-4 w-4 transition-transform", isLoyaltyCardExpanded && "rotate-180")}
+                        />
+                      </span>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {isLoyaltyCardExpanded && (
+                        <motion.div
+                          id="mobile-loyalty-card"
+                          initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                          animate={{ opacity: 1, height: "auto", marginTop: 12 }}
+                          exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                          className="mx-auto max-w-md overflow-hidden"
+                        >
+                          <LoyaltyCard
+                            userName={getUserDisplayName()}
+                            userId={user.id}
+                            lifetimePoints={heroLifetime}
+                            memberSince={user.createdAt}
+                            rankLevel={heroLevel}
+                          />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
 
                 {/* Slim tier progress — no card */}
-                <div className="mt-8 space-y-2">
+                <div className="mt-5 space-y-2 sm:mt-8">
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span className="font-semibold text-amber-700 dark:text-amber-400">{currentTier.nameAr}</span>
                     <span className="text-muted-foreground">
@@ -896,7 +993,7 @@ export default function Profile() {
 
                 {/* Flat metrics strip */}
                 <div
-                  className="mt-6 flex flex-wrap items-stretch justify-between gap-y-3 border-y border-border/50 py-4 text-center sm:text-right"
+                  className="mt-5 grid grid-cols-5 items-stretch border-y border-border/50 py-3 text-center sm:mt-6 sm:py-4"
                   data-testid="profile-metrics-strip"
                 >
                   {[
@@ -909,11 +1006,11 @@ export default function Profile() {
                     <div
                       key={m.label}
                       className={cn(
-                        "min-w-[4.5rem] flex-1 px-2",
+                        "min-w-0 px-1 sm:px-2",
                         i > 0 && "border-r border-border/40",
                       )}
                     >
-                      <p className="text-xl font-black tabular-nums tracking-tight sm:text-2xl" data-testid={m.testId}>
+                      <p className="truncate text-base font-black tabular-nums tracking-tight sm:text-2xl" data-testid={m.testId}>
                         {Number(m.value).toLocaleString("en-US")}
                       </p>
                       <p className="mt-0.5 text-[11px] text-muted-foreground">{m.label}</p>
@@ -1047,9 +1144,13 @@ export default function Profile() {
             </section>
 
             {/* Editorial navigation + content — no wrapping Card */}
-            <main className="container mx-auto max-w-5xl px-4 py-8 sm:px-6" dir="rtl" data-testid="profile-account-band">
+            <main className="container mx-auto max-w-5xl px-4 py-5 sm:px-6 sm:py-8" dir="rtl" data-testid="profile-account-band">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <div className="mb-8 flex gap-1 overflow-x-auto border-b border-border/60 pb-px [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div
+                  className="sticky top-0 z-20 -mx-4 mb-6 flex gap-1 overflow-x-auto border-b border-border/60 bg-background/95 px-4 pb-px backdrop-blur sm:static sm:mx-0 sm:mb-8 sm:bg-transparent sm:px-0 sm:backdrop-blur-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  role="tablist"
+                  aria-label="أقسام الملف الشخصي"
+                >
                   {navItems.map((item) => {
                     const Icon = item.icon;
                     const active = activeTab === item.id;
@@ -1058,6 +1159,9 @@ export default function Profile() {
                         key={item.id}
                         type="button"
                         onClick={() => setActiveTab(item.id)}
+                        role="tab"
+                        aria-selected={active}
+                        aria-controls={`profile-panel-${item.id}`}
                         data-testid={`tab-${item.id === "followers" ? "followers" : item.id === "bookmarks" ? "bookmarks" : item.id}`}
                         className={cn(
                           "relative flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
@@ -1078,39 +1182,50 @@ export default function Profile() {
                 </div>
 
                 {/* محفوظاتي أولاً */}
-                <TabsContent value="bookmarks" className="mt-0 space-y-5 focus-visible:outline-none">
-                  <div className="flex flex-wrap items-end justify-between gap-3">
+                <TabsContent id="profile-panel-bookmarks" value="bookmarks" className="mt-0 space-y-5 focus-visible:outline-none">
+                  <div className="space-y-4" data-testid="profile-saved-heading">
                     <div>
                       <h2 className="text-xl font-bold tracking-tight">محفوظاتي</h2>
                       <p className="mt-0.5 text-sm text-muted-foreground">ما حفظتَه وأعجبتَ به وما قرأتَه مؤخراً</p>
                     </div>
-                    <div className="flex gap-4 text-xs text-muted-foreground">
+                    <div className="grid w-full grid-cols-3 rounded-xl bg-muted/60 p-1 text-xs text-muted-foreground sm:w-fit sm:min-w-[360px]" role="tablist" aria-label="نوع المواد المحفوظة">
                       {(
                         [
-                          ["bookmarks", "المحفوظات", "button-saved-bookmarks"],
-                          ["likes", "الإعجابات", "tab-activity"],
-                          ["history", "سجل القراءة", "button-saved-history"],
+                          ["bookmarks", "المحفوظات", bookmarkedArticles.length, "button-saved-bookmarks"],
+                          ["likes", "الإعجابات", likedArticles.length, "tab-activity"],
+                          ["history", "سجل القراءة", readingHistory.length, "button-saved-history"],
                         ] as const
-                      ).map(([id, label, testId]) => (
+                      ).map(([id, label, count, testId]) => (
                         <button
                           key={id}
                           type="button"
                           onClick={() => setSavedView(id)}
                           data-testid={testId}
+                          role="tab"
+                          aria-selected={savedView === id}
                           className={cn(
-                            "border-b-2 pb-1 transition-colors",
+                            "flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2 font-medium transition-all",
                             savedView === id
-                              ? "border-primary font-semibold text-foreground"
-                              : "border-transparent hover:text-foreground",
+                              ? "bg-background text-foreground shadow-sm"
+                              : "hover:text-foreground",
                           )}
                         >
-                          {label}
+                          <span className="truncate">{label}</span>
+                          <span
+                            className={cn(
+                              "rounded-full px-1.5 py-0.5 text-[10px] tabular-nums",
+                              savedView === id ? "bg-primary/10 text-primary" : "bg-background/70",
+                            )}
+                          >
+                            {count.toLocaleString("en-US")}
+                          </span>
                         </button>
                       ))}
                     </div>
                   </div>
                   {savedView === "bookmarks" && (
                     <SavedArticlesList
+                      key="bookmarks"
                       articles={bookmarkedArticles}
                       isLoading={isLoadingBookmarks}
                       emptyIcon={Bookmark}
@@ -1120,6 +1235,7 @@ export default function Profile() {
                   )}
                   {savedView === "likes" && (
                     <SavedArticlesList
+                      key="likes"
                       articles={likedArticles}
                       isLoading={isLoadingLiked}
                       emptyIcon={Heart}
@@ -1129,6 +1245,7 @@ export default function Profile() {
                   )}
                   {savedView === "history" && (
                     <SavedArticlesList
+                      key="history"
                       articles={readingHistory}
                       isLoading={isLoadingHistory}
                       emptyIcon={Clock}
@@ -1138,7 +1255,7 @@ export default function Profile() {
                   )}
                 </TabsContent>
 
-                <TabsContent value="journey" className="mt-0 space-y-10 focus-visible:outline-none">
+                <TabsContent id="profile-panel-journey" value="journey" className="mt-0 space-y-10 focus-visible:outline-none">
                   <div>
                     <h2 className="text-xl font-bold tracking-tight">رحلتي في سبق</h2>
                     <p className="mt-0.5 text-sm text-muted-foreground">
@@ -1339,7 +1456,7 @@ export default function Profile() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="followers" className="mt-0 space-y-5 focus-visible:outline-none">
+                <TabsContent id="profile-panel-followers" value="followers" className="mt-0 space-y-5 focus-visible:outline-none">
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
                       <h2 className="text-xl font-bold tracking-tight">شبكتي</h2>
@@ -1441,7 +1558,7 @@ export default function Profile() {
                   )}
                 </TabsContent>
 
-                <TabsContent value="wallet" className="mt-0 space-y-8 focus-visible:outline-none">
+                <TabsContent id="profile-panel-wallet" value="wallet" className="mt-0 space-y-8 focus-visible:outline-none">
                   <div>
                     <h2 className="text-xl font-bold tracking-tight">المحفظة</h2>
                     <p className="mt-0.5 text-sm text-muted-foreground">بطاقات رقمية لـ Apple Wallet</p>
@@ -1511,7 +1628,7 @@ export default function Profile() {
                   </div>
                 </TabsContent>
 
-                <TabsContent value="settings" className="mt-0 space-y-8 focus-visible:outline-none">
+                <TabsContent id="profile-panel-settings" value="settings" className="mt-0 space-y-8 focus-visible:outline-none">
                   <div>
                     <h2 className="text-xl font-bold tracking-tight">الإعدادات</h2>
                     <p className="mt-0.5 text-sm text-muted-foreground">الخصوصية والأمان</p>
