@@ -1343,6 +1343,11 @@ struct MatchesCenterView: View {
             // مرة واحدة — فيصير بلوك «بطولاتي» في تبويب البطولات هو نفسه سلة الجدول.
             favorites.sync(with: resp.competitions)
             seedFavoritesIfNeeded(resp.competitions)
+            // إن بقي اختيار فلتر على بطولة حُذفت من المفضّلة/السجل، ارجع لـ«الكل».
+            if selection != "all", !selection.hasPrefix("lens:"), !favorites.isFavorite(selection) {
+                selection = "all"
+                SpCenterFilter.save("all")
+            }
         }
     }
 
