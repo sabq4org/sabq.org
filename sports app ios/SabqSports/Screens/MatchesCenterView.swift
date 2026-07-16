@@ -13,6 +13,8 @@ import SwiftUI
 //   • كل صف فيه نجمة متابعة (SpMatchFollows القائم) وشارة بطولة عند الخلط.
 //   • بلوك «مبارياتي» (SpMyMatchesCard القائمة) مثبّت تحت الفلتر.
 //   • شريط أدوار عام يظهر عند فلترة بطولة إقصائية واحدة (يغطي المونديال).
+//   • كثافة العرض: اليوم وغدًا = كل المباريات؛ من بعد غد = حتى 3 لكل بطولة
+//     + «بقية المباريات» يفتح جدول البطولة (تبويب المباريات).
 //
 // ملاحظة تقنية: مفاتيح التفضيل ومُعدِّل الطيّ منسوخان من MatchesView بأسماء
 // مستقلة عمدًا — MatchesView لا يُمسّ وهو يخدم المونديال الجاري، ويُسحب عند
@@ -80,7 +82,7 @@ nonisolated enum SpCenterFilter {
     /// البطولات المهمة المفعّلة افتراضيًّا (تُبذر مرة واحدة في المفضّلة).
     static let defaultSlugs = [
         "pro-league", "kings-cup", "super-cup",
-        "afc-champions-league", "champions-league",
+        "afc-champions-league", "champions-league", "uefa-super-cup", "europa-league",
         "premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1",
     ]
 
@@ -102,6 +104,18 @@ private struct SpCenterDay: Identifiable {
     let round: String
     let fixtures: [SpFixture]
 }
+
+/// مجموعة مباريات بطولة واحدة داخل يوم بعيد — ملخص + زر «بقية المباريات».
+private struct SpCenterCompSlice: Identifiable {
+    let id: String
+    let slug: String?
+    let name: String?
+    let featured: [SpFixture]
+    let hiddenCount: Int
+}
+
+/// أقصى عدد مباريات ظاهرة لكل بطولة في الأيام البعيدة (بعد غد فما بعد).
+private let spCenterFeaturedPerComp = 3
 
 private struct SpCenterDayTopKey: PreferenceKey {
     static var defaultValue: [String: CGFloat] = [:]
@@ -893,14 +907,161 @@ struct MatchesCenterView: View {
         VStack(alignment: .leading, spacing: 8) {
             dayHeader(day)
                 .id(day.id)
-            matchGroup(day.fixtures)
+            if shouldCollapseDay(day) {
+                collapsedDayBody(day)
+            } else {
+                matchGroup(day.fixtures, showCompetition: isMixed)
+            }
         }
     }
 
-    private func matchGroup(_ fixtures: [SpFixture]) -> some View {
+    /// اليوم وغدًا كاملان؛ من بعد غد يُلخَّص كل دوري إلى 3 مباريات + بقية المباريات.
+    private func shouldCollapseDay(_ day: SpCenterDay) -> Bool {
+        if liveOnly { return false }
+        let cal = Self.riyadhCal
+        if cal.isDateInToday(day.date) || cal.isDateInTomorrow(day.date) { return false }
+        let start = cal.startOfDay(for: Date())
+        guard let dayAfterTomorrow = cal.date(byAdding: .day, value: 2, to: start) else { return false }
+        return day.date >= dayAfterTomorrow
+    }
+
+    @ViewBuilder
+    private func collapsedDayBody(_ day: SpCenterDay) -> some View {
+        let slices = competitionSlices(for: day.fixtures)
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(slices) { slice in
+                VStack(alignment: .leading, spacing: 6) {
+                    if isMixed, let name = slice.name, !name.isEmpty {
+                        Text(name)
+                            .font(SportsFonts.app(size: 12, weight: .bold))
+                            .foregroundStyle(SpTheme.compAccent(slice.slug ?? ""))
+                            .padding(.horizontal, 4)
+                    }
+                    matchGroup(slice.featured, showCompetition: false)
+                    if slice.hiddenCount > 0 {
+                        restMatchesButton(slice: slice)
+                    }
+                }
+            }
+        }
+    }
+
+    private func restMatchesButton(slice: SpCenterCompSlice) -> some View {
+        Group {
+            if let slug = slice.slug, let comp = competition(forSlug: slug) {
+                NavigationLink {
+                    CompetitionDetailView(comp: comp, openOnMatches: true)
+                } label: {
+                    restMatchesLabel(count: slice.hiddenCount)
+                }
+                .buttonStyle(.plain)
+            } else {
+                // لا سجل بطولة — لا رابط؛ نُبقي التلميح فقط (نادر).
+                restMatchesLabel(count: slice.hiddenCount)
+                    .opacity(0.7)
+            }
+        }
+    }
+
+    private func restMatchesLabel(count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(Lf("بقية المباريات (%d)", count))
+                .font(SportsFonts.app(size: 12, weight: .bold))
+            Image(systemName: "chevron.left")
+                .font(.system(size: 10, weight: .bold))
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(accent)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(accent.opacity(0.1))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(accent.opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    private func competition(forSlug slug: String) -> SpCompetition? {
+        competitions.first { $0.slug == slug }
+            ?? favorites.items.first { $0.slug == slug }
+    }
+
+    /// تجميع يوم بعيد حسب البطولة: 3 مباريات مميّزة + عدد المخفي.
+    private func competitionSlices(for fixtures: [SpFixture]) -> [SpCenterCompSlice] {
+        var order: [String] = []
+        var buckets: [String: [SpFixture]] = [:]
+        var names: [String: String] = [:]
+        for f in fixtures {
+            let key = f.competitionSlug ?? "_unknown"
+            if buckets[key] == nil { order.append(key) }
+            buckets[key, default: []].append(f)
+            if names[key] == nil, let n = f.competition, !n.isEmpty { names[key] = n }
+        }
+        order.sort { a, b in
+            let ra = competitionSliceRank(a)
+            let rb = competitionSliceRank(b)
+            if ra != rb { return ra < rb }
+            let ta = buckets[a]?.map(\.timestamp).min() ?? 0
+            let tb = buckets[b]?.map(\.timestamp).min() ?? 0
+            return ta < tb
+        }
+        return order.compactMap { key in
+            guard let list = buckets[key] else { return nil }
+            let ranked = list.sorted { featuredSort($0, before: $1) }
+            let featured = Array(ranked.prefix(spCenterFeaturedPerComp))
+            let hidden = max(0, ranked.count - featured.count)
+            return SpCenterCompSlice(
+                id: key,
+                slug: key == "_unknown" ? nil : key,
+                name: names[key],
+                featured: featured,
+                hiddenCount: hidden
+            )
+        }
+    }
+
+    private func competitionSliceRank(_ slug: String) -> Int {
+        if let i = SpCenterFilter.defaultSlugs.firstIndex(of: slug) { return i }
+        if SportsConstants.isSaudi(slug) { return 100 }
+        if slug == "_unknown" { return 9_999 }
+        return 500
+    }
+
+    private func featuredSort(_ a: SpFixture, before b: SpFixture) -> Bool {
+        let pa = featuredPriority(a)
+        let pb = featuredPriority(b)
+        if pa != pb { return pa < pb }
+        if a.timestamp != b.timestamp { return a.timestamp < b.timestamp }
+        return a.id < b.id
+    }
+
+    /// أولوية الظهور في الملخص: مباشر → متابعة → فريق متابَع → سعودي → قادمة قبل المنتهية.
+    private func featuredPriority(_ f: SpFixture) -> (Int, Int, Int, Int, Int) {
+        let live = f.status.live ? 0 : 1
+        let followed = follows.isFollowing(f.id) ? 0 : 1
+        let team = involvesFollowedTeam(f) ? 0 : 1
+        let saudi = SportsConstants.isSaudiFixture(f) ? 0 : 1
+        let finished = f.status.finished ? 1 : 0
+        return (live, followed, team, saudi, finished)
+    }
+
+    private func involvesFollowedTeam(_ f: SpFixture) -> Bool {
+        let ids = Set(
+            auth.follows
+                .filter { $0.kind == "team" }
+                .compactMap { Int($0.refId) }
+        )
+        guard !ids.isEmpty else { return false }
+        return ids.contains(f.home.id) || ids.contains(f.away.id)
+    }
+
+    private func matchGroup(_ fixtures: [SpFixture], showCompetition: Bool) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(fixtures.enumerated()), id: \.element.id) { idx, f in
-                SpCenterMatchRow(fixture: f, showCompetition: isMixed)
+                SpCenterMatchRow(fixture: f, showCompetition: showCompetition)
                 if idx < fixtures.count - 1 {
                     Divider()
                         .overlay(SpTheme.outline.opacity(0.75))

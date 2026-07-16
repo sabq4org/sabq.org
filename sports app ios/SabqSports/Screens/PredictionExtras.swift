@@ -114,6 +114,8 @@ func prettyComp(_ slug: String) -> String {
     case "saudi-league", "roshn-league": return L("دوري روشن")
     case "world-cup": return L("كأس العالم")
     case "champions-league": return L("دوري الأبطال")
+    case "europa-league": return L("الدوري الأوروبي")
+    case "uefa-super-cup": return L("كأس السوبر الأوروبي")
     case "afc-champions-league", "afc-champions": return L("أبطال آسيا")
     case "pro-league": return L("دوري روشن")
     default: return slug.replacingOccurrences(of: "-", with: " ")

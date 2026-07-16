@@ -193,10 +193,7 @@ export const COMP_ACCENTS: Record<string, string> = {
   "ligue-1": "#12275e",
   "champions-league": "#2b4bc4",
   "europa-league": "#d96a1e",
-  "conference-league": "#0e8f74",
-  "segunda-division": "#0e8f8f",
-  "primera-rfef-1": "#8f2d5f",
-  "primera-rfef-2": "#b0437a",
+  "uefa-super-cup": "#c9a227",
   // خليجي
   "gulf-cup": "#0d8577",
   "uae-pro-league": "#b01e3c",
