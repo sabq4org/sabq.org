@@ -165,6 +165,10 @@ import { SortableAttachmentItem } from "@/components/article-editor/SortableAtta
 import { ImageCaptionForm } from "@/components/article-editor/ImageCaptionForm";
 import { generateSlug } from "@/lib/slug";
 
+// تعطيل مؤقت لحاجز توثيق حقوق الصورة عند النشر.
+// غيّر القيمة إلى true لإعادة الخطوة دون استرجاع الكود المحذوف.
+const HERO_RIGHTS_GATE_ENABLED = false;
+
 export default function ArticleEditor() {
   const params = useParams<{ id: string }>();
   const [location, navigate] = useLocation();
@@ -1709,7 +1713,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
     // حاجز الحقوق (غير مانع): عند النشر بصورة بارزة بلا حقوق موثّقة، افتح
     // نموذج التوثيق السريع. فحص best-effort — أي فشل فيه لا يعطّل النشر.
-    if (publishNow && !isOpinionAuthor && imageUrl && heroImageMediaId && !rightsGateBypassRef.current) {
+    if (HERO_RIGHTS_GATE_ENABLED && publishNow && !isOpinionAuthor && imageUrl && heroImageMediaId && !rightsGateBypassRef.current) {
       try {
         const gov = (await apiRequest(`/api/media/${heroImageMediaId}/governance`, {
           method: "GET",
@@ -4683,7 +4687,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
       {/* حاجز الحقوق: توثيق سريع لحقوق الصورة البارزة قبل النشر */}
       <HeroRightsDialog
-        open={!!rightsGateMediaId}
+        open={HERO_RIGHTS_GATE_ENABLED && !!rightsGateMediaId}
         mediaId={rightsGateMediaId}
         onContinue={() => {
           setRightsGateMediaId(null);
