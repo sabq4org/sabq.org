@@ -398,26 +398,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Team & Leadership */}
-      <section className="py-16 md:py-24">
-        <div className="container mx-auto px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="max-w-3xl mx-auto text-center"
-          >
-            <h2 className="text-3xl md:text-4xl font-bold mb-6" data-testid="heading-team">فريق من المبدعين</h2>
-            <p className="text-muted-foreground text-lg leading-relaxed mb-8" data-testid="text-team-intro">
-              يقف خلف "سبق الذكية" فريق سعودي شغوف، يضم نخبة من الصحفيين والمطورين بقيادة رائد الإعلام الأستاذ <span className="font-semibold text-foreground">علي الحازمي</span>. نحن لسنا مجرد فريق عمل، بل عائلة من المبتكرين الذين يوحدهم هدف واحد: إهداء المستقبل للإعلام العربي.
-            </p>
-            <p className="text-muted-foreground leading-relaxed" data-testid="text-team-description">
-              في غرفة أخبارنا، يعمل الصحفيون والمطورون معًا لتقديم محتوى يتجاوز التوقعات. نحن نؤمن بأن الجمع بين الخبرة البشرية والقدرات التقنية المتقدمة هو مفتاح النجاح في عصر المعلومات.
-            </p>
-          </motion.div>
-        </div>
-      </section>
-
       {/* CTA Section */}
       <section className="py-16 md:py-24 bg-gradient-to-br from-primary to-primary/80">
         <div className="container mx-auto px-4">
