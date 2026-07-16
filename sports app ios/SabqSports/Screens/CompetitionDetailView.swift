@@ -8,6 +8,8 @@ struct CompetitionDetailView: View {
     private var acc: Color { SpTheme.compAccent(comp.slug) }
 
     let comp: SpCompetition
+    /// يفتح تبويب المباريات مباشرة (مثل زر «بقية المباريات» من مركز المباريات).
+    var openOnMatches: Bool = false
 
     private enum Segment: String, CaseIterable {
         case overview, groups, standings, matches, bracket, scorers, assists, cards, transfers
@@ -169,7 +171,10 @@ struct CompetitionDetailView: View {
         .background(SpAmbientBackground())
         .navigationTitle(comp.name)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await loadAll() }
+        .task {
+            if openOnMatches { segment = .matches }
+            await loadAll()
+        }
         .task { await pollLive() }
         .refreshable { await loadAll(force: true) }
         .navigationDestination(item: $selectedTeam) { box in SpTeamPage(teamId: box.id) }

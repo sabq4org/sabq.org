@@ -133,16 +133,10 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   // hasStandings مباشرة عبر standings[0]؛ الأدوار الإقصائية تظهر في المباريات.
   { id: 2, slug: "champions-league", name: "دوري أبطال أوروبا", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
   { id: 3, slug: "europa-league", name: "الدوري الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
-  { id: 848, slug: "conference-league", name: "دوري المؤتمر الأوروبي", type: "cup", hasStandings: true, hasScorers: true, hasStats: false, fallbackSeason: 2025, category: "european" },
-  // الدرجات الإسبانية الأدنى من La Liga — تغطية كاملة في API-Football.
-  // الدرجة الثانية (Segunda División) دوري واحد بجدول مفرد.
-  { id: 141, slug: "segunda-division", name: "الدرجة الثانية الإسبانية", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
-  // الدرجة الثالثة (Primera Federación) — اسمها في API-Football "Primera División
-  // RFEF" ومقسّمة إلى مجموعتين حيّتين، لكل مجموعة معرّف مستقل وجدول ترتيب مفرد
-  // (لا ترتيب متعدّد المجموعات)، فتُضاف كدوريين عاديين. المجموعات 3/4/5
-  // (437/438/692) ميتة (عالقة عند موسم 2020) فتُتجاهَل.
-  { id: 435, slug: "primera-rfef-1", name: "الدرجة الثالثة الإسبانية - المجموعة 1", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
-  { id: 436, slug: "primera-rfef-2", name: "الدرجة الثالثة الإسبانية - المجموعة 2", type: "league", hasStandings: true, hasScorers: true, hasStats: true, fallbackSeason: 2025, category: "european" },
+  // كأس السوبر الأوروبي (API-Football id 531) — مباراة سنوية بين بطل الأبطال وبطل يوروبا.
+  { id: 531, slug: "uefa-super-cup", name: "كأس السوبر الأوروبي", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "european" },
+  // أُزيلت البطولات الثانوية الأوروبية من الاشتراك النشط (تخفيف الجدول):
+  // conference-league (848)، segunda-division (141)، primera-rfef-1/2 (435/436).
   // دوريات الخليج — أندية معرّبة (قاموس GULF_TEAM_AR). كأس الخليج للمنتخبات
   // «خليجي 27» (id 25) له قسم مخصّص مستقل (gulfCupService + /gulf-cup) يعتمد
   // الجدول الرسمي الثابت حتى يضيف المزوّد موسم 2026؛ نُدرجه هنا للبوابة العامة
@@ -190,10 +184,7 @@ const COMP_NAME_EN: Record<string, string> = {
   "ligue-1": "Ligue 1",
   "champions-league": "UEFA Champions League",
   "europa-league": "UEFA Europa League",
-  "conference-league": "UEFA Conference League",
-  "segunda-division": "Segunda División",
-  "primera-rfef-1": "Primera Federación - Group 1",
-  "primera-rfef-2": "Primera Federación - Group 2",
+  "uefa-super-cup": "UEFA Super Cup",
   "gulf-cup": "Arabian Gulf Cup",
   "uae-pro-league": "UAE Pro League",
   "qatar-stars-league": "Qatar Stars League",
