@@ -19,25 +19,27 @@ function readFavoriteIds(): string[] {
   }
 }
 
+function writeFavoriteIds(ids: string[]) {
+  try {
+    localStorage.setItem(DASHBOARD_FAVORITES_STORAGE_KEY, JSON.stringify(ids));
+  } catch (error) {
+    console.error("Failed to save sidebar favorites:", error);
+  }
+}
+
+function sameIds(a: string[], b: string[]) {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
 export function useDashboardFavorites(navigableItems: NavItem[]) {
   const { toast } = useToast();
   const [favoriteIds, setFavoriteIds] = useState<string[]>(() => readFavoriteIds());
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(DASHBOARD_FAVORITES_STORAGE_KEY, JSON.stringify(favoriteIds));
-    } catch (error) {
-      console.error("Failed to save sidebar favorites:", error);
-    }
-  }, [favoriteIds]);
-
-  // مزامنة بين التبويبات / الصفحة الرئيسية والشريط (نفس التبويب + تبويبات أخرى)
+  // مزامنة بين الشريط والرئيسية (وبعد الكتابة المتزامنة لـ localStorage)
   useEffect(() => {
     const sync = () => {
       const next = readFavoriteIds();
-      setFavoriteIds((current) =>
-        current.length === next.length && current.every((id, i) => id === next[i]) ? current : next,
-      );
+      setFavoriteIds((current) => (sameIds(current, next) ? current : next));
     };
     const onStorage = (event: StorageEvent) => {
       if (event.key !== DASHBOARD_FAVORITES_STORAGE_KEY) return;
@@ -60,10 +62,13 @@ export function useDashboardFavorites(navigableItems: NavItem[]) {
 
   const toggleFavorite = useCallback(
     (item: NavItem) => {
+      const label = item.labelAr || item.labelKey;
       setFavoriteIds((current) => {
-        let next = current;
+        let next: string[];
+        let action: "added" | "removed" | "full" = "added";
         if (current.includes(item.id)) {
           next = current.filter((id) => id !== item.id);
+          action = "removed";
         } else if (current.length >= DASHBOARD_MAX_FAVORITES) {
           toast({
             title: "اكتملت المفضلة",
@@ -72,8 +77,19 @@ export function useDashboardFavorites(navigableItems: NavItem[]) {
           return current;
         } else {
           next = [...current, item.id];
+          action = "added";
         }
-        queueMicrotask(() => window.dispatchEvent(new Event(FAVORITES_SYNC_EVENT)));
+
+        // اكتب قبل بثّ المزامنة — وإلا المستمع يقرأ القيمة القديمة ويعيد التراجع
+        writeFavoriteIds(next);
+        queueMicrotask(() => {
+          window.dispatchEvent(new Event(FAVORITES_SYNC_EVENT));
+          if (action === "added") {
+            toast({ title: "أُضيفت للمفضلة", description: label });
+          } else if (action === "removed") {
+            toast({ title: "أُزيلت من المفضلة", description: label });
+          }
+        });
         return next;
       });
     },

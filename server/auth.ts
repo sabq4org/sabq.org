@@ -473,7 +473,8 @@ export async function setupAuth(app: Express) {
 
   passport.deserializeUser(async (id: string, done) => {
     try {
-      const cacheKey = `user:session:${id}`;
+      // v2: includes firstName/lastName/profileImageUrl for presence & avatars
+      const cacheKey = `user:session:v2:${id}`;
       
       // Check cache first
       const cachedUser = memoryCache.get(cacheKey);
@@ -486,10 +487,15 @@ export async function setupAuth(app: Express) {
         return done(null, false);
       }
       
+      // Include display fields used by presence / avatars. Omitting firstName
+      // made /api/editor-presence fall back to the email local-part (e.g. alawijan1).
       const serializedUser = {
         id: user.id,
         email: user.email,
         role: user.role,
+        firstName: user.firstName ?? null,
+        lastName: user.lastName ?? null,
+        profileImageUrl: user.profileImageUrl ?? null,
         allowedLanguages: user.allowedLanguages || [],
         hasPressCard: user.hasPressCard || false,
       };
@@ -512,6 +518,7 @@ export async function setupAuth(app: Express) {
 // Invalidate session cache when user data changes
 export function invalidateUserSessionCache(userId: string): void {
   memoryCache.delete(`user:session:${userId}`);
+  memoryCache.delete(`user:session:v2:${userId}`);
 }
 
 // Bounded activity update cache to prevent memory leaks
