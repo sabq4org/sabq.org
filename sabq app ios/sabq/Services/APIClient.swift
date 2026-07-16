@@ -540,12 +540,16 @@ actor APIClient {
 
     // MARK: - Stories
 
+    // القصص تعيش على الجذر العام `/api/stories` (لا `/api/v1`) — الجذر
+    // الافتراضي كان يعيد 404 فتختفي القصص بصمت خلف try? لدى كل مستهلك
+    // خارج استجابة /homepage المدمجة.
     func fetchStories() async throws -> [APIStory] {
-        try await get(WrappedArray<APIStory>.self, path: "/stories").items
+        try await get(WrappedArray<APIStory>.self, path: "/stories", apiRoot: publicAPIBaseURL).items
     }
 
-    func fetchStory(id: Int) async throws -> APIStory {
-        try await get(WrappedObject<APIStory>.self, path: "/stories/\(id)").item
+    // الخادم يستعلم القصة المفردة بالـ slug لا بمعرّف رقمي.
+    func fetchStory(slug: String) async throws -> APIStory {
+        try await get(WrappedObject<APIStory>.self, path: "/stories/\(slug)", apiRoot: publicAPIBaseURL).item
     }
 
     // MARK: - Opinions

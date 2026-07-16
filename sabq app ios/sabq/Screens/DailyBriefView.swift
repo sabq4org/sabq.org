@@ -253,7 +253,7 @@ struct DailyBriefView: View {
     }
 
     private static func daysSinceJoined(_ raw: String?) -> Int? {
-        guard let raw, let date = ISO8601DateFormatter().date(from: raw) else { return nil }
+        guard let raw, let date = SabqFormatters.parseISO8601(raw) else { return nil }
         let diff = Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0
         return max(0, diff)
     }

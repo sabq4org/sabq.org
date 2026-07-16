@@ -37,8 +37,17 @@ final class AuthStore {
         return (user.firstName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var loginAttempts = 0
-    private var lastLoginAttempt: Date?
+    // عدّاد القفل مثابر في UserDefaults — كان في الذاكرة فقط، فإغلاق التطبيق
+    // وإعادة فتحه يتجاوز قفل المحاولات كليًّا. (الحماية الفعلية في rate limit
+    // الخادم؛ هذه طبقة تجربة تصير الآن صادقة.)
+    private var loginAttempts: Int {
+        get { UserDefaults.standard.integer(forKey: "sabq_login_attempts") }
+        set { UserDefaults.standard.set(newValue, forKey: "sabq_login_attempts") }
+    }
+    private var lastLoginAttempt: Date? {
+        get { UserDefaults.standard.object(forKey: "sabq_last_login_attempt") as? Date }
+        set { UserDefaults.standard.set(newValue, forKey: "sabq_last_login_attempt") }
+    }
     private var lastAuthenticatedAt: Date?
     private static let maxLoginAttempts = 5
     private static let loginLockoutDuration: TimeInterval = 120 // 2 minutes
@@ -51,23 +60,34 @@ final class AuthStore {
     func checkAuth() async {
         guard await APIClient.shared.hasSession else { return }
 
-        // Session timeout check
-        if let lastAuth = UserDefaults.standard.object(forKey: "sabq_last_auth_date") as? Date,
-           Date().timeIntervalSince(lastAuth) > Self.sessionTimeoutDuration {
-            await MainActor.run {
-                currentUser = nil
-                isLoggedIn = false
+        // مهلة الجلسة — نافذة منزلقة من آخر نشاط موثّق لا من آخر تسجيل دخول:
+        // كانت تُحسب من الدخول التفاعلي فقط فيُطرد المستخدم النشط يوميًّا في
+        // اليوم 31 بلا سبب.
+        if let lastAuth = UserDefaults.standard.object(forKey: "sabq_last_auth_date") as? Date {
+            if Date().timeIntervalSince(lastAuth) > Self.sessionTimeoutDuration {
+                await MainActor.run {
+                    currentUser = nil
+                    isLoggedIn = false
+                }
+                await APIClient.shared.markLoggedOut()
+                return
             }
-            await APIClient.shared.markLoggedOut()
-            return
+        } else {
+            // توكن Keychain بلا تاريخ (إعادة تثبيت أبقت الجلسة ومسحت
+            // UserDefaults): نبذر بـ«الآن» بدل تخطي فحص المهلة للأبد.
+            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
         }
 
         await fetchFullProfile()
         // Returning session — re-register the APNs token so a stale token
         // gets refreshed lastActiveAt-wise and a new token (if iOS rotated)
         // is linked to the user.
-        if isLoggedIn, let token = NotificationsStore.shared.deviceToken {
-            await NotificationsStore.shared.registerWithBackend(token: token)
+        if isLoggedIn {
+            // جلسة نشطة مؤكدة من الخادم — تنزلق نافذة المهلة.
+            UserDefaults.standard.set(Date(), forKey: "sabq_last_auth_date")
+            if let token = NotificationsStore.shared.deviceToken {
+                await NotificationsStore.shared.registerWithBackend(token: token)
+            }
         }
     }
 

@@ -349,7 +349,7 @@ struct EditorialNotificationsView: View {
     // `-u-nu-latn` locale extension forces 4567 instead of ٤٥٦٧ which is
     // the editorial team's standard across the rest of the product.
     private func relativeDate(from iso: String) -> String {
-        guard let date = ISO8601DateFormatter().date(from: iso) else { return iso }
+        guard let date = SabqFormatters.parseISO8601(iso) else { return iso }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         formatter.locale = Locale(identifier: "ar-u-nu-latn")
@@ -787,7 +787,7 @@ struct EditorialNotificationDetailView: View {
     }
 
     private func relativeArabic(_ iso: String) -> String {
-        guard let date = ISO8601DateFormatter().date(from: iso) else { return iso }
+        guard let date = SabqFormatters.parseISO8601(iso) else { return iso }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         formatter.locale = Locale(identifier: "ar-u-nu-latn")

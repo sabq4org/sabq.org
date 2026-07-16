@@ -129,7 +129,7 @@ struct OpinionDetailView: View {
                 url: displayOpinion.imageURL.flatMap(URL.init(string:)),
                 placeholderImage: displayOpinion.imageURL
                     .flatMap(URL.init(string:))
-                    .flatMap { ImageCache.shared.object(forKey: $0 as NSURL) }
+                    .flatMap { ImageCache.cachedAny($0) }
             )
         }
         .fullScreenCover(item: Binding(
@@ -138,7 +138,7 @@ struct OpinionDetailView: View {
         )) { holder in
             ImageLightbox(
                 url: holder.url,
-                placeholderImage: ImageCache.shared.object(forKey: holder.url as NSURL)
+                placeholderImage: ImageCache.cachedAny(holder.url)
             )
         }
         .onAppear {

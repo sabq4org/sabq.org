@@ -154,4 +154,41 @@ struct ArticleHtmlParserTests {
             return
         }
     }
+
+    // MARK: - الاسترداد من HTML مشوّه
+
+    /// انحدار: وسم حاوية لم يُغلق أبدًا كان يبتلع كل ما بعده (صور/عناوين/فقرات)
+    /// داخل بلوك واحد فتختفي بقية المقال. بعد الاسترداد تُحلَّل البلوكات التالية
+    /// كبلوكات عليا وتظهر كلها.
+    @Test func unclosedContainerDoesNotSwallowRestOfDocument() {
+        let blocks = ArticleHtmlParser.parse(
+            #"<div class="broken"><p>فقرة أولى</p><h2>عنوان تالٍ</h2><img src="https://cdn.sabq.org/c.jpg">"#
+        )
+        let joinedText = blocks.compactMap { block -> String? in
+            if case .paragraph(let runs) = block { return runs.map(\.text).joined() }
+            return nil
+        }.joined()
+        #expect(joinedText.contains("فقرة أولى"), "الفقرة داخل الحاوية المكسورة اختفت: \(blocks)")
+        #expect(
+            blocks.contains { if case .heading = $0 { return true } else { return false } },
+            "العنوان بعد الحاوية المكسورة ابتُلع: \(blocks)"
+        )
+        #expect(
+            blocks.contains { if case .image = $0 { return true } else { return false } },
+            "الصورة بعد الحاوية المكسورة ابتُلعت: \(blocks)"
+        )
+    }
+
+    /// الحاويات السليمة المتداخلة يجب ألا يتغيّر سلوكها مع منطق الاسترداد.
+    @Test func wellFormedNestedContainersUnaffectedByRecovery() {
+        let blocks = ArticleHtmlParser.parse(
+            "<div><div><p>متداخل</p></div></div><p>بعد الحاوية</p>"
+        )
+        let texts = blocks.compactMap { block -> String? in
+            if case .paragraph(let runs) = block { return runs.map(\.text).joined() }
+            return nil
+        }
+        #expect(texts.contains { $0.contains("متداخل") })
+        #expect(texts.contains { $0.contains("بعد الحاوية") })
+    }
 }
