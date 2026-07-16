@@ -6,19 +6,16 @@ import { z } from "zod";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { Header } from "@/components/Header";
-import { AccountSectionHeader } from "@/components/AccountSectionHeader";
 import { LoyaltyBlock } from "@/components/loyalty/LoyaltyBlock";
 import { LoyaltyCard } from "@/components/loyalty/LoyaltyCard";
-import { computeTier, tierProgress, nextTier } from "@shared/loyalty";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { computeTier, nextTier } from "@shared/loyalty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ChartTooltip } from "recharts";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   Form,
@@ -32,9 +29,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { 
-  Heart, 
-  Bookmark, 
-  FileText, 
+  Heart,
+  Bookmark,
+  FileText,
   Settings,
   Bell,
   Shield,
@@ -43,7 +40,6 @@ import {
   TrendingUp,
   LayoutDashboard,
   Trophy,
-  Coins,
   Star,
   Sparkles,
   Tag,
@@ -51,12 +47,10 @@ import {
   AlertCircle,
   Mail,
   Users,
-  UserPlus,
   UserMinus,
   IdCard,
   Check,
   Download,
-  Plus,
   Wallet,
   Edit,
   Clock,
@@ -68,7 +62,6 @@ import { SmartInterestsBlock } from "@/components/SmartInterestsBlock";
 import { TwoFactorSettings } from "@/components/TwoFactorSettings";
 import type { ArticleWithDetails, User as UserType, UserPointsTotal } from "@shared/schema";
 import { hasRole } from "@/hooks/useAuth";
-import { MobileOptimizedKpiCard } from "@/components/MobileOptimizedKpiCard";
 
 const updateUserSchema = z.object({
   firstName: z.string().min(2, "الاسم الأول يجب أن يكون حرفين على الأقل").optional(),
@@ -112,18 +105,18 @@ function SavedArticlesList({
 
   if (articles.length === 0) {
     return (
-      <div className="text-center py-12 bg-muted/30 rounded-xl border border-dashed border-border">
-        <EmptyIcon className="h-10 w-10 mx-auto mb-3 text-muted-foreground/60" />
-        <p className="text-muted-foreground font-medium">{emptyText}</p>
-        {emptyHint && <p className="text-sm text-muted-foreground/80 mt-1">{emptyHint}</p>}
+      <div className="py-14 text-center">
+        <EmptyIcon className="mx-auto mb-3 h-8 w-8 text-muted-foreground/50" />
+        <p className="font-medium text-muted-foreground">{emptyText}</p>
+        {emptyHint && <p className="mt-1 text-sm text-muted-foreground/70">{emptyHint}</p>}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+    <div className="divide-y divide-border/60 rounded-none border-y border-border/50">
       {articles.map((article) => (
-        <div key={article.id} className="overflow-hidden rounded-xl border-0 bg-card shadow-sm dark:border dark:border-card-border hover-elevate active-elevate-2 transition-all">
+        <div key={article.id} className="py-2 first:pt-0 last:pb-0">
           <ArticleCard article={article} variant="list" />
         </div>
       ))}
@@ -133,7 +126,7 @@ function SavedArticlesList({
 
 export default function Profile() {
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState("journey");
+  const [activeTab, setActiveTab] = useState("bookmarks");
   const [savedView, setSavedView] = useState<"bookmarks" | "likes" | "history">("bookmarks");
   const [networkView, setNetworkView] = useState<"followers" | "following">("followers");
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -677,19 +670,6 @@ export default function Profile() {
     );
   };
 
-  const getRankIcon = (rank?: string) => {
-    switch (rank) {
-      case "سفير سبق":
-        return <Trophy className="h-5 w-5 text-yellow-500" />;
-      case "العضو الذهبي":
-        return <Star className="h-5 w-5 text-amber-500" />;
-      case "المتفاعل":
-        return <TrendingUp className="h-5 w-5 text-blue-500" />;
-      default:
-        return <Coins className="h-5 w-5 text-gray-500" />;
-    }
-  };
-
   const getFollowerDisplayName = (follower: { firstName: string | null; lastName: string | null; email: string | null }) => {
     if (follower.firstName || follower.lastName) {
       return `${follower.firstName || ''} ${follower.lastName || ''}`.trim();
@@ -729,35 +709,34 @@ export default function Profile() {
     <div className="min-h-screen bg-background">
       <Header user={user} />
 
-      {/* Email Verification Alert */}
       {user && !user.emailVerified && (
-        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4" dir="rtl">
-          <Alert className="bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-900" data-testid="alert-email-verification">
-            <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-500" />
-            <AlertTitle className="text-yellow-800 dark:text-yellow-300 text-right">
+        <div className="container mx-auto max-w-5xl px-4 pt-4 sm:px-6" dir="rtl">
+          <Alert className="border-amber-200/80 bg-amber-50/80 dark:border-amber-900/50 dark:bg-amber-950/20" data-testid="alert-email-verification">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-500" />
+            <AlertTitle className="text-right text-amber-900 dark:text-amber-300">
               يرجى تفعيل حسابك عبر البريد الإلكتروني
             </AlertTitle>
-            <AlertDescription className="text-yellow-700 dark:text-yellow-400">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <p className="text-right">
-                  للوصول الكامل لجميع الميزات، يرجى التحقق من بريدك الإلكتروني وتفعيل حسابك.
+            <AlertDescription className="text-amber-800 dark:text-amber-400">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-right text-sm">
+                  للوصول الكامل لجميع الميزات، يرجى التحقق من بريدك الإلكتروني.
                 </p>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => resendVerificationMutation.mutate()}
                   disabled={resendVerificationMutation.isPending}
-                  className="shrink-0 border-yellow-300 dark:border-yellow-800 hover:bg-yellow-100 dark:hover:bg-yellow-900/30"
+                  className="shrink-0 border-amber-300 dark:border-amber-800"
                   data-testid="button-resend-verification"
                 >
                   {resendVerificationMutation.isPending ? (
                     <>
-                      <Loader2 className="h-4 w-4 ml-2 animate-spin" />
+                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
                       جاري الإرسال...
                     </>
                   ) : (
                     <>
-                      <Mail className="h-4 w-4 ml-2" />
+                      <Mail className="ml-2 h-4 w-4" />
                       إعادة إرسال رسالة التحقق
                     </>
                   )}
@@ -768,908 +747,368 @@ export default function Profile() {
         </div>
       )}
 
-      {/* Modern Profile Header — Phase 2 loyalty redesign */}
-      <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8" dir="rtl">
-        {(() => {
-          const lifetime = loyaltyPoints?.lifetimePoints ?? 0;
-          const heroTier = computeTier(lifetime);
-          const heroLevel = loyaltyPoints?.rankLevel ?? heroTier.level;
-          return (
-        <Card
-          className="mb-6 overflow-hidden border-transparent relative"
-          style={{
-            background: `linear-gradient(135deg, ${heroTier.color}14 0%, transparent 55%)`,
-          }}
-        >
-          {/* Tier accent stripe at the top */}
-          <div className="h-1 w-full" style={{ background: `linear-gradient(90deg, ${heroTier.color}, transparent)` }} />
-          <CardContent className="p-5 sm:p-7">
-            {/* 2026-05-19 rev — declutter the hero. The previous layout
-                stacked four chips of different sizes (tier, role, press
-                card) next to the name, with mismatched primary/outline
-                buttons below. The tier chip was redundant with the
-                LoyaltyCard. Now: avatar + name + email + ONE compact
-                meta row (role + press, both same neutral chip style),
-                then two same-size buttons. On mobile everything centers
-                so the wrap doesn't look chaotic. */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr,auto] gap-6 lg:gap-8 items-center">
-              <div className="flex flex-col sm:flex-row gap-5 sm:gap-6 items-center sm:items-start text-center sm:text-right">
-              {/* Avatar with tier ring */}
-              <div className="relative shrink-0">
-                <div
-                  className="rounded-full p-1"
-                  style={{ background: `linear-gradient(135deg, ${heroTier.color}, ${heroTier.color}66)` }}
-                >
-                  <Avatar className="h-24 w-24 sm:h-28 sm:w-28 border-4 border-background shadow-xl">
-                    <AvatarImage
-                      src={user.profileImageUrl || ""}
-                      alt={getUserDisplayName()}
-                      className="object-cover"
-                      data-testid="img-profile-avatar"
-                    />
-                    <AvatarFallback className="bg-primary text-primary-foreground text-2xl sm:text-3xl">
-                      {getInitials()}
-                    </AvatarFallback>
-                  </Avatar>
-                </div>
+      {(() => {
+        const heroLifetime = loyaltyPoints?.lifetimePoints ?? 0;
+        const heroTier = computeTier(heroLifetime);
+        const heroLevel = loyaltyPoints?.rankLevel ?? heroTier.level;
+        const navItems = [
+          { id: "bookmarks", label: "محفوظاتي", icon: Bookmark },
+          { id: "journey", label: "رحلتي", icon: Trophy },
+          { id: "followers", label: "شبكتي", icon: Users },
+          { id: "wallet", label: "المحفظة", icon: Wallet },
+          { id: "settings", label: "الإعدادات", icon: Settings },
+        ] as const;
 
-                <div className="absolute -bottom-1 -right-1">
-                  <input
-                    id="avatar-file-input"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="sr-only"
-                    onChange={handleAvatarFileChange}
-                    disabled={isUploadingAvatar}
-                    data-testid="input-avatar-file"
-                  />
-                  <Button
-                    type="button"
-                    variant="default"
-                    size="icon"
-                    className="h-8 w-8 rounded-full shadow-md"
-                    disabled={isUploadingAvatar}
-                    onClick={() => document.getElementById("avatar-file-input")?.click()}
-                    data-testid="button-upload-avatar"
-                    aria-label="تغيير الصورة الشخصية"
-                  >
-                    <Upload className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Info */}
-              <div className="flex-1 min-w-0 space-y-3">
-                <div className="space-y-1">
-                  <h1
-                    className="text-2xl sm:text-3xl font-bold leading-tight truncate"
-                    data-testid="text-profile-name"
-                  >
-                    {getUserDisplayName()}
-                  </h1>
-                  <p
-                    className="text-sm text-muted-foreground truncate"
-                    data-testid="text-profile-email"
-                  >
-                    {user.email}
-                  </p>
-                </div>
-
-                {/* Compact meta row — role + press credential only. Tier
-                    badge lives on the loyalty card to its left, so we
-                    don't repeat it here. */}
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-1.5">
-                  {getRoleBadge(user.role)}
-                  {user.hasPressCard && (
-                    <Badge variant="outline" className="gap-1 font-normal" data-testid="badge-press-card">
-                      <IdCard className="h-3 w-3" />
-                      صحفي معتمد
-                    </Badge>
-                  )}
-                </div>
-
-                {user.bio && !isEditingProfile && (
-                  <p className="text-sm text-foreground/80 max-w-2xl leading-relaxed">
-                    {user.bio}
-                  </p>
-                )}
-
-                {/* Quick Actions — same size, same variant family so
-                    they read as a unit. Full width on mobile, inline on
-                    sm+. */}
-                <div className="flex flex-col sm:flex-row gap-2 pt-1 w-full sm:w-auto">
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="gap-2 w-full sm:w-auto"
-                    onClick={() => setIsEditingProfile(!isEditingProfile)}
-                    data-testid="button-edit-profile"
-                  >
-                    <Edit className="h-4 w-4" />
-                    {isEditingProfile ? "إلغاء التعديل" : "تعديل الملف"}
-                  </Button>
-
-                  {hasRole(user, "editor", "admin", "system_admin") && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-2 w-full sm:w-auto"
-                      asChild
-                      data-testid="button-go-to-dashboard"
-                    >
-                      <Link href="/dashboard">
-                        <LayoutDashboard className="h-4 w-4" />
-                        لوحة التحكم
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-              </div>
-              </div>
-
-              {/* Loyalty Card — the showpiece. Full-width on mobile, fixed-width on desktop. */}
-              <div className="w-full lg:w-[400px] shrink-0">
-                <LoyaltyCard
-                  userName={getUserDisplayName()}
-                  userId={user.id}
-                  lifetimePoints={lifetime}
-                  memberSince={user.createdAt}
-                  rankLevel={heroLevel}
-                />
-              </div>
-            </div>
-
-            {/* Edit Profile Form */}
-            <AnimatePresence>
-              {isEditingProfile && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-6 pt-6 border-t"
-                >
-                  <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                      {/* Names are write-once for comment integrity — once a
-                         non-empty value exists the input is read-only and the
-                         backend silently drops further updates. See PR for
-                         the security rationale. */}
-                      {(() => {
-                        const firstNameLocked = !!user?.firstName?.trim();
-                        const lastNameLocked = !!user?.lastName?.trim();
-                        return (
-                          <>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                              <FormField
-                                control={form.control}
-                                name="firstName"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>الاسم الأول</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        {...field}
-                                        readOnly={firstNameLocked}
-                                        disabled={firstNameLocked}
-                                        className={firstNameLocked ? "opacity-70 cursor-not-allowed" : ""}
-                                        data-testid="input-first-name"
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-
-                              <FormField
-                                control={form.control}
-                                name="lastName"
-                                render={({ field }) => (
-                                  <FormItem>
-                                    <FormLabel>اسم العائلة</FormLabel>
-                                    <FormControl>
-                                      <Input
-                                        {...field}
-                                        readOnly={lastNameLocked}
-                                        disabled={lastNameLocked}
-                                        className={lastNameLocked ? "opacity-70 cursor-not-allowed" : ""}
-                                        data-testid="input-last-name"
-                                      />
-                                    </FormControl>
-                                    <FormMessage />
-                                  </FormItem>
-                                )}
-                              />
-                            </div>
-                            {(firstNameLocked || lastNameLocked) && (
-                              <p className="text-xs text-muted-foreground -mt-2">
-                                لا يمكن تعديل الاسم بعد التسجيل لاعتبارات أمنية ومصداقية التعليقات
-                              </p>
-                            )}
-                          </>
-                        );
-                      })()}
-
-                      <FormField
-                        control={form.control}
-                        name="phoneNumber"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>رقم الهاتف</FormLabel>
-                            <FormControl>
-                              <Input {...field} data-testid="input-phone-number" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="bio"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>نبذة عنك</FormLabel>
-                            <FormControl>
-                              <Textarea 
-                                {...field} 
-                                rows={4}
-                                placeholder="اكتب نبذة مختصرة عنك..."
-                                data-testid="input-bio"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <div className="flex gap-2">
-                        <Button
-                          type="submit"
-                          disabled={updateMutation.isPending}
-                          data-testid="button-save-profile"
-                        >
-                          {updateMutation.isPending ? (
-                            <>
-                              <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                              جاري الحفظ...
-                            </>
-                          ) : (
-                            "حفظ التغييرات"
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setIsEditingProfile(false);
-                            form.reset();
-                          }}
-                          data-testid="button-cancel-edit"
-                        >
-                          إلغاء
-                        </Button>
+        return (
+          <>
+            {/* Atmospheric brand plane — not a card */}
+            <section
+              className="relative overflow-hidden border-b border-border/40"
+              style={{
+                background: `radial-gradient(1200px 420px at 100% -10%, ${heroTier.color}22, transparent 55%), linear-gradient(180deg, hsl(var(--primary) / 0.06) 0%, transparent 70%)`,
+              }}
+              dir="rtl"
+            >
+              <div className="pointer-events-none absolute inset-0 opacity-[0.035]" style={{ backgroundImage: "repeating-linear-gradient(-12deg, currentColor 0 1px, transparent 1px 14px)" }} />
+              <div className="container relative mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+                <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+                  {/* Identity — editorial masthead */}
+                  <div className="flex min-w-0 flex-1 flex-col gap-5 sm:flex-row sm:items-center">
+                    <div className="relative mx-auto shrink-0 sm:mx-0">
+                      <div
+                        className="rounded-full p-[3px]"
+                        style={{ background: `linear-gradient(145deg, ${heroTier.color}, ${heroTier.color}55)` }}
+                      >
+                        <Avatar className="h-20 w-20 border-[3px] border-background sm:h-24 sm:w-24">
+                          <AvatarImage
+                            src={user.profileImageUrl || ""}
+                            alt={getUserDisplayName()}
+                            className="object-cover"
+                            data-testid="img-profile-avatar"
+                          />
+                          <AvatarFallback className="bg-primary text-xl text-primary-foreground sm:text-2xl">
+                            {getInitials()}
+                          </AvatarFallback>
+                        </Avatar>
                       </div>
-                    </form>
-                  </Form>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </CardContent>
-        </Card>
-          );
-        })()}
-      </div>
+                      <input
+                        id="avatar-file-input"
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="sr-only"
+                        onChange={handleAvatarFileChange}
+                        disabled={isUploadingAvatar}
+                        data-testid="input-avatar-file"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        className="absolute -bottom-1 -left-1 h-8 w-8 rounded-full border border-border/60 shadow-sm"
+                        disabled={isUploadingAvatar}
+                        onClick={() => document.getElementById("avatar-file-input")?.click()}
+                        data-testid="button-upload-avatar"
+                        aria-label="تغيير الصورة الشخصية"
+                      >
+                        <Upload className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
 
-      <section
-        className="scroll-fade-in border-y border-emerald-600/10 bg-emerald-50/80 py-8 dark:border-emerald-400/10 dark:bg-emerald-950/20"
-        data-testid="profile-account-band"
-      >
-        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8" dir="rtl">
-        <AccountSectionHeader
-          icon={LayoutDashboard}
-          title="مساحتي"
-          subtitle="إحصائياتك السريعة ومحتواك المحفوظ"
-          testId="profile-section-header"
-        />
-
-        {/* Stats Row */}
-        <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3 md:gap-4">
-          <MobileOptimizedKpiCard
-            label="متابع"
-            value={(followStats?.followersCount || 0).toLocaleString('en-US')}
-            icon={Users}
-            iconColor="text-primary"
-            iconBgColor="bg-primary/10"
-            className="border-0 dark:border dark:border-card-border"
-            testId="text-stat-followers"
-          />
-
-          <MobileOptimizedKpiCard
-            label="إعجاب"
-            value={likedArticles.length.toLocaleString('en-US')}
-            icon={Heart}
-            iconColor="text-primary"
-            iconBgColor="bg-primary/10"
-            className="border-0 dark:border dark:border-card-border"
-            testId="text-stat-likes"
-          />
-
-          <MobileOptimizedKpiCard
-            label="محفوظ"
-            value={bookmarkedArticles.length.toLocaleString('en-US')}
-            icon={Bookmark}
-            iconColor="text-primary"
-            iconBgColor="bg-primary/10"
-            className="border-0 dark:border dark:border-card-border"
-            testId="text-stat-bookmarks"
-          />
-
-          <MobileOptimizedKpiCard
-            label="قراءة"
-            value={readingHistory.length.toLocaleString('en-US')}
-            icon={Eye}
-            iconColor="text-primary"
-            iconBgColor="bg-primary/10"
-            className="border-0 dark:border dark:border-card-border"
-            testId="text-stat-reads"
-          />
-
-          <MobileOptimizedKpiCard
-            label="نقطة"
-            value={(loyaltyPoints?.totalPoints || 0).toLocaleString('en-US')}
-            icon={Coins}
-            iconColor="text-amber-500"
-            iconBgColor="bg-amber-500/10"
-            className="border-0 dark:border dark:border-card-border"
-            testId="text-stat-points"
-          />
-        </div>
-
-        {/* Main Content with Tabs */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-          <Card className="border-0 bg-card/90 shadow-sm dark:border dark:border-card-border">
-            <CardContent className="p-6">
-              <Tabs value={activeTab} onValueChange={setActiveTab}>
-                {/* Responsive 5-column tab grid — icon stacks above the label
-                    on mobile, sits inline on sm+. grid-cols-5 guarantees no
-                    horizontal scroll and no chaotic wrapping at any width. */}
-                <TabsList dir="rtl" className="mb-6 grid h-auto w-full grid-cols-5 gap-1 rounded-xl bg-muted p-1">
-                  <TabsTrigger value="journey" data-testid="tab-journey" className="flex-col sm:flex-row gap-1 sm:gap-2 h-auto py-2 px-1 sm:px-3 text-[11px] sm:text-sm rounded-lg data-[state=active]:shadow-sm">
-                    <Trophy className="h-4 w-4 shrink-0" />
-                    <span>نظرة عامة</span>
-                  </TabsTrigger>
-
-                  <TabsTrigger value="bookmarks" data-testid="tab-bookmarks" className="flex-col sm:flex-row gap-1 sm:gap-2 h-auto py-2 px-1 sm:px-3 text-[11px] sm:text-sm rounded-lg data-[state=active]:shadow-sm">
-                    <Bookmark className="h-4 w-4 shrink-0" />
-                    <span>محفوظاتي</span>
-                  </TabsTrigger>
-
-                  <TabsTrigger value="followers" data-testid="tab-followers" className="flex-col sm:flex-row gap-1 sm:gap-2 h-auto py-2 px-1 sm:px-3 text-[11px] sm:text-sm rounded-lg data-[state=active]:shadow-sm">
-                    <Users className="h-4 w-4 shrink-0" />
-                    <span>شبكتي</span>
-                  </TabsTrigger>
-
-                  <TabsTrigger value="wallet" data-testid="tab-wallet" className="flex-col sm:flex-row gap-1 sm:gap-2 h-auto py-2 px-1 sm:px-3 text-[11px] sm:text-sm rounded-lg data-[state=active]:shadow-sm">
-                    <Wallet className="h-4 w-4 shrink-0" />
-                    <span>المحفظة</span>
-                  </TabsTrigger>
-
-                  <TabsTrigger value="settings" data-testid="tab-settings" className="flex-col sm:flex-row gap-1 sm:gap-2 h-auto py-2 px-1 sm:px-3 text-[11px] sm:text-sm rounded-lg data-[state=active]:shadow-sm">
-                    <Settings className="h-4 w-4 shrink-0" />
-                    <span>الإعدادات</span>
-                  </TabsTrigger>
-                </TabsList>
-
-                {/* Journey Dashboard Tab */}
-                <TabsContent value="journey" className="space-y-8" dir="rtl">
-                  {/* Journey Header Card */}
-                  <Card className="border-transparent bg-gradient-to-br from-primary/10 via-background to-accent/5 overflow-hidden relative">
-                    <CardContent className="p-6">
-                      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                        <div className="space-y-1 text-right">
-                          <h3 className="text-xl font-bold flex items-center gap-2">
-                            <Sparkles className="h-5 w-5 text-amber-500 animate-pulse" />
-                            أهلاً بك في رحلتك المعرفية في سبق!
-                          </h3>
-                          <p className="text-sm text-muted-foreground">
-                            هنا يمكنك استكشاف إحصائيات قراءتك، ومتابعة رتبة ولائك، واكتشاف الأوسمة المقترحة لك.
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 bg-background/50 backdrop-blur border border-border/50 rounded-full px-4 py-2 text-xs font-semibold">
-                          <Clock className="h-3.5 w-3.5 text-primary" />
-                          <span>آخر تحديث: {new Date(activitySummary?.updatedAt || Date.now()).toLocaleDateString("ar-SA", { hour: "numeric", minute: "numeric" })}</span>
-                        </div>
+                    <div className="min-w-0 space-y-2 text-center sm:text-right">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-primary/80">
+                        سبق · ملفي
+                      </p>
+                      <h1
+                        className="truncate text-3xl font-black tracking-tight sm:text-4xl"
+                        data-testid="text-profile-name"
+                      >
+                        {getUserDisplayName()}
+                      </h1>
+                      <p className="truncate text-sm text-muted-foreground" data-testid="text-profile-email">
+                        {user.email}
+                      </p>
+                      <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+                        {getRoleBadge(user.role)}
+                        {user.hasPressCard && (
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="badge-press-card">
+                            <IdCard className="h-3.5 w-3.5" />
+                            صحفي معتمد
+                          </span>
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Interactive Stats Grid */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Card className="hover-elevate cursor-default transition-all duration-300">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                          <Eye className="h-5 w-5" />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">المقالات المقروءة</p>
-                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{totalReads.toLocaleString("en-US")}</h4>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {activitySummary?.articlesReadLast7Days ?? 0} هذا الأسبوع
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="hover-elevate cursor-default transition-all duration-300">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-600 dark:text-amber-500">
-                          <Coins className="h-5 w-5" />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">نقاط الولاء</p>
-                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{userPoints.toLocaleString("en-US")}</h4>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            من أصل {lifetime.toLocaleString("en-US")} نقطة تاريخية
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="hover-elevate cursor-default transition-all duration-300">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                          <Clock className="h-5 w-5" />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">وقت القراءة المقدر</p>
-                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{estimatedReadTime.toLocaleString("en-US")} د</h4>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            بمتوسط 3 دقائق للمقال
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="hover-elevate cursor-default transition-all duration-300">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                          <Heart className="h-5 w-5" />
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">التفاعل والمشاركة</p>
-                          <h4 className="text-2xl font-bold mt-0.5 tabular-nums">{totalEngagement.toLocaleString("en-US")}</h4>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {activitySummary?.totalComments ?? 0} تعليق · {activitySummary?.totalReactions ?? 0} إعجاب
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
+                      {user.bio && !isEditingProfile && (
+                        <p className="mx-auto max-w-xl text-sm leading-relaxed text-foreground/75 sm:mx-0">
+                          {user.bio}
+                        </p>
+                      )}
+                      <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:justify-start">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="gap-2"
+                          onClick={() => setIsEditingProfile(!isEditingProfile)}
+                          data-testid="button-edit-profile"
+                        >
+                          <Edit className="h-4 w-4" />
+                          {isEditingProfile ? "إلغاء التعديل" : "تعديل الملف"}
+                        </Button>
+                        {hasRole(user, "editor", "admin", "system_admin") && (
+                          <Button variant="ghost" size="sm" className="gap-2" asChild data-testid="button-go-to-dashboard">
+                            <Link href="/dashboard">
+                              <LayoutDashboard className="h-4 w-4" />
+                              لوحة التحكم
+                            </Link>
+                          </Button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Loyalty Road / Tier Pathway */}
-                  <Card className="border border-border/50">
-                    <CardHeader className="pb-3 text-right">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Trophy className="h-5 w-5 text-amber-500" />
-                        مسار تقدم رتبة الولاء
-                      </CardTitle>
-                      <CardDescription>
-                        كلما تفاعلت وقرأت أكثر في سبق، كلما ارتفعت رتبتك لتحصل على مزايا خاصة وأوسمة حصرية.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="pt-2">
-                      <div className="space-y-6">
-                        {/* Responsive Timeline Container */}
-                        <div className="py-2" dir="rtl">
-                          {/* Desktop Timeline (Horizontal). The 5 circles each
-                              live in an equal flex-1 cell, so their centers land
-                              precisely at 10/30/50/70/90% of the row width. The
-                              track spans exactly between the first and last
-                              centers (inset 10% on both sides) and the active
-                              fill width = 80% × pathProgress, so the bar always
-                              terminates on a real circle center. */}
-                          <div className="hidden sm:block max-w-3xl mx-auto py-2">
-                            <div className="relative flex items-start">
-                              <div
-                                className="absolute top-5 -translate-y-1/2 h-1 rounded-full bg-muted"
-                                style={{ insetInlineStart: "10%", insetInlineEnd: "10%" }}
-                              />
-                              <div
-                                className="absolute top-5 -translate-y-1/2 h-1 rounded-full bg-gradient-to-l from-amber-500 to-amber-400 transition-all duration-700"
-                                style={{ insetInlineStart: "10%", width: `calc(80% * ${pathProgress})` }}
-                              />
+                  {/* LoyaltyCard — sole visual card hero (design unchanged) */}
+                  <div className="mx-auto w-full max-w-md shrink-0 lg:mx-0 lg:w-[380px]">
+                    <LoyaltyCard
+                      userName={getUserDisplayName()}
+                      userId={user.id}
+                      lifetimePoints={heroLifetime}
+                      memberSince={user.createdAt}
+                      rankLevel={heroLevel}
+                    />
+                  </div>
+                </div>
 
-                              {tierNodes.map(({ level, threshold }) => {
-                                const tierInfo = computeTier(threshold);
-                                const isCurrent = currentTier.level === level;
-                                const isUnlocked = currentTier.level >= level;
-                                return (
-                                  <div key={level} className="relative z-10 flex flex-1 flex-col items-center gap-2">
-                                    <div
-                                      className={cn(
-                                        "h-10 w-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-sm",
-                                        isCurrent
-                                          ? "bg-background border-amber-500 ring-4 ring-amber-500/20 text-amber-600 dark:text-amber-500 font-bold scale-110"
-                                          : isUnlocked
-                                            ? "bg-amber-500 border-amber-500 text-white"
-                                            : "bg-background border-muted text-muted-foreground"
-                                      )}
-                                      title={tierInfo.nameAr}
-                                    >
-                                      {level}
-                                    </div>
-                                    <span
-                                      className={cn(
-                                        "text-[11px] text-center leading-tight",
-                                        isCurrent
-                                          ? "text-amber-600 dark:text-amber-500 font-bold"
-                                          : isUnlocked
-                                            ? "text-foreground font-medium"
-                                            : "text-muted-foreground"
-                                      )}
-                                    >
-                                      {tierInfo.nameAr}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
+                {/* Slim tier progress — no card */}
+                <div className="mt-8 space-y-2">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="font-semibold text-amber-700 dark:text-amber-400">{currentTier.nameAr}</span>
+                    <span className="text-muted-foreground">
+                      {nextTierInfo
+                        ? `${pointsToNext.toLocaleString("en-US")} نقطة للرتبة التالية`
+                        : "أعلى رتبة — سفير سبق"}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-l from-amber-500 to-amber-400 transition-all duration-700"
+                      style={{ width: `${nextTierInfo ? progressPercentage : 100}%` }}
+                    />
+                  </div>
+                </div>
 
-                          {/* Mobile Timeline (Vertical). Fixed-height column with
-                              5 equal flex-1 rows keeps node centers at
-                              10/30/50/70/90% of the height; the vertical track and
-                              its active fill use the same pathProgress fraction. */}
-                          <div className="sm:hidden h-[340px] max-w-xs mx-auto">
-                            <div className="relative flex h-full flex-col">
-                              <div
-                                className="absolute w-1 rounded-full bg-muted"
-                                style={{ insetInlineEnd: 16, top: "10%", bottom: "10%" }}
-                              />
-                              <div
-                                className="absolute w-1 rounded-full bg-gradient-to-b from-amber-500 to-amber-400 transition-all duration-700"
-                                style={{ insetInlineEnd: 16, top: "10%", height: `calc(80% * ${pathProgress})` }}
-                              />
+                {/* Flat metrics strip */}
+                <div
+                  className="mt-6 flex flex-wrap items-stretch justify-between gap-y-3 border-y border-border/50 py-4 text-center sm:text-right"
+                  data-testid="profile-metrics-strip"
+                >
+                  {[
+                    { label: "متابع", value: followStats?.followersCount || 0, testId: "text-stat-followers" },
+                    { label: "إعجاب", value: likedArticles.length, testId: "text-stat-likes" },
+                    { label: "محفوظ", value: bookmarkedArticles.length, testId: "text-stat-bookmarks" },
+                    { label: "قراءة", value: readingHistory.length, testId: "text-stat-reads" },
+                    { label: "نقطة", value: loyaltyPoints?.totalPoints || 0, testId: "text-stat-points" },
+                  ].map((m, i) => (
+                    <div
+                      key={m.label}
+                      className={cn(
+                        "min-w-[4.5rem] flex-1 px-2",
+                        i > 0 && "border-r border-border/40",
+                      )}
+                    >
+                      <p className="text-xl font-black tabular-nums tracking-tight sm:text-2xl" data-testid={m.testId}>
+                        {Number(m.value).toLocaleString("en-US")}
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">{m.label}</p>
+                    </div>
+                  ))}
+                </div>
 
-                              {tierNodes.map(({ level, threshold }) => {
-                                const tierInfo = computeTier(threshold);
-                                const isCurrent = currentTier.level === level;
-                                const isUnlocked = currentTier.level >= level;
-                                return (
-                                  <div key={level} className="relative z-10 flex flex-1 items-center gap-3">
-                                    <div
-                                      className={cn(
-                                        "h-9 w-9 shrink-0 rounded-full flex items-center justify-center border-2 transition-all duration-500 shadow-sm",
-                                        isCurrent
-                                          ? "bg-background border-amber-500 ring-4 ring-amber-500/20 text-amber-600 dark:text-amber-500 font-bold"
-                                          : isUnlocked
-                                            ? "bg-amber-500 border-amber-500 text-white font-bold"
-                                            : "bg-background border-muted text-muted-foreground"
-                                      )}
-                                    >
-                                      {level}
-                                    </div>
-                                    <div className="flex flex-col text-right">
-                                      <span
-                                        className={cn(
-                                          "text-xs font-bold",
-                                          isCurrent
-                                            ? "text-amber-600 dark:text-amber-500"
-                                            : isUnlocked
-                                              ? "text-foreground"
-                                              : "text-muted-foreground"
-                                        )}
-                                      >
-                                        {tierInfo.nameAr}
-                                      </span>
-                                      <span className="text-[10px] text-muted-foreground">
-                                        من {threshold.toLocaleString("en-US")} نقطة
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Progress Explanation subtext */}
-                        <div className="mt-8 text-center bg-muted/30 border border-border/30 rounded-lg p-3 max-w-md mx-auto text-xs">
-                          {nextTierInfo ? (
-                            <p className="leading-relaxed">
-                              أنت الآن برتبة <strong className="text-amber-500">{currentTier.nameAr}</strong>. 
-                              تحتاج إلى <strong className="text-primary">{pointsToNext.toLocaleString("en-US")}</strong> نقطة إضافية للترقية إلى رتبة <strong>{nextTierInfo.nameAr}</strong>.
-                            </p>
-                          ) : (
-                            <p className="text-amber-500 font-bold leading-relaxed">
-                              تهانينا! لقد وصلت إلى الرتبة الأعلى: {currentTier.nameAr} (سفير سبق) 🎉
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Category Breakdown section */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {/* Recharts PieChart Container */}
-                    <Card className="md:col-span-1 border border-border/50">
-                      <CardHeader className="text-right">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <LayoutDashboard className="h-4 w-4 text-primary" />
-                          توزيع اهتماماتك
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent className="h-[220px] flex items-center justify-center p-2 relative">
-                        {topCategoriesData.length > 0 ? (
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                              <Pie
-                                data={topCategoriesData}
-                                dataKey="value"
-                                nameKey="name"
-                                cx="50%"
-                                cy="50%"
-                                outerRadius={75}
-                                innerRadius={55}
-                                paddingAngle={3}
-                              >
-                                {topCategoriesData.map((entry: any, index: number) => (
-                                  <Cell key={`cell-${index}`} fill={entry.color} />
-                                ))}
-                              </Pie>
-                              <ChartTooltip formatter={(val: any) => [`${val} مقال`, 'قراءات']} />
-                            </PieChart>
-                          </ResponsiveContainer>
-                        ) : (
-                          <div className="text-center text-xs text-muted-foreground py-8">
-                            لا توجد قراءات كافية لتحليل الاهتمامات
-                          </div>
-                        )}
-                        {topCategoriesData.length > 0 && (
-                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none mt-6">
-                            <span className="text-xl font-bold text-foreground">{totalReads}</span>
-                            <span className="text-[10px] text-muted-foreground">مقالاً مقروءاً</span>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-
-                    {/* Detailed list with values */}
-                    <Card className="md:col-span-2 border border-border/50">
-                      <CardHeader className="text-right">
-                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <TrendingUp className="h-4 w-4 text-primary" />
-                          تفاصيل القراءة حسب الأقسام
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {topCategoriesData.length > 0 ? (
-                          <div className="space-y-4">
-                            {topCategoriesData.map((item: any, idx: number) => (
-                              <div key={idx} className="space-y-1.5 text-right">
-                                <div className="flex justify-between items-center text-xs">
-                                  <span className="flex items-center gap-2 font-medium">
-                                    <span 
-                                      className="h-2.5 w-2.5 rounded-full" 
-                                      style={{ backgroundColor: item.color }} 
-                                    />
-                                    {item.name}
-                                  </span>
-                                  <span className="text-muted-foreground font-mono">
-                                    {item.value} مقال ({Math.round(item.weight * 100)}%)
-                                  </span>
-                                </div>
-                                <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                                  <div 
-                                    className="h-full rounded-full transition-all duration-500" 
-                                    style={{ 
-                                      backgroundColor: item.color,
-                                      width: `${item.weight * 100}%` 
-                                    }} 
+                <AnimatePresence>
+                  {isEditingProfile && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mt-6 overflow-hidden border-t border-border/50 pt-6"
+                    >
+                      <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                          {(() => {
+                            const firstNameLocked = !!user?.firstName?.trim();
+                            const lastNameLocked = !!user?.lastName?.trim();
+                            return (
+                              <>
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                  <FormField
+                                    control={form.control}
+                                    name="firstName"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>الاسم الأول</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            {...field}
+                                            readOnly={firstNameLocked}
+                                            disabled={firstNameLocked}
+                                            className={firstNameLocked ? "cursor-not-allowed opacity-70" : ""}
+                                            data-testid="input-first-name"
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
+                                  />
+                                  <FormField
+                                    control={form.control}
+                                    name="lastName"
+                                    render={({ field }) => (
+                                      <FormItem>
+                                        <FormLabel>اسم العائلة</FormLabel>
+                                        <FormControl>
+                                          <Input
+                                            {...field}
+                                            readOnly={lastNameLocked}
+                                            disabled={lastNameLocked}
+                                            className={lastNameLocked ? "cursor-not-allowed opacity-70" : ""}
+                                            data-testid="input-last-name"
+                                          />
+                                        </FormControl>
+                                        <FormMessage />
+                                      </FormItem>
+                                    )}
                                   />
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-12 text-muted-foreground text-sm">
-                            <FileText className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-                            ابدأ بقراءة بعض المقالات لرؤية تحليل تفصيلي لاهتماماتك.
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Achievements Grid */}
-                  <Card className="border border-border/50">
-                    <CardHeader className="text-right">
-                      <CardTitle className="text-base flex items-center gap-2">
-                        <Trophy className="h-5 w-5 text-amber-500" />
-                        الأوسمة والإنجازات المعرفية
-                      </CardTitle>
-                      <CardDescription>
-                        أكمل المهام المختلفة لفتح أوسمة الإنجاز وتثبيتها في ملفك الشخصي.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-                        {[
-                          {
-                            id: "welcome",
-                            title: "شارة البداية",
-                            description: "عضو جديد في عائلة سبق",
-                            icon: Trophy,
-                            unlocked: true,
-                          },
-                          {
-                            id: "reader",
-                            title: "القارئ النهم",
-                            description: "قرأت أكثر من 20 مقالاً",
-                            icon: Eye,
-                            unlocked: totalReads >= 20,
-                          },
-                          {
-                            id: "commenter",
-                            title: "معلق متميز",
-                            description: "شاركت بـ 5 تعليقات أو أكثر",
-                            icon: FileText,
-                            unlocked: (activitySummary?.totalComments ?? 0) >= 5,
-                          },
-                          {
-                            id: "supporter",
-                            title: "المساند المتفاعل",
-                            description: "أضفت 10 تفاعلات أو إعجابات",
-                            icon: Heart,
-                            unlocked: (activitySummary?.totalReactions ?? 0) >= 10,
-                          },
-                          {
-                            id: "passionate",
-                            title: "شغوف بالمعرفة",
-                            description: "جمعت 500 نقطة ولاء",
-                            icon: Star,
-                            unlocked: lifetime >= 500,
-                          },
-                          {
-                            id: "ambassador",
-                            title: "سفير سبق",
-                            description: "الوصول إلى الرتبة الأعلى في سبق",
-                            icon: Shield,
-                            unlocked: currentTier.level === 5,
-                          },
-                        ].map((badge) => {
-                          const IconComponent = badge.icon;
-                          return (
-                            <motion.div
-                              key={badge.id}
-                              whileHover={badge.unlocked ? { scale: 1.04, y: -3 } : {}}
-                              transition={{ type: "spring", stiffness: 300, damping: 15 }}
-                              className="relative h-full"
-                            >
-                              {/* Unified gold/amber loyalty theme for unlocked
-                                  badges; muted + dashed for locked ones. */}
-                              <Card
-                                className={cn(
-                                  "h-full p-4 flex flex-col items-center justify-between text-center gap-3 transition-all duration-300 relative overflow-hidden border",
-                                  badge.unlocked
-                                    ? "bg-card border-amber-500/20 shadow-sm hover:shadow-md hover:border-amber-500/40"
-                                    : "bg-muted/5 opacity-60 border-dashed border-border"
-                                )}
-                              >
-                                <div
-                                  className={cn(
-                                    "h-12 w-12 rounded-2xl flex items-center justify-center transition-transform duration-500",
-                                    badge.unlocked
-                                      ? "bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-md shadow-amber-500/20"
-                                      : "bg-muted/30 text-muted-foreground border border-border"
-                                  )}
-                                >
-                                  <IconComponent className="h-5 w-5" />
-                                </div>
-
-                                <div className="space-y-1 z-10 flex-1 flex flex-col justify-center">
-                                  <h5 className={cn("text-[11px] font-bold leading-tight", badge.unlocked ? "text-foreground" : "text-muted-foreground")}>
-                                    {badge.title}
-                                  </h5>
-                                  <p className="text-[9px] text-muted-foreground leading-normal max-w-[100px] mx-auto">
-                                    {badge.description}
+                                {(firstNameLocked || lastNameLocked) && (
+                                  <p className="-mt-2 text-xs text-muted-foreground">
+                                    لا يمكن تعديل الاسم بعد التسجيل لاعتبارات أمنية ومصداقية التعليقات
                                   </p>
-                                </div>
-
-                                {badge.unlocked ? (
-                                  <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-500 border-amber-500/20 text-[9px] px-1.5 py-0 gap-1">
-                                    <Check className="h-2 w-2" />
-                                    مكتمل
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline" className="bg-muted/20 text-muted-foreground/60 border-transparent text-[9px] px-1.5 py-0 gap-1">
-                                    <Lock className="h-2 w-2" />
-                                    مغلق
-                                  </Badge>
                                 )}
+                              </>
+                            );
+                          })()}
+                          <FormField
+                            control={form.control}
+                            name="phoneNumber"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>رقم الهاتف</FormLabel>
+                                <FormControl>
+                                  <Input {...field} data-testid="input-phone-number" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="bio"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>نبذة عنك</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    {...field}
+                                    rows={3}
+                                    placeholder="اكتب نبذة مختصرة عنك..."
+                                    data-testid="input-bio"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <div className="flex gap-2">
+                            <Button type="submit" disabled={updateMutation.isPending} data-testid="button-save-profile">
+                              {updateMutation.isPending ? (
+                                <>
+                                  <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                                  جاري الحفظ...
+                                </>
+                              ) : (
+                                "حفظ التغييرات"
+                              )}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setIsEditingProfile(false);
+                                form.reset();
+                              }}
+                              data-testid="button-cancel-edit"
+                            >
+                              إلغاء
+                            </Button>
+                          </div>
+                        </form>
+                      </Form>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </section>
 
-                                {badge.unlocked ? (
-                                  <div className="absolute top-1.5 right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-500 border border-amber-500/30">
-                                    <Check className="h-2.5 w-2.5" />
-                                  </div>
-                                ) : (
-                                  <div className="absolute top-1.5 right-1.5 text-muted-foreground/60">
-                                    <Lock className="h-3 w-3" />
-                                  </div>
-                                )}
-                              </Card>
-                            </motion.div>
-                          );
-                        })}
-                      </div>
-                    </CardContent>
-                  </Card>
+            {/* Editorial navigation + content — no wrapping Card */}
+            <main className="container mx-auto max-w-5xl px-4 py-8 sm:px-6" dir="rtl" data-testid="profile-account-band">
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <div className="mb-8 flex gap-1 overflow-x-auto border-b border-border/60 pb-px [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {navItems.map((item) => {
+                    const Icon = item.icon;
+                    const active = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setActiveTab(item.id)}
+                        data-testid={`tab-${item.id === "followers" ? "followers" : item.id === "bookmarks" ? "bookmarks" : item.id}`}
+                        className={cn(
+                          "relative flex shrink-0 items-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors sm:px-4",
+                          active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.label}
+                        {active && (
+                          <motion.span
+                            layoutId="profile-nav-underline"
+                            className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-primary"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
 
-                  {/* Recommendations */}
-                  <div>
-                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-right">
-                      <Sparkles className="h-5 w-5 text-amber-500 animate-pulse" />
-                      ترشيحات معرفية مخصصة لرحلتك
-                    </h3>
-                    {recommendations && recommendations.length > 0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" dir="rtl">
-                        {recommendations.slice(0, 3).map((article) => (
-                          <ArticleCard key={article.id} article={article} />
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-10 bg-muted/20 rounded-xl border border-dashed border-border text-sm text-muted-foreground">
-                        نعمل حالياً على تحليل قراءاتك لتجهيز الترشيحات الأنسب لك.
-                      </div>
-                    )}
+                {/* محفوظاتي أولاً */}
+                <TabsContent value="bookmarks" className="mt-0 space-y-5 focus-visible:outline-none">
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <h2 className="text-xl font-bold tracking-tight">محفوظاتي</h2>
+                      <p className="mt-0.5 text-sm text-muted-foreground">ما حفظتَه وأعجبتَ به وما قرأتَه مؤخراً</p>
+                    </div>
+                    <div className="flex gap-4 text-xs text-muted-foreground">
+                      {(
+                        [
+                          ["bookmarks", "المحفوظات", "button-saved-bookmarks"],
+                          ["likes", "الإعجابات", "tab-activity"],
+                          ["history", "سجل القراءة", "button-saved-history"],
+                        ] as const
+                      ).map(([id, label, testId]) => (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setSavedView(id)}
+                          data-testid={testId}
+                          className={cn(
+                            "border-b-2 pb-1 transition-colors",
+                            savedView === id
+                              ? "border-primary font-semibold text-foreground"
+                              : "border-transparent hover:text-foreground",
+                          )}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </TabsContent>
-
-                {/* Saved Tab — bookmarks + likes + reading history merged into
-                    one organized surface. An internal segmented control switches
-                    between the three lists, all rendered as compact list cards
-                    (small thumbnail) instead of the large grid cards. */}
-                <TabsContent value="bookmarks" className="space-y-5" dir="rtl">
-                  <div className="grid grid-cols-3 w-full max-w-md gap-1 rounded-lg bg-muted p-1">
-                    <button
-                      type="button"
-                      onClick={() => setSavedView("bookmarks")}
-                      className={cn(
-                        "flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] sm:text-sm font-medium transition-all",
-                        savedView === "bookmarks" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                      )}
-                      data-testid="button-saved-bookmarks"
-                    >
-                      <Bookmark className="h-4 w-4 shrink-0" />
-                      <span className="truncate">المحفوظات</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSavedView("likes")}
-                      className={cn(
-                        "flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] sm:text-sm font-medium transition-all",
-                        savedView === "likes" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                      )}
-                      data-testid="tab-activity"
-                    >
-                      <Heart className="h-4 w-4 shrink-0" />
-                      <span className="truncate">الإعجابات</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSavedView("history")}
-                      className={cn(
-                        "flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[11px] sm:text-sm font-medium transition-all",
-                        savedView === "history" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                      )}
-                      data-testid="button-saved-history"
-                    >
-                      <Clock className="h-4 w-4 shrink-0" />
-                      <span className="truncate">سجل القراءة</span>
-                    </button>
-                  </div>
-
                   {savedView === "bookmarks" && (
                     <SavedArticlesList
                       articles={bookmarkedArticles}
@@ -1699,353 +1138,404 @@ export default function Profile() {
                   )}
                 </TabsContent>
 
-                {/* Network Tab — followers + following unified under one tab.
-                    The internal toggle uses its own networkView state (decoupled
-                    from the page-level activeTab) so switching never re-mounts
-                    the whole tab. */}
-                <TabsContent value="followers" className="space-y-4" dir="rtl">
-                  <div className="grid grid-cols-2 w-full max-w-md gap-1 rounded-lg bg-muted p-1">
-                    <button
-                      type="button"
-                      onClick={() => setNetworkView("followers")}
-                      className={cn(
-                        "flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all",
-                        networkView === "followers" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                <TabsContent value="journey" className="mt-0 space-y-10 focus-visible:outline-none">
+                  <div>
+                    <h2 className="text-xl font-bold tracking-tight">رحلتي في سبق</h2>
+                    <p className="mt-0.5 text-sm text-muted-foreground">
+                      قراءة · تفاعل · تقدّم الولاء — بلا لوحات متكدّسة
+                    </p>
+                  </div>
+
+                  {/* Compact stats as newspaper figures */}
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4">
+                    {[
+                      { label: "مقالات مقروءة", value: totalReads, hint: `${activitySummary?.articlesReadLast7Days ?? 0} هذا الأسبوع` },
+                      { label: "نقاط الولاء", value: userPoints, hint: `من ${lifetime.toLocaleString("en-US")} تاريخية` },
+                      { label: "وقت القراءة", value: `${estimatedReadTime}`, hint: "دقيقة تقديرية" },
+                      { label: "التفاعل", value: totalEngagement, hint: `${activitySummary?.totalComments ?? 0} تعليق` },
+                    ].map((s) => (
+                      <div key={s.label} className="space-y-1 border-r border-border/40 pr-4 last:border-0">
+                        <p className="text-[11px] text-muted-foreground">{s.label}</p>
+                        <p className="text-2xl font-black tabular-nums tracking-tight">{typeof s.value === "number" ? s.value.toLocaleString("en-US") : s.value}</p>
+                        <p className="text-[10px] text-muted-foreground/80">{s.hint}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Tier nodes — compact horizontal only */}
+                  <div>
+                    <h3 className="mb-4 flex items-center gap-2 text-sm font-bold">
+                      <Trophy className="h-4 w-4 text-amber-500" />
+                      مسار الرتب
+                    </h3>
+                    <div className="relative flex max-w-2xl items-start">
+                      <div className="absolute top-4 h-0.5 bg-muted" style={{ insetInlineStart: "10%", insetInlineEnd: "10%" }} />
+                      <div
+                        className="absolute top-4 h-0.5 bg-gradient-to-l from-amber-500 to-amber-400 transition-all duration-700"
+                        style={{ insetInlineStart: "10%", width: `calc(80% * ${pathProgress})` }}
+                      />
+                      {tierNodes.map(({ level, threshold }) => {
+                        const tierInfo = computeTier(threshold);
+                        const isCurrent = currentTier.level === level;
+                        const isUnlocked = currentTier.level >= level;
+                        return (
+                          <div key={level} className="relative z-10 flex flex-1 flex-col items-center gap-1.5">
+                            <div
+                              className={cn(
+                                "flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold transition-all",
+                                isCurrent
+                                  ? "scale-110 border-amber-500 bg-background text-amber-600 ring-4 ring-amber-500/15 dark:text-amber-400"
+                                  : isUnlocked
+                                    ? "border-amber-500 bg-amber-500 text-white"
+                                    : "border-muted bg-background text-muted-foreground",
+                              )}
+                            >
+                              {level}
+                            </div>
+                            <span className={cn("text-[10px] leading-tight", isCurrent ? "font-bold text-amber-600 dark:text-amber-400" : "text-muted-foreground")}>
+                              {tierInfo.nameAr}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Interests — bars, no pie card */}
+                  <div>
+                    <h3 className="mb-4 flex items-center gap-2 text-sm font-bold">
+                      <TrendingUp className="h-4 w-4 text-primary" />
+                      اهتماماتك من القراءة
+                    </h3>
+                    {topCategoriesData.length > 0 ? (
+                      <div className="space-y-3">
+                        {topCategoriesData.slice(0, 6).map((item: any, idx: number) => (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="flex items-center gap-2 font-medium">
+                                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+                                {item.name}
+                              </span>
+                              <span className="tabular-nums text-muted-foreground">
+                                {item.value} · {Math.round(item.weight * 100)}%
+                              </span>
+                            </div>
+                            <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+                              <div className="h-full rounded-full" style={{ backgroundColor: item.color, width: `${item.weight * 100}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">ابدأ بالقراءة لرؤية توزيع اهتماماتك.</p>
+                    )}
+                  </div>
+
+                  {/* Achievements as icon strip */}
+                  <div>
+                    <h3 className="mb-4 flex items-center gap-2 text-sm font-bold">
+                      <Sparkles className="h-4 w-4 text-amber-500" />
+                      الأوسمة
+                    </h3>
+                    <div className="flex flex-wrap gap-3">
+                      {[
+                        { id: "welcome", title: "شارة البداية", icon: Trophy, unlocked: true },
+                        { id: "reader", title: "القارئ النهم", icon: Eye, unlocked: totalReads >= 20 },
+                        { id: "commenter", title: "معلق متميز", icon: FileText, unlocked: (activitySummary?.totalComments ?? 0) >= 5 },
+                        { id: "supporter", title: "المساند", icon: Heart, unlocked: (activitySummary?.totalReactions ?? 0) >= 10 },
+                        { id: "passionate", title: "شغوف", icon: Star, unlocked: lifetime >= 500 },
+                        { id: "ambassador", title: "سفير سبق", icon: Shield, unlocked: currentTier.level === 5 },
+                      ].map((badge) => {
+                        const IconComponent = badge.icon;
+                        return (
+                          <div
+                            key={badge.id}
+                            title={badge.title}
+                            className={cn(
+                              "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium",
+                              badge.unlocked
+                                ? "bg-amber-500/10 text-amber-800 dark:text-amber-300"
+                                : "bg-muted/40 text-muted-foreground/60",
+                            )}
+                          >
+                            <IconComponent className="h-3.5 w-3.5" />
+                            {badge.title}
+                            {badge.unlocked ? <Check className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Recommendations — list density */}
+                  <div>
+                    <h3 className="mb-4 flex items-center gap-2 text-sm font-bold">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      ترشيحات لك
+                    </h3>
+                    {recommendations && recommendations.length > 0 ? (
+                      <div className="divide-y divide-border/60 border-y border-border/50">
+                        {recommendations.slice(0, 4).map((article) => (
+                          <div key={article.id} className="py-2">
+                            <ArticleCard article={article} variant="list" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">نجهّز ترشيحات مخصصة بعد مزيد من القراءات.</p>
+                    )}
+                  </div>
+
+                  {/* Interests + keywords inline */}
+                  <div className="grid gap-8 border-t border-border/50 pt-8 md:grid-cols-2">
+                    <div>
+                      <SmartInterestsBlock userId={user.id} />
+                    </div>
+                    <div>
+                      <h3 className="mb-3 flex items-center gap-2 text-sm font-bold">
+                        <Tag className="h-4 w-4" />
+                        كلماتي المتابعة
+                      </h3>
+                      {isLoadingKeywords ? (
+                        <div className="space-y-2">
+                          {[1, 2, 3].map((i) => (
+                            <Skeleton key={i} className="h-7 w-40" />
+                          ))}
+                        </div>
+                      ) : followedKeywords.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {followedKeywords.slice(0, 12).map((keyword) => (
+                            <span
+                              key={keyword.tagId}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-background/60 px-2.5 py-1 text-xs"
+                            >
+                              <Link
+                                href={`/keyword/${keyword.tagName}`}
+                                className="font-medium hover:text-primary"
+                                data-testid={`link-keyword-${keyword.tagId}`}
+                              >
+                                {keyword.tagName}
+                              </Link>
+                              <button
+                                type="button"
+                                className="text-muted-foreground hover:text-destructive"
+                                onClick={() => unfollowKeywordMutation.mutate(keyword.tagId)}
+                                disabled={unfollowKeywordMutation.isPending}
+                                data-testid={`button-unfollow-keyword-${keyword.tagId}`}
+                                aria-label="إلغاء المتابعة"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">لم تتابع أي كلمات بعد</p>
                       )}
-                      data-testid="button-show-followers"
-                    >
-                      <Users className="h-4 w-4 shrink-0" />
-                      المتابِعون
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{followStats?.followersCount || 0}</Badge>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setNetworkView("following")}
-                      className={cn(
-                        "flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs sm:text-sm font-medium transition-all",
-                        networkView === "following" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                      )}
-                      data-testid="button-show-following"
-                    >
-                      <UserPlus className="h-4 w-4 shrink-0" />
-                      المتابَعون
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{followStats?.followingCount || 0}</Badge>
-                    </button>
+                      <div className="mt-6">
+                        <LoyaltyBlock />
+                      </div>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="followers" className="mt-0 space-y-5 focus-visible:outline-none">
+                  <div className="flex flex-wrap items-end justify-between gap-3">
+                    <div>
+                      <h2 className="text-xl font-bold tracking-tight">شبكتي</h2>
+                      <p className="mt-0.5 text-sm text-muted-foreground">من يتابعك ومن تتابع</p>
+                    </div>
+                    <div className="flex gap-4 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setNetworkView("followers")}
+                        data-testid="button-show-followers"
+                        className={cn(
+                          "border-b-2 pb-1 transition-colors",
+                          networkView === "followers" ? "border-primary font-semibold" : "border-transparent text-muted-foreground",
+                        )}
+                      >
+                        المتابِعون ({followStats?.followersCount || 0})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNetworkView("following")}
+                        data-testid="button-show-following"
+                        className={cn(
+                          "border-b-2 pb-1 transition-colors",
+                          networkView === "following" ? "border-primary font-semibold" : "border-transparent text-muted-foreground",
+                        )}
+                      >
+                        المتابَعون ({followStats?.followingCount || 0})
+                      </button>
+                    </div>
                   </div>
 
                   {networkView === "followers" ? (
                     isLoadingFollowers ? (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                        {[1, 2, 3, 4].map((i) => (
-                          <Skeleton key={i} className="h-20 rounded-xl" />
+                      <div className="space-y-3">
+                        {[1, 2, 3].map((i) => (
+                          <Skeleton key={i} className="h-14 w-full" />
                         ))}
                       </div>
                     ) : followers.length > 0 ? (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                      <ul className="divide-y divide-border/60 border-y border-border/50">
                         {followers.map((follower) => (
-                          <Card key={follower.id} className="hover-elevate">
-                            <CardContent className="p-4">
-                              <div className="flex items-center gap-3">
-                                <Avatar>
-                                  <AvatarImage src={follower.profileImageUrl || ""} />
-                                  <AvatarFallback>
-                                    {getFollowerInitials(follower)}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium truncate">
-                                    {getFollowerDisplayName(follower)}
-                                  </p>
-                                  {follower.bio && (
-                                    <p className="text-sm text-muted-foreground line-clamp-1">
-                                      {follower.bio}
-                                    </p>
-                                  )}
-                                </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  asChild
-                                  className="shrink-0"
-                                  data-testid={`button-view-profile-${follower.id}`}
-                                >
-                                  <Link href={`/user/${follower.id}`}>
-                                    عرض
-                                  </Link>
-                                </Button>
-                              </div>
-                            </CardContent>
-                          </Card>
+                          <li key={follower.id} className="flex items-center gap-3 py-3">
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage src={follower.profileImageUrl || ""} />
+                              <AvatarFallback>{getFollowerInitials(follower)}</AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate font-medium">{getFollowerDisplayName(follower)}</p>
+                              {follower.bio && (
+                                <p className="line-clamp-1 text-xs text-muted-foreground">{follower.bio}</p>
+                              )}
+                            </div>
+                            <Button variant="ghost" size="sm" asChild data-testid={`button-view-profile-${follower.id}`}>
+                              <Link href={`/user/${follower.id}`}>عرض</Link>
+                            </Button>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     ) : (
-                      <div className="text-center py-12 bg-muted/30 rounded-xl border border-dashed border-border">
-                        <Users className="h-10 w-10 mx-auto mb-3 text-muted-foreground/60" />
-                        <p className="text-muted-foreground font-medium">لا يوجد متابعون بعد</p>
-                      </div>
+                      <p className="py-12 text-center text-sm text-muted-foreground">لا يوجد متابعون بعد</p>
                     )
                   ) : isLoadingFollowing ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                      {[1, 2, 3, 4].map((i) => (
-                        <Skeleton key={i} className="h-20 rounded-xl" />
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <Skeleton key={i} className="h-14 w-full" />
                       ))}
                     </div>
                   ) : following.length > 0 ? (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <ul className="divide-y divide-border/60 border-y border-border/50">
                       {following.map((followed) => (
-                        <Card key={followed.id} className="hover-elevate">
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-3">
-                              <Avatar>
-                                <AvatarImage src={followed.profileImageUrl || ""} />
-                                <AvatarFallback>
-                                  {getFollowerInitials(followed)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium truncate">
-                                  {getFollowerDisplayName(followed)}
-                                </p>
-                                {followed.bio && (
-                                  <p className="text-sm text-muted-foreground line-clamp-1">
-                                    {followed.bio}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="flex gap-2 shrink-0">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  asChild
-                                  data-testid={`button-view-profile-${followed.id}`}
-                                >
-                                  <Link href={`/user/${followed.id}`}>
-                                    عرض
-                                  </Link>
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => unfollowUserMutation.mutate(followed.id)}
-                                  disabled={unfollowUserMutation.isPending}
-                                  data-testid={`button-unfollow-user-${followed.id}`}
-                                >
-                                  <UserMinus className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
+                        <li key={followed.id} className="flex items-center gap-3 py-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={followed.profileImageUrl || ""} />
+                            <AvatarFallback>{getFollowerInitials(followed)}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium">{getFollowerDisplayName(followed)}</p>
+                            {followed.bio && (
+                              <p className="line-clamp-1 text-xs text-muted-foreground">{followed.bio}</p>
+                            )}
+                          </div>
+                          <Button variant="ghost" size="sm" asChild data-testid={`button-view-profile-${followed.id}`}>
+                            <Link href={`/user/${followed.id}`}>عرض</Link>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => unfollowUserMutation.mutate(followed.id)}
+                            disabled={unfollowUserMutation.isPending}
+                            data-testid={`button-unfollow-user-${followed.id}`}
+                          >
+                            <UserMinus className="h-4 w-4" />
+                          </Button>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   ) : (
-                    <div className="text-center py-12 bg-muted/30 rounded-xl border border-dashed border-border">
-                      <Users className="h-10 w-10 mx-auto mb-3 text-muted-foreground/60" />
-                      <p className="text-muted-foreground font-medium">لا تتابع أحدًا بعد</p>
-                    </div>
+                    <p className="py-12 text-center text-sm text-muted-foreground">لا تتابع أحدًا بعد</p>
                   )}
                 </TabsContent>
 
-                {/* Settings Tab */}
-                <TabsContent value="settings" className="space-y-6" dir="rtl">
+                <TabsContent value="wallet" className="mt-0 space-y-8 focus-visible:outline-none">
                   <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Bell className="h-5 w-5" />
-                      إعدادات الإشعارات
-                    </h3>
-                    <Card>
-                      <CardContent className="p-6">
-                        <p className="text-muted-foreground">
-                          قريبًا: خيارات تخصيص الإشعارات
-                        </p>
-                      </CardContent>
-                    </Card>
+                    <h2 className="text-xl font-bold tracking-tight">المحفظة</h2>
+                    <p className="mt-0.5 text-sm text-muted-foreground">بطاقات رقمية لـ Apple Wallet</p>
                   </div>
-
-                  <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Shield className="h-5 w-5" />
-                      الخصوصية والأمان
-                    </h3>
-                    <Card>
-                      <CardContent className="p-6">
-                        <TwoFactorSettings />
-                      </CardContent>
-                    </Card>
+                  <div className="divide-y divide-border/60 border-y border-border/50">
+                    <div className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-3">
+                        <Trophy className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                        <div>
+                          <h4 className="font-semibold">بطاقة العضوية</h4>
+                          <p className="mt-0.5 text-sm text-muted-foreground">
+                            بطاقة رقمية تعرض نقاط الولاء ورتبتك
+                          </p>
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {(loyaltyPoints?.totalPoints || 0).toLocaleString("en-US")} نقطة · {loyaltyPoints?.currentRank || "القارئ الجديد"}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={() => issueLoyaltyCardMutation.mutate()}
+                        disabled={issueLoyaltyCardMutation.isPending}
+                        className="gap-2 shrink-0"
+                        data-testid="button-download-loyalty-card"
+                      >
+                        {issueLoyaltyCardMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            جاري الإصدار...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4" />
+                            تحميل البطاقة
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    {user.hasPressCard && (
+                      <div className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                          <IdCard className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                          <div>
+                            <h4 className="font-semibold">البطاقة الصحفية</h4>
+                            <p className="mt-0.5 text-sm text-muted-foreground">بطاقة صحفية رقمية معتمدة من سبق</p>
+                          </div>
+                        </div>
+                        <Button
+                          onClick={() => issuePressCardMutation.mutate()}
+                          disabled={issuePressCardMutation.isPending}
+                          className="gap-2 shrink-0"
+                          data-testid="button-download-press-card"
+                        >
+                          {issuePressCardMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              جاري الإصدار...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="h-4 w-4" />
+                              تحميل البطاقة
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
 
-                {/* Wallet Tab */}
-                <TabsContent value="wallet" className="space-y-6" dir="rtl">
+                <TabsContent value="settings" className="mt-0 space-y-8 focus-visible:outline-none">
                   <div>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Wallet className="h-5 w-5" />
-                      Apple Wallet
+                    <h2 className="text-xl font-bold tracking-tight">الإعدادات</h2>
+                    <p className="mt-0.5 text-sm text-muted-foreground">الخصوصية والأمان</p>
+                  </div>
+                  <div className="space-y-2 border-y border-border/50 py-5">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold">
+                      <Bell className="h-4 w-4" />
+                      إعدادات الإشعارات
                     </h3>
-                    
-                    <div className="space-y-4">
-                      {/* Loyalty Card */}
-                      <Card>
-                        <CardContent className="p-6">
-                          <div className="flex items-start gap-4">
-                            <div className="h-12 w-12 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-                              <Trophy className="h-6 w-6 text-amber-600 dark:text-amber-500" />
-                            </div>
-                            <div className="flex-1 space-y-3">
-                              <div>
-                                <h4 className="font-semibold">بطاقة العضوية</h4>
-                                <p className="text-sm text-muted-foreground mt-1">
-                                  احصل على بطاقة عضوية رقمية تعرض نقاط الولاء ورتبتك
-                                </p>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="gap-1">
-                                  <Coins className="h-3 w-3" />
-                                  {loyaltyPoints?.totalPoints || 0} نقطة
-                                </Badge>
-                                <Badge variant="outline">
-                                  {loyaltyPoints?.currentRank || "القارئ الجديد"}
-                                </Badge>
-                              </div>
-                              <Button
-                                onClick={() => issueLoyaltyCardMutation.mutate()}
-                                disabled={issueLoyaltyCardMutation.isPending}
-                                className="gap-2"
-                                data-testid="button-download-loyalty-card"
-                              >
-                                {issueLoyaltyCardMutation.isPending ? (
-                                  <>
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                    جاري الإصدار...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Download className="h-4 w-4" />
-                                    تحميل بطاقة العضوية
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Press Card (if eligible) */}
-                      {user.hasPressCard && (
-                        <Card>
-                          <CardContent className="p-6">
-                            <div className="flex items-start gap-4">
-                              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                                <IdCard className="h-6 w-6 text-primary" />
-                              </div>
-                              <div className="flex-1 space-y-3">
-                                <div>
-                                  <h4 className="font-semibold">البطاقة الصحفية</h4>
-                                  <p className="text-sm text-muted-foreground mt-1">
-                                    بطاقة صحفية رقمية معتمدة من سبق للصحفيين
-                                  </p>
-                                </div>
-                                <Badge variant="default" className="gap-1">
-                                  <Check className="h-3 w-3" />
-                                  صحفي معتمد
-                                </Badge>
-                                <Button
-                                  onClick={() => issuePressCardMutation.mutate()}
-                                  disabled={issuePressCardMutation.isPending}
-                                  className="gap-2"
-                                  data-testid="button-download-press-card"
-                                >
-                                  {issuePressCardMutation.isPending ? (
-                                    <>
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                      جاري الإصدار...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Download className="h-4 w-4" />
-                                      تحميل البطاقة الصحفية
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      )}
-                    </div>
+                    <p className="text-sm text-muted-foreground">قريبًا: خيارات تخصيص الإشعارات</p>
+                  </div>
+                  <div className="space-y-3">
+                    <h3 className="flex items-center gap-2 text-sm font-semibold">
+                      <Shield className="h-4 w-4" />
+                      الخصوصية والأمان
+                    </h3>
+                    <TwoFactorSettings />
                   </div>
                 </TabsContent>
               </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* Sidebar */}
-          <aside className="space-y-6">
-            {/* Smart Interests */}
-            <div>
-              <SmartInterestsBlock userId={user.id} />
-            </div>
-
-            {/* Followed Keywords */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Tag className="h-4 w-4" />
-                  كلماتي المتابعة
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoadingKeywords ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-8" />
-                    ))}
-                  </div>
-                ) : followedKeywords.length > 0 ? (
-                  <div className="space-y-2">
-                    {followedKeywords.slice(0, 5).map((keyword) => (
-                      <div
-                        key={keyword.tagId}
-                        className="flex items-center justify-between gap-2 p-2 rounded-md hover-elevate"
-                      >
-                        <Link href={`/keyword/${keyword.tagName}`}>
-                          <span className="flex items-center gap-2 flex-1 cursor-pointer" data-testid={`link-keyword-${keyword.tagId}`}>
-                            <Tag className="h-3.5 w-3.5 text-primary" />
-                            <span className="text-sm font-medium">{keyword.tagName}</span>
-                            <Badge variant="secondary" className="text-xs">
-                              {keyword.articleCount}
-                            </Badge>
-                          </span>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          onClick={() => unfollowKeywordMutation.mutate(keyword.tagId)}
-                          disabled={unfollowKeywordMutation.isPending}
-                          data-testid={`button-unfollow-keyword-${keyword.tagId}`}
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-6">
-                    <Tag className="h-10 w-10 mx-auto mb-2 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      لم تتابع أي كلمات بعد
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <LoyaltyBlock />
-          </aside>
-        </div>
-        </div>
-      </section>
+            </main>
+          </>
+        );
+      })()}
     </div>
   );
 }
