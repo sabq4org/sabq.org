@@ -299,10 +299,9 @@ struct SpMatchCenter: View {
                 }
             }
         }
-        .task { await load() }
-        .task(id: fixtureId) { await recordMatchViewIfNeeded() }
-        // حكم المباراة (نقطة المونديال — أفضل جهد؛ تختفي البطاقة إن لا حكم/بطولة أخرى).
-        .task(id: fixtureId) { await loadReferee() }
+        .task(id: fixtureId) { await load() }
+        // الحكم بعد ظهور التفاصيل — لا يزاحم طلب التفاصيل الأساسي على الشبكة البطيئة.
+        .task(id: detail?.fixture.id) { await loadReferee() }
         // تحديث لحظي تلقائي أثناء اللعب — الأهداف/الكروت/الدقيقة/النتيجة تتجدّد
         // ذاتيًّا كما في الويب دون سحب-لتحديث يدوي. يتوقّف عند الانتهاء/البُعد.
         .task(id: detail?.fixture.id) { await pollLive() }
@@ -2085,20 +2084,15 @@ struct SpMatchCenter: View {
     // MARK: - التحميل
 
     private func load() async {
-        // التفاصيل أساسية؛ نعطيها الاتصال أولًا ثم نفتح المركز قبل إطلاق طلبات
-        // SportMonks الاختيارية. تشغيل السبعة معًا كان يزاحم الطلب الأساسي على
-        // الشبكات البطيئة ويُبقي المؤشر الظاهر في لقطات البلاغ مدة أطول.
+        // التفاصيل أساسية؛ نفتح المركز فور وصولها ثم نُثري على موجتين حتى لا
+        // ينتظر المستخدم مخططات xG قبل أول إطار، ولا تُسلسل H2H بعد طلبات ثقيلة.
         do {
             self.detail = try await APIClient.shared.fetchMatchDetail(id: fixtureId)
             self.loadError = nil
-            // حدّث نشاط شاشة القفل بأحدث نتيجة وآخر حدث (no-op إن لم يكن قائمًا).
             if let d = self.detail {
                 liveActivity.update(with: liveActivityFixture(d.fixture), lastEvent: lastEventText(d.events))
             }
         } catch {
-            // لوحة المباشر تمنحنا لقطةً كاملة للترويسة. قد تخرج المباراة من
-            // endpoint التفاصيل فور نهايتها أو أثناء تبديل مزوّد البيانات؛ لا
-            // نستبدل النتيجة الظاهرة برسالة 404 ما دام لدينا preview صالح.
             if let preview {
                 self.detail = SpMatchDetail(
                     fixture: preview,
@@ -2114,76 +2108,96 @@ struct SpMatchCenter: View {
         }
         self.loading = false
         if Task.isCancelled { return }
+        await recordMatchViewIfNeeded()
+        await Task.yield()
+        if Task.isCancelled { return }
+        await loadPrimaryEnrichments()
+        if Task.isCancelled { return }
+        await loadSecondaryEnrichments()
+    }
 
-        // بعد ظهور المحتوى الأساسي فقط نبدأ الإثراءات المتوازية.
+    /// موجة 1 — تعليق/تشكيلة/H2H/ترتيب/توقّع/تقديم (ما يظهر قرب الترويسة).
+    private func loadPrimaryEnrichments() async {
+        let f = preview ?? detail?.fixture
+        let needExpected = detail.map { d in
+            !d.fixture.status.finished && !d.lineups.contains(where: { !$0.startXI.isEmpty })
+        } ?? false
+        let slug = f?.competitionSlug ?? ""
+        let upcoming = f.map { !$0.started } ?? false
+
+        async let commentaryOpt = (try? APIClient.shared.fetchCommentary(matchId: fixtureId))
+        async let expectedOpt: SpExpectedLineups? = needExpected
+            ? (try? await APIClient.shared.fetchExpectedLineup(matchId: fixtureId)) : nil
+        async let h2hOpt: SpH2HResponse? = {
+            guard let f else { return nil }
+            return try? await APIClient.shared.fetchH2H(home: f.home.id, away: f.away.id)
+        }()
+        async let strengthOpt: [Int: VaraTeamStrength]? = {
+            guard !slug.isEmpty else { return nil }
+            if slug == "world-cup" {
+                guard let wc = try? await APIClient.shared.fetchWorldCupStandings() else { return nil }
+                var m: [Int: VaraTeamStrength] = [:]
+                for g in wc.groups { for row in g.rows { m[row.team.id] = VaraTeamStrength(wcRow: row) } }
+                return m.isEmpty ? nil : m
+            }
+            guard let st = try? await APIClient.shared.fetchStandings(comp: slug) else { return nil }
+            var m: [Int: VaraTeamStrength] = [:]
+            for row in st.standings { m[row.team.id] = VaraTeamStrength(row: row) }
+            return m.isEmpty ? nil : m
+        }()
+        async let predOpt: SpPrediction? = auth.isLoggedIn
+            ? (try? await APIClient.shared.fetchMyPrediction(matchId: fixtureId)) : nil
+        async let previewOpt: SpMatchPreview? = upcoming
+            ? (try? await APIClient.shared.get(
+                SpMatchPreview.self, path: "/sports/match/\(fixtureId)/preview", apiRoot: URLConstants.publicAPI))
+            : nil
+        async let tvOpt: SpMatchTv? = upcoming
+            ? (try? await APIClient.shared.get(
+                SpMatchTv.self, path: "/sports/match/\(fixtureId)/tv", apiRoot: URLConstants.publicAPI))
+            : nil
+        async let homeScOpt: SpTeamScorersResponse? = {
+            guard upcoming, let f else { return nil }
+            return try? await APIClient.shared.get(
+                SpTeamScorersResponse.self, path: "/sports/team/\(f.home.id)/scorers", apiRoot: URLConstants.publicAPI)
+        }()
+        async let awayScOpt: SpTeamScorersResponse? = {
+            guard upcoming, let f else { return nil }
+            return try? await APIClient.shared.get(
+                SpTeamScorersResponse.self, path: "/sports/team/\(f.away.id)/scorers", apiRoot: URLConstants.publicAPI)
+        }()
+
+        self.commentary = await commentaryOpt
+        self.expectedLineup = await expectedOpt
+        self.h2h = await h2hOpt
+        if let m = await strengthOpt { self.strength = m }
+        if let p = await predOpt {
+            myPrediction = p
+            if let f, !f.started {
+                predHome = p.predHome
+                predAway = p.predAway
+            }
+        }
+        self.previewNote = await previewOpt
+        self.tv = await tvOpt
+        self.homeScorers = (await homeScOpt)?.scorers ?? []
+        self.awayScorers = (await awayScOpt)?.scorers ?? []
+        if let f = detail?.fixture ?? preview, !f.started {
+            VaraPickArchive.save(fixtureId: f.id, pick: varaPick(f))
+        }
+    }
+
+    /// موجة 2 — مخططات اختيارية بعد أول محتوى مفيد.
+    private func loadSecondaryEnrichments() async {
         async let xgOpt = (try? APIClient.shared.fetchXg(matchId: fixtureId))
         async let momOpt = (try? APIClient.shared.fetchMomentum(matchId: fixtureId))
         async let presOpt = (try? APIClient.shared.fetchPressure(matchId: fixtureId))
         async let factsOpt = (try? APIClient.shared.fetchMatchFacts(matchId: fixtureId))
         async let ratingsOpt = (try? APIClient.shared.fetchMatchPlayers(matchId: fixtureId))
-        async let commentaryOpt = (try? APIClient.shared.fetchCommentary(matchId: fixtureId))
-
         self.xg = await xgOpt
         self.momentum = await momOpt
         self.pressure = await presOpt
         self.facts = await factsOpt
         self.ratings = await ratingsOpt
-        self.commentary = await commentaryOpt
-        // التشكيلة المتوقعة — «الرسمية» تُعد صادرة فقط إذا فيها أساسيون؛ المزوّد
-        // قد يرسل قوائم بدلاء قبل المباراة فلا تحجب المتوقعة (نفس منطق الويب).
-        if let d = self.detail,
-           !d.fixture.status.finished,
-           !d.lineups.contains(where: { !$0.startXI.isEmpty }) {
-            self.expectedLineup = try? await APIClient.shared.fetchExpectedLineup(matchId: fixtureId)
-        }
-        // المواجهات المباشرة — تحتاج معرّفَي الفريقين.
-        if let f = preview ?? detail?.fixture {
-            self.h2h = try? await APIClient.shared.fetchH2H(home: f.home.id, away: f.away.id)
-        }
-        // إثراء «تقديم» — للمباريات القادمة فقط (رؤية VARA + القنوات + هدّافو الفريقين).
-        if let f = preview ?? detail?.fixture, !f.started {
-            async let previewOpt = (try? APIClient.shared.get(
-                SpMatchPreview.self, path: "/sports/match/\(fixtureId)/preview", apiRoot: URLConstants.publicAPI))
-            async let tvOpt = (try? APIClient.shared.get(
-                SpMatchTv.self, path: "/sports/match/\(fixtureId)/tv", apiRoot: URLConstants.publicAPI))
-            async let homeScOpt = (try? APIClient.shared.get(
-                SpTeamScorersResponse.self, path: "/sports/team/\(f.home.id)/scorers", apiRoot: URLConstants.publicAPI))
-            async let awayScOpt = (try? APIClient.shared.get(
-                SpTeamScorersResponse.self, path: "/sports/team/\(f.away.id)/scorers", apiRoot: URLConstants.publicAPI))
-            self.previewNote = await previewOpt
-            self.tv = await tvOpt
-            self.homeScorers = (await homeScOpt)?.scorers ?? []
-            self.awayScorers = (await awayScOpt)?.scorers ?? []
-        }
-        // قوّة الفريقين من ترتيب البطولة (لتوقّع VARA) — أفضل جهد، يتراجع للمواجهات.
-        if let slug = (detail?.fixture.competitionSlug ?? preview?.competitionSlug), !slug.isEmpty {
-            if slug == "world-cup" {
-                if let wc = try? await APIClient.shared.fetchWorldCupStandings() {
-                    var m: [Int: VaraTeamStrength] = [:]
-                    for g in wc.groups { for row in g.rows { m[row.team.id] = VaraTeamStrength(wcRow: row) } }
-                    if !m.isEmpty { self.strength = m }
-                }
-            } else if let st = try? await APIClient.shared.fetchStandings(comp: slug) {
-                var m: [Int: VaraTeamStrength] = [:]
-                for row in st.standings { m[row.team.id] = VaraTeamStrength(row: row) }
-                if !m.isEmpty { self.strength = m }
-            }
-        }
-        // توقّعي (عضو): قبل الانطلاق لملء الستيبر، وبعد النهاية لبطاقة «نتيجة التوقّعات».
-        if auth.isLoggedIn,
-           let p = try? await APIClient.shared.fetchMyPrediction(matchId: fixtureId) {
-            myPrediction = p
-            if let f = preview ?? detail?.fixture, !f.started {
-                predHome = p.predHome
-                predAway = p.predAway
-            }
-        }
-        // أرشفة لقطة توقّع VARA قبل الانطلاق — المقارنة بعد النهاية تعتمدها
-        // (إعادة الحساب بجداول ما بعد المباراة متحيّزة لأنها تتضمّن نتيجتها).
-        if let f = detail?.fixture ?? preview, !f.started {
-            VaraPickArchive.save(fixtureId: f.id, pick: varaPick(f))
-        }
-        await recordMatchViewIfNeeded()
     }
 
     private func recordMatchViewIfNeeded() async {

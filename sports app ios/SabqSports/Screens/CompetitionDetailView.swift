@@ -1362,6 +1362,8 @@ struct CompetitionDetailView: View {
         }
         self.loading = false
         if Task.isCancelled { return }
+        await Task.yield()
+        if Task.isCancelled { return }
 
         async let standingsT: [SpStandingRow]? = comp.hasStandings
             ? (try? await APIClient.shared.fetchStandings(comp: comp.slug, ignoreCache: force))?.standings : nil
@@ -1375,6 +1377,15 @@ struct CompetitionDetailView: View {
             ? (try? await APIClient.shared.fetchLeagueTransfers(ignoreCache: force)) : nil
         async let roundsT = try? APIClient.shared.fetchRounds(comp: comp.slug, ignoreCache: force)
 
+        // الترتيب/الهدّافون تظهر فور جهوزها؛ جولة المباريات تُكمَّل بالتوازي ولا تحجزها.
+        self.standings = (await standingsT) ?? []
+        self.scorers = (await scorersT) ?? []
+        self.assists = (await assistsT) ?? []
+        self.outlook = (await outlookT) ?? nil
+        self.insights = await insightsT
+        let tr = await transfersT
+        self.leagueTransfers = (tr?.topDeals ?? tr?.transfers) ?? []
+
         let roundsResponse = await roundsT
         self.rounds = roundsResponse?.rounds ?? []
         self.currentRound = roundsResponse?.current
@@ -1385,14 +1396,6 @@ struct CompetitionDetailView: View {
         } else {
             self.roundFixtures = []
         }
-
-        self.standings = (await standingsT) ?? []
-        self.scorers = (await scorersT) ?? []
-        self.assists = (await assistsT) ?? []
-        self.outlook = (await outlookT) ?? nil
-        self.insights = await insightsT
-        let tr = await transfersT
-        self.leagueTransfers = (tr?.topDeals ?? tr?.transfers) ?? []
     }
 
     private func selectRound(_ round: String) async {
