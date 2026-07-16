@@ -577,9 +577,10 @@ final class SpCompetitionFavorites {
             if fresh != stored { changed = true }
             return fresh
         }
-        // بعد إضافة السوبر الأوروبي للسجل: ألحقه تلقائيًا لمن لديه أبطال أوروبا.
+        // السوبر الأوروبي: يُلحق تلقائيًا ما دام في السجل وغير منتهٍ — بدون اشتراط
+        // وجود أبطال أوروبا في المفضّلة (البذر القديم يعمل مرة واحدة فقط).
         if let superCup = bySlug["uefa-super-cup"],
-           next.contains(where: { $0.slug == "champions-league" }),
+           superCup.status != "finished",
            !next.contains(where: { $0.slug == "uefa-super-cup" }) {
             next.append(superCup)
             changed = true

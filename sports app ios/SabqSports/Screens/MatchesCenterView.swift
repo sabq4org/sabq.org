@@ -1355,7 +1355,15 @@ struct MatchesCenterView: View {
     /// السلة الافتراضية + المونديال/الخليجي ما داما غير منتهيين. ما أضافه
     /// المستخدم سابقًا في «بطولاتي» يبقى كما هو — نضيف فوقه ولا نحذف.
     private func seedFavoritesIfNeeded(_ registry: [SpCompetition]) {
-        guard !UserDefaults.standard.bool(forKey: SpCenterFilter.seededKey) else { return }
+        guard !UserDefaults.standard.bool(forKey: SpCenterFilter.seededKey) else {
+            // أجهزة سبق بذرها: ألحق فقط السوبر الأوروبي إن غاب (هجرة خفيفة).
+            if let superCup = registry.first(where: { $0.slug == "uefa-super-cup" }),
+               superCup.status != "finished",
+               !favorites.isFavorite("uefa-super-cup") {
+                favorites.add(superCup)
+            }
+            return
+        }
         var slugs = SpCenterFilter.defaultSlugs
         for special in ["world-cup", "gulf-cup"] {
             if let comp = registry.first(where: { $0.slug == special }), comp.status != "finished" {
