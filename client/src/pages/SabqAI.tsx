@@ -23,6 +23,7 @@ import {
   Gauge,
   Image as ImageIcon,
   Languages,
+  Layers,
   Mic,
   Newspaper,
   PenLine,
@@ -58,7 +59,6 @@ const PIPELINE = [
 ];
 
 const STATS = [
-  { value: "+40", label: "خدمة ذكية تعمل في المنظومة" },
   { value: "5", label: "بطولات تُغطّى بمحرّكات آلية" },
   { value: "3", label: "لغات نشر من منظومة واحدة" },
   { value: "100%", label: "من المواد بمسؤولية تحريرية بشرية" },
@@ -79,16 +79,18 @@ const SPORT_FACTS = [
   { value: "0", label: "معلومة مخترعة — المصدر بيانات المباراة الرسمية فقط" },
 ];
 
-const DOMAINS = [
-  { icon: Newspaper, kicker: "تحرير", title: "التحرير الذكي", desc: "تحليلات «عُمق»، رادار المصادر العالمية، توليد المقالات، التصنيف والروابط الذكية" },
-  { icon: Trophy, kicker: "رياضة", title: "الرياضة اللحظية", desc: "تقارير فور الصافرة، معاينات المباريات، التعليق المعرّب لحظة بلحظة" },
-  { icon: Mic, kicker: "صوت", title: "الأخبار المسموعة", desc: "نشرات وموجز صوتي بأصوات عربية طبيعية" },
-  { icon: ImageIcon, kicker: "بصري", title: "الاستوديو البصري", desc: "صور وإنفوجرافيك ومصغّرات وأوصاف بديلة بهوية سبق" },
-  { icon: Sparkles, kicker: "تخصيص", title: "لكل قارئ صحيفته", desc: "الموجز اليومي والتوصيات الذكية حسب اهتماماتك الحقيقية" },
-  { icon: ShieldCheck, kicker: "جودة", title: "الجودة والإشراف", desc: "فلترة التعليقات وفحص معايير النشر وتحليل الأسلوب" },
-  { icon: Languages, kicker: "لغات", title: "ثلاث لغات", desc: "عربي وإنجليزي وأردو من منظومة تحريرية واحدة" },
-  { icon: Gauge, kicker: "بنية", title: "البوابة الموحدة", desc: "توجيه النماذج بين المزوّدين وقياس الجودة والتكلفة باستمرار" },
+const SERVICE_DOMAINS = [
+  { icon: Newspaper, label: "التحرير الذكي", count: 9 },
+  { icon: Trophy, label: "الرياضة اللحظية", count: 9 },
+  { icon: Mic, label: "الأخبار المسموعة", count: 6 },
+  { icon: ImageIcon, label: "الاستوديو البصري", count: 6 },
+  { icon: Sparkles, label: "التخصيص", count: 6 },
+  { icon: ShieldCheck, label: "الجودة والإشراف", count: 5 },
+  { icon: Languages, label: "اللغات", count: 2 },
+  { icon: Gauge, label: "البنية الذكية", count: 2 },
 ];
+
+const TOTAL_SMART_SERVICES = SERVICE_DOMAINS.reduce((total, domain) => total + domain.count, 0);
 
 /** ميثاق سبق للذكاء الاصطناعي — ثماني مواد معتمدة من الإدارة */
 const CHARTER = [
@@ -199,7 +201,7 @@ function Pipeline() {
 function StatsBand() {
   return (
     <section className="px-4 py-8">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-5xl mx-auto">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-4xl mx-auto">
         {STATS.map((s) => (
           <div key={s.label} className="rounded-xl border border-border bg-card p-5 text-center">
             <div className="text-2xl md:text-3xl font-extrabold text-primary tabular-nums" dir="ltr">
@@ -513,29 +515,53 @@ function SportsBand() {
   );
 }
 
-function DomainsGrid() {
+function ServicesShowcase() {
   return (
-    <section className="px-4 py-10 md:py-12" data-testid="sabqai-domains">
-      <div className="max-w-5xl mx-auto">
-        <h2 className="text-xl md:text-2xl font-extrabold text-center mb-1.5">
-          ثمانية مجالات… أكثر من 40 خدمة
+    <section
+      className="relative isolate overflow-hidden bg-[#07111f] px-4 py-14 text-white md:py-20"
+      data-testid="sabqai-services-showcase"
+    >
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 mx-auto h-72 max-w-4xl bg-[radial-gradient(circle_at_center,rgba(14,165,233,0.18),transparent_68%)]"
+        aria-hidden="true"
+      />
+      <div className="mx-auto max-w-7xl text-center">
+        <span className="inline-flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-400/10 px-5 py-2 text-xs font-extrabold text-sky-400 md:text-sm">
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          منظومة الخدمات الذكية
+        </span>
+
+        <div
+          className="mx-auto mt-7 w-fit bg-gradient-to-b from-sky-300 via-sky-400 to-blue-500 bg-clip-text text-[clamp(6rem,18vw,11rem)] font-black leading-[0.82] tracking-[-0.08em] text-transparent drop-shadow-[0_0_42px_rgba(14,165,233,0.22)] tabular-nums"
+          dir="ltr"
+          aria-label={`${TOTAL_SMART_SERVICES} خدمة ذكية`}
+        >
+          {TOTAL_SMART_SERVICES}
+        </div>
+
+        <h2 className="mt-8 text-2xl font-extrabold leading-tight md:text-4xl">
+          خدمة ذكية تعمل الآن داخل عقل سبق
         </h2>
-        <p className="text-sm text-muted-foreground text-center mb-6">
-          منظومة واحدة تخدم غرفة التحرير والقارئ معًا — على مدار الساعة
+        <p className="mx-auto mt-3 max-w-3xl text-sm leading-7 text-slate-400 md:text-lg">
+          منظومة حقيقية تعمل في خط الإنتاج يوميًا — من رصد الإشارة وصناعة القصة،
+          إلى الرياضة والصوت والصورة والتخصيص، تحت إشراف المحرر.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {DOMAINS.map((d) => (
-            <div
-              key={d.title}
-              className="rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary"
+
+        <div className="mt-9 flex flex-wrap items-center justify-center gap-2.5 md:mt-11 md:gap-3">
+          <span className="inline-flex min-h-12 items-center gap-2 rounded-full border border-sky-400 bg-sky-500 px-5 py-2.5 text-sm font-extrabold text-white shadow-[0_10px_35px_rgba(14,165,233,0.24)]">
+            <Layers className="h-4 w-4" aria-hidden="true" />
+            الكل
+            <b className="tabular-nums" dir="ltr">{TOTAL_SMART_SERVICES}</b>
+          </span>
+          {SERVICE_DOMAINS.map((domain) => (
+            <span
+              key={domain.label}
+              className="inline-flex min-h-12 items-center gap-2 rounded-full border border-white/10 bg-white/[0.055] px-4 py-2.5 text-sm font-bold text-slate-200 md:px-5"
             >
-              <span className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <d.icon className="w-[18px] h-[18px]" aria-hidden="true" />
-              </span>
-              <span className="text-[11px] font-bold text-primary tracking-wide">{d.kicker}</span>
-              <h3 className="text-[15px] font-extrabold mt-0.5 mb-1">{d.title}</h3>
-              <p className="text-[13px] text-muted-foreground leading-relaxed">{d.desc}</p>
-            </div>
+              <domain.icon className="h-4 w-4 text-slate-400" aria-hidden="true" />
+              {domain.label}
+              <b className="text-white tabular-nums" dir="ltr">{domain.count}</b>
+            </span>
           ))}
         </div>
       </div>
@@ -599,10 +625,10 @@ export default function SabqAI() {
       <main className="flex-1">
         <Hero />
         <Ticker />
+        <ServicesShowcase />
         <Pipeline />
         <LiveStatsBand />
         <SportsBand />
-        <DomainsGrid />
         <Charter />
       </main>
 
