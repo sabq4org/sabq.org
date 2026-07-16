@@ -90,8 +90,6 @@ import {
   SpellCheck,
   Frame,
   MoreHorizontal,
-  Type,
-  Settings2,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -328,7 +326,6 @@ export default function ArticleEditor() {
   const [smartLinksOpen, setSmartLinksOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [newsletterOpen, setNewsletterOpen] = useState(false);
-  const [editorMobileTab, setEditorMobileTab] = useState<"content" | "media" | "publish">("content");
   const [imageToolsOpen, setImageToolsOpen] = useState(false);
   const [autoImageOpen, setAutoImageOpen] = useState(false);
   
@@ -2509,42 +2506,6 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </div>
         </div>
 
-        {/* Mobile editor tabs — content / media / publish */}
-        {!isOpinionAuthor && (
-          <div
-            className="mb-4 lg:hidden"
-            data-testid="editor-mobile-tabs"
-          >
-            <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-border/70 bg-muted/40 p-1">
-              {([
-                { id: "content" as const, label: "المحتوى", icon: Type },
-                { id: "media" as const, label: "الوسائط", icon: ImageIcon },
-                { id: "publish" as const, label: "النشر", icon: Settings2 },
-              ]).map((tab) => {
-                const active = editorMobileTab === tab.id;
-                const Icon = tab.icon;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setEditorMobileTab(tab.id)}
-                    className={cn(
-                      "flex items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-xs font-bold transition-colors",
-                      active
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "text-muted-foreground hover:bg-background/80 hover:text-foreground",
-                    )}
-                    data-testid={`editor-tab-${tab.id}`}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "grid grid-cols-1 lg:grid-cols-12 gap-5 pb-24 lg:pb-0"}>
           {/* Main Content Area */}
           <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-5" : "lg:col-span-8 flex min-w-0 flex-col gap-5"}>
@@ -2619,13 +2580,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               );
             })()}
             {/* Content panel — title first; body uses order so it sits above media on desktop */}
-            <div
-              className={cn(
-                "space-y-6",
-                !isOpinionAuthor && editorMobileTab !== "content" && "max-lg:hidden",
-              )}
-              data-editor-panel="content-head"
-            >
+            <div className="space-y-5" data-editor-panel="content-head">
             {/* Title with AI */}
             <Card>
               <CardHeader>
@@ -2722,13 +2677,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </div>
 
             {/* Media panel — مباشرة بعد العنوان وقبل المحتوى */}
-            <div
-              className={cn(
-                "space-y-6",
-                !isOpinionAuthor && editorMobileTab === "publish" && "max-lg:hidden",
-              )}
-              data-editor-panel="media"
-            >
+            <div className="space-y-5" data-editor-panel="media">
             {/* Featured Image */}
             {!isOpinionAuthor && showFeaturedImageHint && (
               <div
@@ -3377,13 +3326,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
             </div>
 
-            <div
-              className={cn(
-                "space-y-6",
-                !isOpinionAuthor && editorMobileTab !== "content" && "max-lg:hidden",
-              )}
-              data-editor-panel="content-body"
-            >
+            <div className="space-y-5" data-editor-panel="content-body">
             {/* Content Editor */}
             <Card>
               <CardHeader className="space-y-3">
@@ -3715,10 +3658,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
           {/* Settings Sidebar - 30% */}
           {!isOpinionAuthor && <div
-            className={cn(
-              "lg:col-span-4 space-y-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2",
-              editorMobileTab !== "publish" && "max-lg:hidden",
-            )}
+            className="lg:col-span-4 space-y-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2"
             data-editor-panel="publish"
           >
             <div
@@ -3778,19 +3718,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 {publishReadiness.map((item) => (
-                  <button
+                  <span
                     key={item.id}
-                    type="button"
-                    onClick={() => {
-                      if (item.id === "image") setEditorMobileTab("media");
-                      else if (item.id === "category" || item.id === "seo") setEditorMobileTab("publish");
-                      else setEditorMobileTab("content");
-                    }}
                     className={cn(
-                      "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors",
+                      "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold",
                       item.ok
                         ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                        : "border-border/70 bg-muted/40 text-muted-foreground hover:border-primary/30 hover:text-foreground",
+                        : "border-border/70 bg-muted/40 text-muted-foreground",
                     )}
                     data-testid={`readiness-chip-${item.id}`}
                   >
@@ -3800,7 +3734,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       <span className="h-1.5 w-1.5 rounded-full bg-current opacity-50" />
                     )}
                     {item.label}
-                  </button>
+                  </span>
                 ))}
               </div>
             </div>
