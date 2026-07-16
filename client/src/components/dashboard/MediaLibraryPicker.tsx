@@ -532,7 +532,7 @@ export function MediaLibraryPicker({
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden"
         >
           <TabsList className="mx-4 mt-3 grid h-10 w-auto shrink-0 grid-cols-3 sm:mx-6 sm:mt-4">
             <TabsTrigger value="library" className="px-2 text-xs sm:text-sm" data-testid="tab-library">
@@ -552,7 +552,7 @@ export function MediaLibraryPicker({
           </TabsList>
 
           {/* Tab 1: Library Browser */}
-          <TabsContent value="library" className="mt-0 flex min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 sm:gap-4 sm:p-6 sm:pt-4">
+          <TabsContent value="library" className="mt-0 flex h-full min-h-0 flex-col gap-3 overflow-hidden p-4 sm:gap-4 sm:p-6 sm:pt-4">
             {/* Search Bar */}
             <div className="relative">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -705,7 +705,7 @@ export function MediaLibraryPicker({
           </TabsContent>
 
           {/* Tab 2: Upload New */}
-          <TabsContent value="upload" className="mt-0 min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain scroll-smooth p-4 [-webkit-overflow-scrolling:touch] sm:p-6 sm:pt-4">
+          <TabsContent value="upload" className="mt-0 h-full min-h-0 touch-pan-y overflow-y-auto overscroll-contain scroll-smooth p-4 [-webkit-overflow-scrolling:touch] sm:p-6 sm:pt-4">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onUploadSubmit)} className="space-y-4">
                 {/* Drag & Drop Zone */}
@@ -886,8 +886,8 @@ export function MediaLibraryPicker({
 
           {/* Tab 3: AI Suggestions */}
           {articleTitle && (
-            <TabsContent value="ai" className="mt-0 flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-3 sm:px-6 sm:pb-6 sm:pt-4">
-              <div className="flex min-h-0 flex-1 flex-col gap-3 sm:gap-4">
+            <TabsContent value="ai" className="mt-0 h-full min-h-0 overflow-hidden px-3 pb-3 pt-3 sm:px-6 sm:pb-6 sm:pt-4">
+              <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 sm:gap-4">
                 {!isLoadingSemanticSuggest && semanticFiles.length > 0 && (
                   <p className="shrink-0 text-xs text-muted-foreground sm:text-sm">
                     صور من أرشيف المكتبة مرتّبة حسب ملاءمتها لموضوع الخبر (بحث دلالي).
@@ -915,7 +915,7 @@ export function MediaLibraryPicker({
                 )}
 
                 <div
-                  className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain scroll-smooth pr-0.5 [-webkit-overflow-scrolling:touch]"
+                  className="row-start-2 min-h-0 touch-pan-y overflow-y-auto overscroll-contain scroll-smooth pr-0.5 [-webkit-overflow-scrolling:touch]"
                   data-testid="smart-suggestions-scroll-area"
                 >
                   {isLoadingSemanticSuggest || isLoadingSuggestions ? (
