@@ -1,6 +1,31 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
   <head>
+    <!-- Apply the saved/system theme before CSS and React paint to avoid a
+         bright flash for dark-mode readers. Keep this dependency-free and
+         in sync with client/src/components/ThemeProvider.tsx. -->
+    <script data-cfasync="false">
+      (function () {
+        try {
+          var saved = localStorage.getItem('theme-preference');
+          if (saved !== 'light' && saved !== 'dark' && saved !== 'system') {
+            var legacy = localStorage.getItem('theme');
+            saved = legacy === 'light' || legacy === 'dark' ? legacy : 'system';
+          }
+          var resolved = saved === 'system'
+            ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+            : saved;
+          document.documentElement.classList.remove('light', 'dark');
+          document.documentElement.classList.add(resolved);
+          document.documentElement.setAttribute('data-theme', resolved);
+          document.documentElement.setAttribute('data-theme-preference', saved);
+          document.documentElement.style.colorScheme = resolved;
+        } catch (_) {
+          document.documentElement.classList.add('light');
+        }
+      })();
+    </script>
+
     <!-- Suppress third-party script errors in development -->
     <script data-cfasync="false">
       (function() {
@@ -484,9 +509,11 @@
           direction: rtl;
         }
         @media (prefers-color-scheme: dark) {
-          .instant-loader { background: #0a0a0a; }
-          .instant-loader .skeleton { background: #1a1a1a; }
+          .instant-loader { background: #101418; }
+          .instant-loader .skeleton { background: #1d232a; }
         }
+        .dark .instant-loader { background: #101418; }
+        .dark .instant-loader .skeleton { background: #1d232a; }
         .instant-loader .header {
           height: 64px;
           border-bottom: 1px solid #e5e5e5;
@@ -496,8 +523,9 @@
           padding: 0 24px;
         }
         @media (prefers-color-scheme: dark) {
-          .instant-loader .header { border-color: #262626; }
+          .instant-loader .header { border-color: #2b333b; }
         }
+        .dark .instant-loader .header { border-color: #2b333b; }
         .instant-loader .nav {
           height: 48px;
           border-bottom: 1px solid #e5e5e5;
@@ -507,8 +535,9 @@
           padding: 0 24px;
         }
         @media (prefers-color-scheme: dark) {
-          .instant-loader .nav { border-color: #262626; }
+          .instant-loader .nav { border-color: #2b333b; }
         }
+        .dark .instant-loader .nav { border-color: #2b333b; }
         .instant-loader .skeleton {
           background: #f3f4f6;
           border-radius: 8px;

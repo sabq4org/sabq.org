@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 
 interface JsonSchema {
   type: "object";
@@ -122,29 +123,12 @@ export function useWebMCP() {
           return { ok: false, message: "invalid email" };
         }
         try {
-          // Fetch a CSRF token first so the POST passes Sabq's
-          // first-party CSRF middleware applied to /api/* writes.
-          let csrfToken = "";
-          try {
-            const tokenRes = await fetch("/api/csrf-token", { credentials: "same-origin" });
-            if (tokenRes.ok) {
-              const data: { csrfToken?: string } = await tokenRes.json();
-              csrfToken = data.csrfToken ?? "";
-            }
-          } catch {
-            // Continue without a token; the server will reject if required.
-          }
-
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (csrfToken) headers["x-csrf-token"] = csrfToken;
-
-          const res = await fetch("/api/newsletter/subscribe", {
+          await apiRequest("/api/newsletter/subscribe", {
             method: "POST",
-            headers,
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: e }),
-            credentials: "same-origin",
           });
-          return { ok: res.ok, status: res.status };
+          return { ok: true, status: 200 };
         } catch (err) {
           return { ok: false, message: errorMessage(err) };
         }
@@ -165,8 +149,15 @@ export function useWebMCP() {
           const next: "light" | "dark" = !theme || theme === "toggle"
             ? current === "dark" ? "light" : "dark"
             : theme;
-          root.classList.toggle("dark", next === "dark");
-          try { localStorage.setItem("vite-ui-theme", next); } catch { /* ignore */ }
+          root.classList.remove("light", "dark");
+          root.classList.add(next);
+          root.setAttribute("data-theme", next);
+          root.setAttribute("data-theme-preference", next);
+          root.style.colorScheme = next;
+          try {
+            localStorage.setItem("theme", next);
+            localStorage.setItem("theme-preference", next);
+          } catch { /* ignore */ }
           return { ok: true, theme: next };
         } catch (err) {
           return { ok: false, message: errorMessage(err) };

@@ -5,6 +5,7 @@ import type { Theme as AppTheme } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
 type Theme = "light" | "dark";
+export type ThemePreference = Theme | "system";
 export type Variant = "ai-first" | "magazine" | "classic" | "terminal";
 
 const VALID_VARIANTS: Variant[] = ["ai-first", "magazine", "classic", "terminal"];
@@ -16,8 +17,11 @@ type ThemeProviderProps = {
 };
 
 type ThemeProviderState = {
+  /** The resolved theme currently applied to the document. */
   theme: Theme;
-  setTheme: (theme: Theme) => void;
+  /** The user's persisted choice; `system` follows prefers-color-scheme. */
+  themePreference: ThemePreference;
+  setTheme: (theme: ThemePreference) => void;
   variant: Variant;
   setVariant: (variant: Variant) => void;
   appTheme: AppTheme | null;
@@ -38,8 +42,22 @@ export function ThemeProvider({
   defaultTheme = "light",
   defaultVariant = "ai-first",
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem("theme") as Theme) || defaultTheme
+  const getSystemTheme = (): Theme =>
+    typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
+    if (typeof window === "undefined") return defaultTheme;
+    const storedPreference = localStorage.getItem("theme-preference");
+    if (storedPreference === "light" || storedPreference === "dark" || storedPreference === "system") {
+      return storedPreference;
+    }
+    const legacyTheme = localStorage.getItem("theme");
+    return legacyTheme === "light" || legacyTheme === "dark" ? legacyTheme : "system";
+  });
+  const [theme, setResolvedTheme] = useState<Theme>(() =>
+    themePreference === "system" ? getSystemTheme() : themePreference
   );
   const [variant, setVariantState] = useState<Variant>(() => {
     const stored = localStorage.getItem("variant") as Variant | null;
@@ -70,20 +88,41 @@ export function ThemeProvider({
   const { data: appTheme, isLoading: isLoadingAppTheme } = useQuery<AppTheme | null>({
     queryKey: ["/api/themes/active", scope],
     queryFn: async () => {
-      const res = await fetch(`/api/themes/active?scope=${scope}`);
-      if (!res.ok) return null;
-      return res.json();
+      try {
+        return await apiRequest<AppTheme>(`/api/themes/active?scope=${scope}`, { silent: true });
+      } catch {
+        return null;
+      }
     },
     staleTime: 60000,
     refetchInterval: 60000,
   });
 
   useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const resolveTheme = () => {
+      setResolvedTheme(
+        themePreference === "system" ? (media.matches ? "dark" : "light") : themePreference
+      );
+    };
+
+    resolveTheme();
+    if (themePreference !== "system") return;
+
+    media.addEventListener?.("change", resolveTheme);
+    return () => media.removeEventListener?.("change", resolveTheme);
+  }, [themePreference]);
+
+  useEffect(() => {
     const root = document.documentElement;
     root.classList.remove("light", "dark");
     root.classList.add(theme);
+    root.setAttribute("data-theme", theme);
+    root.setAttribute("data-theme-preference", themePreference);
+    root.style.colorScheme = theme;
     localStorage.setItem("theme", theme);
-  }, [theme]);
+    localStorage.setItem("theme-preference", themePreference);
+  }, [theme, themePreference]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -180,7 +219,7 @@ export function ThemeProvider({
   }, [appTheme, theme]);
 
   return (
-    <ThemeProviderContext.Provider value={{ theme, setTheme, variant, setVariant, appTheme: appTheme || null, isLoadingAppTheme }}>
+    <ThemeProviderContext.Provider value={{ theme, themePreference, setTheme: setThemePreference, variant, setVariant, appTheme: appTheme || null, isLoadingAppTheme }}>
       {children}
     </ThemeProviderContext.Provider>
   );

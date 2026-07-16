@@ -147,6 +147,14 @@ input, select, textarea {
   --info-foreground: 0 0% 98%;
 
   --input: 200 23.0769% 97.4510%;
+  /* Rich editor surfaces are semantic tokens so TipTap stays readable even
+     when embedded in tinted dashboard cards. */
+  --editor-background: 0 0% 100%;
+  --editor-toolbar: 210 20% 98%;
+  --editor-foreground: 210 25% 7.8431%;
+  --editor-muted: 210 10% 42%;
+  --editor-border: 201.4286 22% 84%;
+  --editor-selection: 203.8863 88.2845% 53.1373%;
   --ring: 202.8169 89.1213% 53.1373%;
   --chart-1: 203.8863 88.2845% 53.1373%;
   --chart-2: 159.7826 100% 36.0784%;
@@ -254,59 +262,60 @@ input, select, textarea {
   --elevate-1: rgba(255,255,255, .04);
   --elevate-2: rgba(255,255,255, .09);
 
-  --background: 0 0% 0%;
+  /* Comfortable night palette: deep slate surfaces instead of pure black. */
+  --background: 210 20% 7.8431%;
 
-  --foreground: 200 6.6667% 91.1765%;
+  --foreground: 214.2857 14.8936% 90.7843%;
 
-  --border: 210 5.2632% 14.9020%;
+  --border: 210 15.6863% 20%;
 
-  --card: 228 9.8039% 10%;
+  --card: 210 17.8571% 10.9804%;
 
-  --card-foreground: 0 0% 85.0980%;
+  --card-foreground: 210 14.7059% 85.0980%;
 
-  --card-border: 220 18% 16%;
+  --card-border: 210 15.6863% 20%;
 
-  --sidebar: 228 9.8039% 10%;
+  --sidebar: 210 18% 9.5%;
 
-  --sidebar-foreground: 0 0% 85.0980%;
+  --sidebar-foreground: 210 14.7059% 85.0980%;
 
-  --sidebar-border: 205.7143 15.7895% 26.0784%;
+  --sidebar-border: 210 15.6863% 20%;
 
-  --sidebar-primary: 202.8169 89.1213% 53.1373%;
+  --sidebar-primary: 201.7857 89.3617% 63.1373%;
 
-  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-primary-foreground: 205 55% 7%;
 
-  --sidebar-accent: 205.7143 70% 7.8431%;
+  --sidebar-accent: 204 54% 17%;
 
-  --sidebar-accent-foreground: 203.7736 87.6033% 52.5490%;
+  --sidebar-accent-foreground: 201.5267 90.4762% 71.1765%;
 
-  --sidebar-ring: 202.8169 89.1213% 53.1373%;
+  --sidebar-ring: 201.5267 90.4762% 71.1765%;
 
-  --popover: 0 0% 0%;
+  --popover: 207.6923 18.3099% 13.9216%;
 
-  --popover-foreground: 200 6.6667% 91.1765%;
+  --popover-foreground: 214.2857 14.8936% 90.7843%;
 
-  --popover-border: 220 18% 16%;
+  --popover-border: 210 15.6863% 20%;
 
-  --primary: 203.7736 87.6033% 52.5490%;
+  --primary: 201.7857 89.3617% 63.1373%;
 
-  --primary-foreground: 0 0% 100%;
+  --primary-foreground: 205 55% 7%;
 
-  --secondary: 195.0000 15.3846% 94.9020%;
+  --secondary: 210 18.1818% 16.4706%;
 
-  --secondary-foreground: 210 25% 7.8431%;
+  --secondary-foreground: 210 14.7059% 85.0980%;
 
-  --muted: 0 0% 9.4118%;
+  --muted: 210 18.75% 12.5490%;
 
-  --muted-foreground: 210 6% 68%;
+  --muted-foreground: 210 10.5263% 69.0196%;
 
-  --footer: 220 18% 12%;
+  --footer: 210 18% 9.5%;
 
-  --footer-foreground: 220 10% 85%;
+  --footer-foreground: 210 14.7059% 85.0980%;
 
-  --accent: 205.7143 70% 7.8431%;
+  --accent: 204 54% 17%;
 
-  --accent-foreground: 203.7736 87.6033% 52.5490%;
+  --accent-foreground: 201.5267 90.4762% 71.1765%;
 
   --destructive: 356.3033 90.5579% 54.3137%;
 
@@ -324,8 +333,14 @@ input, select, textarea {
 
   --info-foreground: 0 0% 98%;
 
-  --input: 207.6923 27.6596% 18.4314%;
-  --ring: 202.8169 89.1213% 53.1373%;
+  --input: 208 21% 15%;
+  --editor-background: 207.6923 18.3099% 13.9216%;
+  --editor-toolbar: 210 17.8571% 10.9804%;
+  --editor-foreground: 210 14.7059% 85.0980%;
+  --editor-muted: 210 10.5263% 69.0196%;
+  --editor-border: 210 15.6863% 20%;
+  --editor-selection: 201.7857 89.3617% 63.1373%;
+  --ring: 201.5267 90.4762% 71.1765%;
   --chart-1: 203.8863 88.2845% 53.1373%;
   --chart-2: 159.7826 100% 36.0784%;
   --chart-3: 42.0290 92.8251% 56.2745%;
@@ -1470,10 +1485,46 @@ html[data-dashboard-theme] .text-indigo-600,
   /* TipTap Editor Styles */
   .ProseMirror {
     outline: none;
+    background-color: hsl(var(--editor-background));
+    color: hsl(var(--editor-foreground));
+    caret-color: hsl(var(--primary));
+  }
+
+  .rich-text-editor {
+    overflow: hidden;
+    background-color: hsl(var(--editor-background));
+    border-color: hsl(var(--editor-border));
+    color: hsl(var(--editor-foreground));
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .rich-text-editor:focus-within {
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 3px hsl(var(--ring) / 0.2);
+  }
+
+  .rich-text-editor__toolbar {
+    background-color: hsl(var(--editor-toolbar));
+    border-color: hsl(var(--editor-border));
+  }
+
+  .rich-text-editor__surface,
+  .rich-text-editor__content {
+    background-color: hsl(var(--editor-background));
+    color: hsl(var(--editor-foreground));
+  }
+
+  .rich-text-editor .ProseMirror ::selection {
+    background-color: hsl(var(--editor-selection) / 0.35);
+    color: hsl(var(--editor-foreground));
+  }
+
+  .rich-text-editor .ProseMirror :where(p, li, h1, h2, h3, strong, em) {
+    color: inherit;
   }
 
   .ProseMirror p.is-editor-empty:first-child::before {
-    color: hsl(var(--muted-foreground));
+    color: hsl(var(--editor-muted));
     content: attr(data-placeholder);
     float: right;
     height: 0;
@@ -1648,6 +1699,16 @@ html[data-dashboard-theme] .text-indigo-600,
     border: none;
     border-top: 2px solid hsl(var(--border));
     margin: 2rem 0;
+  }
+
+  /* Old drafts may contain an explicit black text color inserted by the
+     editor's palette. Preserve the stored HTML, but remap it while editing in
+     dark mode so the text never disappears against the night surface. */
+  .dark .ProseMirror [style*="color: #000000"],
+  .dark .ProseMirror [style*="color:#000000"],
+  .dark .ProseMirror [style*="color: rgb(0, 0, 0)"],
+  .dark .ProseMirror [style*="color:rgb(0, 0, 0)"] {
+    color: hsl(var(--editor-foreground)) !important;
   }
 
   /* AI Accent Utilities */
