@@ -20,6 +20,7 @@ import {
   MessageSquare,
   RefreshCw,
   Sparkles,
+  Star,
   Timer,
   TrendingDown,
   TrendingUp,
@@ -45,7 +46,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { hasPermission, hasRole, useAuth } from "@/hooks/useAuth";
+import { getHighestRole, hasPermission, hasRole, useAuth } from "@/hooks/useAuth";
+import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
+import { useNav, trackNavClick } from "@/nav/useNav";
+import { resolveUserRole } from "@/lib/roleMapping";
+import type { UserRole } from "@/nav/types";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 
 interface DashboardStats {
@@ -294,16 +299,16 @@ function ActionCard({
     <Link href={href}>
       <a className="group block rounded-xl border border-border/70 bg-card text-foreground shadow-none transition hover:border-border hover:bg-muted/20 hover:shadow-sm sm:rounded-2xl">
         {/* Mobile: compact horizontal row */}
-        <div className="flex items-center gap-3 px-3 py-2.5 sm:hidden">
-          <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", style.icon)}>
-            <Icon className="h-4 w-4" />
+        <div className="flex items-center gap-2.5 px-2.5 py-2 sm:hidden">
+          <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", style.icon)}>
+            <Icon className="h-3.5 w-3.5" />
           </span>
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold leading-tight">{title}</div>
-            <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{description}</p>
+            <div className="text-[13px] font-semibold leading-tight">{title}</div>
+            <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">{description}</p>
           </div>
-          <div className={cn("shrink-0 text-lg font-bold tabular-nums", style.accent)}>{number(count)}</div>
-          <ChevronLeft className="h-4 w-4 shrink-0 text-muted-foreground/50" />
+          <div className={cn("shrink-0 text-base font-bold tabular-nums", style.accent)}>{number(count)}</div>
+          <ChevronLeft className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
         </div>
 
         {/* Desktop/tablet: original vertical card */}
@@ -526,7 +531,7 @@ function UpcomingScheduleList({ schedule }: { schedule: DashboardStats["upcoming
 
 export default function NewsroomPulseDashboard() {
   const { user, isLoading: userLoading } = useAuth({ redirectToLogin: true });
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const isAngleWriter = hasRole(user, "angle_writer");
   const isContentManager = hasRole(user, "content_manager");
   const hasElevatedDashboardRole = hasRole(user, "admin", "system_admin", "editor", "content_manager", "analyst", "reviewer", "author", "comments_moderator");
@@ -535,6 +540,25 @@ export default function NewsroomPulseDashboard() {
   const canReviewMuqtarab = hasPermission(user, "muqtarab.manage");
   const canViewMessages = hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_MESSAGES);
   const canViewWriterTickets = hasRole(user, "admin", "editor", "system_admin");
+
+  const role: UserRole = resolveUserRole(getHighestRole(user));
+  const navFlags = useMemo(() => ({ aiDeepAnalysis: false, smartThemes: true, audioSummaries: false }), []);
+  const { flat } = useNav({
+    role,
+    flags: navFlags,
+    pathname: location,
+    permissions: user?.permissions || [],
+    allRoles: user?.roles && user.roles.length > 0 ? user.roles : (user?.role ? [user.role] : []),
+  });
+  const navigableItems = useMemo(() => {
+    const seenPaths = new Set<string>();
+    return flat.filter((item) => {
+      if (!item.path || seenPaths.has(item.path)) return false;
+      seenPaths.add(item.path);
+      return true;
+    });
+  }, [flat]);
+  const { favoriteItems, toggleFavorite } = useDashboardFavorites(navigableItems);
 
   useEffect(() => {
     if (user?.role === "opinion_author") navigate("/dashboard/opinion-author", { replace: true });
@@ -666,9 +690,51 @@ export default function NewsroomPulseDashboard() {
           </div>
         </header>
 
-        <section className="space-y-3">
+        <section className="space-y-2" data-testid="dashboard-favorites">
+          <SectionTitle title="المفضلة" description="اختصاراتك السريعة من قائمة لوحة التحكم" />
+          {favoriteItems.length > 0 ? (
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2 lg:grid-cols-5">
+              {favoriteItems.map((item) => {
+                const FavoriteIcon = item.icon;
+                return (
+                  <div
+                    key={item.id}
+                    className="group flex items-center gap-1 rounded-xl border border-border/70 bg-card"
+                  >
+                    <Link
+                      href={item.path || "#"}
+                      onClick={() => trackNavClick(item.id, item.path || "")}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2.5 py-2 text-sm font-medium"
+                    >
+                      {FavoriteIcon && (
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <FavoriteIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                        </span>
+                      )}
+                      <span className="truncate">{item.labelAr || item.labelKey}</span>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => toggleFavorite(item)}
+                      className="shrink-0 rounded-lg p-2 text-warning opacity-80 hover:bg-muted hover:opacity-100"
+                      aria-label={`إزالة ${item.labelAr || item.labelKey} من المفضلة`}
+                    >
+                      <Star className="h-3.5 w-3.5 fill-current" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-3 text-[13px] text-muted-foreground">
+              لا توجد مفضّلات بعد. افتح القائمة الجانبية واضغط ★ بجانب أي صفحة لتظهر هنا وفي القائمة.
+            </div>
+          )}
+        </section>
+
+        <section className="space-y-2 sm:space-y-3">
           <SectionTitle title="يتطلب تدخلك" description="الأعمال التي لا ينبغي أن تبقى في قائمة الانتظار" />
-          <div className={cn("grid gap-2 sm:grid-cols-2 sm:gap-3", !isContentManager && "xl:grid-cols-4")}>
+          <div className={cn("grid gap-1.5 sm:grid-cols-2 sm:gap-3", !isContentManager && "xl:grid-cols-4")}>
             {!isContentManager && <ActionCard title="تعليقات للمراجعة" count={stats?.comments.pending ?? 0} description={stats?.comments.pendingOlderThanTwoHours ? `${number(stats.comments.pendingOlderThanTwoHours)} تجاوزت ساعتين` : "ضمن وقت الاستجابة"} href="/dashboard/ai-moderation" icon={MessageSquare} tone="danger" />}
             {canReviewMuqtarab && <ActionCard title="مراجعة مُقترب" count={muqtarabCount} description="مواضيع تنتظر قرار التحرير" href="/dashboard/muqtarab/review" icon={BellRing} tone="warning" />}
             <ActionCard title="المسار التحريري" count={pipelineTotal} description={`${number(stats?.articles.scheduled)} مواد مجدولة`} href="/dashboard/articles" icon={FileClock} tone="info" />

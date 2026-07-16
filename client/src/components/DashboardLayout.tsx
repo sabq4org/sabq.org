@@ -2,6 +2,7 @@ import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
 import { LogOut, ChevronDown, Globe, User, Search, Star, Plus } from "lucide-react";
+import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
   Sidebar,
   SidebarContent,
@@ -52,8 +53,6 @@ interface DashboardLayoutProps {
 }
 
 const OPEN_GROUP_STORAGE_KEY = "sabq.sidebar.open-group.v2";
-const FAVORITES_STORAGE_KEY = "sabq.sidebar.favorites.v1";
-const MAX_FAVORITES = 5;
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location, navigate] = useLocation();
@@ -65,15 +64,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       return localStorage.getItem(OPEN_GROUP_STORAGE_KEY);
     } catch {
       return null;
-    }
-  });
-  const [favoriteIds, setFavoriteIds] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem(FAVORITES_STORAGE_KEY);
-      const parsed = stored ? JSON.parse(stored) : [];
-      return Array.isArray(parsed) ? parsed.slice(0, MAX_FAVORITES) : [];
-    } catch {
-      return [];
     }
   });
   const [searchQuery, setSearchQuery] = useState("");
@@ -90,14 +80,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       console.error("Failed to save sidebar state:", error);
     }
   }, [openGroupId]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteIds));
-    } catch (error) {
-      console.error("Failed to save sidebar favorites:", error);
-    }
-  }, [favoriteIds]);
 
   useEffect(() => {
     const handleSearchShortcut = (event: KeyboardEvent) => {
@@ -169,34 +151,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const quickCreateItem = navigableItems.find((item) =>
     item.id === "new_article" || item.id === "opinion_author_new_article"
   );
-  const favoriteItems = favoriteIds.flatMap((id) => {
-    const item = navigableItems.find((candidate) => candidate.id === id);
-    return item ? [item] : [];
-  });
+  const { favoriteIds, favoriteItems, toggleFavorite } = useDashboardFavorites(navigableItems);
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase("ar");
   const searchResults = normalizedSearch
     ? navigableItems
         .filter((item) => (item.labelAr || item.labelKey).toLocaleLowerCase("ar").includes(normalizedSearch))
         .slice(0, 8)
     : [];
-
-  const toggleFavorite = (item: NavItem) => {
-    setFavoriteIds((current) => {
-      if (current.includes(item.id)) {
-        return current.filter((id) => id !== item.id);
-      }
-
-      if (current.length >= MAX_FAVORITES) {
-        toast({
-          title: "اكتملت المفضلة",
-          description: `يمكن تثبيت ${MAX_FAVORITES} عناصر كحد أقصى`,
-        });
-        return current;
-      }
-
-      return [...current, item.id];
-    });
-  };
 
   // عرض شاشة تحميل أثناء التحقق من المصادقة
   if (isLoading || !user) {
@@ -295,7 +256,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <button
                         type="button"
                         onClick={() => toggleFavorite(child)}
-                        className="absolute left-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:opacity-100 group-hover/nav-favorite:opacity-100"
+                        className="absolute left-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground opacity-70 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:opacity-100 sm:opacity-0 sm:group-hover/nav-favorite:opacity-100"
                         aria-label={favoriteIds.includes(child.id) ? `إزالة ${child.labelAr || child.labelKey} من المفضلة` : `إضافة ${child.labelAr || child.labelKey} إلى المفضلة`}
                         title={favoriteIds.includes(child.id) ? "إزالة من المفضلة" : "إضافة إلى المفضلة"}
                       >
@@ -410,37 +371,43 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </kbd>
                 </div>
 
-                {favoriteItems.length > 0 && !normalizedSearch && (
-                  <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/20 p-2">
+                {!normalizedSearch && (
+                  <div className="rounded-lg border border-sidebar-border bg-sidebar-accent/20 p-2" data-testid="sidebar-favorites">
                     <div className="mb-1.5 flex items-center gap-1.5 px-1 text-[11px] font-medium text-muted-foreground">
                       <Star className="h-3.5 w-3.5 fill-warning text-warning" />
                       <span>المفضلة</span>
                     </div>
-                    <div className="space-y-0.5">
-                      {favoriteItems.map((item) => {
-                        const FavoriteIcon = item.icon;
-                        return (
-                          <div key={item.id} className="group/favorite-item flex items-center rounded-md hover:bg-sidebar-accent">
-                            <Link
-                              href={item.path || "#"}
-                              onClick={() => handleNavClick(item)}
-                              className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-xs"
-                            >
-                              {FavoriteIcon && <FavoriteIcon className="h-3.5 w-3.5 shrink-0" />}
-                              <span className="truncate">{item.labelAr || item.labelKey}</span>
-                            </Link>
-                            <button
-                              type="button"
-                              onClick={() => toggleFavorite(item)}
-                              className="ml-1 rounded p-1 text-muted-foreground opacity-0 hover:text-foreground focus:opacity-100 group-hover/favorite-item:opacity-100"
-                              aria-label={`إزالة ${item.labelAr || item.labelKey} من المفضلة`}
-                            >
-                              <Star className="h-3 w-3 fill-current" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    {favoriteItems.length > 0 ? (
+                      <div className="space-y-0.5">
+                        {favoriteItems.map((item) => {
+                          const FavoriteIcon = item.icon;
+                          return (
+                            <div key={item.id} className="group/favorite-item flex items-center rounded-md hover:bg-sidebar-accent">
+                              <Link
+                                href={item.path || "#"}
+                                onClick={() => handleNavClick(item)}
+                                className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-xs"
+                              >
+                                {FavoriteIcon && <FavoriteIcon className="h-3.5 w-3.5 shrink-0" />}
+                                <span className="truncate">{item.labelAr || item.labelKey}</span>
+                              </Link>
+                              <button
+                                type="button"
+                                onClick={() => toggleFavorite(item)}
+                                className="ml-1 rounded p-1 text-muted-foreground opacity-0 hover:text-foreground focus:opacity-100 group-hover/favorite-item:opacity-100"
+                                aria-label={`إزالة ${item.labelAr || item.labelKey} من المفضلة`}
+                              >
+                                <Star className="h-3 w-3 fill-current" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="px-1 py-1 text-[11px] leading-relaxed text-muted-foreground">
+                        اضغط ★ بجانب أي صفحة في القائمة لتثبيتها هنا.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
