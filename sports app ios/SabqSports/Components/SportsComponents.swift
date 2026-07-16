@@ -409,10 +409,6 @@ struct SpScoreRow: View {
     private let centerWidth: CGFloat = 50
 
     private var started: Bool { fixture.status.live || fixture.status.finished }
-    private var decided: Bool {
-        fixture.status.finished && (fixture.home.winner == true || fixture.away.winner == true)
-    }
-    private func isWinner(_ t: SpTeam) -> Bool { decided && t.winner == true }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -434,7 +430,7 @@ struct SpScoreRow: View {
 
     private func teamName(_ team: SpTeam) -> some View {
         Text(team.name)
-            .font(SportsFonts.app(size: 12.5, weight: isWinner(team) ? .heavy : .semibold))
+            .font(SportsFonts.app(size: 12.5, weight: .semibold))
             .foregroundStyle(SpTheme.onDarkStrong)
             .lineLimit(1).minimumScaleFactor(0.76).allowsTightening(true)
     }
