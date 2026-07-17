@@ -436,20 +436,16 @@ const WorldCup = lazy(() => retryImport(() => import("@/pages/WorldCup")));
 const WorldCupTeam = lazy(() => retryImport(() => import("@/pages/WorldCupTeam")));
 const WorldCupPredictions = lazy(() => retryImport(() => import("@/pages/WorldCupPredictions")));
 const AsianCup = lazy(() => retryImport(() => import("@/pages/AsianCup")));
-const AsianCupPredictions = lazy(() => retryImport(() => import("@/pages/AsianCupPredictions")));
 const AsianCupMatch = lazy(() => retryImport(() => import("@/pages/AsianCupMatch")));
 const AsianCupTeam = lazy(() => retryImport(() => import("@/pages/AsianCupTeam")));
 const AsianCupPlayer = lazy(() => retryImport(() => import("@/pages/AsianCupPlayer")));
 const AsianCupVenues = lazy(() => retryImport(() => import("@/pages/AsianCupVenues")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
-const GulfCupPredictions = lazy(() => retryImport(() => import("@/pages/GulfCupPredictions")));
 const PredictionCenter = lazy(() => retryImport(() => import("@/pages/PredictionCenter")));
 const GulfCupMajlis = lazy(() => retryImport(() => import("@/pages/GulfCupMajlis")));
 const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
 const KingsCupTeam = lazy(() => retryImport(() => import("@/pages/KingsCupTeam")));
 const KingsCupPlayer = lazy(() => retryImport(() => import("@/pages/KingsCupPlayer")));
-const KingsCupPredictions = lazy(() => retryImport(() => import("@/pages/KingsCupPredictions")));
-const SuperCupPredictions = lazy(() => retryImport(() => import("@/pages/SuperCupPredictions")));
 // البوابة الرياضية المعتمدة على /sports (تصميم Dashboard بعمودين)
 const SportsDashboard = lazy(() => retryImport(() => import("@/pages/SportsDashboard")));
 // لوحة "مباريات اليوم" (مجمّعة حسب البطولة + فلترة) على /sports/matches
@@ -468,7 +464,6 @@ const SportsTransfers = lazy(() => retryImport(() => import("@/pages/SportsTrans
 const TransferStory = lazy(() => retryImport(() => import("@/pages/TransferStory")));
 // هب دوري روشن السعودي الفاخر — تجربة الدخول الرئيسية للبطولات السعودية على /roshn
 const RoshnHub = lazy(() => retryImport(() => import("@/pages/RoshnHub")));
-const RoshnPredictions = lazy(() => retryImport(() => import("@/pages/RoshnPredictions")));
 const GulfEventsEditor = lazy(() => retryImport(() => import("@/pages/admin/GulfEventsEditor")));
 
 function PageLoader() {
@@ -985,7 +980,7 @@ function Router() {
         <Route path="/world-cup/predictions">{() => <LazyRoute component={WorldCupPredictions} />}</Route>
         <Route path="/world-cup/team/:teamId">{() => <LazyRoute component={WorldCupTeam} />}</Route>
         <Route path="/world-cup">{() => <LazyRoute component={WorldCup} />}</Route>
-        <Route path="/asian-cup/predictions">{() => <LazyRoute component={AsianCupPredictions} />}</Route>
+        <Route path="/asian-cup/predictions">{() => <Redirect to="/predictions?competition=asian-cup-2027" />}</Route>
         <Route path="/asian-cup/match/:id">{() => <LazyRoute component={AsianCupMatch} />}</Route>
         <Route path="/asian-cup/team/:id">{() => <LazyRoute component={AsianCupTeam} />}</Route>
         <Route path="/asian-cup/player/:id">{() => <LazyRoute component={AsianCupPlayer} />}</Route>
@@ -995,21 +990,21 @@ function Router() {
         <Route path="/asian-cup">{() => <LazyRoute component={AsianCup} />}</Route>
         <Route path="/gulf-cup/majlis/:id">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
         <Route path="/gulf-cup/majlis">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
-        <Route path="/gulf-cup/predictions">{() => <LazyRoute component={GulfCupPredictions} />}</Route>
+        <Route path="/gulf-cup/predictions">{() => <Redirect to="/predictions?competition=gulf-cup-27" />}</Route>
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
 
         {/* المنصة المركزية للتوقعات — كل البطولات ما عدا مونديال 2026 */}
         <Route path="/predictions">{() => <LazyRoute component={PredictionCenter} />}</Route>
 
-        <Route path="/kings-cup/predictions">{() => <LazyRoute component={KingsCupPredictions} />}</Route>
-        <Route path="/super-cup/predictions">{() => <LazyRoute component={SuperCupPredictions} />}</Route>
+        <Route path="/kings-cup/predictions">{() => <Redirect to="/predictions?competition=kings-cup-2026" />}</Route>
+        <Route path="/super-cup/predictions">{() => <Redirect to="/predictions?competition=super-cup-2026" />}</Route>
         <Route path="/kings-cup/team/:teamId">{() => <LazyRoute component={KingsCupTeam} />}</Route>
         <Route path="/kings-cup/player/:id">{() => <LazyRoute component={KingsCupPlayer} />}</Route>
         <Route path="/kings-cup">{() => <LazyRoute component={KingsCup} />}</Route>
         {/* مركز دوري روشن السعودي بنظام تصميم المونديال — /rsl يحوّل إليه */}
-        <Route path="/roshn/predictions">{() => <LazyRoute component={RoshnPredictions} />}</Route>
+        <Route path="/roshn/predictions">{() => <Redirect to="/predictions?competition=rsl-2026" />}</Route>
         <Route path="/roshn">{() => <LazyRoute component={RoshnHub} />}</Route>
-        <Route path="/rsl/predictions">{() => <Redirect to="/roshn/predictions" />}</Route>
+        <Route path="/rsl/predictions">{() => <Redirect to="/predictions?competition=rsl-2026" />}</Route>
         <Route path="/rsl">{() => <Redirect to="/roshn" />}</Route>
         {/* توحيد البوابة الرياضية: التجارب القديمة (/sports10، /sports22) اندمجت في
             /sports — رفّ موجز البطولات + الغلاف الذكي، وقالب البطولة موحّد على

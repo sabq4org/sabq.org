@@ -32,10 +32,23 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "leaders", label: "المتصدّرون" },
 ];
 
+/** رابط عميق لكل بطولة: /predictions?competition=<slug> — تقرأه الصفحة عند
+ *  الفتح وتزامنه عند التبديل، فتصلح الروابط للمشاركة وتحويلات المسارات القديمة. */
+function competitionFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  return new URLSearchParams(window.location.search).get("competition");
+}
+
+function syncCompetitionUrl(slug: string) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("competition", slug);
+  window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 export default function PredictionCenter() {
   const { user, isAuthenticated } = useAuth();
   const [tab, setTab] = useState<Tab>("matches");
-  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(competitionFromUrl);
   const [settlementContestId, setSettlementContestId] = useState<string | null>(null);
 
   const goLogin = () => {
@@ -99,7 +112,10 @@ export default function PredictionCenter() {
                   <button
                     key={comp.slug}
                     type="button"
-                    onClick={() => setSelectedSlug(comp.slug)}
+                    onClick={() => {
+                      setSelectedSlug(comp.slug);
+                      syncCompetitionUrl(comp.slug);
+                    }}
                     className={`whitespace-nowrap rounded-full px-4 py-1.5 text-[12px] font-bold transition ${
                       comp.slug === selected?.slug
                         ? "bg-primary text-primary-foreground"
