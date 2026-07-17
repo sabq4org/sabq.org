@@ -1,4 +1,4 @@
-import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, Bookmark, ChevronLeft, FolderOpen, Search } from "lucide-react";
+import { Menu, User, LogOut, LayoutDashboard, Bell, Newspaper, MessageSquare, Brain, Sparkles, ExternalLink, Zap, Home, Clock, BookOpen, Boxes, Bookmark, ChevronLeft, FolderOpen, Search, Eye } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -11,9 +11,10 @@ import { NotificationBell } from "./NotificationBell";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UserAccountMenu } from "@/components/UserAccountMenu";
 import {
   Sheet,
   SheetContent,
@@ -300,12 +301,64 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-72">
-                    <UserAccountMenu
-                      user={user}
-                      onLogout={handleLogout}
-                      testIdSuffix="-mobile"
-                    />
+                  <DropdownMenuContent align="end" className="w-56">
+                    <div className="px-2 py-1.5">
+                      <p className="text-sm font-medium">{user.name}</p>
+                      <p className="text-xs font-medium text-foreground/65">{user.email}</p>
+                    </div>
+                    <DropdownMenuSeparator />
+                    {hasPermission(user as any, "dashboard.view") && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <a href="/dashboard" className="flex w-full items-center cursor-pointer" data-testid="link-dashboard-mobile">
+                            <LayoutDashboard className="ml-2 h-4 w-4" aria-hidden="true" />
+                            لوحة التحكم
+                          </a>
+                        </DropdownMenuItem>
+                        {hasPermission(user as any, "dashboard.view_messages") && (
+                          <DropdownMenuItem asChild>
+                            <a href="/dashboard/communications" className="flex w-full items-center cursor-pointer" data-testid="link-communications-mobile">
+                              <MessageSquare className="ml-2 h-4 w-4" aria-hidden="true" />
+                              قنوات الاتصال
+                            </a>
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    <DropdownMenuItem asChild>
+                      <a href="/daily-brief" className="flex w-full items-center cursor-pointer" data-testid="link-daily-brief-mobile">
+                        <Newspaper className="ml-2 h-4 w-4" aria-hidden="true" />
+                        ملخصي اليومي
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href="/profile" className="flex w-full items-center cursor-pointer" data-testid="link-profile-mobile">
+                        <User className="ml-2 h-4 w-4" aria-hidden="true" />
+                        الملف الشخصي
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href="/focus/weekly" className="flex w-full items-center cursor-pointer" data-testid="link-focus-weekly-mobile">
+                        <Eye className="ml-2 h-4 w-4" aria-hidden="true" />
+                        تقرير القراءة الأسبوعي
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href="/notification-settings" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings-mobile">
+                        <Bell className="ml-2 h-4 w-4" aria-hidden="true" />
+                        إعدادات الإشعارات
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={handleLogout}
+                      className="flex w-full items-center cursor-pointer" 
+                      data-testid="link-logout-mobile"
+                    >
+                      <LogOut className="ml-2 h-4 w-4" aria-hidden="true" />
+                      تسجيل الخروج
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
@@ -350,8 +403,64 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                       </Avatar>
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-72">
-                    <UserAccountMenu user={user} onLogout={handleLogout} />
+                  <DropdownMenuContent align="start" className="w-56">
+                    <div className="px-2 py-1.5">
+                      <p className="text-sm font-medium">{user.name}</p>
+                      <p className="text-xs font-medium text-foreground/65">{user.email}</p>
+                    </div>
+                    <DropdownMenuSeparator />
+                    {hasPermission(user as any, "dashboard.view") && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <a href="/dashboard" className="flex w-full items-center cursor-pointer" data-testid="link-dashboard">
+                            <LayoutDashboard className="ml-2 h-4 w-4" aria-hidden="true" />
+                            لوحة التحكم
+                          </a>
+                        </DropdownMenuItem>
+                        {hasPermission(user as any, "dashboard.view_messages") && (
+                          <DropdownMenuItem asChild>
+                            <a href="/dashboard/communications" className="flex w-full items-center cursor-pointer" data-testid="link-communications">
+                              <MessageSquare className="ml-2 h-4 w-4" aria-hidden="true" />
+                              قنوات الاتصال
+                            </a>
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    <DropdownMenuItem asChild>
+                      <a href="/daily-brief" className="flex w-full items-center cursor-pointer" data-testid="link-daily-brief">
+                        <Newspaper className="ml-2 h-4 w-4" aria-hidden="true" />
+                        ملخصي اليومي
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href="/profile" className="flex w-full items-center cursor-pointer" data-testid="link-profile">
+                        <User className="ml-2 h-4 w-4" aria-hidden="true" />
+                        الملف الشخصي
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href="/focus/weekly" className="flex w-full items-center cursor-pointer" data-testid="link-focus-weekly">
+                        <Eye className="ml-2 h-4 w-4" aria-hidden="true" />
+                        تقرير القراءة الأسبوعي
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href="/notification-settings" className="flex w-full items-center cursor-pointer" data-testid="link-notification-settings">
+                        <Bell className="ml-2 h-4 w-4" aria-hidden="true" />
+                        إعدادات الإشعارات
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem 
+                      onClick={handleLogout}
+                      className="flex w-full items-center cursor-pointer" 
+                      data-testid="link-logout"
+                    >
+                      <LogOut className="ml-2 h-4 w-4" aria-hidden="true" />
+                      تسجيل الخروج
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
