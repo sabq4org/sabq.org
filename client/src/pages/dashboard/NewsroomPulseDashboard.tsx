@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   AlertTriangle,
@@ -13,17 +13,22 @@ import {
   ChevronLeft,
   Clock3,
   Eye,
+  EyeOff,
   FileClock,
+  FilePenLine,
   FileText,
+  Flame,
   Gauge,
   Heart,
   MessageSquare,
+  Radar,
   RefreshCw,
   Sparkles,
   Star,
   Timer,
   TrendingDown,
   TrendingUp,
+  UserPlus,
   UserRoundCheck,
   WandSparkles,
 } from "lucide-react";
@@ -44,8 +49,21 @@ import { QuickActionsSection } from "@/components/QuickActionsSection";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { ToastAction } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { getHighestRole, hasPermission, hasRole, useAuth } from "@/hooks/useAuth";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import { useNav, trackNavClick } from "@/nav/useNav";
@@ -529,6 +547,393 @@ function UpcomingScheduleList({ schedule }: { schedule: DashboardStats["upcoming
   );
 }
 
+// ============================================
+// قسم «فجوات التغطية الآن» — مواضيع رصدها الرادار الذكي بلا تغطية داخلية.
+// المصدر: GET /api/admin/dashboard/coverage-gaps (رادار الفجوات #949/#950)
+// ============================================
+
+type CoverageGapStatus = "open" | "drafting" | "scheduled" | "covered" | "dismissed";
+
+interface CoverageGapActiveEditor {
+  userId: string;
+  userName: string;
+  userAvatar: string | null;
+}
+
+interface CoverageGap {
+  id: string;
+  radarItemId: string;
+  title: string;
+  originalTitle: string;
+  link: string;
+  imageUrl: string | null;
+  sourceName: string | null;
+  sourceType: string | null;
+  publishedAt: string | null;
+  isBreaking: boolean;
+  newsValue: number | null;
+  topicFingerprint: string;
+  heatScore: number;
+  status: CoverageGapStatus;
+  firstDetectedAt: string;
+  coveredByArticleId: string | null;
+  assignedTo: string | null;
+  assigneeName: string | null;
+  activeEditors: CoverageGapActiveEditor[];
+}
+
+interface CoverageGapsResponse {
+  gaps: CoverageGap[];
+  matcher: { lastRunAt: string | null; lastRunMode: string | null; isRunning: boolean };
+}
+
+const COVERAGE_GAPS_KEY = "/api/admin/dashboard/coverage-gaps";
+
+/** عدّاد عُمر الفجوة — يتجدد كل 30 ثانية مثل عدّاد جدول النشر */
+function gapAgeLabel(firstDetectedAt: string, nowMs: number): string {
+  const startedMs = new Date(firstDetectedAt).getTime();
+  if (!Number.isFinite(startedMs)) return "تتصاعد الآن";
+  const elapsedMinutes = Math.max(1, Math.floor((nowMs - startedMs) / 60_000));
+  if (elapsedMinutes < 60) return `تتصاعد منذ ${number(elapsedMinutes)} دقيقة`;
+  const hours = Math.floor(elapsedMinutes / 60);
+  if (hours < 24) return `تتصاعد منذ ${number(hours)} ساعة`;
+  return `تتصاعد منذ ${number(Math.floor(hours / 24))} يوم`;
+}
+
+/** مؤشر الحرارة متدرج اللون من heatScore (0–100) */
+function heatTier(score: number) {
+  if (score >= 80) return { label: "حار جداً", bar: "bg-destructive", text: "text-destructive", chip: "bg-destructive/10 text-destructive" };
+  if (score >= 60) return { label: "حار", bar: "bg-warning", text: "text-warning", chip: "bg-warning/10 text-warning" };
+  if (score >= 40) return { label: "متوسط", bar: "bg-primary", text: "text-primary", chip: "bg-primary/10 text-primary" };
+  return { label: "هادئ", bar: "bg-muted-foreground/50", text: "text-muted-foreground", chip: "bg-muted text-muted-foreground" };
+}
+
+function gapStatusBadge(gap: CoverageGap): { label: string; className: string } {
+  switch (gap.status) {
+    case "open":
+      return { label: "لا تغطية", className: "bg-destructive/10 text-destructive border-destructive/20" };
+    case "drafting": {
+      const editors = gap.activeEditors?.map((e) => e.userName).filter(Boolean) ?? [];
+      return {
+        label: editors.length ? `مسودة قيد الإعداد — ${editors.join("، ")}` : "مسودة قيد الإعداد",
+        className: "bg-primary/10 text-primary border-primary/20",
+      };
+    }
+    case "scheduled":
+      return { label: "مجدولة", className: "bg-secondary text-secondary-foreground border-secondary" };
+    default:
+      return { label: "مغطاة", className: "bg-muted text-muted-foreground border-border" };
+  }
+}
+
+function CoverageGapsSection() {
+  const { toast } = useToast();
+  const queryClientHook = useQueryClient();
+  const [, navigate] = useLocation();
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [assignTarget, setAssignTarget] = useState<CoverageGap | null>(null);
+  const [assignNote, setAssignNote] = useState("");
+  const [assignDueAt, setAssignDueAt] = useState("");
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const gapsQuery = useQuery<CoverageGapsResponse>({
+    queryKey: [COVERAGE_GAPS_KEY],
+    refetchInterval: 120_000,
+  });
+
+  // guard على المصفوفات — TanStack قد يعيد null؛ نخفي المستبعدة والمغطاة ونكتفي بـ 5
+  const gaps = useMemo(() => {
+    const list = Array.isArray(gapsQuery.data?.gaps) ? gapsQuery.data.gaps : [];
+    return list.filter((gap) => gap.status !== "dismissed" && gap.status !== "covered").slice(0, 5);
+  }, [gapsQuery.data]);
+
+  const invalidateGaps = () => queryClientHook.invalidateQueries({ queryKey: [COVERAGE_GAPS_KEY] });
+
+  // إنشاء مسودة أولية — تحديث متفائل للحالة ثم invalidate
+  const draftMutation = useMutation({
+    mutationFn: async (gapId: string) =>
+      apiRequest(`/api/admin/coverage-gaps/${gapId}/draft`, { method: "POST" }),
+    onMutate: async (gapId) => {
+      await queryClientHook.cancelQueries({ queryKey: [COVERAGE_GAPS_KEY] });
+      const previous = queryClientHook.getQueryData<CoverageGapsResponse>([COVERAGE_GAPS_KEY]);
+      queryClientHook.setQueryData<CoverageGapsResponse>([COVERAGE_GAPS_KEY], (old) =>
+        old ? { ...old, gaps: old.gaps.map((gap) => (gap.id === gapId ? { ...gap, status: "drafting" } : gap)) } : old,
+      );
+      return { previous };
+    },
+    onError: (error, _gapId, context) => {
+      if (context?.previous) queryClientHook.setQueryData([COVERAGE_GAPS_KEY], context.previous);
+      toast({
+        title: "تعذر إنشاء المسودة",
+        description: error instanceof Error ? error.message : "حاول مجدداً بعد قليل",
+        variant: "destructive",
+      });
+    },
+    onSuccess: (data: any) => {
+      invalidateGaps();
+      toast({
+        title: "أُنشئت المسودة الأولية",
+        description: "الفجوة انتقلت إلى «قيد الإعداد» — أكملها من محرر المقالات.",
+        action: data?.articleId ? (
+          <ToastAction altText="فتح المسودة" onClick={() => navigate(`/dashboard/articles/${data.articleId}/edit`)}>
+            فتح المسودة
+          </ToastAction>
+        ) : undefined,
+      });
+    },
+  });
+
+  // تجاهل فجوة — إخفاء البطاقة فوراً (متفائل) ثم invalidate
+  const dismissMutation = useMutation({
+    mutationFn: async (gapId: string) =>
+      apiRequest(`/api/admin/coverage-gaps/${gapId}/dismiss`, { method: "POST", body: JSON.stringify({}) }),
+    onMutate: async (gapId) => {
+      await queryClientHook.cancelQueries({ queryKey: [COVERAGE_GAPS_KEY] });
+      const previous = queryClientHook.getQueryData<CoverageGapsResponse>([COVERAGE_GAPS_KEY]);
+      queryClientHook.setQueryData<CoverageGapsResponse>([COVERAGE_GAPS_KEY], (old) =>
+        old ? { ...old, gaps: old.gaps.filter((gap) => gap.id !== gapId) } : old,
+      );
+      return { previous };
+    },
+    onError: (error, _gapId, context) => {
+      if (context?.previous) queryClientHook.setQueryData([COVERAGE_GAPS_KEY], context.previous);
+      toast({
+        title: "تعذر تجاهل الفجوة",
+        description: error instanceof Error ? error.message : "حاول مجدداً بعد قليل",
+        variant: "destructive",
+      });
+    },
+    onSuccess: () => {
+      invalidateGaps();
+      toast({ title: "تم التجاهل", description: "أُخفيت الفجوة من قائمة المتابعة." });
+    },
+  });
+
+  // تكليف محرر — الـ API يسند للمستخدم الحالي عند غياب userId
+  const assignMutation = useMutation({
+    mutationFn: async ({ gapId, note, dueAt }: { gapId: string; note?: string; dueAt?: string }) =>
+      apiRequest(`/api/admin/coverage-gaps/${gapId}/assign`, {
+        method: "POST",
+        body: JSON.stringify({ ...(note ? { note } : {}), ...(dueAt ? { dueAt } : {}) }),
+      }),
+    onError: (error) => {
+      toast({
+        title: "تعذر تكليف الفجوة",
+        description: error instanceof Error ? error.message : "حاول مجدداً بعد قليل",
+        variant: "destructive",
+      });
+    },
+    onSuccess: () => {
+      invalidateGaps();
+      setAssignTarget(null);
+      setAssignNote("");
+      setAssignDueAt("");
+      toast({ title: "تم التكليف", description: "أُنشئت مهمة تغطية في التقويم التحريري وأُسندت إليك." });
+    },
+  });
+
+  const renderActions = (gap: CoverageGap, compact = false) => (
+    <div className={cn("flex flex-wrap items-center gap-1.5", compact && "gap-1")}>
+      <Button
+        size="sm"
+        variant="outline"
+        className={cn("gap-1.5", compact && "h-7 px-2 text-[11px]")}
+        disabled={assignMutation.isPending}
+        onClick={() => { setAssignTarget(gap); setAssignNote(""); setAssignDueAt(""); }}
+      >
+        <UserPlus className="h-3.5 w-3.5" /> كلّف محرراً
+      </Button>
+      {gap.status === "open" && (
+        <Button
+          size="sm"
+          className={cn("gap-1.5", compact && "h-7 px-2 text-[11px]")}
+          disabled={draftMutation.isPending}
+          onClick={() => draftMutation.mutate(gap.id)}
+        >
+          <FilePenLine className="h-3.5 w-3.5" /> أنشئ مسودة أولية
+        </Button>
+      )}
+      {gap.status === "drafting" && gap.coveredByArticleId && (
+        <Button
+          size="sm"
+          variant="secondary"
+          className={cn("gap-1.5", compact && "h-7 px-2 text-[11px]")}
+          onClick={() => navigate(`/dashboard/articles/${gap.coveredByArticleId}/edit`)}
+        >
+          <FilePenLine className="h-3.5 w-3.5" /> فتح المسودة
+        </Button>
+      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        className={cn("gap-1.5 text-muted-foreground", compact && "h-7 px-2 text-[11px]")}
+        disabled={dismissMutation.isPending}
+        onClick={() => dismissMutation.mutate(gap.id)}
+      >
+        <EyeOff className="h-3.5 w-3.5" /> تجاهل
+      </Button>
+    </div>
+  );
+
+  let body: React.ReactNode;
+  if (gapsQuery.isLoading) {
+    body = (
+      <div className="space-y-2 sm:flex sm:gap-3 sm:space-y-0">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-24 w-full sm:h-44 sm:min-w-[280px]" />
+        ))}
+      </div>
+    );
+  } else if (gapsQuery.isError) {
+    body = (
+      <Card className="border-border/70 shadow-none">
+        <CardContent className="flex flex-col items-center gap-3 p-6 text-center">
+          <AlertTriangle className="h-7 w-7 text-destructive" />
+          <p className="text-sm text-muted-foreground">تعذر تحميل فجوات التغطية</p>
+          <Button variant="outline" size="sm" onClick={() => gapsQuery.refetch()}>إعادة المحاولة</Button>
+        </CardContent>
+      </Card>
+    );
+  } else if (!gaps.length) {
+    body = (
+      <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-6 text-center text-sm text-muted-foreground">
+        لا فجوات حرجة — تغطيتكم مواكبة للمشهد ✅
+      </div>
+    );
+  } else {
+    body = (
+      // الجوال: صفوف مدمجة بنمط ActionCard — الديسكتوب: شريط بطاقات أفقي قابل للتمرير
+      <div className="space-y-2 sm:flex sm:gap-3 sm:space-y-0 sm:overflow-x-auto sm:pb-2">
+        {gaps.map((gap) => {
+          const heat = heatTier(gap.heatScore ?? 0);
+          const badge = gapStatusBadge(gap);
+          return (
+            <div
+              key={gap.id}
+              className="rounded-xl border border-border/70 bg-card shadow-none sm:flex sm:w-[300px] sm:shrink-0 sm:flex-col sm:rounded-2xl"
+            >
+              {/* الجوال — صف مدمج */}
+              <div className="px-2.5 py-2 sm:hidden">
+                <div className="flex items-center gap-2.5">
+                  <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", heat.chip)}>
+                    <Flame className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="line-clamp-1 text-[13px] font-semibold leading-tight">{gap.title}</div>
+                    <p className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
+                      <Timer className="h-3 w-3" /> {gapAgeLabel(gap.firstDetectedAt, nowMs)}
+                      {gap.sourceName && <> · {gap.sourceName}</>}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className={cn("shrink-0 px-1.5 py-0.5 text-[10px]", badge.className)}>
+                    {badge.label}
+                  </Badge>
+                </div>
+                <div className="mt-2">{renderActions(gap, true)}</div>
+              </div>
+
+              {/* الديسكتوب — بطاقة ضمن الشريط الأفقي */}
+              <div className="hidden sm:flex sm:flex-1 sm:flex-col sm:p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <Badge variant="outline" className={cn("px-2 py-0.5 text-[11px]", badge.className)}>
+                    {badge.label}
+                  </Badge>
+                  <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold", heat.chip)}>
+                    <Flame className="h-3 w-3" /> {number(gap.heatScore ?? 0)}
+                  </span>
+                </div>
+                <p className="mt-3 line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-6">{gap.title}</p>
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className={cn("h-full rounded-full", heat.bar)} style={{ width: `${Math.min(Math.max(gap.heatScore ?? 0, 4), 100)}%` }} />
+                </div>
+                <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Timer className="h-3 w-3 shrink-0" />
+                  <span>{gapAgeLabel(gap.firstDetectedAt, nowMs)}</span>
+                  {gap.sourceName && <span className="truncate">· {gap.sourceName}</span>}
+                </div>
+                {gap.assigneeName && (
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">مكلّف: {gap.assigneeName}</p>
+                )}
+                <div className="mt-auto pt-3">{renderActions(gap)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <section className="space-y-2 sm:space-y-3" data-testid="coverage-gaps-section">
+      <SectionTitle
+        title="فجوات التغطية الآن"
+        description="مواضيع تتصاعد خارجياً رصدها الرادار ولا تغطية داخلية لها بعد"
+        action={
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Radar className="h-3.5 w-3.5 text-primary" /> رادار الفجوات
+          </span>
+        }
+      />
+      {body}
+
+      {/* حوار التكليف — يسند للمستخدم الحالي (الـ API يفترض ذلك عند غياب userId) */}
+      <Dialog open={!!assignTarget} onOpenChange={(open) => !open && setAssignTarget(null)}>
+        <DialogContent dir="rtl">
+          <DialogHeader>
+            <DialogTitle>تكليف محرر بتغطية الفجوة</DialogTitle>
+            <DialogDescription className="leading-6">
+              {assignTarget?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">ملاحظة للمحرر (اختياري)</label>
+              <Textarea
+                value={assignNote}
+                onChange={(event) => setAssignNote(event.target.value)}
+                placeholder="زاوية مقترحة، مصادر إضافية، تعليمات…"
+                rows={3}
+                maxLength={1000}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">موعد الاستحقاق (اختياري)</label>
+              <Input
+                type="datetime-local"
+                value={assignDueAt}
+                onChange={(event) => setAssignDueAt(event.target.value)}
+              />
+            </div>
+            <p className="text-[11px] leading-5 text-muted-foreground">
+              ستُنشأ مهمة تغطية في التقويم التحريري وتُسند إليك مباشرة.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setAssignTarget(null)}>إلغاء</Button>
+            <Button
+              disabled={assignMutation.isPending}
+              onClick={() => {
+                if (!assignTarget) return;
+                assignMutation.mutate({
+                  gapId: assignTarget.id,
+                  note: assignNote.trim() || undefined,
+                  dueAt: assignDueAt ? new Date(assignDueAt).toISOString() : undefined,
+                });
+              }}
+            >
+              {assignMutation.isPending ? "جارٍ التكليف…" : "تأكيد التكليف"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
 export default function NewsroomPulseDashboard() {
   const { user, isLoading: userLoading } = useAuth({ redirectToLogin: true });
   const [location, navigate] = useLocation();
@@ -742,6 +1147,9 @@ export default function NewsroomPulseDashboard() {
           </div>
           {(canViewMessages || canViewWriterTickets) && <MessagesTabs showVisitorMessages={canViewMessages} showWriterTickets={canViewWriterTickets} />}
         </section>
+
+        {/* رادار الفجوات التحريرية — قسم تحليلي يتبع نفس شروط canViewStats ويُخفى عن content_manager كبقية الأقسام التحليلية */}
+        {canViewStats && !isContentManager && <CoverageGapsSection />}
 
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
           <div className="min-w-0"><QuickActionsSection /></div>
