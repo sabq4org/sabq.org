@@ -46,7 +46,13 @@ const AI_LINES = [
   "وكل ما تدخل يوميًا وتشارك… المحفظة تكبر أسرع.",
 ];
 
-const EARN = [
+const EARN: {
+  icon: typeof BookOpen;
+  title: string;
+  pts: number;
+  hint: string;
+  highlight?: boolean;
+}[] = [
   {
     icon: BookOpen,
     title: "قراءة مقال",
@@ -84,7 +90,7 @@ const EARN = [
     pts: PREVIEW.like,
     hint: "تفاعل سريع",
   },
-] as const;
+];
 
 export default function LoyaltyPreview() {
   const reduceMotion = useReducedMotion();
