@@ -21,7 +21,9 @@ import {
 } from "./repo";
 import { transformItem } from "./transformer";
 
-const MAX_ANALYZE_PER_RUN = Number(process.env.RADAR_MAX_ANALYZE_PER_RUN || 12);
+// بعد توسعة المصادر تراكم طابور إنجليزي — دفعة أكبر + جولات متعددة لتصفية الترجمة
+const MAX_ANALYZE_PER_RUN = Number(process.env.RADAR_MAX_ANALYZE_PER_RUN || 20);
+const MAX_ANALYZE_ROUNDS = Math.max(1, Number(process.env.RADAR_MAX_ANALYZE_ROUNDS || 3));
 const AUTO_TRANSFORM_MIN_SCORE = Number(process.env.RADAR_AUTOTRANSFORM_MIN_SCORE || 80);
 const MAX_AUTO_TRANSFORM_PER_RUN = 2;
 const RETENTION_DAYS = Number(process.env.RADAR_RETENTION_DAYS || 14);
@@ -93,20 +95,24 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     }
   }
 
-  // 2) التحليل — دفعة واحدة بنداء نموذج واحد
-  let analyzed: RadarItem[] = [];
+  // 2) التحليل + الترجمة — جولات متتالية حتى يصفو الطابور أو يبلغ السقف
+  const analyzed: RadarItem[] = [];
   try {
-    const pending = await itemsNeedingAnalysis(MAX_ANALYZE_PER_RUN);
-    if (pending.length) {
-      analyzed = await analyzeItems(pending);
-      summary.analyzed = analyzed.length;
+    for (let round = 0; round < MAX_ANALYZE_ROUNDS; round++) {
+      const pending = await itemsNeedingAnalysis(MAX_ANALYZE_PER_RUN);
+      if (!pending.length) break;
+      const batch = await analyzeItems(pending);
+      analyzed.push(...batch);
+      summary.analyzed += batch.length;
+      // دفعة ناقصة = لا مزيد في الطابور
+      if (pending.length < MAX_ANALYZE_PER_RUN) break;
     }
   } catch (error) {
     summary.errors++;
     console.error("[Radar] analysis failed:", error);
   }
 
-  // 3) التنبيهات على ما حُلّل للتو
+  // 3) التنبيهات على ما حُلّل في هذه الدورة
   try {
     summary.alertsSent = await processAlerts(analyzed);
   } catch (error) {

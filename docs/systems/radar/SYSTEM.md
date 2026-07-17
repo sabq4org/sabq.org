@@ -27,6 +27,7 @@
 - أعمدة تشغيلية additive: `tier`, `region`, `weight`, `pack_id`.
 - وكالات AP/Reuters/AFP بلا RSS عام موثوق — الرصد عبر حزمة `x-news-accounts`.
 - **فلتر اهتمام سبق** (`topicFilter.ts`): على المصادر الأجنبية (`region=us|global`) لا يُدخل إلا ما يمس السعودية / أمريكا–إيران / المونديال / لاعبين مشهورين / حدثاً كبيراً. الخليج بلا فلتر. عطّل بـ `RADAR_TOPIC_FILTER_ENABLED=false`.
+- الترجمة العربية تتم في خطوة التحليل (`analyst`) — المادة `new` بلا `translatedTitle` تظهر بالإنجليزي حتى تُحلَّل. السعة: `RADAR_MAX_ANALYZE_PER_RUN` (افتراضي 20) × `RADAR_MAX_ANALYZE_ROUNDS` (افتراضي 3) لكل دقيقة.
 - التفعيل التشغيلي: `RADAR_ENABLED=true` + مفتاح X (`X_API_BEARER_TOKEN` و/أو `TWITTERAPI_IO_API_KEY`).
 
 ## صحة وتشغيل

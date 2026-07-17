@@ -528,6 +528,11 @@ function RadarItemCard({
             <Badge variant="outline">{item.sourceType === "json" ? "JSON" : "RSS"}</Badge>
           )}
           {item.originalLanguage && <Badge variant="outline">{item.originalLanguage}</Badge>}
+          {!item.translatedTitle && (
+            <Badge variant="outline" className="border-amber-400 text-amber-700 dark:text-amber-300">
+              بانتظار الترجمة
+            </Badge>
+          )}
           {/* «نُشر» = تاريخ المصدر الحقيقي؛ غيابه يُعلن صراحةً بوقت الرصد —
               عرض وقت الجلب كأنه وقت النشر أوهم بأن خبرًا قديمًا «منذ دقائق» */}
           <span className="text-muted-foreground">
