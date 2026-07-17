@@ -330,7 +330,7 @@
       "nameEn": "Sports Tournaments",
       "status": "active",
       "category": "sports",
-      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.",
+      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة: فشل سريع + تسخين إثراء SM.",
       "docPath": "docs/systems/sports-tournaments/SYSTEM.md",
       "relatedDocs": [
         "docs/SPORTS_PORTAL_ROADMAP.md",
@@ -379,7 +379,7 @@
       ],
       "dashboardPath": "/dashboard/sports-tournaments",
       "owners": ["sports"],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-07-18"
     },
     {
       "id": "push-notifications",
