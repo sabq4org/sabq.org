@@ -96,6 +96,50 @@ export const LOYALTY_ACTIONS = {
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
 
+export type LoyaltyActionMeta = {
+  labelAr: string;
+  icon: string;
+  category: "content" | "engagement" | "account" | "sports" | "admin";
+};
+
+/**
+ * Human-facing action metadata used by admin analytics and member history.
+ *
+ * Keep this beside LOYALTY_ACTIONS so newly introduced award types cannot
+ * silently leak internal enum values into RTL user interfaces. Unknown legacy
+ * actions still receive a safe fallback through getLoyaltyActionMeta().
+ */
+export const LOYALTY_ACTION_META: Record<string, LoyaltyActionMeta> = {
+  READ: { labelAr: "قراءة", icon: "📖", category: "content" },
+  READ_DEEP: { labelAr: "قراءة عميقة", icon: "📕", category: "content" },
+  LIKE: { labelAr: "إعجاب", icon: "♥", category: "engagement" },
+  SHARE: { labelAr: "مشاركة", icon: "↗", category: "engagement" },
+  COMMENT: { labelAr: "تعليق", icon: "💬", category: "engagement" },
+  NOTIFICATION_OPEN: { labelAr: "فتح إشعار", icon: "🔔", category: "engagement" },
+  DAILY_LOGIN: { labelAr: "دخول يومي", icon: "↪", category: "account" },
+  PROFILE_COMPLETE: { labelAr: "إكمال الملف الشخصي", icon: "✓", category: "account" },
+  EMAIL_VERIFIED: { labelAr: "توثيق البريد الإلكتروني", icon: "✉", category: "account" },
+  WC_PREDICTION_WIN: { labelAr: "فوز بتوقّع كأس العالم", icon: "🏆", category: "sports" },
+  WC_LONG_PREDICTION_WIN: { labelAr: "فوز بتوقّع موسمي لكأس العالم", icon: "🏆", category: "sports" },
+  AC_PREDICTION_WIN: { labelAr: "فوز بتوقّع كأس آسيا", icon: "🏆", category: "sports" },
+  GC_PREDICTION_WIN: { labelAr: "فوز بتوقّع كأس الخليج", icon: "🏆", category: "sports" },
+  GC_LONG_PREDICTION_WIN: { labelAr: "فوز بتوقّع موسمي لكأس الخليج", icon: "🏆", category: "sports" },
+  RSL_PREDICTION_WIN: { labelAr: "فوز بتوقّع دوري روشن", icon: "🏆", category: "sports" },
+  RSL_LONG_PREDICTION_WIN: { labelAr: "فوز بتوقّع موسمي لدوري روشن", icon: "🏆", category: "sports" },
+  SPORTS_PREDICTION_WIN: { labelAr: "فوز بتوقّع رياضي", icon: "🏆", category: "sports" },
+  SPORTS_LONG_PREDICTION_WIN: { labelAr: "فوز بتوقّع رياضي طويل المدى", icon: "🏆", category: "sports" },
+  SPORTS_SCORER_PREDICTION_WIN: { labelAr: "فوز بتوقّع الهدّاف", icon: "⚽", category: "sports" },
+  ADMIN_ADJUSTMENT: { labelAr: "تعديل إداري", icon: "±", category: "admin" },
+};
+
+export function getLoyaltyActionMeta(action: string): LoyaltyActionMeta {
+  return LOYALTY_ACTION_META[action] ?? {
+    labelAr: "نشاط ولاء آخر",
+    icon: "•",
+    category: "engagement",
+  };
+}
+
 // Point values match what production was awarding before the audit.
 // Changing these later is an explicit, separate decision — Phase 1 keeps
 // them stable so the migration doesn't shift anyone's tier unexpectedly.
