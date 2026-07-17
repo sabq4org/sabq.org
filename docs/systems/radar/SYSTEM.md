@@ -22,6 +22,7 @@
 - التنبيهات والمصدّرات (alerts/exporter) جزء من الحلقة — اختبرها عند تغيير المستودعات.
 - **رادار الفجوات التحريرية** (نظام `editorial`، `coverage-gap-matcher`) يستهلك مواد الرادار النشطة (الحالات `new/analyzed/ready`) ويعيد استخدام `transformItem` و`exportItemToArticle` لإنشاء مسودات التغطية؛ يعمل بعد كل دورة رادار من `cycle.ts`. أي تغيير في حالات المواد أو عقد التصدير (`RADAR_DRAFT_MISSING`) يؤثر عليه.
 - رصدة X = صف في `radar_sources` بـ `type=x` و`url` اصطناعي `x:{type}:{value}`.
+- قائمة المواد تعيد `sourceType` + `xValue`؛ الفلتر `channel=x|feed` يفصل إكس عن الصحف/RSS.
 - حسابات X الأولوية: `fetchIntervalMinutes=1` + `since_id` (SLA ≤ دقيقتين). السقف: `RADAR_X_MAX_ACTIVE_WATCHES` (افتراضي 80).
 - أعمدة تشغيلية additive: `tier`, `region`, `weight`, `pack_id`.
 - وكالات AP/Reuters/AFP بلا RSS عام موثوق — الرصد عبر حزمة `x-news-accounts`.

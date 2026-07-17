@@ -87,6 +87,8 @@ interface RadarItemRow {
   id: string;
   sourceId: string;
   sourceName: string | null;
+  sourceType: "rss" | "json" | "x" | null;
+  xValue: string | null;
   link: string;
   originalTitle: string;
   originalExcerpt: string | null;
@@ -190,6 +192,7 @@ export default function SmartRadar() {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("inbox");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [channelFilter, setChannelFilter] = useState<"all" | "feed" | "x">("all");
   const [limit, setLimit] = useState(30);
 
   const tabParams = TABS.find((t) => t.id === activeTab)?.params ?? {};
@@ -208,7 +211,12 @@ export default function SmartRadar() {
   }>({
     queryKey: [
       "/api/radar/items",
-      { ...tabParams, sourceId: sourceFilter === "all" ? undefined : sourceFilter, limit },
+      {
+        ...tabParams,
+        sourceId: sourceFilter === "all" ? undefined : sourceFilter,
+        channel: channelFilter === "all" ? undefined : channelFilter,
+        limit,
+      },
     ],
     refetchInterval: 60_000,
   });
@@ -374,19 +382,34 @@ export default function SmartRadar() {
             </TabsList>
           </Tabs>
           </div>
-          <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="w-full sm:w-44">
-              <SelectValue placeholder="كل المصادر" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل المصادر</SelectItem>
-              {allSources.map((source) => (
-                <SelectItem key={source.id} value={source.id}>
-                  {source.type === "x" ? `X · ${source.name}` : source.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Select
+              value={channelFilter}
+              onValueChange={(value) => setChannelFilter(value as "all" | "feed" | "x")}
+            >
+              <SelectTrigger className="w-full sm:w-36">
+                <SelectValue placeholder="القناة" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">الكل</SelectItem>
+                <SelectItem value="feed">صحف / RSS</SelectItem>
+                <SelectItem value="x">إكس فقط</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="كل المصادر" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل المصادر</SelectItem>
+                {allSources.map((source) => (
+                  <SelectItem key={source.id} value={source.id}>
+                    {source.type === "x" ? `X · ${source.name}` : source.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* ---------- شبكة البطاقات ---------- */}
@@ -497,6 +520,13 @@ function RadarItemCard({
             </Badge>
           )}
           <Badge variant="secondary">{item.sourceName ?? "مصدر"}</Badge>
+          {item.sourceType === "x" ? (
+            <Badge className="bg-sky-600 text-white hover:bg-sky-600">
+              X{item.xValue ? ` · ${item.xValue}` : ""}
+            </Badge>
+          ) : (
+            <Badge variant="outline">{item.sourceType === "json" ? "JSON" : "RSS"}</Badge>
+          )}
           {item.originalLanguage && <Badge variant="outline">{item.originalLanguage}</Badge>}
           {/* «نُشر» = تاريخ المصدر الحقيقي؛ غيابه يُعلن صراحةً بوقت الرصد —
               عرض وقت الجلب كأنه وقت النشر أوهم بأن خبرًا قديمًا «منذ دقائق» */}
