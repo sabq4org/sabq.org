@@ -227,6 +227,19 @@ function presenceList(): PresenceEntry[] {
   return Array.from(presence.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+/**
+ * المحررون النشطون حاليًا على مقال محدد (خلال TTL). يستخدمه رادار الفجوات
+ * التحريرية لعرض مَن يحرّر مسودة التغطية الآن.
+ */
+export function getEditorsForArticle(
+  articleId: string
+): { userId: string; userName: string; userAvatar: string | null }[] {
+  const now = Date.now();
+  return Array.from(presence.values())
+    .filter((entry) => entry.articleId === articleId && now - entry.updatedAt <= PRESENCE_TTL_MS)
+    .map((entry) => ({ userId: entry.userId, userName: entry.userName, userAvatar: entry.userAvatar }));
+}
+
 function broadcastLocal(event: string, data: unknown) {
   const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of clients) {

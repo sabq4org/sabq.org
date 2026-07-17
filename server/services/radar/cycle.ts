@@ -146,5 +146,16 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     }
   }
 
+  // 6) رادار الفجوات التحريرية — fire-and-forget بعد اكتمال الدورة؛
+  // استيراد ديناميكي + catch مزدوج حتى لا يؤثر فشل المطابقة على دورة الرادار
+  try {
+    const { refreshCoverageGaps } = await import("../coverageGapMatcher");
+    void refreshCoverageGaps("radar-cycle").catch((error) => {
+      console.warn("[Radar] coverage-gap matching failed:", error instanceof Error ? error.message : error);
+    });
+  } catch (error) {
+    console.warn("[Radar] coverage-gap matcher unavailable:", error instanceof Error ? error.message : error);
+  }
+
   return summary;
 }

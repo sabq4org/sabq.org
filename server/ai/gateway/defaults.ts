@@ -115,6 +115,8 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   // ── Search / embeddings — PINNED: vectors are incompatible across models ──
   { featureKey: "embeddings", displayName: "المتجهات (بحث وتشابه)", category: "search", primary: EMBED_LARGE, fallbackChain: [], allowFailover: false },
   { featureKey: "entity-extraction", displayName: "استخراج الكيانات", category: "search", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
+  // رادار الفجوات التحريرية — مثبت على نفس نموذج المتجهات حتى تبقى الأبعاد متوافقة
+  { featureKey: "coverage-gap-matcher", displayName: "رادار الفجوات التحريرية", category: "analysis", primary: EMBED_LARGE, fallbackChain: [], allowFailover: false },
 
   // ── Media generation (same-provider output differs; chains start empty) ──
   { featureKey: "image-generation", displayName: "توليد الصور", category: "media", primary: GPT_IMAGE, fallbackChain: [] },

@@ -73,6 +73,7 @@
         "server/routes/editorAlerts.ts",
         "server/routes/editorPresence.ts",
         "server/routes/dashboardPulse.ts",
+        "server/routes/coverageGaps.ts",
         "server/routes/whatsappAgent.ts",
         "server/routes/emailAgent.ts",
         "server/routes/visualAiRoutes.ts",
@@ -84,6 +85,7 @@
         "server/services/editorialNotifications.ts",
         "server/services/editorAlerts.ts",
         "server/services/dashboardPulseService.ts",
+        "server/services/coverageGapMatcher.ts",
         "server/services/aiArticleGenerator.ts",
         "server/services/smartLinks.ts",
         "server/services/smartInsightsService.ts",
@@ -142,7 +144,8 @@
         "opinion-writer-ideas",
         "opinion-writer-coach",
         "opinion-writer-first-reader",
-        "opinion-writer-style-profile"
+        "opinion-writer-style-profile",
+        "coverage-gap-matcher"
       ],
       "dashboardPath": "/dashboard",
       "owners": ["editorial"],
