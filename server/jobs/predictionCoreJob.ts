@@ -8,6 +8,7 @@ import { isLeader } from "../leaderElection";
 import { isPredictionCoreEnabled } from "../services/predictions/predictionCoreService";
 import { lockDueContests, settleReadyContests } from "../services/predictions/settlementService";
 import { deliverPendingAwards } from "../services/predictions/outboxService";
+import { syncCompetitionFixtures } from "../services/predictions/fixtureAdapter";
 
 let isRunning = false;
 
@@ -16,13 +17,19 @@ async function tick(trigger: string): Promise<void> {
   if (isRunning) return;
   isRunning = true;
   try {
+    // المزامنة أولًا (إنشاء/جدولة/نتائج) ثم القفل فالتسوية فالتسليم —
+    // نتيجة تصل في هذه الدورة تُسوّى في الدورة نفسها
+    const sync = await syncCompetitionFixtures();
     const locked = await lockDueContests();
     const settlement = await settleReadyContests();
     const outbox = await deliverPendingAwards();
 
-    if (locked > 0 || settlement.settled > 0 || settlement.failed > 0 || outbox.delivered > 0 || outbox.deadLettered > 0) {
+    const activity =
+      sync.created + sync.rescheduled + sync.resultsSet + sync.voided + sync.errors.length;
+    if (activity > 0 || locked > 0 || settlement.settled > 0 || settlement.failed > 0 || outbox.delivered > 0 || outbox.deadLettered > 0) {
       console.log(
-        `[Prediction Core Job] (${trigger}) locked=${locked} settled=${settlement.settled} ` +
+        `[Prediction Core Job] (${trigger}) synced(created=${sync.created} rescheduled=${sync.rescheduled} ` +
+          `results=${sync.resultsSet} voided=${sync.voided}) locked=${locked} settled=${settlement.settled} ` +
           `failed=${settlement.failed} outboxDelivered=${outbox.delivered} deadLettered=${outbox.deadLettered}`,
       );
     }
