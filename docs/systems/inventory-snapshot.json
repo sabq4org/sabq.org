@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-17T11:52:09.678Z",
+  "generatedAt": "2026-07-17T12:05:50.356Z",
   "systems": [
     {
       "id": "loyalty",
@@ -31,7 +31,7 @@
     },
     {
       "id": "editorial",
-      "fileCount": 10,
+      "fileCount": 13,
       "samplePaths": [
         "server/routes/articleEditLocks.ts",
         "server/routes/editorAlerts.ts",
@@ -40,7 +40,7 @@
         "server/services/editorialNotifications.ts",
         "server/services/editorAlerts.ts",
         "server/services/dashboardPulseService.ts",
-        "client/src/pages/dashboard/NewsroomPulseDashboard.tsx"
+        "server/services/aiArticleGenerator.ts"
       ]
     },
     {
