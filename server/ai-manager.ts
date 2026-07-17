@@ -143,6 +143,7 @@ export const AI_MODELS = {
   // OpenAI - Unified GPT-5.1 model for all completions
   GPT_5_1: { provider: 'openai' as const, model: 'gpt-5.1' },
   GPT5: { provider: 'openai' as const, model: 'gpt-5.1' }, // Legacy alias
+  GPT_4O_MINI: { provider: 'openai' as const, model: 'gpt-4o-mini' },
   O3_MINI: { provider: 'openai' as const, model: 'o3-mini' },
   GPT4: { provider: 'openai' as const, model: 'gpt-5.1' }, // Migrated to gpt-5.1
 

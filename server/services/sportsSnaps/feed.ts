@@ -2,12 +2,13 @@
  * قراءة وتحديث خلاصة لقطات VARA الذكية. كل الوصول إلى Drizzle هنا داخل الخدمة
  * حتى تبقى الراوترات نظيفة وفق ADR-001.
  */
+import { createHash } from "crypto";
 import { desc, eq, gte } from "drizzle-orm";
 import { db } from "../../db";
 import { sportsFollows, sportsMatchViews, type SportsInsight } from "@shared/schema";
 import { pruneExpiredInsights, queryInsights, saveInsights } from "../sportsIntelligence/insightsStore";
 import { listFollows } from "../sportsFollowsService";
-import { buildTeamFacts } from "./factsBuilder";
+import { buildTeamFacts, type TeamSnapFacts } from "./factsBuilder";
 import { composeSnaps } from "./composer";
 import {
   PHASE_ONE_SNAP_KINDS,
@@ -120,10 +121,36 @@ async function storeTeamSnaps(teamId: number, snaps: TemplateSnap[], sourceStats
   );
 }
 
+// hash الحقائق المستقرة لكل فريق من آخر توليد ناجح. generatedAt يتغير كل بناء
+// فيُستثنى؛ ما عداه (نتائج، مراكز، relativeDay، حالة اللايف) تغيّره حقيقي يستحق
+// إعادة التوليد. الذاكرة تكفي: الجوب ساعي وعلى القائد فقط، وإعادة التشغيل تكلف
+// دورة توليد واحدة.
+const lastComposedFactsHash = new Map<number, string>();
+
+function stableFactsHash(facts: TeamSnapFacts): string {
+  const { generatedAt: _ignored, ...stable } = facts;
+  return createHash("sha1").update(JSON.stringify(stable)).digest("hex");
+}
+
 export async function refreshTeamSnaps(teamId: number): Promise<number> {
   const facts = await buildTeamFacts(teamId);
+  const hash = stableFactsHash(facts);
+
+  // الحقائق لم تتغير منذ آخر توليد؟ نتخطى استدعاء الـAI والتخزين ما دامت اللقطات
+  // الحالية موجودة وبنسخة الصياغة الحالية (لو انتهت صلاحيتها أو قُصّت نعيد التوليد).
+  if (lastComposedFactsHash.get(teamId) === hash) {
+    const existing = await queryInsights({
+      scope: "team",
+      refId: String(teamId),
+      kinds: [...PHASE_ONE_SNAP_KINDS],
+      limit: SNAP_FEED_LIMIT,
+    });
+    if (existing.length > 0 && existing.every(hasCurrentCopy)) return 0;
+  }
+
   const snaps = await composeSnaps(facts);
   await storeTeamSnaps(teamId, snaps, facts);
+  lastComposedFactsHash.set(teamId, hash);
   return snaps.length;
 }
 
