@@ -152,10 +152,18 @@ export interface RadarItemFilters {
   statuses?: string[];
   minScore?: number;
   sourceId?: string;
+  /** x = رصدات إكس فقط · feed = صحف/RSS/JSON فقط */
+  channel?: "x" | "feed";
   breakingOnly?: boolean;
   limit?: number;
   offset?: number;
 }
+
+export type RadarItemListRow = RadarItem & {
+  sourceName: string | null;
+  sourceType: string | null;
+  xValue: string | null;
+};
 
 function itemConditions(filters: RadarItemFilters) {
   const conditions = [];
@@ -163,26 +171,45 @@ function itemConditions(filters: RadarItemFilters) {
   if (filters.minScore != null) conditions.push(gte(radarItems.newsValue, filters.minScore));
   if (filters.sourceId) conditions.push(eq(radarItems.sourceId, filters.sourceId));
   if (filters.breakingOnly) conditions.push(eq(radarItems.isBreaking, true));
+  if (filters.channel === "x") conditions.push(eq(radarSources.type, "x"));
+  if (filters.channel === "feed") conditions.push(inArray(radarSources.type, ["rss", "json"]));
   return conditions.length ? and(...conditions) : undefined;
 }
 
 export async function listItems(
   filters: RadarItemFilters
-): Promise<{ items: (RadarItem & { sourceName: string | null })[]; total: number }> {
+): Promise<{ items: RadarItemListRow[]; total: number }> {
   const where = itemConditions(filters);
+  const needsSourceJoin = Boolean(filters.channel);
   const [rows, totals] = await Promise.all([
     db
-      .select({ item: radarItems, sourceName: radarSources.name })
+      .select({
+        item: radarItems,
+        sourceName: radarSources.name,
+        sourceType: radarSources.type,
+        xValue: radarSources.xValue,
+      })
       .from(radarItems)
       .leftJoin(radarSources, eq(radarItems.sourceId, radarSources.id))
       .where(where)
       .orderBy(desc(radarItems.fetchedAt))
       .limit(Math.min(filters.limit ?? 30, 100))
       .offset(filters.offset ?? 0),
-    db.select({ value: count() }).from(radarItems).where(where),
+    needsSourceJoin
+      ? db
+          .select({ value: count() })
+          .from(radarItems)
+          .innerJoin(radarSources, eq(radarItems.sourceId, radarSources.id))
+          .where(where)
+      : db.select({ value: count() }).from(radarItems).where(where),
   ]);
   return {
-    items: rows.map((r) => ({ ...r.item, sourceName: r.sourceName })),
+    items: rows.map((r) => ({
+      ...r.item,
+      sourceName: r.sourceName,
+      sourceType: r.sourceType,
+      xValue: r.xValue,
+    })),
     total: totals[0]?.value ?? 0,
   };
 }
