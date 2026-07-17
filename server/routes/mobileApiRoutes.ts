@@ -960,7 +960,7 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
   
   const [session] = await db
-    .select({ userId: appMemberSessions.memberId })
+    .select({ userId: appMemberSessions.memberId, lastUsedAt: appMemberSessions.lastUsedAt })
     .from(appMemberSessions)
     .where(and(
       eq(appMemberSessions.tokenHash, tokenHash),
@@ -970,12 +970,23 @@ async function verifyMemberSession(req: Request): Promise<{ userId: string } | n
     .limit(1);
   
   if (session) {
-    await db.update(appMemberSessions)
-      .set({ lastUsedAt: new Date() })
-      .where(eq(appMemberSessions.tokenHash, tokenHash));
+    // خنق كتابة lastUsedAt — مرة كل 5 دقائق للجلسة بدل كتابة لكل طلب،
+    // فاستطلاعات الموبايل المتكررة كانت تضغط كتابة دائمة على القاعدة.
+    const LAST_USED_WRITE_THROTTLE_MS = 5 * 60 * 1000;
+    const lastUsedMs = session.lastUsedAt?.getTime() ?? 0;
+    if (Date.now() - lastUsedMs > LAST_USED_WRITE_THROTTLE_MS) {
+      try {
+        await db.update(appMemberSessions)
+          .set({ lastUsedAt: new Date() })
+          .where(eq(appMemberSessions.tokenHash, tokenHash));
+      } catch (err) {
+        console.warn("[auth] lastUsedAt update failed:", err);
+      }
+    }
+    return { userId: session.userId };
   }
   
-  return session || null;
+  return null;
 }
 
 // ==========================================
