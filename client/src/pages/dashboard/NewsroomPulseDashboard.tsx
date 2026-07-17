@@ -589,15 +589,23 @@ interface CoverageGapsResponse {
 
 const COVERAGE_GAPS_KEY = "/api/admin/dashboard/coverage-gaps";
 
-/** عدّاد عُمر الفجوة — يتجدد كل 30 ثانية مثل عدّاد جدول النشر */
-function gapAgeLabel(firstDetectedAt: string, nowMs: number): string {
-  const startedMs = new Date(firstDetectedAt).getTime();
+/** صياغة الجمع العربي: مفرد/مثنى/جمع قلة/جمع كثرة */
+function arabicCount(value: number, one: string, two: string, few: string, many: string): string {
+  if (value === 1) return one;
+  if (value === 2) return two;
+  if (value >= 3 && value <= 10) return `${number(value)} ${few}`;
+  return `${number(value)} ${many}`;
+}
+
+/** عدّاد عُمر الموضوع — من وقت نشر المصدر (publishedAt) مع سقوط إلى وقت اكتشاف الفجوة؛ يتجدد كل 30 ثانية */
+function gapAgeLabel(startIso: string, nowMs: number): string {
+  const startedMs = new Date(startIso).getTime();
   if (!Number.isFinite(startedMs)) return "تتصاعد الآن";
   const elapsedMinutes = Math.max(1, Math.floor((nowMs - startedMs) / 60_000));
-  if (elapsedMinutes < 60) return `تتصاعد منذ ${number(elapsedMinutes)} دقيقة`;
+  if (elapsedMinutes < 60) return `تتصاعد منذ ${arabicCount(elapsedMinutes, "دقيقة", "دقيقتين", "دقائق", "دقيقة")}`;
   const hours = Math.floor(elapsedMinutes / 60);
-  if (hours < 24) return `تتصاعد منذ ${number(hours)} ساعة`;
-  return `تتصاعد منذ ${number(Math.floor(hours / 24))} يوم`;
+  if (hours < 24) return `تتصاعد منذ ${arabicCount(hours, "ساعة", "ساعتين", "ساعات", "ساعة")}`;
+  return `تتصاعد منذ ${arabicCount(Math.floor(hours / 24), "يوم", "يومين", "أيام", "يوماً")}`;
 }
 
 /** مؤشر الحرارة متدرج اللون من heatScore (0–100) */
@@ -825,7 +833,7 @@ function CoverageGapsSection() {
                   <div className="min-w-0 flex-1">
                     <div className="line-clamp-1 text-[13px] font-semibold leading-tight">{gap.title}</div>
                     <p className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <Timer className="h-3 w-3" /> {gapAgeLabel(gap.firstDetectedAt, nowMs)}
+                      <Timer className="h-3 w-3" /> {gapAgeLabel(gap.publishedAt ?? gap.firstDetectedAt, nowMs)}
                       {gap.sourceName && <> · {gap.sourceName}</>}
                     </p>
                   </div>
@@ -852,7 +860,7 @@ function CoverageGapsSection() {
                 </div>
                 <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <Timer className="h-3 w-3 shrink-0" />
-                  <span>{gapAgeLabel(gap.firstDetectedAt, nowMs)}</span>
+                  <span>{gapAgeLabel(gap.publishedAt ?? gap.firstDetectedAt, nowMs)}</span>
                   {gap.sourceName && <span className="truncate">· {gap.sourceName}</span>}
                 </div>
                 {gap.assigneeName && (
@@ -1148,13 +1156,13 @@ export default function NewsroomPulseDashboard() {
           {(canViewMessages || canViewWriterTickets) && <MessagesTabs showVisitorMessages={canViewMessages} showWriterTickets={canViewWriterTickets} />}
         </section>
 
-        {/* رادار الفجوات التحريرية — قسم تحليلي يتبع نفس شروط canViewStats ويُخفى عن content_manager كبقية الأقسام التحليلية */}
-        {canViewStats && !isContentManager && <CoverageGapsSection />}
-
         <section className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
           <div className="min-w-0"><QuickActionsSection /></div>
           <OnlineModeratorsWidget />
         </section>
+
+        {/* رادار الفجوات التحريرية — بين «إجراءات سريعة» و«موجز سبق الذكي»؛ يتبع شروط canViewStats ويُخفى عن content_manager كبقية الأقسام التحليلية */}
+        {canViewStats && !isContentManager && <CoverageGapsSection />}
 
         {stats && <SmartBrief stats={stats} muqtarabCount={muqtarabCount} operationalOnly={isContentManager} />}
 
