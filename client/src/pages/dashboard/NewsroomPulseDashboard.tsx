@@ -563,17 +563,22 @@ interface CoverageGapActiveEditor {
 interface CoverageGap {
   id: string;
   radarItemId: string;
+  storyId?: string | null;
   title: string;
   originalTitle: string;
   link: string;
   imageUrl: string | null;
   sourceName: string | null;
   sourceType: string | null;
+  sourceCount?: number | null;
   publishedAt: string | null;
   isBreaking: boolean;
   newsValue: number | null;
   topicFingerprint: string;
   heatScore: number;
+  relevanceScore?: number | null;
+  momentumScore?: number | null;
+  gapReason?: string[] | null;
   status: CoverageGapStatus;
   firstDetectedAt: string;
   coveredByArticleId: string | null;
@@ -834,8 +839,17 @@ function CoverageGapsSection() {
                     <div className="line-clamp-1 text-[13px] font-semibold leading-tight">{gap.title}</div>
                     <p className="mt-0.5 flex items-center gap-1 text-[10px] text-muted-foreground">
                       <Timer className="h-3 w-3" /> {gapAgeLabel(gap.publishedAt ?? gap.firstDetectedAt, nowMs)}
-                      {gap.sourceName && <> · {gap.sourceName}</>}
+                      {gap.sourceCount != null && gap.sourceCount > 1 ? (
+                        <> · {gap.sourceCount} مصادر</>
+                      ) : gap.sourceName ? (
+                        <> · {gap.sourceName}</>
+                      ) : null}
                     </p>
+                    {Array.isArray(gap.gapReason) && gap.gapReason.length > 0 && (
+                      <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">
+                        {gap.gapReason.slice(0, 2).join(" · ")}
+                      </p>
+                    )}
                   </div>
                   <Badge variant="outline" className={cn("shrink-0 px-1.5 py-0.5 text-[10px]", badge.className)}>
                     {badge.label}
@@ -861,8 +875,21 @@ function CoverageGapsSection() {
                 <div className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                   <Timer className="h-3 w-3 shrink-0" />
                   <span>{gapAgeLabel(gap.publishedAt ?? gap.firstDetectedAt, nowMs)}</span>
-                  {gap.sourceName && <span className="truncate">· {gap.sourceName}</span>}
+                  {gap.sourceCount != null && gap.sourceCount > 1 ? (
+                    <span>· {gap.sourceCount} مصادر</span>
+                  ) : gap.sourceName ? (
+                    <span className="truncate">· {gap.sourceName}</span>
+                  ) : null}
                 </div>
+                {Array.isArray(gap.gapReason) && gap.gapReason.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {gap.gapReason.slice(0, 4).map((reason) => (
+                      <Badge key={reason} variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
+                        {reason}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
                 {gap.assigneeName && (
                   <p className="mt-1.5 text-[11px] text-muted-foreground">مكلّف: {gap.assigneeName}</p>
                 )}

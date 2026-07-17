@@ -248,7 +248,7 @@
       "nameEn": "Smart Radar",
       "status": "active",
       "category": "intelligence",
-      "summary": "رصد إخباري كثيف (RSS + X)، حزم مصادر أمريكية/عالمية، تنبيهات، وصحة شبكة.",
+      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ يغذّي فجوات التغطية.",
       "docPath": "docs/systems/radar/SYSTEM.md",
       "relatedDocs": [
         "docs/RADAR_X_WATCHES.md",
@@ -263,10 +263,11 @@
         "scripts/seed-packs/**",
         "scripts/seed-radar-pack.ts",
         "scripts/radar-coverage-report.ts",
+        "scripts/radar-phase1-acceptance.ts",
         "docs/RADAR_X_WATCHES.md",
         "docs/radar-source-licensing.md"
       ],
-      "aiFeatureKeys": ["radar"],
+      "aiFeatureKeys": ["radar", "radar-clustering", "radar-relevance"],
       "dashboardPath": "/dashboard/radar",
       "owners": ["editorial"],
       "lastReviewed": "2026-07-17"

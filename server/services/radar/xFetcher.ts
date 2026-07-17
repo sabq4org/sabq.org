@@ -42,6 +42,11 @@ function normalizeTweet(tweet: XTweet): NormalizedRadarItem {
     excerpt: `${text}${engagementLine(tweet)}`.substring(0, 1200),
     imageUrl: tweet.imageUrl,
     publishedAt: tweet.createdAt,
+    metrics: {
+      likes: tweet.likeCount,
+      retweets: tweet.retweetCount,
+      views: tweet.viewCount,
+    },
   };
 }
 

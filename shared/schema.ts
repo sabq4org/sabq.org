@@ -1100,9 +1100,30 @@ export const radarSources = pgTable("radar_sources", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+/** قصص مجمّعة عبر المصادر — وحدة الزخم/الصلة/الفجوات v2 */
+export const radarStories = pgTable("radar_stories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fingerprint: text("fingerprint").notNull(),
+  title: text("title").notNull(),
+  summary: text("summary"),
+  status: text("status").notNull().default("active"), // active | archived
+  sourceCount: integer("source_count").notNull().default(1),
+  topNewsValue: integer("top_news_value").notNull().default(0),
+  saudiRelevance: integer("saudi_relevance").notNull().default(0), // 0–100
+  momentumScore: integer("momentum_score").notNull().default(0), // 0–100
+  embedding: jsonb("embedding").$type<number[]>(), // متجه مخزّن لتفادي إعادة التضمين
+  firstSeenAt: timestamp("first_seen_at").defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_radar_stories_status_seen").on(table.status, table.lastSeenAt.desc()),
+  index("idx_radar_stories_fingerprint").on(table.fingerprint),
+]);
+
 export const radarItems = pgTable("radar_items", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   sourceId: varchar("source_id").references(() => radarSources.id, { onDelete: "cascade" }).notNull(),
+  storyId: varchar("story_id").references(() => radarStories.id, { onDelete: "set null" }),
   guid: text("guid").notNull(), // معرف المادة لدى المصدر (guid/link) — أساس منع التكرار
   link: text("link").notNull(),
   originalTitle: text("original_title").notNull(),
@@ -1126,6 +1147,13 @@ export const radarItems = pgTable("radar_items", {
   translatedTitle: text("translated_title"), // ترجمة تفسيرية لا حرفية
   translatedSummary: text("translated_summary"),
   suggestedCategorySlug: text("suggested_category_slug"),
+  // تفاعل X مهيكل (likes/retweets/replies/views) — additive
+  metrics: jsonb("metrics").$type<{
+    likes?: number;
+    retweets?: number;
+    replies?: number;
+    views?: number;
+  }>(),
   // مسودة التحويل التحريري الكامل — تطابق حقول فورم النشر
   draft: jsonb("draft").$type<{
     title: string;
@@ -1152,6 +1180,18 @@ export const radarItems = pgTable("radar_items", {
   uniqueIndex("uq_radar_items_source_guid").on(table.sourceId, table.guid),
   index("idx_radar_items_status").on(table.status, table.fetchedAt.desc()),
   index("idx_radar_items_news_value").on(table.newsValue),
+  index("idx_radar_items_story").on(table.storyId),
+]);
+
+export const radarStorySnapshots = pgTable("radar_story_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  storyId: varchar("story_id").references(() => radarStories.id, { onDelete: "cascade" }).notNull(),
+  capturedAt: timestamp("captured_at").defaultNow().notNull(),
+  mentionCount: integer("mention_count").notNull(),
+  sourceCount: integer("source_count").notNull(),
+  xEngagement: integer("x_engagement").notNull().default(0),
+}, (table) => [
+  index("idx_snapshots_story_time").on(table.storyId, table.capturedAt.desc()),
 ]);
 
 export const radarAlertRules = pgTable("radar_alert_rules", {
@@ -1193,8 +1233,13 @@ export type InsertRadarAlertRule = z.infer<typeof insertRadarAlertRuleSchema>;
 export const coverageGaps = pgTable("coverage_gaps", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   radarItemId: varchar("radar_item_id").references(() => radarItems.id, { onDelete: "cascade" }).notNull(),
+  // فجوات v2: وحدة القصة (additive) — عند التفعيل تُنشأ/تُحدَّث فجوة واحدة لكل قصة
+  storyId: varchar("story_id").references(() => radarStories.id, { onDelete: "set null" }),
   topicFingerprint: text("topic_fingerprint").notNull(), // مفتاح موضوع مُطبَّع للمطابقة ومنع التكرار
   heatScore: integer("heat_score").notNull().default(0), // حرارة الموضوع (من قيمة الرادار الإخبارية)
+  relevanceScore: integer("relevance_score"), // صلة سعودية 0–100 (v2)
+  momentumScore: integer("momentum_score"), // زخم 0–100 (v2)
+  gapReason: jsonb("gap_reason").$type<string[]>(), // أسباب مهيكلة للواجهة
   // open → drafting → scheduled → covered | dismissed
   status: text("status").notNull().default("open"),
   firstDetectedAt: timestamp("first_detected_at").defaultNow().notNull(),
@@ -1209,12 +1254,17 @@ export const coverageGaps = pgTable("coverage_gaps", {
   uniqueIndex("uq_coverage_gaps_radar_item").on(table.radarItemId),
   index("idx_coverage_gaps_status").on(table.status, table.firstDetectedAt.desc()),
   index("idx_coverage_gaps_fingerprint").on(table.topicFingerprint),
+  index("idx_coverage_gaps_story").on(table.storyId),
 ]);
 
 export const coverageGapsRelations = relations(coverageGaps, ({ one }) => ({
   radarItem: one(radarItems, {
     fields: [coverageGaps.radarItemId],
     references: [radarItems.id],
+  }),
+  story: one(radarStories, {
+    fields: [coverageGaps.storyId],
+    references: [radarStories.id],
   }),
   coveredByArticle: one(articles, {
     fields: [coverageGaps.coveredByArticleId],
@@ -1239,6 +1289,8 @@ export const insertCoverageGapSchema = createInsertSchema(coverageGaps).omit({
 
 export type CoverageGap = typeof coverageGaps.$inferSelect;
 export type InsertCoverageGap = z.infer<typeof insertCoverageGapSchema>;
+export type RadarStory = typeof radarStories.$inferSelect;
+export type RadarStorySnapshot = typeof radarStorySnapshots.$inferSelect;
 
 // User reading history for recommendations (ENHANCED for advanced analytics)
 export const readingHistory = pgTable("reading_history", {
