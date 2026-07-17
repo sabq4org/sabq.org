@@ -7610,6 +7610,23 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           updateData[field] = new Date(updateData[field]);
         }
       });
+
+      // الموجز العام يُحرَّر عبر `excerpt`؛ صندوق «الموجز» يقرأ `aiSummary`/`aiBullets`.
+      // عند حفظ الملخص نزامن المصدر ونبطل النقاط القديمة حتى لا يبقى نص قديم على الصفحة.
+      if (Object.prototype.hasOwnProperty.call(parsed.data, "excerpt")) {
+        const nextSummary =
+          typeof parsed.data.excerpt === "string" ? parsed.data.excerpt.trim() || null : null;
+        updateData.excerpt = nextSummary;
+        if (updateData.aiSummary === undefined) {
+          updateData.aiSummary = nextSummary;
+        }
+        if (updateData.aiBullets === undefined) {
+          updateData.aiBullets = null;
+          updateData.aiBulletsGeneratedAt = null;
+        }
+        aiBulletsCache.delete(articleId);
+        aiBulletsInFlight.delete(articleId);
+      }
       
       // Handle republish feature
       if (req.body.republish === true) {
@@ -13385,8 +13402,10 @@ Respond in valid JSON format only:
         return res.json({ bullets: storedBullets, source: "db" });
       }
 
-      // 2) Fallback: parse from existing aiSummary text if available
-      const existing = typeof article.aiSummary === "string" ? article.aiSummary.trim() : "";
+      // 2) Fallback: parse from existing aiSummary / excerpt text if available
+      const existing =
+        (typeof article.aiSummary === "string" ? article.aiSummary.trim() : "") ||
+        (typeof article.excerpt === "string" ? article.excerpt.trim() : "");
       if (existing) {
         const bullets = parseToBullets(existing);
         if (bullets.length > 0) {
@@ -13398,102 +13417,9 @@ Respond in valid JSON format only:
         }
       }
 
-      const cacheKey = article.id;
-      const now = Date.now();
-
-      // 3) Memory-cache hit from a recent background generation
-      const cached = aiBulletsCache.get(cacheKey);
-      if (cached && cached.expiresAt > now) {
-        cacheBullets();
-        return res.json({ bullets: cached.bullets, source: "generated" });
-      }
-
-      // Build the source text for generation (used only by the background job)
-      const sourceText = [
-        article.title,
-        article.excerpt || "",
-        (article.content || "").replace(/<[^>]+>/g, " "),
-      ]
-        .filter(Boolean)
-        .join("\n\n")
-        .slice(0, 6000);
-
-      if (!sourceText.trim()) {
-        noStore();
-        return res.json({ bullets: [], source: "empty" });
-      }
-
-      // 4) Generate via OpenAI — but NEVER on the request path. A synchronous
-      // LLM call was adding ~1.8s to every cold request and tripping the APM
-      // slow-request alarm. Instead we kick generation off in the background
-      // (deduped across concurrent requests via aiBulletsInFlight), persist the
-      // result to the memory cache + DB, and return an empty "pending" response
-      // with no-store. The next load (CDN/browser revalidates because of
-      // no-store) hits the fast "db"/"generated" path above. Bullets are a
-      // progressive enhancement, so a one-load delay is acceptable.
-      if (!aiBulletsInFlight.has(cacheKey)) {
-        const generationPromise: Promise<string[]> = (async () => {
-          const OpenAIMod = (await import("openai")).default;
-          const openai = new OpenAIMod({ apiKey: process.env.OPENAI_API_KEY });
-          // 8s ceiling so a stuck OpenAI call can't pin the in-flight slot forever.
-          const completion = await openai.chat.completions.create(
-            {
-              model: "gpt-4o-mini",
-              temperature: 0.3,
-              response_format: { type: "json_object" },
-              messages: [
-                {
-                  role: "system",
-                  content:
-                    "أنت محرر صحفي يلخّص الأخبار بالعربية الفصحى. أعطِ ملخصاً موجزاً جداً في 3 نقاط مختصرة (10-18 كلمة لكل نقطة) تغطي جوهر الخبر. أعد JSON فقط بالشكل: {\"bullets\": [\"...\", \"...\", \"...\"]}",
-                },
-                {
-                  role: "user",
-                  content: `لخّص الخبر التالي في 3 نقاط:\n\n${sourceText}`,
-                },
-              ],
-            },
-            { signal: AbortSignal.timeout(8_000) }
-          );
-          const raw = completion.choices?.[0]?.message?.content || "{}";
-          let bullets: string[] = [];
-          try {
-            const parsed: unknown = JSON.parse(raw);
-            const arr = (parsed && typeof parsed === "object" && "bullets" in (parsed as Record<string, unknown>))
-              ? (parsed as { bullets: unknown }).bullets
-              : null;
-            if (Array.isArray(arr)) {
-              bullets = arr
-                .map((b: unknown): string => (typeof b === "string" ? b.trim() : ""))
-                .filter((s): s is string => s.length > 0)
-                .slice(0, 3);
-            }
-          } catch {
-            bullets = parseToBullets(raw);
-          }
-          return bullets;
-        })();
-
-        aiBulletsInFlight.set(cacheKey, generationPromise);
-        generationPromise
-          .then((bullets) => {
-            aiBulletsCache.set(cacheKey, { bullets, expiresAt: Date.now() + AI_BULLETS_TTL_MS });
-            // Persist to DB so future requests skip OpenAI entirely (fire-and-forget)
-            if (bullets.length > 0) {
-              storage.updateArticle(article.id, { aiBullets: bullets, aiBulletsGeneratedAt: new Date() } as Parameters<typeof storage.updateArticle>[1])
-                .catch((e) => console.error("[ai-bullets] failed to persist generated bullets:", e instanceof Error ? e.message : e));
-            }
-          })
-          .catch((genErr) => {
-            console.error("[ai-bullets] background generation error:", genErr instanceof Error ? genErr.message : String(genErr));
-          })
-          .finally(() => {
-            aiBulletsInFlight.delete(cacheKey);
-          });
-      }
-
+      // لا تولّد موجزاً من نص المقال إن فرّغ المحرر الملخص — الصندوق يختفي بدل أن يعود تلقائياً
       noStore();
-      return res.json({ bullets: [], source: "pending" });
+      return res.json({ bullets: [], source: "empty" });
     } catch (error) {
       console.error("Error in ai-bullets:", error);
       noStore();
@@ -25697,6 +25623,21 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
           updateData[field] = new Date(updateData[field]);
         }
       });
+
+      if (Object.prototype.hasOwnProperty.call(parsed.data, "excerpt")) {
+        const nextSummary =
+          typeof parsed.data.excerpt === "string" ? parsed.data.excerpt.trim() || null : null;
+        updateData.excerpt = nextSummary;
+        if (updateData.aiSummary === undefined) {
+          updateData.aiSummary = nextSummary;
+        }
+        if (updateData.aiBullets === undefined) {
+          updateData.aiBullets = null;
+          updateData.aiBulletsGeneratedAt = null;
+        }
+        aiBulletsCache.delete(articleId);
+        aiBulletsInFlight.delete(articleId);
+      }
 
       const [updatedArticle] = await db
         .update(articles)

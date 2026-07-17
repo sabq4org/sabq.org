@@ -4168,6 +4168,9 @@ export const updateArticleSchema = z.object({
     z.string(),
     z.null()
   ]).optional(),
+  // عند تغيير الملخص من المحرر تُمسَح النقاط ليعاد بناؤها من النص الجديد
+  aiBullets: z.union([z.array(z.string()), z.null()]).optional(),
+  aiBulletsGeneratedAt: z.union([z.string().datetime(), z.null()]).optional(),
   isFeatured: z.boolean().optional(),
   hideFromHomepage: z.boolean().optional(),
   publishedAt: z.union([
