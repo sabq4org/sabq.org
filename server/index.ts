@@ -2060,6 +2060,18 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // تسخين تفاصيل المباريات الساخنة — يقتل الجلب البارد لمركز المباراة
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startSportsMatchWarmupJob } = await import("./jobs/sportsMatchWarmupJob");
+            startSportsMatchWarmupJob();
+          } catch (error) {
+            console.error("[Server] Error starting match warmup job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // رادار سبق الذكي: نفس نمط المونديال — تسجيل دائم وفحص القيادة داخل الدورة
       if (enableBackgroundWorkers) {
         setTimeout(async () => {
