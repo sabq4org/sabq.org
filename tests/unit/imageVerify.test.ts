@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import {
+  needsWebpTranscode,
   transcodeAvifToWebp,
   verifyImageMagicBytes,
 } from "../../server/utils/imageVerify";
@@ -45,5 +46,13 @@ describe("image upload verification", () => {
       ok: true,
       detectedFormat: "webp",
     });
+  });
+
+  it("flags AVIF and HEIC MIME types for WebP transcode", () => {
+    expect(needsWebpTranscode("image/avif")).toBe("avif");
+    expect(needsWebpTranscode("image/heic")).toBe("heic");
+    expect(needsWebpTranscode("image/heif")).toBe("heic");
+    expect(needsWebpTranscode("image/jpeg")).toBeNull();
+    expect(needsWebpTranscode("image/png")).toBeNull();
   });
 });

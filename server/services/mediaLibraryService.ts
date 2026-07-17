@@ -155,7 +155,20 @@ export async function saveExistingMedia(input: SaveExistingMediaInput): Promise<
     description: input.description ?? undefined,
     category,
     uploadedBy: input.userId,
-  }).returning();
+  }).returning({
+    id: mediaFiles.id,
+    fileName: mediaFiles.fileName,
+    originalName: mediaFiles.originalName,
+    url: mediaFiles.url,
+    type: mediaFiles.type,
+    mimeType: mediaFiles.mimeType,
+    size: mediaFiles.size,
+    title: mediaFiles.title,
+    description: mediaFiles.description,
+    category: mediaFiles.category,
+    uploadedBy: mediaFiles.uploadedBy,
+    createdAt: mediaFiles.createdAt,
+  });
 
   if (shouldAutoTag({ mimeType, url: input.url, category })) {
     enqueueAutoTag(mediaFile.id);

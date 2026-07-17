@@ -250,7 +250,7 @@ export function MediaUploadDialog({ open, onOpenChange, folders }: MediaUploadDi
                   id="file-input"
                   type="file"
                   className="hidden"
-                  accept=".jpg,.jpeg,.png,.webp,.avif,image/jpeg,image/png,image/webp,image/avif"
+                  accept=".jpg,.jpeg,.png,.webp,.avif,.heic,.heif,image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) handleFileSelect(file);
