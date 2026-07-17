@@ -112,6 +112,7 @@ object SabqRoutes {
     const val WorldCupMatch = "world-cup/match/{id}"
     const val WorldCupTeam = "world-cup/team/{id}?name={name}&logo={logo}"
     const val WorldCupPredictions = "world-cup/predictions"
+    const val Predictions = "predictions"
     const val GulfCup = "gulf-cup"
     const val GulfCupMatch = "gulf-cup/match/{id}"
     const val GulfCupTeam = "gulf-cup/team/{id}?name={name}&logo={logo}"
@@ -392,6 +393,7 @@ fun SabqApp(
                     SettingsScreen(
                         onLoginClick = { navController.navigate(SabqRoutes.Login) },
                         onLoyaltyClick = { navController.navigate(SabqRoutes.Loyalty) },
+                        onPredictionsClick = { navController.navigate(SabqRoutes.Predictions) },
                         onEditProfileClick = { navController.navigate(SabqRoutes.EditProfile) },
                         onChangePasswordClick = { navController.navigate(SabqRoutes.ChangePassword) },
                         onDeleteAccountClick = { navController.navigate(SabqRoutes.DeleteAccount) },
@@ -532,6 +534,13 @@ fun SabqApp(
                 }
                 composable(SabqRoutes.WorldCupPredictions) {
                     com.sabq.smart.feature.worldcup.WorldCupPredictionsScreen(
+                        onBack = { navController.popBackStack() },
+                        onRequireLogin = { navController.navigate(SabqRoutes.Login) },
+                    )
+                }
+                // المنصة المركزية للتوقّعات — كل البطولات ما عدا المونديال
+                composable(SabqRoutes.Predictions) {
+                    com.sabq.smart.feature.predictions.PredictionCenterScreen(
                         onBack = { navController.popBackStack() },
                         onRequireLogin = { navController.navigate(SabqRoutes.Login) },
                     )
