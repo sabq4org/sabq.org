@@ -1,0 +1,51 @@
+{
+  "packId": "saudi-gulf",
+  "title": "سعودي / خليجي — وزن أعلى لجمهور سبق",
+  "version": 1,
+  "sources": [
+    {
+      "name": "واس — وكالة الأنباء السعودية",
+      "url": "https://www.spa.gov.sa/rss.xml",
+      "type": "rss",
+      "language": "ar",
+      "categorySlug": "saudi",
+      "tier": "A",
+      "region": "gulf",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.5
+    },
+    {
+      "name": "عكاظ",
+      "url": "https://www.okaz.com.sa/rss",
+      "type": "rss",
+      "language": "ar",
+      "categorySlug": "saudi",
+      "tier": "A",
+      "region": "gulf",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.4
+    },
+    {
+      "name": "CNN بالعربية",
+      "url": "https://arabic.cnn.com/api/v1/rss/rss.xml",
+      "type": "rss",
+      "language": "ar",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "gulf",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.35
+    },
+    {
+      "name": "سكاي نيوز عربية",
+      "url": "https://www.skynewsarabia.com/rss",
+      "type": "rss",
+      "language": "ar",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "gulf",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.35
+    }
+  ]
+}

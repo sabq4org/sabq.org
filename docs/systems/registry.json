@@ -248,17 +248,23 @@
       "nameEn": "Smart Radar",
       "status": "active",
       "category": "intelligence",
-      "summary": "رصد إخباري، مؤشرات، تنبيهات، ومراقبة مصادر.",
+      "summary": "رصد إخباري كثيف (RSS + X)، حزم مصادر أمريكية/عالمية، تنبيهات، وصحة شبكة.",
       "docPath": "docs/systems/radar/SYSTEM.md",
       "relatedDocs": [
         "docs/RADAR_X_WATCHES.md",
-        "docs/radar-example.md"
+        "docs/radar-source-licensing.md",
+        "docs/radar-example.md",
+        "docs/proposals/2026-07-17-radar-evolution-plan.md"
       ],
       "pathGlobs": [
         "server/services/radar/**",
         "server/routes/radar.ts",
         "client/src/pages/dashboard/SmartRadar.tsx",
-        "docs/RADAR_X_WATCHES.md"
+        "scripts/seed-packs/**",
+        "scripts/seed-radar-pack.ts",
+        "scripts/radar-coverage-report.ts",
+        "docs/RADAR_X_WATCHES.md",
+        "docs/radar-source-licensing.md"
       ],
       "aiFeatureKeys": ["radar"],
       "dashboardPath": "/dashboard/radar",

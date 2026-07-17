@@ -1,0 +1,100 @@
+{
+  "packId": "global-background",
+  "title": "رصد عالمي خلفي (وكالات ووسائل دولية)",
+  "version": 1,
+  "sources": [
+    {
+      "name": "BBC World",
+      "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "global",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.2
+    },
+    {
+      "name": "BBC Arabic",
+      "url": "https://feeds.bbci.co.uk/arabic/rss.xml",
+      "type": "rss",
+      "language": "ar",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "global",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.25
+    },
+    {
+      "name": "The Guardian — World",
+      "url": "https://www.theguardian.com/world/rss",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "global",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.1
+    },
+    {
+      "name": "Sky News — World",
+      "url": "https://feeds.skynews.com/feeds/rss/world.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "global",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.05
+    },
+    {
+      "name": "Al Jazeera English",
+      "url": "https://www.aljazeera.com/xml/rss/all.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "A",
+      "region": "global",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.2
+    },
+    {
+      "name": "DW English — Top",
+      "url": "https://rss.dw.com/rdf/rss-en-top",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "global",
+      "fetchIntervalMinutes": 15,
+      "weight": 1.05
+    },
+    {
+      "name": "France 24 — English",
+      "url": "https://www.france24.com/en/rss",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "global",
+      "fetchIntervalMinutes": 15,
+      "weight": 1.05
+    },
+    {
+      "name": "BBC Sport — Football",
+      "url": "https://feeds.bbci.co.uk/sport/football/rss.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "sports",
+      "tier": "B",
+      "region": "global",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.1
+    }
+  ],
+  "xOnlyAlternatives": [
+    { "outlet": "AP", "handle": "@AP", "reason": "لا RSS عام مجاني موثوق" },
+    { "outlet": "Reuters", "handle": "@Reuters", "reason": "RSS الرسمي مغلق/مدفوع" },
+    { "outlet": "AFP", "handle": "@AFP", "reason": "لا RSS عام — الرصد عبر X" }
+  ]
+}

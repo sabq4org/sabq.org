@@ -21,6 +21,43 @@ export async function listSources(): Promise<RadarSource[]> {
   return db.select().from(radarSources).orderBy(desc(radarSources.createdAt));
 }
 
+/** عدد رصدات إكس النشطة — سقف الحماية RADAR_X_MAX_ACTIVE_WATCHES */
+export async function countActiveXWatches(): Promise<number> {
+  const rows = await db
+    .select({ value: count() })
+    .from(radarSources)
+    .where(and(eq(radarSources.isActive, true), eq(radarSources.type, "x")));
+  return Number(rows[0]?.value ?? 0);
+}
+
+/** ملخص صحة الشبكة للوحة والـ API */
+export async function sourceHealthSummary(): Promise<{
+  active: number;
+  rss: number;
+  xWatches: number;
+  withError: number;
+  neverFetched: number;
+  errors: Array<{ id: string; name: string; type: string; lastError: string | null; tier: string | null }>;
+}> {
+  const sources = await listSources();
+  const active = sources.filter((s) => s.isActive);
+  const withError = active.filter((s) => s.lastError);
+  return {
+    active: active.length,
+    rss: active.filter((s) => s.type !== "x").length,
+    xWatches: active.filter((s) => s.type === "x").length,
+    withError: withError.length,
+    neverFetched: active.filter((s) => !s.lastFetchedAt).length,
+    errors: withError.slice(0, 50).map((s) => ({
+      id: s.id,
+      name: s.name,
+      type: s.type,
+      lastError: s.lastError,
+      tier: s.tier ?? null,
+    })),
+  };
+}
+
 export async function getSource(id: string): Promise<RadarSource | undefined> {
   const rows = await db.select().from(radarSources).where(eq(radarSources.id, id)).limit(1);
   return rows[0];
