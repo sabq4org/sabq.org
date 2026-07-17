@@ -1,6 +1,6 @@
 {
-  "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog.",
-  "version": 1,
+  "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
+  "version": 2,
   "updatedAt": "2026-07-17",
   "systems": [
     {
@@ -28,9 +28,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/loyalty-admin",
-      "owners": [
-        "platform"
-      ],
+      "owners": ["platform"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -55,9 +53,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
-      "owners": [
-        "sports"
-      ],
+      "owners": ["sports"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -66,7 +62,7 @@
       "nameEn": "Editorial / Newsroom",
       "status": "active",
       "category": "content",
-      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور — مع الأقفال والتنبيهات ونبض اللوحة.",
+      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ورأي الكاتب.",
       "docPath": "docs/systems/editorial/SYSTEM.md",
       "relatedDocs": [
         "docs/editorial/sabq-unified-editorial-prompt.md",
@@ -77,14 +73,47 @@
         "server/routes/editorAlerts.ts",
         "server/routes/editorPresence.ts",
         "server/routes/dashboardPulse.ts",
+        "server/routes/whatsappAgent.ts",
+        "server/routes/emailAgent.ts",
+        "server/routes/visualAiRoutes.ts",
+        "server/routes/nanoBananaRoutes.ts",
+        "server/routes/infographicAi.ts",
+        "server/routes/storyCardsRoutes.ts",
+        "server/routes/smartInsightsRoutes.ts",
+        "server/routes/autoImageRoutes.ts",
         "server/services/editorialNotifications.ts",
         "server/services/editorAlerts.ts",
         "server/services/dashboardPulseService.ts",
         "server/services/aiArticleGenerator.ts",
+        "server/services/smartLinks.ts",
+        "server/services/smartInsightsService.ts",
+        "server/services/smartCategoryClassifier.ts",
+        "server/services/geoExtractionService.ts",
+        "server/services/storyCardsService.ts",
+        "server/services/mobileArticleEnrichment.ts",
+        "server/services/visualAiService.ts",
+        "server/services/infographicAiService.ts",
+        "server/services/nanoBananaService.ts",
+        "server/services/aiSmartThumbnailService.ts",
+        "server/services/autoImageGenerationService.ts",
+        "server/services/aiImageGenerator.ts",
+        "server/services/opinionAuthorWorkspaceService.ts",
         "server/journalist-agent-ai.ts",
+        "server/journalist-agent-routes.ts",
+        "server/ai-content-tools.ts",
+        "server/data-story-ai.ts",
+        "server/data-story-routes.ts",
+        "server/seo-generator.ts",
+        "server/ai-classifier.ts",
+        "server/ai/contentAnalyzer.ts",
+        "server/storyMatcher.ts",
+        "server/smartCategoriesEngine.ts",
         "client/src/pages/dashboard/NewsroomPulseDashboard.tsx",
         "client/src/pages/dashboard/EditorAlertsSettings.tsx",
         "client/src/pages/dashboard/SmartJournalist.tsx",
+        "client/src/pages/dashboard/SmartLinksManagement.tsx",
+        "client/src/pages/dashboard/CommunicationsManagement.tsx",
+        "client/src/pages/DataStoryGenerator.tsx",
         "docs/editorial/**"
       ],
       "aiFeatureKeys": [
@@ -108,14 +137,15 @@
         "smart-thumbnail",
         "visual-ai",
         "infographic-ai",
-        "entity-extraction",
-        "prompt-studio",
-        "legacy-ai-manager"
+        "whatsapp-agent",
+        "email-agent",
+        "opinion-writer-ideas",
+        "opinion-writer-coach",
+        "opinion-writer-first-reader",
+        "opinion-writer-style-profile"
       ],
-      "dashboardPath": "/dashboard/newsroom-pulse",
-      "owners": [
-        "editorial"
-      ],
+      "dashboardPath": "/dashboard",
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -124,7 +154,7 @@
       "nameEn": "iFox AI Content",
       "status": "active",
       "category": "ai",
-      "summary": "توليد وإدارة محتوى بالذكاء الاصطناعي: مقالات، تقويم، ميزانية، جودة، وسائط.",
+      "summary": "توليد وإدارة محتوى بالذكاء الاصطناعي: مقالات، تقويم، ميزانية، جودة، وسائط، ومهام AI المجدولة.",
       "docPath": "docs/systems/ifox/SYSTEM.md",
       "relatedDocs": [
         "docs/architecture/SYSTEM_DOCUMENTATION.md"
@@ -132,6 +162,10 @@
       "pathGlobs": [
         "server/services/ifox/**",
         "server/routes/ifox/**",
+        "server/services/aiTaskExecutor.ts",
+        "server/routes/aiTasksRoutes.ts",
+        "server/jobs/aiTasksJob.ts",
+        "server/jobs/aiTasksCleanup.ts",
         "client/src/pages/admin/ifox/**",
         "client/src/components/admin/ifox/**",
         "client/src/pages/ifox/**"
@@ -139,12 +173,11 @@
       "aiFeatureKeys": [
         "ifox-content",
         "ifox-quality",
-        "ifox-strategy"
+        "ifox-strategy",
+        "ai-task-executor"
       ],
       "dashboardPath": "/dashboard/admin/ifox",
-      "owners": [
-        "ai"
-      ],
+      "owners": ["ai"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -153,23 +186,32 @@
       "nameEn": "AI Hub",
       "status": "active",
       "category": "ai",
-      "summary": "بوابة موحّدة للنماذج، الميزانيات، سجلات الاستخدام، وصحة المزودين.",
+      "summary": "بوابة موحّدة للنماذج، الميزانيات، سجلات الاستخدام، المتجهات، واستوديو البرومبت، ومظلة الاستدعاءات القديمة.",
       "docPath": "docs/systems/ai-hub/SYSTEM.md",
       "relatedDocs": [
         "docs/ai-models-migration.md"
       ],
       "pathGlobs": [
-        "server/ai/**",
+        "server/ai/gateway/**",
+        "server/ai-manager.ts",
+        "server/embeddingsService.ts",
         "server/services/aiHubService.ts",
+        "server/services/promptStudio.ts",
         "server/routes/aiHub.ts",
+        "server/routes/promptStudio.ts",
         "server/jobs/aiUsageRollup.ts",
-        "client/src/pages/dashboard/AiHub/**"
+        "client/src/pages/dashboard/AiHub/**",
+        "client/src/pages/PromptStudio.tsx",
+        "client/src/pages/PromptStudioPublic.tsx"
       ],
-      "aiFeatureKeys": [],
+      "aiFeatureKeys": [
+        "legacy-ai-manager",
+        "prompt-studio",
+        "embeddings",
+        "entity-extraction"
+      ],
       "dashboardPath": "/dashboard/ai-hub",
-      "owners": [
-        "ai"
-      ],
+      "owners": ["ai"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -178,7 +220,7 @@
       "nameEn": "Muqtarab",
       "status": "active",
       "category": "engagement",
-      "summary": "منصة مشاركة القرّاء والزوايا الإخبارية مع مراجعة تحريرية.",
+      "summary": "منصة مشاركة القرّاء والزوايا الإخبارية مع مراجعة تحريرية وذكاء مساعد.",
       "docPath": "docs/systems/muqtarab/SYSTEM.md",
       "relatedDocs": [
         "docs/MUQTARAB.md",
@@ -192,13 +234,9 @@
         "docs/MUQTARAB.md",
         "docs/MUQTARAB_IOS_PLAN.md"
       ],
-      "aiFeatureKeys": [
-        "muqtarab-ai"
-      ],
+      "aiFeatureKeys": ["muqtarab-ai"],
       "dashboardPath": "/dashboard/muqtarab",
-      "owners": [
-        "editorial"
-      ],
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -219,13 +257,9 @@
         "client/src/pages/dashboard/SmartRadar.tsx",
         "docs/RADAR_X_WATCHES.md"
       ],
-      "aiFeatureKeys": [
-        "radar"
-      ],
+      "aiFeatureKeys": ["radar"],
       "dashboardPath": "/dashboard/radar",
-      "owners": [
-        "editorial"
-      ],
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -242,21 +276,19 @@
       "pathGlobs": [
         "server/services/audioNewsletterService.ts",
         "server/services/aiNewsletterService.ts",
+        "server/services/aiNewsletterEnhancer.ts",
         "server/services/newsletterScheduler.ts",
         "server/services/ttsProviderRegistry.ts",
+        "server/services/smartNewsletterTemplates.ts",
         "server/routes/audioNewsletterRoutes.ts",
         "server/routes/smartNewsletterRoutes.ts",
         "server/routes/newsletterAnalyticsRoutes.ts",
         "client/src/pages/dashboard/NewsletterAnalytics.tsx",
         "docs/AUDIO_NEWSLETTER_SYSTEM.md"
       ],
-      "aiFeatureKeys": [
-        "audio-newsletter"
-      ],
+      "aiFeatureKeys": ["audio-newsletter"],
       "dashboardPath": "/dashboard/audio-newsletters",
-      "owners": [
-        "content"
-      ],
+      "owners": ["content"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -265,7 +297,7 @@
       "nameEn": "Media Library",
       "status": "active",
       "category": "content",
-      "summary": "تخزين وبحث وحوكمة أصول الوسائط التحريرية.",
+      "summary": "تخزين وبحث وحوكمة وأوصاف أصول الوسائط التحريرية (توليد الصور يبقى تحت التحرير).",
       "docPath": "docs/systems/media-library/SYSTEM.md",
       "relatedDocs": [
         "docs/R2_NEWS_IMAGES_ROLLOUT.md"
@@ -277,13 +309,9 @@
         "server/routes/mediaStoreRoutes.ts",
         "client/src/pages/dashboard/MediaLibrary.tsx"
       ],
-      "aiFeatureKeys": [
-        "media-caption"
-      ],
+      "aiFeatureKeys": ["media-caption"],
       "dashboardPath": "/dashboard/media-library",
-      "owners": [
-        "content"
-      ],
+      "owners": ["content"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -292,7 +320,7 @@
       "nameEn": "Sports Tournaments",
       "status": "active",
       "category": "sports",
-      "summary": "خليجي، آسيا، كأس الملك، كأس العالم (legacy)، مجالس، فانتازي، ومصادر البيانات الرياضية.",
+      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.",
       "docPath": "docs/systems/sports-tournaments/SYSTEM.md",
       "relatedDocs": [
         "docs/SPORTS_PORTAL_ROADMAP.md",
@@ -308,8 +336,13 @@
         "server/services/wc*.ts",
         "server/services/gc*.ts",
         "server/services/sportmonksService.ts",
+        "server/services/sportmonksNewsService.ts",
         "server/services/sportsTournamentsService.ts",
+        "server/services/sportsNamesService.ts",
+        "server/services/worldCupNewsGenerator.ts",
+        "server/services/kingsCupNewsGenerator.ts",
         "server/services/sportsIntelligence/**",
+        "server/services/sportsSnaps/**",
         "server/routes/gulfCup.ts",
         "server/routes/asianCup.ts",
         "server/routes/kingsCup.ts",
@@ -326,12 +359,16 @@
       "aiFeatureKeys": [
         "world-cup-news",
         "sportmonks-news",
-        "sports-names"
+        "sports-names",
+        "sports-snaps",
+        "sports-intel-trends",
+        "sports-intel-prediction",
+        "sports-intel-scene",
+        "sports-intel-digest",
+        "sports-intel-copilot"
       ],
       "dashboardPath": "/dashboard/sports-tournaments",
-      "owners": [
-        "sports"
-      ],
+      "owners": ["sports"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -356,10 +393,8 @@
         "docs/APPLE_PUSH_SETUP.md"
       ],
       "aiFeatureKeys": [],
-      "dashboardPath": "/dashboard/notifications",
-      "owners": [
-        "platform"
-      ],
+      "dashboardPath": "/dashboard/notification-admin",
+      "owners": ["platform"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -383,9 +418,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/ads",
-      "owners": [
-        "monetization"
-      ],
+      "owners": ["monetization"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -411,9 +444,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
-      "owners": [
-        "platform"
-      ],
+      "owners": ["platform"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -422,7 +453,7 @@
       "nameEn": "SEO / SSR",
       "status": "active",
       "category": "infra",
-      "summary": "حقن الميتا، إعادة توجيه السلاق، وSSR عبر web-next للحواف العامة.",
+      "summary": "حقن الميتا، إعادة توجيه السلاق، وSSR عبر web-next — بدون توليد SEO بالذكاء (ذلك تحت التحرير).",
       "docPath": "docs/systems/seo-ssr/SYSTEM.md",
       "relatedDocs": [
         "docs/DEPLOYMENT_STATUS.md",
@@ -439,9 +470,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
-      "owners": [
-        "platform"
-      ],
+      "owners": ["platform"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -450,22 +479,24 @@
       "nameEn": "Comments & Reactions",
       "status": "active",
       "category": "engagement",
-      "summary": "تعليقات، تفاعلات، وإشراف بالذكاء الاصطناعي.",
+      "summary": "تعليقات، تفاعلات، إشراف آلي، وتحليل مشاعر التعليقات.",
       "docPath": "docs/systems/comments/SYSTEM.md",
       "relatedDocs": [],
       "pathGlobs": [
         "server/services/comment*.ts",
         "server/routes/comment*.ts",
+        "server/routes/topicComments.ts",
         "server/ai/commentModeration.ts",
-        "server/routes/topicComments.ts"
+        "server/sentiment-analyzer.ts",
+        "client/src/pages/dashboard/SentimentAnalytics.tsx",
+        "client/src/pages/admin/SentimentInsights.tsx"
       ],
       "aiFeatureKeys": [
-        "comment-moderation"
+        "comment-moderation",
+        "sentiment-analysis"
       ],
-      "dashboardPath": null,
-      "owners": [
-        "engagement"
-      ],
+      "dashboardPath": "/dashboard/ai-moderation",
+      "owners": ["engagement"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -482,13 +513,9 @@
         "client/src/pages/dashboard/DeepAnalysis.tsx",
         "client/src/pages/dashboard/DeepAnalysisList.tsx"
       ],
-      "aiFeatureKeys": [
-        "deep-analysis"
-      ],
+      "aiFeatureKeys": ["deep-analysis"],
       "dashboardPath": "/dashboard/deep-analysis",
-      "owners": [
-        "editorial"
-      ],
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -497,7 +524,7 @@
       "nameEn": "Editorial Calendar",
       "status": "active",
       "category": "content",
-      "summary": "أحداث تحريرية وتذكيرات وربط بتوليد المحتوى.",
+      "summary": "أحداث تحريرية وتذكيرات وربط اختياري بتوليد محتوى.",
       "docPath": "docs/systems/calendar/SYSTEM.md",
       "relatedDocs": [
         "docs/architecture/CALENDAR_SYSTEM.md"
@@ -505,15 +532,14 @@
       "pathGlobs": [
         "server/services/calendarAi.ts",
         "server/routes/calendar.ts",
+        "client/src/pages/CalendarPage.tsx",
+        "client/src/pages/CalendarEventForm.tsx",
+        "client/src/pages/CalendarEventDetail.tsx",
         "docs/architecture/CALENDAR_SYSTEM.md"
       ],
-      "aiFeatureKeys": [
-        "calendar-ai"
-      ],
+      "aiFeatureKeys": ["calendar-ai"],
       "dashboardPath": "/dashboard/calendar",
-      "owners": [
-        "editorial"
-      ],
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -526,7 +552,8 @@
       "docPath": "docs/systems/systems-catalog/SYSTEM.md",
       "relatedDocs": [
         "docs/systems/README.md",
-        "docs/systems/GOVERNANCE.md"
+        "docs/systems/GOVERNANCE.md",
+        "docs/systems/AUDIT-2026-07-17.md"
       ],
       "pathGlobs": [
         "docs/systems/**",
@@ -538,9 +565,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/systems-catalog",
-      "owners": [
-        "platform"
-      ],
+      "owners": ["platform"],
       "lastReviewed": "2026-07-17"
     }
   ]

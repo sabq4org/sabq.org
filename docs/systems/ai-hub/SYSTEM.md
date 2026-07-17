@@ -3,28 +3,24 @@
 > آخر مراجعة: 2026-07-17 | المالك: ai
 
 ## الغرض
-بوابة موحّدة: اختيار النماذج، الميزانيات، سجلات `ai_usage_logs` / `ai_usage_daily`، وصحة المزودين. **لا تعرض مفاتيح أبداً.**
+بوابة موحّدة: نماذج، ميزانيات، سجلات الاستخدام، صحة المزودين، متجهات، استوديو البرومبت، ومظلة الاستدعاءات غير المهاجرة (`legacy-ai-manager`).
 
 ## الحدود
-- **داخل النطاق:** `server/ai/**`, `aiHubService`, `/dashboard/ai-hub`.
-- **خارج النطاق:** منطق أعمال iFox/التعليقات — تلك أنظمة تستهلك البوابة فقط.
+- **داخل النطاق:** Gateway، ai-manager، embeddings، prompt studio، AiHub UI، usage rollup.
+- **خارج النطاق:** منطق أعمال iFox/التحرير — تلك تستهلك البوابة بمفاتيحها.
 
-## نقاط الدخول
-| الطبقة | المسار |
-|--------|--------|
-| Gateway | `server/ai/gateway/` |
-| Service | `server/services/aiHubService.ts` |
-| Web | `client/src/pages/dashboard/AiHub/` |
-| Job | `server/jobs/aiUsageRollup.ts` |
+## مفاتيح AI (حصرية)
+`legacy-ai-manager`, `prompt-studio`, `embeddings`, `entity-extraction`
 
-## عقود مهمة / Gotchas
-- الاستخدام يُسجَّل fire-and-forget عبر `usageLogger` — لا تُفشل طلب AI بسبب فشل اللوج.
-- الرسوم البيانية من rollup يومي؛ «اليوم» يقرأ السجلات الخام.
+## عقود مهمة
+- لا تعرض مفاتيح المزودين أبداً.
+- الاستخدام fire-and-forget عبر `usageLogger`.
+- `legacy-ai-manager` يستوعب كل `aiManager.generate()` بلا `feature` صريح — رقمه كبير حتى تكتمل الهجرة.
 
 ## صحة وتشغيل
 - لوحة: `/dashboard/ai-hub`
-- هذا النظام هو مصدر أرقام الاستهلاك لكتالوج الأنظمة
+- استوديو البرومبت: `/dashboard/prompt-studio`
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
-- [ ] لم تُسرَّب أسرار مزودين في الاستجابات
+- [ ] لم تُسرَّب أسرار مزودين

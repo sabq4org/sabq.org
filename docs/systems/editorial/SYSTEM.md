@@ -3,44 +3,26 @@
 > آخر مراجعة: 2026-07-17 | المالك: editorial
 
 ## الغرض
-غرفة الأخبار اليومية (أقفال، حضور، تنبيهات، نبض) **وأدوات التحرير بالذكاء الاصطناعي** التي يستخدمها المحررون يومياً: عناوين، توليد/مساعدة مقالات، تصنيف، SEO، روابط ذكية، صور.
+غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي.
 
 ## الحدود
-- **داخل النطاق:**
-  - تشغيل غرفة الأخبار: edit locks، editor presence/alerts، dashboard pulse
-  - استهلاك AI التحريري عبر Gateway (انظر `aiFeatureKeys` في السجل)
-- **خارج النطاق (أنظمة مجاورة لها مفاتيحها الخاصة):**
-  - iFox (`ifox-*`)
-  - المقترب (`muqtarab-ai`)
-  - الرادار (`radar`)
-  - عُمق (`deep-analysis`)
-  - أخبار البطولات (`world-cup-news`, `sportmonks-news`)
-  - النشرات الصوتية والتعليقات
+- **داخل النطاق:** أقفال/حضور/تنبيهات/نبض + مفاتيح AI المدرجة في السجل لهذا النظام.
+- **خارج النطاق (لها أنظمة):** iFox، المقترب، الرادار، عُمق، أخبار البطولات، النشرات الصوتية، إشراف التعليقات، المتجهات/البرومبت (ai-hub).
 
-> ملاحظة: ظهور «لا استخدام AI مسجّل اليوم» يعني أن المفاتيح مربوطة لكن لا صفوف في `ai_usage_logs` لهذا اليوم — وليس أن التحرير بلا ذكاء اصطناعي.
+## مفاتيح AI (حصرية)
+`content-tools`, `journalist-agent`, `data-story`, `ai-article-generator`, `article-classification`, `content-analyzer`, `smart-categories`, `smart-category-classifier`, `story-matcher`, `smart-insights`, `geo-extraction`, `smart-links`, `story-cards`, `seo-generator`, `mobile-article-enrichment`, `image-generation`, `nano-banana-images`, `smart-thumbnail`, `visual-ai`, `infographic-ai`, `whatsapp-agent`, `email-agent`, `opinion-writer-*`
 
 ## نقاط الدخول
-| الطبقة | المسار |
+| الطبقة | أمثلة |
 |--------|--------|
-| Backend غرفة الأخبار | `articleEditLocks`, `editorAlerts`, `editorPresence`, `dashboardPulse` |
-| Backend AI تحريري | `aiArticleGenerator`, `journalist-agent-ai`, أدوات content-tools عبر Gateway |
-| Web | `NewsroomPulseDashboard`, `EditorAlertsSettings`, `SmartJournalist` |
-| Docs | `docs/editorial/` |
+| غرفة الأخبار | `articleEditLocks`, `editorAlerts`, `dashboardPulse` |
+| AI تحريري | `ai-content-tools`, `journalist-agent-ai`, `aiArticleGenerator`, `seo-generator` |
+| Web | `/dashboard`, SmartJournalist, Communications, DataStory |
 
-## التوثيق المرتبط
-- `docs/editorial/sabq-unified-editorial-prompt.md`
-- `docs/ai-prompts-article-editor.md`
-
-## عقود مهمة / Gotchas
-- أقفال التحرير TTL ≈ 10 دقائق مع heartbeat.
-- أي استدعاء نموذج جديد من المحرر يجب أن يمر AI Gateway بمفتاح `featureKey` معروف ويُسجَّل في usage.
-- لا تُكرَّر مفاتيح أنظمة مجاورة هنا حتى لا يُحسب الاستهلاك مرتين في كتالوج الأنظمة.
-
-## صحة وتشغيل
-- لوحة غرفة الأخبار: `/dashboard/newsroom-pulse`
-- استهلاك AI: مجموع مفاتيح `aiFeatureKeys` في السجل مقابل `ai_usage_logs` لليوم
+## عقود مهمة
+- أي أداة AI جديدة من المحرر → أضف `featureKey` هنا وفي `defaults.ts`، ولا تكرره بنظام آخر.
+- جزء كبير من الاستدعاءات القديمة ما زال يُحسب تحت `legacy-ai-manager` في `ai-hub` حتى تُهاجر.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
-- [ ] إن أضفت أداة AI تحريرية: أضفت `featureKey` في السجل + defaults Gateway
-- [ ] اختبرت مسار القفل/heartbeat إن لمسته
+- [ ] حدّثت `aiFeatureKeys` في السجل إن لزم

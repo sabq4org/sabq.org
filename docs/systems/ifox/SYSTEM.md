@@ -3,27 +3,18 @@
 > آخر مراجعة: 2026-07-17 | المالك: ai
 
 ## الغرض
-منصة توليد وإدارة محتوى بالذكاء الاصطناعي داخل سبق: مقالات، تقويم، ميزانية، جودة، وسائط.
+منصة توليد وإدارة محتوى بالذكاء الاصطناعي: مقالات، تقويم، ميزانية، جودة، وسائط، ومهام AI المجدولة.
 
-## الحدود
-- **داخل النطاق:** `server/services/ifox/**`, `server/routes/ifox/**`, صفحات `/dashboard/admin/ifox/*`.
-- **خارج النطاق:** AI Hub (البوابة والميزانيات العامة) — تكامل عبر Gateway/feature keys.
+## مفاتيح AI (حصرية)
+`ifox-content`, `ifox-quality`, `ifox-strategy`, `ai-task-executor`
 
 ## نقاط الدخول
-| الطبقة | المسار |
-|--------|--------|
-| Backend | `server/services/ifox/`, `server/routes/ifox/` |
-| Web | `client/src/pages/admin/ifox/`, Image Studio |
-| مرجع معماري | `docs/architecture/SYSTEM_DOCUMENTATION.md` § iFox |
+`server/services/ifox/**`, `server/routes/ifox/**`, `aiTaskExecutor`, صفحات `/dashboard/admin/ifox/*`
 
-## عقود مهمة / Gotchas
-- الميزانية والجودة جزء من دورة النشر — لا تتجاوز فحوص الجودة بصمت في الإنتاج.
-- سجّل استهلاك AI عبر AI Gateway بمفاتيح واضحة.
-
-## صحة وتشغيل
-- لوحة: `/dashboard/admin/ifox`
-- AI: راقب AiHub + `aiFeatureKeys` في السجل
+## عقود مهمة
+- الميزانية والجودة جزء من دورة النشر.
+- سجّل الاستهلاك عبر Gateway بمفاتيح ifox الواضحة.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
-- [ ] أي استدعاء نموذج جديد يمر من AI Gateway ويُسجَّل usage
+- [ ] أي نموذج جديد يمر Gateway ويُسجَّل usage

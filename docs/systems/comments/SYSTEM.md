@@ -3,23 +3,17 @@
 > آخر مراجعة: 2026-07-17 | المالك: engagement
 
 ## الغرض
-تعليقات المقالات/المواضيع، تفاعلات، وإشراف آلي عبر نموذج صغير.
+تعليقات المقالات/المواضيع، تفاعلات، إشراف آلي، وتحليل مشاعر التعليقات.
 
-## الحدود
-- **داخل النطاق:** `comment*` services/routes، `commentModeration`.
-- **خارج النطاق:** المقترب (محتوى قرّاء منظم بشكل مختلف).
+## مفاتيح AI (حصرية)
+`comment-moderation`, `sentiment-analysis`
 
 ## نقاط الدخول
-| الطبقة | المسار |
-|--------|--------|
-| Backend | `server/services/comment*.ts`, `server/routes/comment*.ts`, `server/ai/commentModeration.ts` |
+`server/ai/commentModeration.ts`, `server/sentiment-analyzer.ts`, مسارات comment*, لوحات `/dashboard/ai-moderation` و`/dashboard/sentiment-*`
 
-## عقود مهمة / Gotchas
-- الإشراف AI يجب أن يُسجَّل usage عبر Gateway عند الإمكان.
+## عقود مهمة
+- المفتاح الحقيقي هو `comment-moderation` (وليس `comments.moderation`).
 - Rate limit للكتابة المجهولة — احترم `X-Sabq-Client-IP`.
-
-## صحة وتشغيل
-- AI feature: `comments.moderation`
 
 ## عند التعديل
 - [ ] قرأت هذا الملف

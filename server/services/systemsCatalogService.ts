@@ -240,15 +240,41 @@ function aggregateAi(
   return acc;
 }
 
+function findDuplicateFeatureKeys(
+  systems: Array<{ id: string; aiFeatureKeys?: string[] }>,
+): Array<{ featureKey: string; systemIds: string[] }> {
+  const owners = new Map<string, string[]>();
+  for (const sys of systems) {
+    for (const key of sys.aiFeatureKeys || []) {
+      const list = owners.get(key) ?? [];
+      list.push(sys.id);
+      owners.set(key, list);
+    }
+  }
+  return [...owners.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([featureKey, systemIds]) => ({ featureKey, systemIds }));
+}
+
 export async function getSystemsCatalog(): Promise<{
   updatedAt: string;
   generatedAt: string;
   count: number;
   inventoryMode: "live" | "snapshot" | "unavailable";
   snapshotGeneratedAt: string | null;
+  /** مجموع AI لليوم بدون تكرار مفاتيح بين الأنظمة */
+  aiTodayUnique: {
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostUsd: number;
+    featureKeyCount: number;
+  };
+  duplicateFeatureKeys: Array<{ featureKey: string; systemIds: string[] }>;
   systems: SystemCatalogEntry[];
 }> {
   const registry = loadRegistry();
+  const duplicateFeatureKeys = findDuplicateFeatureKeys(registry.systems);
   const allFeatureKeys = [
     ...new Set(registry.systems.flatMap((s) => s.aiFeatureKeys || [])),
   ];
@@ -298,12 +324,37 @@ export async function getSystemsCatalog(): Promise<{
       ? "snapshot"
       : "unavailable";
 
+  const aiTodayUnique = {
+    requests: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    estimatedCostUsd: 0,
+    featureKeyCount: allFeatureKeys.length,
+  };
+  for (const key of allFeatureKeys) {
+    const row = byFeature.get(key);
+    if (!row) continue;
+    aiTodayUnique.requests += row.requests;
+    aiTodayUnique.inputTokens += row.inputTokens;
+    aiTodayUnique.outputTokens += row.outputTokens;
+    aiTodayUnique.estimatedCostUsd += row.estimatedCostUsd;
+  }
+
+  if (duplicateFeatureKeys.length) {
+    console.warn(
+      "[SystemsCatalog] duplicate aiFeatureKeys:",
+      duplicateFeatureKeys.map((d) => `${d.featureKey}→${d.systemIds.join(",")}`).join("; "),
+    );
+  }
+
   return {
     updatedAt: registry.updatedAt,
     generatedAt: new Date().toISOString(),
     count: systems.length,
     inventoryMode,
     snapshotGeneratedAt: snapshot?.generatedAt ?? null,
+    aiTodayUnique,
+    duplicateFeatureKeys,
     systems,
   };
 }
