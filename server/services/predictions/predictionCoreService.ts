@@ -5,6 +5,7 @@
 import { and, asc, desc, eq, inArray, lt, sql, type SQL } from "drizzle-orm";
 import { db } from "../../db";
 import {
+  predictionAwardOutbox,
   predictionCompetitions,
   predictionContests,
   predictionEntries,
@@ -514,6 +515,7 @@ export async function getContestSettlement(contestId: string, userId?: string) {
     reasonLabelAr: string;
     breakdown: Record<string, unknown> | null;
     referenceId: string;
+    wallet: { multiplier: number; walletPoints: number; delivered: boolean } | null;
   }> = [];
   if (userId && settlement) {
     const rows = await db
@@ -523,13 +525,31 @@ export async function getContestSettlement(contestId: string, userId?: string) {
         eq(predictionPointsLedger.settlementId, settlement.id),
         eq(predictionPointsLedger.userId, userId),
       ));
-    myAwards = rows.map((row) => ({
-      points: row.points,
-      reasonCode: row.reasonCode,
-      reasonLabelAr: REASON_LABELS_AR[row.reasonCode as ReasonCode] ?? row.reasonCode,
-      breakdown: row.breakdown,
-      referenceId: row.id, // الرقم المرجعي للدعم
-    }));
+    // مكافأة المحفظة تعيش في Outbox (فصل النقاط) — تُضم هنا للعرض فقط
+    const outboxRows = rows.length > 0
+      ? await db
+          .select()
+          .from(predictionAwardOutbox)
+          .where(inArray(predictionAwardOutbox.ledgerId, rows.map((r) => r.id)))
+      : [];
+    const outboxByLedger = new Map(outboxRows.map((o) => [o.ledgerId, o]));
+    myAwards = rows.map((row) => {
+      const outbox = outboxByLedger.get(row.id);
+      return {
+        points: row.points,
+        reasonCode: row.reasonCode,
+        reasonLabelAr: REASON_LABELS_AR[row.reasonCode as ReasonCode] ?? row.reasonCode,
+        breakdown: row.breakdown,
+        referenceId: row.id, // الرقم المرجعي للدعم
+        wallet: outbox
+          ? {
+              multiplier: outbox.multiplierSnapshot / 100,
+              walletPoints: outbox.walletPoints,
+              delivered: outbox.status === "delivered",
+            }
+          : null,
+      };
+    });
   }
 
   return {
