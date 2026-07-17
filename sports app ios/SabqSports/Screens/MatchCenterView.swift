@@ -76,13 +76,6 @@ struct SpMatchCenter: View {
     @State private var segment: Segment = .events
     @State private var selectedTeam: IDBox?
 
-    // التوقّع (للمباريات القادمة، للأعضاء)
-    @State private var predHome = 0
-    @State private var predAway = 0
-    @State private var myPrediction: SpPrediction?
-    @State private var predicting = false
-    @State private var predictError: String?
-
     // إثراء SportMonks (أفضل جهد) — يُفعّل تبويب «التحليل» عند توفّره.
     @State private var xg: SpXg?
     @State private var momentum: SpMomentum?
@@ -559,88 +552,7 @@ struct SpMatchCenter: View {
         )
     }
 
-    // MARK: - توقّع VARA (نموذج ديناميكي: ترتيب + فورمة + أفضلية أرض + مواجهات)
-
-    private func varaPick(_ f: SpFixture) -> VaraPick {
-        var tuple: (home: Int, draw: Int, away: Int)? = nil
-        if let s = h2h?.summary { tuple = (s.homeWins, s.draws, s.awayWins) }
-        let neutral = (f.competitionSlug == "world-cup" || f.competitionSlug == "gulf-cup")
-        return VaraPredict.compute(
-            home: strength[f.home.id], away: strength[f.away.id],
-            homeName: f.home.name, awayName: f.away.name,
-            neutralVenue: neutral, h2h: tuple)
-    }
-
-    // بطاقة «توقّع VARA» (من سيربح؟) — أُعيد تفعيلها ضمن تبويب «تقديم» للمباراة
-    // القادمة (قرار 2026-07-08). بطاقة verdict/predict العضو تبقى معطّلة.
-    @ViewBuilder private var varaModelCard: some View {
-        if let f = fixture, !f.started {
-            let pick = varaPick(f)
-            VStack(spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
-                    Text(L("توقّع VARA")).font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
-                    Spacer(minLength: 0)
-                    Text(Lf("الأرجح %d-%d", pick.scoreHome, pick.scoreAway))
-                        .font(SportsFonts.app(size: 11, weight: .heavy)).foregroundStyle(acc)
-                        .monospacedDigit().environment(\.layoutDirection, .leftToRight)
-                        .padding(.horizontal, 8).padding(.vertical, 3)
-                        .background(Capsule().fill(acc.opacity(0.10)))
-                }
-                HStack(alignment: .top) {
-                    varaStat("\(pick.home)٪", f.home.name, acc)
-                    varaStat("\(pick.draw)٪", L("تعادل"), SpTheme.onDarkDim)
-                    varaStat("\(pick.away)٪", f.away.name, SpTheme.onDark)
-                }
-                GeometryReader { geo in
-                    HStack(spacing: 2) {
-                        Capsule().fill(acc).frame(width: geo.size.width * CGFloat(pick.home) / 100)
-                        Capsule().fill(SpTheme.onDarkFaint.opacity(0.45)).frame(width: geo.size.width * CGFloat(pick.draw) / 100)
-                        Capsule().fill(SpTheme.teal).frame(width: geo.size.width * CGFloat(pick.away) / 100)
-                    }
-                    .environment(\.layoutDirection, .rightToLeft)
-                }.frame(height: 8)
-                HStack(spacing: 6) {
-                    Image(systemName: "info.circle").font(.system(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
-                    Text(pick.rationale)
-                        .font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
-                        .lineLimit(2)
-                    Spacer(minLength: 0)
-                }
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
-                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
-            )
-            .padding(.horizontal, 16)
-        }
-    }
-
-    // حكم ما بعد النهاية: لقطة VARA المؤرشفة قبل الانطلاق + توقّع العضو ضد النتيجة.
-    @ViewBuilder private var varaVerdictCard: some View {
-        if let f = fixture, f.status.finished, let gh = f.goals.home, let ga = f.goals.away {
-            let snap = VaraPickArchive.load(fixtureId: f.id)
-            let mine = myPrediction.map { (predHome: $0.predHome, predAway: $0.predAway) }
-            if snap != nil || mine != nil {
-                VaraVerdictCard(homeName: f.home.name, awayName: f.away.name,
-                                finalHome: gh, finalAway: ga, vara: snap, mine: mine)
-                    .padding(.horizontal, 16)
-            }
-        }
-    }
-
-    private func varaStat(_ value: String, _ label: String, _ color: Color) -> some View {
-        VStack(spacing: 3) {
-            Text(value).font(SportsFonts.app(size: 19, weight: .heavy)).foregroundStyle(color)
-                .monospacedDigit().environment(\.layoutDirection, .leftToRight)
-            Text(label).font(SportsFonts.app(size: 10.5, weight: .semibold)).foregroundStyle(SpTheme.onDarkDim)
-                .lineLimit(1).minimumScaleFactor(0.7).multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    // MARK: - تبويب «تقديم» (المباراة القادمة) — يجمع رؤية VARA + التوقّع + الفورمة
+    // MARK: - تبويب «تقديم» (المباراة القادمة) — يجمع رؤية VARA + الفورمة
     // + المواجهات + هدّافي الفريقين + الأجواء (طقس/قنوات/حكم) في مكان واحد هادئ.
     // كل بطاقة تدير هامشها الأفقي بنفسها (16) كبقية التبويبات.
 
@@ -648,7 +560,6 @@ struct SpMatchCenter: View {
         if let f = fixture {
             VStack(spacing: 16) {
                 varaVisionCard
-                varaModelCard
                 formCompareCard(f)
                 if let s = h2h?.summary, s.total > 0 {
                     h2hSummaryCard(s, home: f.home, away: f.away)
@@ -827,91 +738,6 @@ struct SpMatchCenter: View {
         let parts = [w.temp.map { "\($0)°" }, w.description, w.humidity.map { "\(L("رطوبة")) \($0)" }]
             .compactMap { $0 }.filter { !$0.isEmpty }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    // MARK: - التوقّع (مُعطّل مؤقتًا — النظام غير مكتمل؛ يُعاد تفعيله لاحقًا)
-
-    @ViewBuilder private var predictCard: some View {
-        if let f = fixture, !f.started, auth.isLoggedIn {
-            VStack(spacing: 14) {
-                HStack(spacing: 8) {
-                    Image(systemName: "sparkles").font(.system(size: 14, weight: .bold)).foregroundStyle(acc)
-                    Text(myPrediction == nil ? L("توقّع النتيجة") : L("توقّعك"))
-                        .font(SportsFonts.app(size: 15, weight: .bold)).foregroundStyle(SpTheme.onDark)
-                    Spacer(minLength: 0)
-                    Text(L("٣ نقاط للمطابقة")).font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
-                }
-                HStack(alignment: .top, spacing: 8) {
-                    scoreStepper(f.home, value: $predHome)
-                    Text("-").font(SportsFonts.app(size: 22, weight: .heavy))
-                        .foregroundStyle(SpTheme.onDarkFaint).padding(.top, 52)
-                    scoreStepper(f.away, value: $predAway)
-                }
-                Button { Task { await submit(f) } } label: {
-                    HStack(spacing: 8) {
-                        if predicting { ProgressView().tint(.white) }
-                        Text(myPrediction == nil ? L("احفظ توقّعي") : L("تعديل التوقّع"))
-                            .font(SportsFonts.app(size: 15, weight: .bold))
-                    }
-                    .foregroundStyle(.white).frame(maxWidth: .infinity).frame(height: 46)
-                    .background(RoundedRectangle(cornerRadius: SpTheme.buttonRadius, style: .continuous).fill(acc))
-                }
-                .buttonStyle(.plain).disabled(predicting)
-                if let predictError {
-                    Text(predictError).font(SportsFonts.app(size: 11)).foregroundStyle(SpTheme.crimson)
-                } else if myPrediction != nil {
-                    Text(L("يمكنك التعديل حتى انطلاق المباراة"))
-                        .font(SportsFonts.app(size: 10)).foregroundStyle(SpTheme.onDarkFaint)
-                }
-            }
-            .padding(16)
-            .background(
-                RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).fill(SpTheme.card)
-                    .overlay(RoundedRectangle(cornerRadius: SpTheme.cardRadius, style: .continuous).stroke(SpTheme.outline, lineWidth: 1))
-            )
-            .padding(.horizontal, 16)
-        }
-    }
-
-    private func scoreStepper(_ team: SpTeam, value: Binding<Int>) -> some View {
-        VStack(spacing: 8) {
-            SpTeamLogo(logo: team.logo, size: 44)
-            Text(team.name)
-                .font(SportsFonts.app(size: 12, weight: .semibold)).foregroundStyle(SpTheme.onDark)
-                .lineLimit(1).minimumScaleFactor(0.8).frame(maxWidth: .infinity)
-            HStack(spacing: 14) {
-                stepButton("minus") { if value.wrappedValue > 0 { value.wrappedValue -= 1 } }
-                Text("\(value.wrappedValue)")
-                    .font(SportsFonts.app(size: 24, weight: .heavy)).foregroundStyle(SpTheme.onDark)
-                    .frame(minWidth: 30).monospacedDigit()
-                stepButton("plus") { if value.wrappedValue < 20 { value.wrappedValue += 1 } }
-            }
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private func stepButton(_ icon: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .bold)).foregroundStyle(acc)
-                .frame(width: 32, height: 32).background(Circle().fill(acc.opacity(0.12)))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func submit(_ f: SpFixture) async {
-        predicting = true; predictError = nil
-        let body = SpPredictBody(
-            predHome: predHome, predAway: predAway, kickoffTs: f.timestamp,
-            competitionSlug: f.competitionSlug, homeId: f.home.id, awayId: f.away.id,
-            homeName: f.home.name, awayName: f.away.name, homeLogo: f.home.logo, awayLogo: f.away.logo
-        )
-        do {
-            myPrediction = try await APIClient.shared.submitPrediction(body, matchId: f.id)
-        } catch {
-            predictError = (error as? APIError)?.errorDescription ?? L("تعذّر حفظ التوقّع")
-        }
-        predicting = false
     }
 
     // MARK: - المحتوى (تبويبات)
@@ -2145,8 +1971,6 @@ struct SpMatchCenter: View {
             for row in st.standings { m[row.team.id] = VaraTeamStrength(row: row) }
             return m.isEmpty ? nil : m
         }()
-        async let predOpt: SpPrediction? = auth.isLoggedIn
-            ? (try? await APIClient.shared.fetchMyPrediction(matchId: fixtureId)) : nil
         async let previewOpt: SpMatchPreview? = upcoming
             ? (try? await APIClient.shared.get(
                 SpMatchPreview.self, path: "/sports/match/\(fixtureId)/preview", apiRoot: URLConstants.publicAPI))
@@ -2170,20 +1994,10 @@ struct SpMatchCenter: View {
         self.expectedLineup = await expectedOpt
         self.h2h = await h2hOpt
         if let m = await strengthOpt { self.strength = m }
-        if let p = await predOpt {
-            myPrediction = p
-            if let f, !f.started {
-                predHome = p.predHome
-                predAway = p.predAway
-            }
-        }
         self.previewNote = await previewOpt
         self.tv = await tvOpt
         self.homeScorers = (await homeScOpt)?.scorers ?? []
         self.awayScorers = (await awayScOpt)?.scorers ?? []
-        if let f = detail?.fixture ?? preview, !f.started {
-            VaraPickArchive.save(fixtureId: f.id, pick: varaPick(f))
-        }
     }
 
     /// موجة 2 — مخططات اختيارية بعد أول محتوى مفيد.
