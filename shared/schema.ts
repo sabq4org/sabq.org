@@ -1091,6 +1091,11 @@ export const radarSources = pgTable("radar_sources", {
   xValue: text("x_value"), // الكلمة/الهاشتاق/الحساب/استعلام البحث، أو woeid للترند
   xProvider: text("x_provider"), // auto (افتراضي) | official | twitterapiio — القرار الهجين
   xSinceId: text("x_since_id"), // مؤشر آخر تغريدة — يجلب الجديد فقط فيخفض الفاتورة
+  // ---- طبقة التشغيل (حزم البذر / الفرز) — additive اختياري ----
+  tier: text("tier"), // A | B | C — أولوية الجلب والعرض
+  region: text("region"), // us | gulf | global | …
+  weight: real("weight").notNull().default(1), // وزن في الزخم/العرض (سعودي/خليجي أعلى)
+  packId: text("pack_id"), // اسم حزمة البذر للتتبع (us-wires, x-news-accounts, …)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

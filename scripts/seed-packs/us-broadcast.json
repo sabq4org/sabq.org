@@ -1,0 +1,140 @@
+{
+  "packId": "us-broadcast",
+  "title": "شبكات وتلفزيون أمريكي + سياسة سريعة",
+  "version": 1,
+  "sources": [
+    {
+      "name": "CNN — Edition",
+      "url": "http://rss.cnn.com/rss/edition.rss",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.15
+    },
+    {
+      "name": "CNN — Top Stories",
+      "url": "http://rss.cnn.com/rss/cnn_topstories.rss",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.15
+    },
+    {
+      "name": "NBC News",
+      "url": "https://feeds.nbcnews.com/nbcnews/public/news",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.1
+    },
+    {
+      "name": "ABC News — Top Stories",
+      "url": "https://abcnews.go.com/abcnews/topstories",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.1
+    },
+    {
+      "name": "CBS News — Latest",
+      "url": "https://www.cbsnews.com/latest/rss/main",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.1
+    },
+    {
+      "name": "Fox News — Latest",
+      "url": "https://moxie.foxnews.com/google-publisher/latest.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 5,
+      "weight": 1.05
+    },
+    {
+      "name": "NPR — News",
+      "url": "https://feeds.npr.org/1001/rss.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.1
+    },
+    {
+      "name": "Politico — Picks",
+      "url": "https://www.politico.com/rss/politicopicks.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.1
+    },
+    {
+      "name": "The Hill",
+      "url": "https://thehill.com/feed/",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.05,
+      "notes": "قد يقيّد المعدل (429) — راقب last_error"
+    },
+    {
+      "name": "Axios",
+      "url": "https://www.axios.com/feeds/feed.rss",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.1
+    },
+    {
+      "name": "CNN — Money",
+      "url": "http://rss.cnn.com/rss/money_latest.rss",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "economy",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.05
+    },
+    {
+      "name": "NPR — World",
+      "url": "https://feeds.npr.org/1004/rss.xml",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "world",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.1
+    }
+  ]
+}

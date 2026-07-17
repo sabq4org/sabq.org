@@ -10,9 +10,10 @@
 `(sourceId, guid)`، تحليل القيمة الإخبارية، قواعد التنبيه (تيليجرام/عاجل)،
 التحويل التلقائي لمسودة، والظهور في `/dashboard/radar`.
 
-- الأعمدة الجديدة: `x_type` (keyword | hashtag | account | query | trend)،
+- الأعمدة: `x_type` (keyword | hashtag | account | query | trend)،
   `x_value`، `x_provider` (auto | official | twitterapiio)، `x_since_id`
-  (مؤشر آخر تغريدة — يجلب الجديد فقط فيخفض الفاتورة).
+  (مؤشر آخر تغريدة — يجلب الجديد فقط فيخفض الفاتورة)، بالإضافة إلى
+  `tier` / `region` / `weight` / `pack_id` للتشغيل.
 - الملفات: `server/services/radar/xProvider.ts` (المزوّدان + التوجيه الهجين،
   دوال نقية بلا DB)، `server/services/radar/xFetcher.ts` (الجلب والتطبيع
   وحفظ المؤشر)، والإرسال من `fetcher.ts` عند `type === "x"`.
@@ -24,6 +25,8 @@
 X_API_BEARER_TOKEN=        # X API v2 الرسمي (دفع بالاستخدام)
 TWITTERAPI_IO_API_KEY=     # twitterapi.io (طرف ثالث، ~$0.15/1000 تغريدة)
 # RADAR_X_TRENDS_WOEID=23424938   # موقع الترندات (الافتراضي: السعودية)
+# RADAR_X_FAST_POLL_ENABLED=true  # افتراضي: حسابات جديدة بفترة 1 دقيقة
+# RADAR_X_MAX_ACTIVE_WATCHES=80   # سقف حماية التكلفة
 ```
 
 بعد سحب التغيير: `npm run db:push` (أعمدة إضافية اختيارية — آمنة).
@@ -38,28 +41,43 @@ TWITTERAPI_IO_API_KEY=     # twitterapi.io (طرف ثالث، ~$0.15/1000 تغر
 غياب مفتاح المفضّل → سقوط تلقائي للمتوفر. تثبيت مزوّد لرصدة بعينها عبر
 `x_provider`. فشل الجلب يظهر في `last_error` للمصدر ولا يوقف بقية الدورة.
 
+## الفورية التشغيلية (SLA)
+
+| الطبقة | الفترة | الهدف |
+|---|---|---|
+| حسابات Tier A (وكالات/شبكات) | 1 دقيقة + `since_id` | وصول ≤ 2 دقيقة من النشر |
+| حسابات Tier B | 2–3 دقائق | رصد قريب |
+| ترند السعودية | 15 دقيقة | رصد اتجاهات |
+
+البذر الجاهز: `npx tsx scripts/seed-radar-pack.ts x-news-accounts` (≥ 25 رصدة).
+
 ## الاستخدام
 
 ```bash
 # إضافة رصدة — النوع يُخمَّن تلقائيًا من الشكل (@حساب، #هاشتاق، معاملات بحث، كلمة)
 POST /api/radar/watches   { "value": "رؤية 2030" }
-POST /api/radar/watches   { "value": "@spagov", "label": "واس" }
+POST /api/radar/watches   { "value": "@AP", "label": "AP", "fetchIntervalMinutes": 1 }
 POST /api/radar/watches   { "value": "#الهلال", "provider": "twitterapiio" }
 POST /api/radar/watches   { "value": "trend", "type": "trend" }   # ترندات السعودية
 
-GET /api/radar/watches    # القائمة + حالة تهيئة المزوّدين
+GET /api/radar/watches    # القائمة + حالة تهيئة المزوّدين + السقف
+GET /api/radar/health     # صحة الشبكة (أخطاء / صامتة)
 # التعديل/الحذف/الجلب اليدوي: مسارات المصادر نفسها /api/radar/sources/:id
 ```
 
 الإضافة تنفّذ **جلبة أولى فورية** ويعيد الرد عدد المواد المدرجة (`inserted`)
 أو سبب الفشل (`fetchError`) دون إلغاء الرصدة.
 
-فترة الجلب الافتراضية: 5 دقائق (الترندات 15). الصلاحيات كبقية الرادار:
-عرض `articles.view`، إدارة `articles.publish`.
+عند بلوغ `RADAR_X_MAX_ACTIVE_WATCHES` يرفض الـ API بـ HTTP 429.
+
+**الواجهة:** تبويب «رصدات X» في `/dashboard/radar` (إضافة/تعطيل/جلب/حذف).
+
+الصلاحيات كبقية الرادار: عرض `articles.view`، إدارة `articles.publish`.
 
 ## حدود المرحلة الحالية
 
-- لا واجهة لوحة مخصصة للرصدات بعد — تُدار عبر الـ API (تبويب المصادر يعرضها).
-- لا تجميع «قصص» بالمتجهات ولا درجة سرعة انتشار — المرحلة الثالثة في الخطة.
+- لا Filtered Stream بعد — الـ polling كل دقيقة يكفي لـ SLA التشغيلي (`RADAR_X_STREAM_ENABLED` لاحقاً).
+- لا تجميع «قصص» بالمتجهات ولا درجة سرعة انتشار — المرحلة 1 في
+  `docs/proposals/2026-07-17-radar-evolution-plan.md`.
 - تقدير التكلفة وقرار الهجين موثقان في نقاش 2026-07-14 (رسمي: $0.005/قراءة
   بسقف 2م/شهر؛ twitterapi.io: ~$0.15/1000).

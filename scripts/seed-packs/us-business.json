@@ -1,0 +1,51 @@
+{
+  "packId": "us-business",
+  "title": "أعمال وتقنية أمريكية",
+  "version": 1,
+  "sources": [
+    {
+      "name": "CNBC — Top News",
+      "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "economy",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.1
+    },
+    {
+      "name": "Bloomberg — Markets",
+      "url": "https://feeds.bloomberg.com/markets/news.rss",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "economy",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 10,
+      "weight": 1.15
+    },
+    {
+      "name": "TechCrunch",
+      "url": "https://techcrunch.com/feed/",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "technology",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 15,
+      "weight": 1.0
+    },
+    {
+      "name": "Wired",
+      "url": "https://www.wired.com/feed/rss",
+      "type": "rss",
+      "language": "en",
+      "categorySlug": "technology",
+      "tier": "B",
+      "region": "us",
+      "fetchIntervalMinutes": 15,
+      "weight": 1.0
+    }
+  ]
+}

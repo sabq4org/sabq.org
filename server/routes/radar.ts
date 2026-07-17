@@ -13,6 +13,7 @@ import { requireAuth, requirePermission } from "../rbac";
 import { PERMISSION_CODES } from "@shared/rbac-constants";
 import { insertRadarAlertRuleSchema, insertRadarSourceSchema } from "@shared/schema";
 import {
+  countActiveXWatches,
   createRule,
   createSource,
   deleteRule,
@@ -22,6 +23,7 @@ import {
   listRules,
   listSources,
   radarStats,
+  sourceHealthSummary,
   updateItem,
   updateRule,
   updateSource,
@@ -62,6 +64,15 @@ export function registerRadarRoutes(app: Express) {
     } catch (error) {
       console.error("[Radar API] stats failed:", error);
       res.status(500).json({ message: "تعذر جلب إحصاءات الرادار" });
+    }
+  });
+
+  app.get("/api/radar/health", requireAuth, canView, async (_req, res) => {
+    try {
+      res.json(await sourceHealthSummary());
+    } catch (error) {
+      console.error("[Radar API] health failed:", error);
+      res.status(500).json({ message: "تعذر جلب صحة الشبكة" });
     }
   });
 
@@ -224,8 +235,23 @@ export function registerRadarRoutes(app: Express) {
     provider: z.enum(["auto", "official", "twitterapiio"]).optional(),
     language: z.string().trim().min(2).max(10).optional(),
     categorySlug: z.string().trim().max(80).optional(),
-    fetchIntervalMinutes: z.coerce.number().int().min(2).max(1440).optional(),
+    // 1 دقيقة لحسابات X-A (SLA ≤ 2د) — الحد الأدنى كان 2 سابقاً
+    fetchIntervalMinutes: z.coerce.number().int().min(1).max(1440).optional(),
+    tier: z.enum(["A", "B", "C"]).optional(),
+    region: z.string().trim().max(40).optional(),
+    weight: z.coerce.number().min(0.1).max(5).optional(),
   });
+
+  function defaultWatchInterval(xType: string): number {
+    if (xType === "trend") return 15;
+    if (xType === "account" && process.env.RADAR_X_FAST_POLL_ENABLED !== "false") return 1;
+    return 5;
+  }
+
+  function maxActiveXWatches(): number {
+    const raw = Number(process.env.RADAR_X_MAX_ACTIVE_WATCHES ?? 80);
+    return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 80;
+  }
 
   app.get("/api/radar/watches", requireAuth, canView, async (_req, res) => {
     try {
@@ -233,6 +259,8 @@ export function registerRadarRoutes(app: Express) {
       res.json({
         watches: sources.filter((source) => source.type === "x"),
         providers: xProvidersConfigured(),
+        maxActive: maxActiveXWatches(),
+        activeCount: sources.filter((s) => s.type === "x" && s.isActive).length,
       });
     } catch (error) {
       console.error("[Radar API] watches failed:", error);
@@ -245,9 +273,19 @@ export function registerRadarRoutes(app: Express) {
     if (!parsed.success) {
       return res.status(400).json({ message: "بيانات الرصدة غير صالحة", issues: parsed.error.issues });
     }
-    const { value, label, provider, language, categorySlug, fetchIntervalMinutes } = parsed.data;
+    const { value, label, provider, language, categorySlug, fetchIntervalMinutes, tier, region, weight } =
+      parsed.data;
     const xType = parsed.data.type ?? detectWatchType(value);
     try {
+      const activeX = await countActiveXWatches();
+      const maxX = maxActiveXWatches();
+      if (activeX >= maxX) {
+        return res.status(429).json({
+          message: `بلغت الحد الأقصى لرصدات إكس النشطة (${maxX}). عطّل رصدة أو ارفع RADAR_X_MAX_ACTIVE_WATCHES.`,
+          activeCount: activeX,
+          maxActive: maxX,
+        });
+      }
       const watch = await createSource({
         name: label ?? value,
         // رابط اصطناعي فريد — إضافة نفس الرصدة مرتين تصطدم بقيد url
@@ -255,11 +293,14 @@ export function registerRadarRoutes(app: Express) {
         type: "x",
         language: language ?? "ar",
         categorySlug: categorySlug ?? null,
-        fetchIntervalMinutes: fetchIntervalMinutes ?? (xType === "trend" ? 15 : 5),
+        fetchIntervalMinutes: fetchIntervalMinutes ?? defaultWatchInterval(xType),
         isActive: true,
         xType,
         xValue: value,
         xProvider: provider ?? "auto",
+        tier: tier ?? (xType === "account" ? "A" : null),
+        region: region ?? null,
+        weight: weight ?? 1,
       });
       // جلبة أولى فورية — المحرر يرى النتيجة الآن لا بعد دورة الكرون؛
       // فشلها (مفتاح ناقص/استعلام خاطئ) لا يلغي الرصدة ويظهر في lastError
