@@ -268,7 +268,7 @@ export default function SystemsCatalogPage() {
                     <span>
                       <strong>{sys.fileCount}</strong> ملف
                     </span>
-                    {sys.aiToday ? (
+                    {sys.aiToday && sys.aiToday.requests > 0 ? (
                       <span>
                         اليوم: <strong>{sys.aiToday.requests}</strong> طلب ·{" "}
                         <strong>
@@ -277,9 +277,13 @@ export default function SystemsCatalogPage() {
                         توكن · <strong>${sys.aiToday.estimatedCostUsd.toFixed(3)}</strong>
                       </span>
                     ) : sys.aiFeatureKeys.length > 0 ? (
-                      <span className="text-muted-foreground">لا استخدام AI مسجّل اليوم</span>
+                      <span className="text-muted-foreground">
+                        مربوط بـ {sys.aiFeatureKeys.length} مفتاح AI · لا استخدام مسجّل اليوم بعد
+                      </span>
                     ) : (
-                      <span className="text-muted-foreground">لا يستهلك AI عبر Gateway</span>
+                      <span className="text-muted-foreground">
+                        لا مفاتيح AI مربوطة في السجل (قد يستهلك أنظمة مجاورة)
+                      </span>
                     )}
                   </div>
                 </div>
