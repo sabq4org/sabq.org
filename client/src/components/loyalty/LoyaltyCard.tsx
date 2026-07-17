@@ -13,7 +13,7 @@ type Props = {
 };
 
 // Visual membership card. Rendered on the profile page as the
-// loyalty centerpiece, and reused inside the /dashboard/loyalty
+// loyalty centerpiece, and reused inside the /loyalty
 // hero. Each tier gets its own gradient + accent so a "سفير سبق"
 // card reads dramatically different from a "القارئ الجديد" one.
 // Designed at credit-card aspect ratio (1.586:1) so we can later
