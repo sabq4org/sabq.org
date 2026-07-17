@@ -147,7 +147,7 @@ async function prepareR2Objects(
     return { objects: [original], deliveryKey: originalKey, thumbnailKey: originalKey };
   }
 
-  const metadata = await sharp(input.buffer, { failOn: "error" }).metadata();
+  const metadata = await sharp(input.buffer, { failOn: "truncated" }).metadata();
   const sourceWidth = metadata.width || 1600;
   const widths = Array.from(
     new Set([
@@ -159,10 +159,10 @@ async function prepareR2Objects(
   const variants = await Promise.all(
     widths.map(async (width): Promise<PreparedObject> => ({
       key: `${prefix}/w${width}.webp`,
-      body: await sharp(input.buffer, { failOn: "error" })
+      body: await sharp(input.buffer, { failOn: "truncated" })
         .rotate()
         .resize({ width, fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 82, effort: 5, smartSubsample: true })
+        .webp({ quality: 82, effort: 4, smartSubsample: true })
         .toBuffer(),
       contentType: "image/webp",
     })),

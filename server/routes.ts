@@ -7,8 +7,7 @@ import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
 import {
   needsWebpTranscode,
-  transcodeAvifToWebp,
-  transcodeHeicToWebp,
+  normalizeImageForUpload,
   verifyImageMagicBytes,
 } from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
@@ -1800,29 +1799,30 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // AVIF / HEIC → WebP before Cloudflare Images or R2 (plan limitations +
-      // iPhone Camera default). Same 10MB cap still applies to the source.
+      // AVIF / HEIC → WebP/JPEG before Cloudflare Images or R2 variants.
+      // Phone exports often fail a strict decode; normalizeImageForUpload
+      // walks a soft fallback ladder before we give up.
       const transcodeKind = needsWebpTranscode(req.file.mimetype);
       if (transcodeKind) {
         try {
-          req.file.buffer = transcodeKind === "heic"
-            ? await transcodeHeicToWebp(req.file.buffer)
-            : await transcodeAvifToWebp(req.file.buffer);
-          req.file.mimetype = 'image/webp';
-          req.file.size = req.file.buffer.length;
+          const normalized = await normalizeImageForUpload(req.file.buffer);
+          req.file.buffer = normalized.buffer;
+          req.file.mimetype = normalized.mimeType;
+          req.file.size = normalized.buffer.length;
           req.file.originalname = req.file.originalname.replace(
             /\.(avif|heic|heif)$/i,
-            '.webp',
+            `.${normalized.extension}`,
           );
+          if (!/\.(webp|jpe?g)$/i.test(req.file.originalname)) {
+            req.file.originalname = `${req.file.originalname}.${normalized.extension}`;
+          }
         } catch (transcodeErr) {
           console.warn(
-            `[Media Upload] ${transcodeKind.toUpperCase()}→WebP failed:`,
+            `[Media Upload] ${transcodeKind.toUpperCase()} normalize failed:`,
             transcodeErr instanceof Error ? transcodeErr.message : transcodeErr,
           );
           return res.status(400).json({
-            message: transcodeKind === "heic"
-              ? "تعذّر تحويل صورة HEIC من الآيفون. صدّرها كـ JPEG من الصور ثم أعد الرفع."
-              : "تعذّر تحويل صورة AVIF. جرّب JPEG أو PNG أو WEBP.",
+            message: "تعذّر قراءة هذه الصورة. صدّرها كـ JPEG أو PNG من تطبيق الصور ثم أعد الرفع.",
           });
         }
       }

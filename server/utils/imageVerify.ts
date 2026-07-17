@@ -24,7 +24,7 @@ const FORMAT_TO_MIMES: Record<string, string[]> = {
   // svg intentionally absent — script-bearing SVGs (audit H3).
   avif: ["image/avif"],
   // iPhone photos: browser may send image/heic or image/heif. We accept
-  // the bytes here then transcode to WebP before storage (Cloudflare
+  // the bytes here then transcode to WebP/JPEG before storage (Cloudflare
   // Images / R2 don't take HEIC as a first-class input on our plan).
   heif: ["image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence"],
   tiff: ["image/tiff"],
@@ -34,6 +34,12 @@ export interface ImageVerifyResult {
   ok: boolean;
   detectedFormat?: string;
   reason?: string;
+}
+
+export interface NormalizedUploadImage {
+  buffer: Buffer;
+  mimeType: "image/webp" | "image/jpeg";
+  extension: "webp" | "jpg";
 }
 
 /**
@@ -77,35 +83,87 @@ export async function verifyImageMagicBytes(
   return { ok: true, detectedFormat: fmt };
 }
 
-const WEBP_TRANSCODE_OPTS = {
-  failOn: "error" as const,
-  limitInputPixels: 100_000_000,
-};
+const MAX_INPUT_PIXELS = 100_000_000;
+
+type SharpFailOn = "none" | "truncated" | "error" | "warning";
+
+async function tryEncode(
+  buffer: Buffer,
+  failOn: SharpFailOn,
+  encode: "webp" | "jpeg",
+  withRotate: boolean,
+): Promise<NormalizedUploadImage> {
+  let pipeline = sharpModule(buffer, {
+    failOn,
+    limitInputPixels: MAX_INPUT_PIXELS,
+    // Animated AVIF/HEIC: flatten to first frame rather than failing the upload.
+    pages: 1,
+  });
+  if (withRotate) pipeline = pipeline.rotate();
+
+  if (encode === "webp") {
+    const out = await pipeline.webp({ quality: 85, effort: 2 }).toBuffer();
+    return { buffer: out, mimeType: "image/webp", extension: "webp" };
+  }
+
+  const out = await pipeline.jpeg({ quality: 88, mozjpeg: true }).toBuffer();
+  return { buffer: out, mimeType: "image/jpeg", extension: "jpg" };
+}
+
+/**
+ * Normalize AVIF/HEIC (and mislabeled phone exports) into WebP or JPEG so
+ * Cloudflare Images and our R2 variant pipeline can always ingest them.
+ *
+ * Real-world phone AVIF/HEIC often trips `failOn: "error"` (truncated boxes,
+ * odd color profiles, multi-page containers). We try a soft ladder of
+ * decode/encode options and only fail if every attempt throws.
+ */
+export async function normalizeImageForUpload(
+  buffer: Buffer,
+): Promise<NormalizedUploadImage> {
+  const attempts: Array<() => Promise<NormalizedUploadImage>> = [
+    () => tryEncode(buffer, "truncated", "webp", true),
+    () => tryEncode(buffer, "none", "webp", true),
+    () => tryEncode(buffer, "truncated", "jpeg", true),
+    () => tryEncode(buffer, "none", "jpeg", true),
+    // Some broken EXIF orientation streams fail rotate(); try without.
+    () => tryEncode(buffer, "none", "jpeg", false),
+    () => tryEncode(buffer, "none", "webp", false),
+  ];
+
+  let lastError: unknown;
+  for (const attempt of attempts) {
+    try {
+      return await attempt();
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`normalizeImageForUpload failed: ${message}`);
+}
 
 /**
  * Cloudflare Images accepts AVIF input only on Enterprise plans. Normalize
- * user-provided AVIF files to WebP so the shared upload endpoint behaves the
- * same regardless of the active Cloudflare plan or fallback storage provider.
+ * user-provided AVIF files to WebP (or JPEG fallback) so the shared upload
+ * endpoint behaves the same regardless of the active storage provider.
  */
 export async function transcodeAvifToWebp(buffer: Buffer): Promise<Buffer> {
-  return sharpModule(buffer, WEBP_TRANSCODE_OPTS)
-    .rotate()
-    .webp({ quality: 90, effort: 4, smartSubsample: true })
-    .toBuffer();
+  const normalized = await normalizeImageForUpload(buffer);
+  return normalized.buffer;
 }
 
 /**
- * iPhone Camera rolls default to HEIC/HEIF. Convert to WebP before storage —
+ * iPhone Camera rolls default to HEIC/HEIF. Convert to WebP/JPEG before storage —
  * same rationale as AVIF (downstream providers don't accept HEIC on our plan).
  */
 export async function transcodeHeicToWebp(buffer: Buffer): Promise<Buffer> {
-  return sharpModule(buffer, WEBP_TRANSCODE_OPTS)
-    .rotate()
-    .webp({ quality: 90, effort: 4, smartSubsample: true })
-    .toBuffer();
+  const normalized = await normalizeImageForUpload(buffer);
+  return normalized.buffer;
 }
 
-/** MIME types that must be normalized to WebP before Cloudflare Images / R2. */
+/** MIME types that must be normalized before Cloudflare Images / R2 variants. */
 export function needsWebpTranscode(mimeType: string): "avif" | "heic" | null {
   const mime = mimeType.toLowerCase();
   if (mime === "image/avif") return "avif";
