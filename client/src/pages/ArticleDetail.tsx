@@ -25,7 +25,6 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { InfographicDetail } from "@/components/InfographicDetail";
 import { DataInfographicPage } from "@/components/data-infographic/DataInfographicPage";
 import { RelatedInfographics } from "@/components/RelatedInfographics";
-import { SmartInsights } from "@/components/SmartInsights";
 import { WeeklyPhotosDisplay } from "@/components/WeeklyPhotosDisplay";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -101,27 +100,12 @@ export default function ArticleDetail() {
       return false;
     }
   });
-  // Smart insights toggle state (persisted in localStorage)
-  const [isInsightsOpen, setIsInsightsOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem("article:isInsightsOpen") === "true";
-    } catch {
-      return false;
-    }
-  });
 
   useEffect(() => {
     try {
       window.localStorage.setItem("article:isSummaryExpanded", String(isSummaryExpanded));
     } catch {}
   }, [isSummaryExpanded]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem("article:isInsightsOpen", String(isInsightsOpen));
-    } catch {}
-  }, [isInsightsOpen]);
 
   const { data: user } = useQuery<{ id: string; name?: string; email?: string; role?: string }>({
     queryKey: ["/api/auth/user"],
@@ -1465,29 +1449,6 @@ export default function ArticleDetail() {
 
             {/* DMS MPU Ad (mobile, under الموجز) — أُعيد إظهاره 2026-07-09 (أُخفي 2026-06-05 بطلب المستخدم). جوال فقط. */}
             <DmsMpuAd id="MPU" lazyLoad={true} />
-
-            {/* Smart AI Insights - secondary trigger (visible only for authenticated users) */}
-            {article.status === "published" && user && (
-              <div className="flex flex-col items-start gap-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsInsightsOpen((v) => !v)}
-                  className="gap-2"
-                  data-testid="button-toggle-insights"
-                  aria-expanded={isInsightsOpen}
-                  aria-label={isInsightsOpen ? "إخفاء التحليل الذكي" : "حلّل هذا الخبر بالذكاء الاصطناعي"}
-                >
-                  <Sparkles className="h-4 w-4" />
-                  {isInsightsOpen ? "إخفاء التحليل" : "حلّل هذا الخبر"}
-                </Button>
-                {isInsightsOpen && (
-                  <div className="w-full">
-                    <SmartInsights articleId={article.id} articleTitle={article.title} autoStart />
-                  </div>
-                )}
-              </div>
-            )}
 
             {/* Article Content or Paywall */}
             <div className="bg-card border rounded-lg p-6">

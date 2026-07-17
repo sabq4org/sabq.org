@@ -240,7 +240,6 @@ export interface SpSummary {
 // المرحلة 4 (المجتمع): لوحة المتصدّرين
 // لوحة متصدّري «المجمّع الموحّد» (sports_pool) — نفس محرك نقاط تطبيق سبق الرياضي
 // (قرار المالك 2026-07-05: الويب يعرض نقاط التطبيق نفسها لا المحرك الكلاسيكي).
-interface SpPoolLeader { rank: number; userId: string; name: string; avatar: string | null; totalPoints: number; correctCount: number; exactCount: number; playedCount: number; accuracy: number; }
 
 // ============================================================
 // أدوات
@@ -2802,66 +2801,3 @@ export function VideoReel({ short, index }: { short: SpShort; index: number }) {
   );
 }
 
-// ============================================================
-// الصفحة
-// ============================================================
-// المرحلة 4 (المجتمع): لوحة متصدّري التوقّعات — عامة. تبديل بين كل الأوقات/الشهر/الأسبوع.
-export function LeaderboardBoard() {
-  const { user } = useAuth();
-  const { data, isLoading } = useQuery<{ leaders: SpPoolLeader[] }>({
-    queryKey: ["/api/sports/predictions/pool/leaderboard"],
-    staleTime: 60_000,
-  });
-  const entries = Array.isArray(data?.leaders) ? data!.leaders : [];
-  const myEntry = user ? entries.find((e) => e.userId === (user as any).id) : undefined;
-
-  const rankBadge = (rank: number) => {
-    if (rank === 1) return "bg-amber-400/20 text-amber-600 dark:text-amber-400 border-amber-400/30";
-    if (rank === 2) return "bg-slate-300/30 text-slate-600 dark:text-slate-300 border-slate-400/30";
-    if (rank === 3) return "bg-orange-400/20 text-orange-600 dark:text-orange-400 border-orange-400/30";
-    return "bg-muted text-muted-foreground border-border";
-  };
-
-  return (
-    <div>
-      {isLoading ? (
-        <div className="space-y-2">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 rounded-xl" />)}</div>
-      ) : entries.length === 0 ? (
-        <div className="text-center text-muted-foreground py-14 bg-card rounded-2xl border border-dashed border-border">
-          لا توجد توقّعات مُسوّاة بعد — كن أول المتنافسين! توقّع من تبويب «التوقّعات» في أي بطولة واجمع نقاط المجمّع.
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {entries.map((e) => {
-            const isMe = myEntry && e.userId === myEntry.userId;
-            return (
-              <div key={e.userId}
-                className={`flex items-center gap-3 rounded-xl border p-2.5 sm:p-3 ${isMe ? "border-primary/50 bg-primary/5" : "border-border bg-card"}`}>
-                <div className={`shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full border text-sm font-black tabular-nums ${rankBadge(e.rank)}`}>
-                  {e.rank <= 3 ? <Medal className="w-4 h-4" /> : e.rank}
-                </div>
-                {e.avatar ? (
-                  <img src={e.avatar} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-muted shrink-0 inline-flex items-center justify-center text-xs font-bold text-muted-foreground">
-                    {e.name.charAt(0)}
-                  </div>
-                )}
-                <div className="min-w-0 flex-1">
-                  <div className="font-bold text-sm text-foreground truncate">{e.name}{isMe && <span className={`mr-1 text-xs ${ACCENT}`}>(أنت)</span>}</div>
-                  <div className="text-[11px] text-muted-foreground tabular-nums">
-                    {e.playedCount} لعب · {e.correctCount} صحيحة · {e.exactCount} تامة · دقة {e.accuracy}٪
-                  </div>
-                </div>
-                <div className="shrink-0 text-center">
-                  <div className={`text-lg font-black tabular-nums ${ACCENT}`}>{e.totalPoints.toLocaleString("en")}</div>
-                  <div className="text-[10px] text-muted-foreground">نقطة</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}

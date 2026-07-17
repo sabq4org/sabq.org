@@ -143,4 +143,6 @@ Role/permission constants are in `shared/rbac-constants.ts`. Runtime logic in `s
 
 ## Pointers
 
+**`docs/PREDICTION_CORE.md` is the canonical note for the central sports-predictions platform** (live in production since 2026-07-17): one engine + versioned scoring profiles + append-only ledger serving every tournament EXCEPT World Cup 2026 (its legacy `wc*` engine stays untouched until the tournament ends). All ~15 old per-tournament prediction engines were deleted in PR #938 — do not resurrect them; new tournaments are configured (Competition + Profiles + fixture source), never coded.
+
 `docs/DEPLOYMENT_STATUS.md` is the canonical production topology note (Pages + Railway; Replit retired mid-May 2026). `replit.md` is the legacy architecture note — still useful for stack/product context. `docs/STRUCTURE.md` is the documentation map (root .md files were reorganized into `docs/architecture/`, `docs/setup/`, `docs/handoff/`, `docs/reports/`, `docs/reference/` on 2026-06-10); `docs/architecture/SYSTEM_DOCUMENTATION.md` and the rest of `docs/` have deeper feature writeups (audio newsletters, mobile API, SendGrid, Cloudflare purge, etc.).

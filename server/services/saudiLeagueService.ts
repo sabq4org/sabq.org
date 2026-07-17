@@ -81,6 +81,14 @@ const LIVE_BOARD_TTL = 8 * 1000;
 const FIXTURES_TTL = 60 * 1000;
 const TODAY_TTL = 60 * 1000; // قائمة مباريات اليوم — تتغيّر ببطء (الجاري يُحدَّث بكاش live)
 const MATCH_DETAIL_TTL = 10 * 1000;
+/**
+ * القادمة البعيدة (> ساعتين قبل الانطلاق) شبه ساكنة — لا أحداث ولا تشكيلات
+ * رسمية بعد. طبقة كاش أطول تقيها «الجلب البارد» (7+ ثوانٍ تحت ضغط محدد
+ * المعدل — مقيس على نهائي المونديال 2026-07-17). تسقط تلقائيًّا عند دخول
+ * نافذة الساعتين فتعود التفاصيل لطزاجة 10ث (تشكيلات/انطلاق).
+ */
+const PRE_MATCH_DETAIL_TTL = 10 * 60 * 1000;
+const PRE_MATCH_GAP_MS = 2 * 3600 * 1000;
 // مباراة منتهية منذ > 3 ساعات: الأحداث/الإحصاءات/التشكيلات صارت ثابتة.
 const FINISHED_MATCH_DETAIL_TTL = 6 * 60 * 60 * 1000;
 const SEASON_TTL = 6 * 60 * 60 * 1000; // الموسم الحالي شبه ثابت
@@ -1435,6 +1443,14 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
   const done = swrCache.get<SplMatchDetail>(doneKey);
   if (done.data) return done.data;
 
+  // القادمة البعيدة: تُخدم من طبقة ما قبل المباراة ما دام الانطلاق أبعد من
+  // ساعتين — الحارس على وقت الانطلاق نفسه فتبطل الطبقة ذاتيًّا مع اقترابه.
+  const preKey = `spl:match:pre:${fixtureId}${isEnglishSports() ? ":en" : ""}`;
+  const pre = swrCache.get<SplMatchDetail>(preKey);
+  if (pre.data && pre.data.fixture.timestamp * 1000 - Date.now() > PRE_MATCH_GAP_MS) {
+    return pre.data;
+  }
+
   let fetchedFresh = false;
   let namesComplete = true;
   const detail = await withSWR(`spl:match:${fixtureId}`, MATCH_DETAIL_TTL, MATCH_DETAIL_TTL * 2, async () => {
@@ -1482,6 +1498,17 @@ export async function getMatchDetail(fixtureId: number): Promise<SplMatchDetail 
     Date.now() / 1000 - detail.fixture.timestamp > 3 * 3600
   ) {
     swrCache.set(doneKey, detail, FINISHED_MATCH_DETAIL_TTL, FINISHED_MATCH_DETAIL_TTL);
+  }
+
+  // ترقية القادمة البعيدة لطبقة ما قبل المباراة (انظر PRE_MATCH_DETAIL_TTL)
+  if (
+    fetchedFresh &&
+    detail &&
+    !detail.fixture.status.live &&
+    !detail.fixture.status.finished &&
+    detail.fixture.timestamp * 1000 - Date.now() > PRE_MATCH_GAP_MS
+  ) {
+    swrCache.set(preKey, detail, PRE_MATCH_DETAIL_TTL, PRE_MATCH_DETAIL_TTL);
   }
   return detail;
 }

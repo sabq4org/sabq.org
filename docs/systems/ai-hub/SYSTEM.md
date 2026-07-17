@@ -1,0 +1,26 @@
+# مركز التحكم بالذكاء الاصطناعي (`ai-hub`)
+
+> آخر مراجعة: 2026-07-17 | المالك: ai
+
+## الغرض
+بوابة موحّدة: نماذج، ميزانيات، سجلات الاستخدام، صحة المزودين، متجهات، استوديو البرومبت، ومظلة الاستدعاءات غير المهاجرة (`legacy-ai-manager`).
+
+## الحدود
+- **داخل النطاق:** Gateway، ai-manager، embeddings، prompt studio، AiHub UI، usage rollup.
+- **خارج النطاق:** منطق أعمال iFox/التحرير — تلك تستهلك البوابة بمفاتيحها.
+
+## مفاتيح AI (حصرية)
+`legacy-ai-manager`, `prompt-studio`, `embeddings`, `entity-extraction`
+
+## عقود مهمة
+- لا تعرض مفاتيح المزودين أبداً.
+- الاستخدام fire-and-forget عبر `usageLogger`.
+- `legacy-ai-manager` يستوعب كل `aiManager.generate()` بلا `feature` صريح — رقمه كبير حتى تكتمل الهجرة.
+
+## صحة وتشغيل
+- لوحة: `/dashboard/ai-hub`
+- استوديو البرومبت: `/dashboard/prompt-studio`
+
+## عند التعديل
+- [ ] قرأت هذا الملف
+- [ ] لم تُسرَّب أسرار مزودين

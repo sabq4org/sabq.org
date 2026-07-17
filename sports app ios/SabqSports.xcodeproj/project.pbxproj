@@ -30,6 +30,9 @@
 		5B000016 /* PredictionsHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000016 /* PredictionsHubView.swift */; };
 		5B000017 /* SpPredictionMatchCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000017 /* SpPredictionMatchCard.swift */; };
 		5B000018 /* PredictionExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C000018 /* PredictionExtras.swift */; };
+		5B0000E1 /* PredictionCoreModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000E1 /* PredictionCoreModels.swift */; };
+		5B0000E2 /* PredictionCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000E2 /* PredictionCenterView.swift */; };
+		5B0000E3 /* PredictionContestDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C0000E3 /* PredictionContestDetailView.swift */; };
 		5B000020 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 5C000020 /* Assets.xcassets */; };
 		5B000021 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5C000021 /* InfoPlist.strings */; };
 		5B000022 /* IBMPlexSansArabic-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 5C000022 /* IBMPlexSansArabic-Regular.ttf */; };
@@ -109,6 +112,9 @@
 		5C000015 /* SportsPredictionModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SportsPredictionModels.swift; sourceTree = "<group>"; };
 		5C000016 /* PredictionsHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionsHubView.swift; sourceTree = "<group>"; };
 		5C000017 /* SpPredictionMatchCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpPredictionMatchCard.swift; sourceTree = "<group>"; };
+		5C0000E1 /* PredictionCoreModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionCoreModels.swift; sourceTree = "<group>"; };
+		5C0000E2 /* PredictionCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionCenterView.swift; sourceTree = "<group>"; };
+		5C0000E3 /* PredictionContestDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionContestDetailView.swift; sourceTree = "<group>"; };
 		5C000018 /* PredictionExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PredictionExtras.swift; sourceTree = "<group>"; };
 		5C000020 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5C000021 /* InfoPlist.strings */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; path = InfoPlist.strings; sourceTree = "<group>"; };
@@ -205,6 +211,8 @@
 				5C000016 /* PredictionsHubView.swift */,
 				5C000017 /* SpPredictionMatchCard.swift */,
 				5C000018 /* PredictionExtras.swift */,
+				5C0000E2 /* PredictionCenterView.swift */,
+				5C0000E3 /* PredictionContestDetailView.swift */,
 				5C0000B1 /* TransferCenterView.swift */,
 			);
 			path = Screens;
@@ -229,6 +237,7 @@
 				5C000003 /* URLConstants.swift */,
 				5C000012 /* AuthStore.swift */,
 				5C000015 /* SportsPredictionModels.swift */,
+				5C0000E1 /* PredictionCoreModels.swift */,
 				5C000102 /* SpMatchActivity.swift */,
 				5C000103 /* SpLiveActivityManager.swift */,
 				5C0000A1 /* VaraPrediction.swift */,
@@ -428,6 +437,9 @@
 				5B000016 /* PredictionsHubView.swift in Sources */,
 				5B000017 /* SpPredictionMatchCard.swift in Sources */,
 				5B000018 /* PredictionExtras.swift in Sources */,
+				5B0000E1 /* PredictionCoreModels.swift in Sources */,
+				5B0000E2 /* PredictionCenterView.swift in Sources */,
+				5B0000E3 /* PredictionContestDetailView.swift in Sources */,
 				5B000102 /* SpMatchActivity.swift in Sources */,
 				5B000103 /* SpLiveActivityManager.swift in Sources */,
 				5B0000A4 /* SpWidgetBridge.swift in Sources */,

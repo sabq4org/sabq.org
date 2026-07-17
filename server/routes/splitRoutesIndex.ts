@@ -53,12 +53,11 @@ import { registerSportsNamesRoutes } from "./sportsNames";
 import commentReactionsRouter from "./commentReactions";
 import topicCommentsRouter from "./topicComments";
 import wcPredictionsRouter from "./wcPredictions";
-import acPredictionsRouter from "./acPredictions";
-import gcPredictionsRouter from "./gcPredictions";
+import predictionsCoreRouter from "./predictionsCore";
+import predictionsMobileRouter from "./predictionsMobile";
 import gcMajlisRouter from "./gcMajlis";
 import gcFantasyRouter from "./gcFantasy";
 import rslPredictionsRouter from "./rslPredictions";
-import { registerCupPredictionRoutes } from "./cupPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
@@ -68,6 +67,7 @@ import editorAlertsRouter from "./editorAlerts";
 import audioNewsletterRoutes from "./audioNewsletterRoutes";
 import dashboardPulseRouter from "./dashboardPulse";
 import adminToolsRouter from "./adminToolsRoutes";
+import { systemsCatalogRouter } from "./systemsCatalog";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -134,12 +134,11 @@ export function registerSplitRoutes(app: Express) {
   app.use(commentReactionsRouter);
   app.use(topicCommentsRouter);
   app.use(wcPredictionsRouter);
-  app.use(acPredictionsRouter);
-  app.use(gcPredictionsRouter);
+  app.use(predictionsCoreRouter);
+  app.use(predictionsMobileRouter);
   app.use(gcMajlisRouter);
   app.use(gcFantasyRouter);
   app.use(rslPredictionsRouter);
-  registerCupPredictionRoutes(app);
   app.use(mediaLibraryRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);
@@ -148,4 +147,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(editorAlertsRouter);
   app.use(dashboardPulseRouter);
   app.use(adminToolsRouter);
+  app.use(systemsCatalogRouter);
 }

@@ -1,0 +1,250 @@
+{
+  "generatedAt": "2026-07-17T12:13:14.762Z",
+  "systems": [
+    {
+      "id": "loyalty",
+      "fileCount": 19,
+      "samplePaths": [
+        "server/services/loyalty.ts",
+        "server/routes/loyaltyAdmin.ts",
+        "client/src/pages/dashboard/LoyaltyAdminDashboard.tsx",
+        "client/src/pages/LoyaltyAccount.tsx",
+        "client/src/pages/LoyaltyPreview.tsx",
+        "client/src/pages/LoyaltyTermsPage.tsx",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/Loyalty.kt",
+        "android-native/app/src/main/kotlin/com/sabq/smart/data/LoyaltyEventQueue.kt"
+      ]
+    },
+    {
+      "id": "predictions-core",
+      "fileCount": 18,
+      "samplePaths": [
+        "server/services/predictions/fixtureAdapter.ts",
+        "server/services/predictions/fixtureSyncLogic.ts",
+        "server/services/predictions/outboxService.ts",
+        "server/services/predictions/predictionCoreService.ts",
+        "server/services/predictions/registry.ts",
+        "server/services/predictions/settlementService.ts",
+        "server/services/predictions/strategies/fixedPoints.ts",
+        "server/services/predictions/strategies/longTermPool.ts"
+      ]
+    },
+    {
+      "id": "editorial",
+      "fileCount": 46,
+      "samplePaths": [
+        "server/routes/articleEditLocks.ts",
+        "server/routes/editorAlerts.ts",
+        "server/routes/editorPresence.ts",
+        "server/routes/dashboardPulse.ts",
+        "server/routes/whatsappAgent.ts",
+        "server/routes/emailAgent.ts",
+        "server/routes/visualAiRoutes.ts",
+        "server/routes/nanoBananaRoutes.ts"
+      ]
+    },
+    {
+      "id": "ifox",
+      "fileCount": 48,
+      "samplePaths": [
+        "server/services/ifox/budgetService.ts",
+        "server/services/ifox/calendarService.ts",
+        "server/services/ifox/index.ts",
+        "server/services/ifox/performanceService.ts",
+        "server/services/ifox/preferencesService.ts",
+        "server/services/ifox/qualityService.ts",
+        "server/services/ifox/strategyService.ts",
+        "server/services/ifox/templatesService.ts"
+      ]
+    },
+    {
+      "id": "ai-hub",
+      "fileCount": 32,
+      "samplePaths": [
+        "server/ai/gateway/adapters/anthropic.ts",
+        "server/ai/gateway/adapters/elevenlabs.ts",
+        "server/ai/gateway/adapters/gemini.ts",
+        "server/ai/gateway/adapters/openai.ts",
+        "server/ai/gateway/circuitBreaker.ts",
+        "server/ai/gateway/configStore.ts",
+        "server/ai/gateway/costs.ts",
+        "server/ai/gateway/defaults.ts"
+      ]
+    },
+    {
+      "id": "muqtarab",
+      "fileCount": 12,
+      "samplePaths": [
+        "server/services/muqtarabAI.ts",
+        "server/services/muqtarabEmails.ts",
+        "server/services/muqtarabNotifications.ts",
+        "server/services/muqtarabProvisioning.ts",
+        "server/services/muqtarabWriterService.ts",
+        "server/routes/muqtarabAI.ts",
+        "server/routes/muqtarabOwn.ts",
+        "server/routes/muqtarabWriter.ts"
+      ]
+    },
+    {
+      "id": "radar",
+      "fileCount": 14,
+      "samplePaths": [
+        "server/services/radar/aiChain.ts",
+        "server/services/radar/alerts.ts",
+        "server/services/radar/analyst.ts",
+        "server/services/radar/cycle.ts",
+        "server/services/radar/exporter.ts",
+        "server/services/radar/fetcher.ts",
+        "server/services/radar/parsing.ts",
+        "server/services/radar/repo.ts"
+      ]
+    },
+    {
+      "id": "audio-newsletter",
+      "fileCount": 11,
+      "samplePaths": [
+        "server/services/audioNewsletterService.ts",
+        "server/services/aiNewsletterService.ts",
+        "server/services/aiNewsletterEnhancer.ts",
+        "server/services/newsletterScheduler.ts",
+        "server/services/ttsProviderRegistry.ts",
+        "server/services/smartNewsletterTemplates.ts",
+        "server/routes/audioNewsletterRoutes.ts",
+        "server/routes/smartNewsletterRoutes.ts"
+      ]
+    },
+    {
+      "id": "media-library",
+      "fileCount": 15,
+      "samplePaths": [
+        "server/services/mediaAutoTagService.ts",
+        "server/services/mediaCaptionService.ts",
+        "server/services/mediaGenerationService.ts",
+        "server/services/mediaGovernanceService.ts",
+        "server/services/mediaHashService.ts",
+        "server/services/mediaHealthService.ts",
+        "server/services/mediaLibraryService.ts",
+        "server/services/mediaSearchService.ts"
+      ]
+    },
+    {
+      "id": "sports-tournaments",
+      "fileCount": 80,
+      "samplePaths": [
+        "server/services/gulfCupData.ts",
+        "server/services/gulfCupFixtureIdentity.ts",
+        "server/services/gulfCupHistory.ts",
+        "server/services/gulfCupNames.ts",
+        "server/services/gulfCupPredictionScoring.ts",
+        "server/services/gulfCupService.ts",
+        "server/services/asianCupNames.ts",
+        "server/services/asianCupRatings.ts"
+      ]
+    },
+    {
+      "id": "push-notifications",
+      "fileCount": 10,
+      "samplePaths": [
+        "server/services/fcmPayload.ts",
+        "server/services/fcmService.ts",
+        "server/services/apnsService.ts",
+        "server/services/expoService.ts",
+        "server/services/liveActivityService.ts",
+        "server/services/liveActivityStartService.ts",
+        "server/jobs/pushWorker.ts",
+        "server/notificationBus.ts"
+      ]
+    },
+    {
+      "id": "ads",
+      "fileCount": 15,
+      "samplePaths": [
+        "server/services/adsAnalytics.ts",
+        "server/ads-routes.ts",
+        "server/routes/nativeAds.ts",
+        "server/routes/advertiserAuth.ts",
+        "server/routes/advertiserPayments.ts",
+        "client/src/pages/dashboard/ads/AdAccountPage.tsx",
+        "client/src/pages/dashboard/ads/AdAnalyticsPage.tsx",
+        "client/src/pages/dashboard/ads/CampaignDetail.tsx"
+      ]
+    },
+    {
+      "id": "auth-rbac",
+      "fileCount": 8,
+      "samplePaths": [
+        "server/auth.ts",
+        "server/rbac.ts",
+        "server/csrf.ts",
+        "server/twoFactor.ts",
+        "server/services/memberSessionService.ts",
+        "shared/rbac-constants.ts",
+        "client/src/hooks/useAuth.ts",
+        "docs/architecture/AUTHENTICATION_FLOW.md"
+      ]
+    },
+    {
+      "id": "seo-ssr",
+      "fileCount": 35,
+      "samplePaths": [
+        "server/seoInjector.ts",
+        "server/middleware/slugRedirect.ts",
+        "server/routes/edgeMeta.ts",
+        "server/utils/noindexPaths.ts",
+        "web-next/.dockerignore",
+        "web-next/.env.example",
+        "web-next/.gitignore",
+        "web-next/Dockerfile"
+      ]
+    },
+    {
+      "id": "comments",
+      "fileCount": 10,
+      "samplePaths": [
+        "server/services/commentInsightsService.ts",
+        "server/services/commentModerationService.ts",
+        "server/services/commentReactionsService.ts",
+        "server/routes/commentModeration.ts",
+        "server/routes/commentReactions.ts",
+        "server/routes/topicComments.ts",
+        "server/ai/commentModeration.ts",
+        "server/sentiment-analyzer.ts"
+      ]
+    },
+    {
+      "id": "deep-analysis",
+      "fileCount": 3,
+      "samplePaths": [
+        "server/deepAnalysisEngine.ts",
+        "client/src/pages/dashboard/DeepAnalysis.tsx",
+        "client/src/pages/dashboard/DeepAnalysisList.tsx"
+      ]
+    },
+    {
+      "id": "calendar",
+      "fileCount": 6,
+      "samplePaths": [
+        "server/services/calendarAi.ts",
+        "server/routes/calendar.ts",
+        "client/src/pages/CalendarPage.tsx",
+        "client/src/pages/CalendarEventForm.tsx",
+        "client/src/pages/CalendarEventDetail.tsx",
+        "docs/architecture/CALENDAR_SYSTEM.md"
+      ]
+    },
+    {
+      "id": "systems-catalog",
+      "fileCount": 28,
+      "samplePaths": [
+        "docs/systems/AUDIT-2026-07-17.md",
+        "docs/systems/GOVERNANCE.md",
+        "docs/systems/README.md",
+        "docs/systems/ads/SYSTEM.md",
+        "docs/systems/ai-hub/SYSTEM.md",
+        "docs/systems/audio-newsletter/SYSTEM.md",
+        "docs/systems/auth-rbac/SYSTEM.md",
+        "docs/systems/calendar/SYSTEM.md"
+      ]
+    }
+  ]
+}

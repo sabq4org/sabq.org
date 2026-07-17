@@ -46,7 +46,6 @@ import {
   StandingsTable,
   PodiumCard,
   CardLeaders,
-  LeaderboardBoard,
   ImageGallery,
   VideoReel,
   MatchDialog,
@@ -1575,7 +1574,6 @@ export default function SportsDashboard() {
           {/* ٠٦ لوحة المتصدّرين (المجتمع) */}
           <section id="leaderboard" className="scroll-mt-16">
             <SectionTitle title="لوحة المتصدّرين" subtitle="توقّع النتائج ونافِس الجمهور" />
-            <LeaderboardBoard />
           </section>
 
           {/* الوسائط: صور + فيديو */}

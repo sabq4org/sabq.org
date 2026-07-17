@@ -10,7 +10,7 @@
  */
 import { Router } from "express";
 import { requireAuth } from "../rbac";
-import { isGcPredictionsEnabled } from "../services/gcPredictionsService";
+import { isGcPredictionsEnabled } from "../services/gcFeatureFlags";
 import {
   FANTASY_BUDGET,
   FANTASY_SQUAD_SIZE,
