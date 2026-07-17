@@ -2092,6 +2092,18 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
+      // المنصة المركزية للتوقعات: عامل تسوية واحد لكل البطولات (Prediction Core)
+      if (enableBackgroundWorkers) {
+        setTimeout(async () => {
+          try {
+            const { startPredictionCoreJob } = await import("./jobs/predictionCoreJob");
+            startPredictionCoreJob();
+          } catch (error) {
+            console.error("[Server] Error starting prediction core job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY);
+      }
+
       // رادار سبق الذكي: نفس نمط المونديال — تسجيل دائم وفحص القيادة داخل الدورة
       if (enableBackgroundWorkers) {
         setTimeout(async () => {

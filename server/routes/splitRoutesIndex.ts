@@ -55,6 +55,8 @@ import topicCommentsRouter from "./topicComments";
 import wcPredictionsRouter from "./wcPredictions";
 import acPredictionsRouter from "./acPredictions";
 import gcPredictionsRouter from "./gcPredictions";
+import predictionsCoreRouter from "./predictionsCore";
+import predictionsMobileRouter from "./predictionsMobile";
 import gcMajlisRouter from "./gcMajlis";
 import gcFantasyRouter from "./gcFantasy";
 import rslPredictionsRouter from "./rslPredictions";
@@ -136,6 +138,8 @@ export function registerSplitRoutes(app: Express) {
   app.use(wcPredictionsRouter);
   app.use(acPredictionsRouter);
   app.use(gcPredictionsRouter);
+  app.use(predictionsCoreRouter);
+  app.use(predictionsMobileRouter);
   app.use(gcMajlisRouter);
   app.use(gcFantasyRouter);
   app.use(rslPredictionsRouter);
