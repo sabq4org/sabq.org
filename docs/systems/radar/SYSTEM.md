@@ -25,6 +25,7 @@
 - حسابات X الأولوية: `fetchIntervalMinutes=1` + `since_id` (SLA ≤ دقيقتين). السقف: `RADAR_X_MAX_ACTIVE_WATCHES` (افتراضي 80).
 - أعمدة تشغيلية additive: `tier`, `region`, `weight`, `pack_id`.
 - وكالات AP/Reuters/AFP بلا RSS عام موثوق — الرصد عبر حزمة `x-news-accounts`.
+- **فلتر اهتمام سبق** (`topicFilter.ts`): على المصادر الأجنبية (`region=us|global`) لا يُدخل إلا ما يمس السعودية / أمريكا–إيران / المونديال / لاعبين مشهورين / حدثاً كبيراً. الخليج بلا فلتر. عطّل بـ `RADAR_TOPIC_FILTER_ENABLED=false`.
 - التفعيل التشغيلي: `RADAR_ENABLED=true` + مفتاح X (`X_API_BEARER_TOKEN` و/أو `TWITTERAPI_IO_API_KEY`).
 
 ## صحة وتشغيل

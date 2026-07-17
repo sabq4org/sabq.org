@@ -15,6 +15,11 @@ import {
   type XTrendEntry,
   type XWatchType,
 } from "./xProvider";
+import {
+  filterItemsBySabqInterest,
+  sabqInterestXQueryClause,
+  shouldApplyTopicFilter,
+} from "./topicFilter";
 
 // السعودية في تصنيف مواقع الترندات (WOEID)
 const DEFAULT_TRENDS_WOEID = Number(process.env.RADAR_X_TRENDS_WOEID || 23424938);
@@ -70,13 +75,21 @@ export async function fetchXSource(source: RadarSource): Promise<NormalizedRadar
     return (await provider.trends(woeid)).map((trend) => normalizeTrend(trend, now));
   }
 
-  const tweets = await provider.searchRecent(
-    buildWatchQuery(xType, value),
-    source.xSinceId ?? undefined
-  );
+  let query = buildWatchQuery(xType, value);
+  // حسابات أجنبية: ضيّق البحث عند المصدر (أوفر + أقل ضوضاء) ثم فلتر لاحق احتياطي
+  if (shouldApplyTopicFilter(source) && xType === "account") {
+    query = `(${query}) ${sabqInterestXQueryClause()}`;
+  }
+
+  const tweets = await provider.searchRecent(query, source.xSinceId ?? undefined);
   const cursor = newestTweetId(tweets);
   if (cursor && cursor !== source.xSinceId) {
     await updateSourceCursor(source.id, cursor);
   }
-  return tweets.map(normalizeTweet);
+
+  let items = tweets.map(normalizeTweet);
+  if (shouldApplyTopicFilter(source)) {
+    items = filterItemsBySabqInterest(items);
+  }
+  return items;
 }
