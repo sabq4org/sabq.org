@@ -443,6 +443,7 @@ const AsianCupPlayer = lazy(() => retryImport(() => import("@/pages/AsianCupPlay
 const AsianCupVenues = lazy(() => retryImport(() => import("@/pages/AsianCupVenues")));
 const GulfCup = lazy(() => retryImport(() => import("@/pages/GulfCup")));
 const GulfCupPredictions = lazy(() => retryImport(() => import("@/pages/GulfCupPredictions")));
+const PredictionCenter = lazy(() => retryImport(() => import("@/pages/PredictionCenter")));
 const GulfCupMajlis = lazy(() => retryImport(() => import("@/pages/GulfCupMajlis")));
 const KingsCup = lazy(() => retryImport(() => import("@/pages/KingsCup")));
 const KingsCupTeam = lazy(() => retryImport(() => import("@/pages/KingsCupTeam")));
@@ -996,6 +997,9 @@ function Router() {
         <Route path="/gulf-cup/majlis">{() => <LazyRoute component={GulfCupMajlis} />}</Route>
         <Route path="/gulf-cup/predictions">{() => <LazyRoute component={GulfCupPredictions} />}</Route>
         <Route path="/gulf-cup">{() => <LazyRoute component={GulfCup} />}</Route>
+
+        {/* المنصة المركزية للتوقعات — كل البطولات ما عدا مونديال 2026 */}
+        <Route path="/predictions">{() => <LazyRoute component={PredictionCenter} />}</Route>
 
         <Route path="/kings-cup/predictions">{() => <LazyRoute component={KingsCupPredictions} />}</Route>
         <Route path="/super-cup/predictions">{() => <LazyRoute component={SuperCupPredictions} />}</Route>

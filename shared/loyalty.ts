@@ -92,6 +92,14 @@ export const LOYALTY_ACTIONS = {
    *  settlement cron re-runs safely. Awarded by `settlePlayerPickMatches` in
    *  server/services/sportsPoolPlayerPicksService.ts. */
   SPORTS_SCORER_PREDICTION_WIN: "SPORTS_SCORER_PREDICTION_WIN",
+  /** المنصة المركزية للتوقعات (Prediction Core) — الكود الموحد الذي يستبدل
+   *  تدريجيًا أكواد الفوز المتناثرة أعلاه. Source = `prediction:<ledgerId>`
+   *  (قيد سجل النقاط المركزي)، و`points` هي قيمة المحفظة النهائية بعد مضاعف
+   *  الطبقة (wallet_points من prediction_award_outbox). التسليم من
+   *  deliverPendingAwards في server/services/predictions/outboxService.ts؛
+   *  الازدواج ممنوع بثلاث طبقات: قيد فريد على ledger_id في الصندوق، dedup
+   *  المحفظة على source، وقيد السجل الفريد نفسه. */
+  PREDICTION_WIN: "PREDICTION_WIN",
 } as const;
 
 export type LoyaltyAction = (typeof LOYALTY_ACTIONS)[keyof typeof LOYALTY_ACTIONS];
@@ -181,6 +189,9 @@ export const LOYALTY_ACTION_POINTS: Record<LoyaltyAction, number> = {
   // Nominal default only — overridden with the user's pari-mutuel share of the
   // scorer pool (300) or first-scorer pool (200).
   SPORTS_SCORER_PREDICTION_WIN: 100,
+  // Nominal default only — the outbox ALWAYS overrides this with wallet_points
+  // (base share × loyalty-tier multiplier) computed at settlement time.
+  PREDICTION_WIN: 100,
 };
 
 // Per-user-per-day cap on each action. Anti-farming guard that did NOT
@@ -220,6 +231,9 @@ export const LOYALTY_DAILY_CAPS: Record<LoyaltyAction, number | null> = {
   SPORTS_LONG_PREDICTION_WIN: null,
   // One settleable pick per (fixture, kind); lifetime dedup keyed on source.
   SPORTS_SCORER_PREDICTION_WIN: null,
+  // No daily cap — a ledger entry pays at most once (unique outbox row +
+  // lifetime dedup on source=prediction:<ledgerId> below).
+  PREDICTION_WIN: null,
 };
 
 // Window during which the same (action, source) for the same user does not
@@ -265,6 +279,9 @@ export const LOYALTY_DEDUP_HOURS: Record<LoyaltyAction, number | null> = {
   SPORTS_LONG_PREDICTION_WIN: 100000,
   // Lifetime, source=fixtureId:kind dedup — a (fixture, kind) pays at most once.
   SPORTS_SCORER_PREDICTION_WIN: 100000,
+  // Lifetime, source=prediction:<ledgerId> dedup — a ledger entry pays at most
+  // once even if the outbox worker retries after a crash mid-delivery.
+  PREDICTION_WIN: 100000,
 };
 
 // ----------------------------------------------------------------------------

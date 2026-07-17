@@ -825,4 +825,29 @@ interface SabqApi {
 
     @POST("api/v1/world-cup/predictions/long")
     suspend fun submitWcLongPrediction(@Body body: com.sabq.smart.feature.worldcup.WcLongSubmitBody): com.sabq.smart.feature.worldcup.WcLongSubmitResponse
+
+    // -- المنصة المركزية للتوقّعات (Bearer) — كل البطولات ما عدا المونديال --
+    @GET("api/v1/predictions/competitions")
+    suspend fun getPredCompetitions(): com.sabq.smart.feature.predictions.PredCompetitionsResponse
+
+    @GET("api/v1/predictions/competitions/{slug}")
+    suspend fun getPredCompetition(@Path("slug") slug: String): com.sabq.smart.feature.predictions.PredCompetitionDetailResponse
+
+    @GET("api/v1/predictions/contests/{id}")
+    suspend fun getPredContest(@Path("id") id: String): com.sabq.smart.feature.predictions.PredContestDetailResponse
+
+    @PUT("api/v1/predictions/contests/{id}/entry")
+    suspend fun putPredEntry(
+        @Path("id") id: String,
+        @Body body: com.sabq.smart.feature.predictions.PredEntryBody,
+    ): com.sabq.smart.feature.predictions.PredEntrySaveResponse
+
+    @GET("api/v1/predictions/me/ledger")
+    suspend fun getPredLedger(@Query("competition") competition: String): com.sabq.smart.feature.predictions.PredLedgerResponse
+
+    @GET("api/v1/predictions/leaderboards")
+    suspend fun getPredLeaderboard(@Query("competition") competition: String): com.sabq.smart.feature.predictions.PredLeaderboardResponse
+
+    @GET("api/v1/predictions/contests/{id}/settlement")
+    suspend fun getPredSettlement(@Path("id") id: String): com.sabq.smart.feature.predictions.PredSettlementResponse
 }

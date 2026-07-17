@@ -13874,3 +13874,204 @@ export type AiUsageDailyRow = typeof aiUsageDaily.$inferSelect;
 export type AiProviderHealthRow = typeof aiProviderHealth.$inferSelect;
 export type AiConfigAuditRow = typeof aiConfigAudit.$inferSelect;
 export type AiBudget = typeof aiBudgets.$inferSelect;
+
+// ============================================================================
+// المنصة المركزية لتوقعات سبق الرياضي — Prediction Core
+// ============================================================================
+// المرجع: مقترح المنصة المركزية v2. جميع الجداول هنا إضافية ولا تمس جداول
+// المحركات القديمة (wc_*, rsl_*, gc_*, ac_*, cup_*, sports_pool_*). القيم
+// المقيَّدة نصوص موثقة (عرف المستودع — لا pgEnum)، والقوائم المسموحة في
+// shared/predictions.ts. كأس العالم 2026 خارج هذا النظام كليًا حتى نهايته.
+
+// البطولة — الحاوية التجارية (الدوري السعودي، كأس الخليج، ...).
+export const predictionCompetitions = pgTable("prediction_competitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: varchar("slug", { length: 64 }).notNull(),
+  nameAr: text("name_ar").notNull(),
+  nameEn: text("name_en"),
+  seasonKey: varchar("season_key", { length: 32 }).notNull(),
+  // draft | active | paused | completed
+  status: text("status").notNull().default("draft"),
+  // competition | season | none
+  leaderboardMode: text("leaderboard_mode").notNull().default("competition"),
+  sourceProvider: text("source_provider"),
+  timezone: text("timezone").notNull().default("Asia/Riyadh"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_comp_slug").on(table.slug),
+  index("idx_pred_comp_status").on(table.status),
+]);
+
+// ملف الاحتساب المُرقّم الإصدار — لا يُعدَّل ملف مستخدم؛ التغيير = إصدار جديد.
+export const predictionScoringProfiles = pgTable("prediction_scoring_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // null = ملف عام يصلح لأي بطولة لا تملك ملفًا خاصًا
+  competitionId: varchar("competition_id").references(() => predictionCompetitions.id),
+  // match_score | match_scorer | first_scorer | champion | top_scorer
+  contestType: text("contest_type").notNull(),
+  // tiered_pool | shared_pool | fixed_points | skill_weighted | player_pool | long_term_pool
+  strategyKey: text("strategy_key").notNull(),
+  version: integer("version").notNull(),
+  params: jsonb("params").$type<Record<string, unknown>>().notNull(),
+  // draft | active | retired
+  status: text("status").notNull().default("draft"),
+  effectiveFrom: timestamp("effective_from"),
+  createdBy: varchar("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_profile_version").on(table.competitionId, table.contestType, table.version),
+  index("idx_pred_profile_lookup").on(table.competitionId, table.contestType, table.status),
+]);
+
+// مسابقة توقع واحدة قابلة للإغلاق والتسوية (مباراة، بطل، هداف...).
+export const predictionContests = pgTable("prediction_contests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  competitionId: varchar("competition_id").references(() => predictionCompetitions.id).notNull(),
+  // معرف المباراة/الجولة لدى مصدر النتائج (fixtureId أو season-champion...)
+  externalRef: varchar("external_ref", { length: 128 }).notNull(),
+  contestType: text("contest_type").notNull(),
+  scoringProfileId: varchar("scoring_profile_id").references(() => predictionScoringProfiles.id).notNull(),
+  opensAt: timestamp("opens_at").notNull(),
+  locksAt: timestamp("locks_at").notNull(),
+  // draft | open | locked | ready | settled | void
+  status: text("status").notNull().default("draft"),
+  resultPayload: jsonb("result_payload").$type<Record<string, unknown>>(),
+  resultVersion: integer("result_version").notNull().default(0),
+  settledAt: timestamp("settled_at"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_contest_external").on(table.competitionId, table.contestType, table.externalRef),
+  index("idx_pred_contest_status").on(table.status, table.locksAt),
+  index("idx_pred_contest_competition").on(table.competitionId, table.status),
+]);
+
+// مشاركة المستخدم — توقع نشط واحد لكل (مسابقة، مستخدم) مع Upsert قبل الإغلاق.
+export const predictionEntries = pgTable("prediction_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contestId: varchar("contest_id").references(() => predictionContests.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  predictionPayload: jsonb("prediction_payload").$type<Record<string, unknown>>().notNull(),
+  // تثبيت إصدار القاعدة الفعال وقت الإرسال — لا يتأثر بتعديل لاحق
+  scoringProfileId: varchar("scoring_profile_id").references(() => predictionScoringProfiles.id).notNull(),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  // active | withdrawn | invalid
+  status: text("status").notNull().default("active"),
+  // web | ios | android
+  sourcePlatform: text("source_platform").notNull().default("web"),
+}, (table) => [
+  uniqueIndex("idx_pred_entry_contest_user").on(table.contestId, table.userId),
+  index("idx_pred_entry_user").on(table.userId),
+]);
+
+// سجل تشغيل التسوية — صف واحد لكل (مسابقة، نسخة نتيجة). إعادة التشغيل بعد
+// فشل تستأنف الصف نفسه ولا تنشئ صفًا جديدًا، وحالة settled نهائية.
+export const predictionSettlements = pgTable("prediction_settlements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contestId: varchar("contest_id").references(() => predictionContests.id).notNull(),
+  resultVersion: integer("result_version").notNull(),
+  strategyKey: text("strategy_key").notNull(),
+  strategyVersion: integer("strategy_version").notNull(),
+  // sha256 للنتيجة + إصدار القاعدة + معرفات التوقعات — لكشف تغير المدخلات
+  inputHash: varchar("input_hash", { length: 64 }).notNull(),
+  // processing | settled | failed | reversed
+  status: text("status").notNull().default("processing"),
+  summary: jsonb("summary").$type<{
+    entries: number;
+    winners: number;
+    poolAvailable: number;
+    poolAwarded: number;
+    poolCarried: number;
+    poolRemainder: number;
+  }>(),
+  errorCode: text("error_code"),
+  // عند التصحيح: التسوية العكسية تشير إلى الأصلية
+  reversesSettlementId: varchar("reverses_settlement_id"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  uniqueIndex("idx_pred_settlement_run").on(table.contestId, table.resultVersion, table.strategyVersion),
+  index("idx_pred_settlement_status").on(table.status),
+]);
+
+// سجل النقاط Append-only — المرجع النهائي لنقاط البطولات. لا تعديل ولا حذف؛
+// التصحيح بقيد عكسي يشير إلى القيد الأصلي عبر reverses_ledger_id.
+export const predictionPointsLedger = pgTable("prediction_points_ledger", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  settlementId: varchar("settlement_id").references(() => predictionSettlements.id).notNull(),
+  contestId: varchar("contest_id").references(() => predictionContests.id).notNull(),
+  competitionId: varchar("competition_id").references(() => predictionCompetitions.id).notNull(),
+  entryId: varchar("entry_id").references(() => predictionEntries.id),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  // موجب للمنح، سالب للقيد العكسي فقط
+  points: integer("points").notNull(),
+  // competition | fantasy
+  pointScope: text("point_scope").notNull().default("competition"),
+  // exact | margin | outcome | scorer | first_scorer | champion | top_scorer | skill | reversal | legacy_import
+  reasonCode: text("reason_code").notNull(),
+  breakdown: jsonb("breakdown").$type<Record<string, unknown>>(),
+  reversesLedgerId: varchar("reverses_ledger_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_ledger_award").on(
+    table.settlementId, table.userId, table.entryId, table.pointScope, table.reasonCode,
+  ),
+  index("idx_pred_ledger_user_comp").on(table.userId, table.competitionId),
+  index("idx_pred_ledger_competition").on(table.competitionId, table.pointScope),
+  index("idx_pred_ledger_contest").on(table.contestId),
+]);
+
+// رصيد الترحيل (Jackpot) لكل (بطولة، نوع مسابقة) مع أثر الحركة في كل تسوية.
+export const predictionPoolState = pgTable("prediction_pool_state", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  competitionId: varchar("competition_id").references(() => predictionCompetitions.id).notNull(),
+  contestType: text("contest_type").notNull(),
+  carryBalance: integer("carry_balance").notNull().default(0),
+  lastSettlementId: varchar("last_settlement_id"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_pool_state_key").on(table.competitionId, table.contestType),
+]);
+
+// صندوق الصادر لمحفظة الولاء — يفصل نجاح التسوية عن التسليم. التسليم عبر
+// awardPoints حصرًا (source = prediction:<ledgerId>) فتبقى ضمانات المحفظة
+// (السقوف ومنع التكرار) سارية. مضاعف العضوية يُطبق هنا فقط، لا في نقاط البطولة.
+export const predictionAwardOutbox = pgTable("prediction_award_outbox", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ledgerId: varchar("ledger_id").references(() => predictionPointsLedger.id).notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  basePoints: integer("base_points").notNull(),
+  // مضاعف طبقة الولاء وقت المنح ×100 (مثال: 120 = ×1.2)
+  multiplierSnapshot: integer("multiplier_snapshot").notNull().default(100),
+  walletPoints: integer("wallet_points").notNull(),
+  // pending | delivered | failed
+  status: text("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  lastError: text("last_error"),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_pred_outbox_ledger").on(table.ledgerId),
+  index("idx_pred_outbox_pending").on(table.status, table.nextAttemptAt),
+]);
+
+export const insertPredictionCompetitionSchema = createInsertSchema(predictionCompetitions)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPredictionScoringProfileSchema = createInsertSchema(predictionScoringProfiles)
+  .omit({ id: true, createdAt: true });
+export const insertPredictionContestSchema = createInsertSchema(predictionContests)
+  .omit({ id: true, createdAt: true, updatedAt: true, settledAt: true, resultVersion: true });
+
+export type PredictionCompetition = typeof predictionCompetitions.$inferSelect;
+export type PredictionScoringProfile = typeof predictionScoringProfiles.$inferSelect;
+export type PredictionContest = typeof predictionContests.$inferSelect;
+export type PredictionEntry = typeof predictionEntries.$inferSelect;
+export type PredictionSettlement = typeof predictionSettlements.$inferSelect;
+export type PredictionPointsLedgerEntry = typeof predictionPointsLedger.$inferSelect;
+export type PredictionPoolState = typeof predictionPoolState.$inferSelect;
+export type PredictionAwardOutboxRow = typeof predictionAwardOutbox.$inferSelect;

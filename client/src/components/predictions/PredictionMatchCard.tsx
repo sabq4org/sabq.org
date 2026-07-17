@@ -1,0 +1,240 @@
+// بطاقة مباراة في مركز التوقعات — سطح التوقع نفسه على الويب: عدّاد نتيجة
+// وشريط قاعدة مولّد من الملف الفعّال (يُجلب عند فتح العدّاد)، وحالة واحدة
+// واضحة لكل مباراة. الأزرار للمسجّلين، وغيرهم يُدعى لتسجيل الدخول.
+
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Lock, Minus, Plus, Shield } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import {
+  kickoffTimeAr,
+  lockCountdownAr,
+  ruleSummaryAr,
+  type PredContest,
+  type PredContestDetail,
+} from "./predictionTypes";
+
+type Props = {
+  contest: PredContest;
+  competitionSlug: string;
+  isAuthenticated: boolean;
+  onLoginNeeded: () => void;
+  onOpenSettlement: (contestId: string) => void;
+};
+
+export function PredictionMatchCard({
+  contest,
+  competitionSlug,
+  isAuthenticated,
+  onLoginNeeded,
+  onOpenSettlement,
+}: Props) {
+  const { toast } = useToast();
+  const mine = contest.myEntry?.payload;
+  const [editing, setEditing] = useState(false);
+  const [predHome, setPredHome] = useState(mine?.predHome ?? 0);
+  const [predAway, setPredAway] = useState(mine?.predAway ?? 0);
+
+  // القاعدة تُجلب عند فتح العدّاد فقط — من ملف الاحتساب الفعّال
+  const { data: detailRaw } = useQuery<PredContestDetail>({
+    queryKey: [`/api/predictions/contests/${contest.id}`],
+    enabled: editing && contest.status === "open",
+    staleTime: 5 * 60_000,
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: () =>
+      apiRequest(`/api/predictions/contests/${contest.id}/entry`, {
+        method: "PUT",
+        body: JSON.stringify({ prediction: { predHome, predAway } }),
+      }),
+    onSuccess: () => {
+      toast({ title: "تم حفظ توقّعك ✅", description: "يمكنك تعديله حتى ضربة البداية" });
+      setEditing(false);
+      queryClient.invalidateQueries({ queryKey: [`/api/predictions/competitions/${competitionSlug}`] });
+    },
+    onError: () =>
+      toast({
+        title: "تعذّر حفظ التوقّع",
+        description: "ربما أُقفلت المباراة — حدّث الصفحة",
+        variant: "destructive",
+      }),
+  });
+
+  const home = contest.metadata?.home;
+  const away = contest.metadata?.away;
+  const countdown = contest.status === "open" ? lockCountdownAr(contest.locksAt) : null;
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+      {/* الفريقان والوسط */}
+      <div className="flex items-center gap-2">
+        <TeamSide name={home?.name} logo={home?.logo} />
+        <div className="min-w-[72px] text-center">
+          {contest.status === "settled" && contest.result ? (
+            <span className="text-xl font-extrabold tabular-nums text-foreground" dir="ltr">
+              {contest.result.finalHome}–{contest.result.finalAway}
+            </span>
+          ) : (
+            <span className="text-sm font-bold tabular-nums text-muted-foreground">
+              {kickoffTimeAr(contest.locksAt)}
+            </span>
+          )}
+        </div>
+        <TeamSide name={away?.name} logo={away?.logo} trailing />
+      </div>
+
+      {/* السطر السفلي: معلومات + الحالة */}
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-[11px] text-muted-foreground">
+          {[contest.metadata?.round, countdown].filter(Boolean).join(" · ")}
+        </span>
+        <StatusChip
+          contest={contest}
+          onPredict={() => {
+            if (!isAuthenticated) return onLoginNeeded();
+            setEditing((value) => !value);
+          }}
+          onOpenSettlement={() => onOpenSettlement(contest.id)}
+        />
+      </div>
+
+      {/* العدّاد + القاعدة + الحفظ */}
+      {editing && contest.status === "open" && (
+        <div className="mt-4 space-y-3 border-t border-border pt-4">
+          {detailRaw?.rule && (
+            <p className="rounded-xl bg-primary/10 px-3 py-2 text-[11.5px] font-semibold leading-relaxed text-primary">
+              {ruleSummaryAr(detailRaw.rule)}
+            </p>
+          )}
+          <div className="flex items-center justify-center gap-6">
+            <Stepper value={predHome} onChange={setPredHome} label={home?.name ?? "المضيف"} />
+            <span className="text-xl font-extrabold text-muted-foreground">-</span>
+            <Stepper value={predAway} onChange={setPredAway} label={away?.name ?? "الضيف"} />
+          </div>
+          <button
+            type="button"
+            onClick={() => submitMutation.mutate()}
+            disabled={submitMutation.isPending}
+            className="w-full rounded-xl bg-primary py-2.5 text-sm font-bold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+          >
+            {submitMutation.isPending ? "جارٍ الحفظ…" : `تأكيد التوقّع ${predHome}–${predAway}`}
+          </button>
+          <p className="text-center text-[10.5px] text-muted-foreground">
+            يُقفل التوقّع عند ضربة البداية — ويمكنك تعديله حتى ذلك الحين
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TeamSide({ name, logo, trailing }: { name?: string | null; logo?: string | null; trailing?: boolean }) {
+  return (
+    <div className={`flex flex-1 items-center gap-2 ${trailing ? "flex-row-reverse" : ""}`}>
+      {logo ? (
+        <img src={logo} alt="" className="h-7 w-7 object-contain" loading="lazy" />
+      ) : (
+        <Shield className="h-6 w-6 text-muted-foreground/40" />
+      )}
+      <span className="truncate text-[13px] font-bold text-foreground">{name ?? "يُحدد لاحقًا"}</span>
+    </div>
+  );
+}
+
+function StatusChip({
+  contest,
+  onPredict,
+  onOpenSettlement,
+}: {
+  contest: PredContest;
+  onPredict: () => void;
+  onOpenSettlement: () => void;
+}) {
+  const mine = contest.myEntry?.payload;
+  switch (contest.status) {
+    case "open":
+      return mine ? (
+        <button
+          type="button"
+          onClick={onPredict}
+          className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary transition hover:bg-primary/20"
+        >
+          توقّعتَ {mine.predHome}–{mine.predAway} · تعديل
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onPredict}
+          className="rounded-full bg-primary px-4 py-1 text-[11px] font-bold text-primary-foreground transition hover:opacity-90"
+        >
+          توقّع الآن
+        </button>
+      );
+    case "locked":
+    case "ready":
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full bg-destructive/10 px-3 py-1 text-[11px] font-bold text-destructive">
+          <Lock className="h-3 w-3" />
+          {mine ? `توقّعك ${mine.predHome}–${mine.predAway} مقفل` : "مقفل — بانتظار النتيجة"}
+        </span>
+      );
+    case "settled":
+      return (
+        <button
+          type="button"
+          onClick={onOpenSettlement}
+          className="rounded-full bg-amber-500/15 px-3 py-1 text-[11px] font-bold text-amber-700 transition hover:bg-amber-500/25 dark:text-amber-400"
+        >
+          احتُسبت — التفاصيل
+        </button>
+      );
+    case "void":
+      return (
+        <span className="rounded-full bg-muted px-3 py-1 text-[11px] font-bold text-muted-foreground">أُلغيت</span>
+      );
+    default:
+      return null;
+  }
+}
+
+function Stepper({ value, onChange, label }: { value: number; onChange: (next: number) => void; label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <span className="max-w-[90px] truncate text-[11px] font-bold text-muted-foreground">{label}</span>
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted text-2xl font-extrabold tabular-nums text-foreground">
+        {value}
+      </span>
+      <div className="flex gap-2">
+        <StepButton onClick={() => value > 0 && onChange(value - 1)} ariaLabel="إنقاص الأهداف">
+          <Minus className="h-3.5 w-3.5" />
+        </StepButton>
+        <StepButton onClick={() => value < 20 && onChange(value + 1)} ariaLabel="زيادة الأهداف">
+          <Plus className="h-3.5 w-3.5" />
+        </StepButton>
+      </div>
+    </div>
+  );
+}
+
+function StepButton({
+  onClick,
+  ariaLabel,
+  children,
+}: {
+  onClick: () => void;
+  ariaLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary transition hover:bg-primary/20"
+    >
+      {children}
+    </button>
+  );
+}

@@ -210,7 +210,7 @@ struct AccountView: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(L("التوقّعات"))
             NavigationLink {
-                PredictionsHubView()
+                PredictionCenterView()
             } label: {
                 HStack(spacing: 14) {
                     Image(systemName: "rosette")
@@ -222,7 +222,7 @@ struct AccountView: View {
                         Text(L("توقّعات VARA"))
                             .font(SportsFonts.app(size: 16, weight: .heavy))
                             .foregroundStyle(SpTheme.onDark)
-                        Text(L("توقّع نتائج كأس العالم والبطولات وتنافس على النقاط والجوائز"))
+                        Text(L("توقّع نتائج مباريات البطولات وتنافس على النقاط والجوائز"))
                             .font(SportsFonts.app(size: 11.5, weight: .semibold))
                             .foregroundStyle(SpTheme.onDarkDim)
                             .lineLimit(2)
