@@ -124,7 +124,23 @@ export interface SaveExistingMediaInput {
  * row (new or previously-unanalyzed) into the AI auto-tag + embedding pipeline
  * so editor-registered images become semantically searchable.
  */
-export async function saveExistingMedia(input: SaveExistingMediaInput): Promise<MediaFile> {
+type SavedExistingMedia = Pick<
+  MediaFile,
+  | "id"
+  | "fileName"
+  | "originalName"
+  | "url"
+  | "type"
+  | "mimeType"
+  | "size"
+  | "title"
+  | "description"
+  | "category"
+  | "uploadedBy"
+  | "createdAt"
+>;
+
+export async function saveExistingMedia(input: SaveExistingMediaInput): Promise<SavedExistingMedia> {
   const [existing] = await db
     .select()
     .from(mediaFiles)
