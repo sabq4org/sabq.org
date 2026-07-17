@@ -166,6 +166,20 @@ export default function ArticleDetail() {
     },
   });
   const aiBullets = storedBullets.length > 0 ? storedBullets : (bulletsData?.bullets || []);
+  // الفقرة الموسّعة غالباً نفس نص النقاط (تقسيم جُمل) — لا نكررها تحت «اقرأ المزيد»
+  const summaryDetailText = (article?.aiSummary || article?.excerpt || "").trim();
+  const showSummaryDetail = useMemo(() => {
+    if (!summaryDetailText) return false;
+    if (aiBullets.length === 0) return true;
+    const normalize = (s: string) => s.replace(/\s+/g, " ").trim();
+    const joined = normalize(aiBullets.join(" "));
+    const detail = normalize(summaryDetailText);
+    if (!joined) return true;
+    if (joined === detail) return false;
+    const shorter = joined.length <= detail.length ? joined : detail;
+    const longer = joined.length <= detail.length ? detail : joined;
+    return !longer.includes(shorter) || longer.length > shorter.length * 1.35;
+  }, [summaryDetailText, aiBullets]);
 
   // DMS Ad tracking for article page
   useAdTracking(article?.category?.nameAr || '', article?.id);
@@ -1364,7 +1378,7 @@ export default function ArticleDetail() {
                           الموجز
                         </h3>
                         <div className="flex items-center gap-2">
-                          {(article.aiSummary || article.excerpt) && (
+                          {showSummaryDetail && (
                             <CollapsibleTrigger asChild>
                               <Button
                                 variant="ghost"
@@ -1430,14 +1444,14 @@ export default function ArticleDetail() {
                         </ul>
                       )}
 
-                      {/* Expanded detailed paragraph */}
-                      {(article.aiSummary || article.excerpt) && (
+                      {/* Expanded detailed paragraph — فقط إن اختلف عن النقاط */}
+                      {showSummaryDetail && (
                         <CollapsibleContent>
                           <p
                             className="mt-3 pt-3 border-t text-xs sm:text-sm text-muted-foreground leading-relaxed"
                             data-testid="text-smart-summary"
                           >
-                            {article.aiSummary || article.excerpt}
+                            {summaryDetailText}
                           </p>
                         </CollapsibleContent>
                       )}

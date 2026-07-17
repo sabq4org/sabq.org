@@ -3528,7 +3528,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             {!isOpinionAuthor && <Card className="order-[55] lg:order-none">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>الملخص</CardTitle>
+                  <CardTitle>الملخص / الموجز</CardTitle>
                   <Button
                     variant="outline"
                     size="sm"
@@ -3542,7 +3542,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-2">
                 <Textarea
                   value={excerpt}
                   onChange={(e) => {
@@ -3551,11 +3551,14 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       setMetaDescription(e.target.value);
                     }
                   }}
-                  placeholder="ملخص قصير للمقال..."
+                  placeholder="ملخص قصير يظهر كـ«الموجز» في صفحة المقال..."
                   rows={4}
                   disabled={isLockedByOther}
                   data-testid="textarea-excerpt"
                 />
+                <p className="text-xs text-muted-foreground">
+                  عند الحفظ يُحدَّث صندوق الموجز في الصفحة العامة بنفس النص. امسح الحقل واحفظ لإخفائه.
+                </p>
               </CardContent>
             </Card>}
 

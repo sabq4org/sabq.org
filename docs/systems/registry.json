@@ -62,7 +62,7 @@
       "nameEn": "Editorial / Newsroom",
       "status": "active",
       "category": "content",
-      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ورأي الكاتب.",
+      "summary": "غرفة الأخبار + أدوات التحرير بالذكاء الاصطناعي: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ورأي الكاتب. الموجز العام يتزامن من excerpt عند الحفظ.",
       "docPath": "docs/systems/editorial/SYSTEM.md",
       "relatedDocs": [
         "docs/editorial/sabq-unified-editorial-prompt.md",
