@@ -22,7 +22,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { hasPermission } from "@/hooks/useAuth";
+import { hasPermission, type User } from "@/hooks/useAuth";
 import { tierProgress } from "@shared/loyalty";
 import { formatNumber } from "@/lib/format";
 
@@ -154,7 +154,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
           <Settings className="ml-2 h-4 w-4" aria-hidden="true" />
           إعدادات
         </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="min-w-[12rem]" dir="rtl">
+        <DropdownMenuSubContent className="min-w-[12rem]">
           <DropdownMenuItem asChild>
             <a
               href="/focus/weekly"
@@ -178,7 +178,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
         </DropdownMenuSubContent>
       </DropdownMenuSub>
 
-      {hasPermission(user, "dashboard.view") && (
+      {hasPermission(user as User, "dashboard.view") && (
         <>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
@@ -191,7 +191,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
               لوحة التحكم
             </a>
           </DropdownMenuItem>
-          {hasPermission(user, "dashboard.view_messages") && (
+          {hasPermission(user as User, "dashboard.view_messages") && (
             <DropdownMenuItem asChild>
               <a
                 href="/dashboard/communications"
