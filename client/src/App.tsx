@@ -427,6 +427,7 @@ const IFoxAITasks = lazy(() => retryImport(() => import("@/pages/admin/ifox/IFox
 const AIManagementDashboard = lazy(() => retryImport(() => import("@/pages/admin/ifox/ai-management")));
 const AiHubPage = lazy(() => retryImport(() => import("@/pages/dashboard/AiHub")));
 const IntegrationsSettingsPage = lazy(() => retryImport(() => import("@/pages/dashboard/IntegrationsSettings")));
+const SystemsCatalogPage = lazy(() => retryImport(() => import("@/pages/dashboard/SystemsCatalogPage")));
 const ImageStudio = lazy(() => retryImport(() => import("@/pages/ifox/ImageStudio")));
 const InfographicStudio = lazy(() => retryImport(() => import("@/pages/InfographicStudio")));
 const DataInfographicDemo = lazy(() => retryImport(() => import("@/pages/DataInfographicDemo")));
@@ -1106,6 +1107,7 @@ function Router() {
         </Route>
         <Route path="/dashboard/profile">{() => <LazyRoute component={DashboardProfile} />}</Route>
         <Route path="/dashboard/admin-tools">{() => <LazyRoute component={AdminTools} />}</Route>
+        <Route path="/dashboard/systems-catalog">{() => <LazyRoute component={SystemsCatalogPage} />}</Route>
         <Route path="/dashboard/notifications">{() => <LazyRoute component={Notifications} />}</Route>
         <Route path="/dashboard/notification-admin">{() => <LazyRoute component={NotificationAdmin} />}</Route>
         <Route path="/dashboard/email-templates">{() => <LazyRoute component={EmailTemplatesPage} />}</Route>

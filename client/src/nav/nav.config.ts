@@ -1061,6 +1061,15 @@ export const navConfig: NavItem[] = [
         permissions: ["system.manage_settings"],
       },
       {
+        id: "systems_catalog",
+        labelKey: "nav.systems_catalog",
+        labelAr: "كتالوج الأنظمة",
+        path: "/dashboard/systems-catalog",
+        icon: Boxes,
+        roles: ["admin", "system_admin"],
+        permissions: ["system.manage_settings"],
+      },
+      {
         id: "auto_image_settings",
         labelKey: "nav.auto_image_settings",
         labelAr: "التوليد التلقائي للصور",

@@ -67,6 +67,7 @@ import editorAlertsRouter from "./editorAlerts";
 import audioNewsletterRoutes from "./audioNewsletterRoutes";
 import dashboardPulseRouter from "./dashboardPulse";
 import adminToolsRouter from "./adminToolsRoutes";
+import { systemsCatalogRouter } from "./systemsCatalog";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -146,4 +147,5 @@ export function registerSplitRoutes(app: Express) {
   app.use(editorAlertsRouter);
   app.use(dashboardPulseRouter);
   app.use(adminToolsRouter);
+  app.use(systemsCatalogRouter);
 }

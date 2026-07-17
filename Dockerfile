@@ -78,6 +78,9 @@ COPY --from=builder /app/server/lib/passkit/pass-template.pass ./server/lib/pass
 COPY --from=builder /app/server/lib/passkit/loyalty-pass-template.pass ./server/lib/passkit/loyalty-pass-template.pass
 COPY --from=builder /app/certs ./certs
 
+# كتالوج الأنظمة — السجل + SYSTEM.md + لقطة الجرد (للوحة /dashboard/systems-catalog)
+COPY --from=builder /app/docs/systems ./docs/systems
+
 # Arabic fonts used by the press-card strip renderer
 # (server/lib/passkit/PressCardImageRenderer.ts). Without these the
 # Alpine container falls back to system sans-serif, which has no

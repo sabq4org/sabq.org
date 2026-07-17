@@ -16,7 +16,8 @@
     "test:unit": "vitest run",
     "test:smoke": "playwright test e2e/smoke.spec.ts",
     "test:e2e": "playwright test",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "systems:inventory": "node scripts/systems-inventory.mjs --write-snapshot"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
