@@ -14,7 +14,7 @@ type Summary = {
 // Compact horizontal strip embedded above the "رحلتك المعرفية" block.
 // Shows: tier dot + name, week points (positive number), streak (if ≥3),
 // and a progress bar toward the next tier. Clicks through to
-// /dashboard/loyalty for the full view. Hidden for signed-out users.
+// /loyalty for the full view. Hidden for signed-out users.
 export function LoyaltyStrip() {
   const { user } = useAuth();
   const { data } = useQuery<Summary>({
@@ -32,7 +32,7 @@ export function LoyaltyStrip() {
 
   return (
     <Link
-      href="/dashboard/loyalty"
+      href="/loyalty"
       className="group block rounded-lg border bg-card hover:bg-accent/40 transition-colors px-3 py-2.5 mb-3"
       data-testid="loyalty-strip"
       dir="rtl"

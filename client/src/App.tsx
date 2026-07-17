@@ -187,8 +187,10 @@ const MyFollows = lazy(() => retryImport(() => import("@/pages/MyFollows")));
 const MyKeywords = lazy(() => retryImport(() => import("@/pages/MyKeywords")));
 
 // === LAZY IMPORTS (Themes) ===
-const LoyaltyAccount = lazy(() => retryImport(() => import("@/pages/dashboard/LoyaltyAccount")));
+const LoyaltyAccount = lazy(() => retryImport(() => import("@/pages/LoyaltyAccount")));
 const LoyaltyAdminDashboard = lazy(() => retryImport(() => import("@/pages/dashboard/LoyaltyAdminDashboard")));
+const LoyaltyPreview = lazy(() => retryImport(() => import("@/pages/LoyaltyPreview")));
+const LoyaltyTermsPage = lazy(() => retryImport(() => import("@/pages/LoyaltyTermsPage")));
 const HajjBlockSettings = lazy(() => retryImport(() => import("@/pages/dashboard/HajjBlockSettings")));
 const ThemeManager = lazy(() => retryImport(() => import("@/pages/ThemeManager")));
 const ThemeEditor = lazy(() => retryImport(() => import("@/pages/ThemeEditor")));
@@ -665,6 +667,9 @@ function Router() {
         
         {/* Static Pages - Lazy loaded */}
         <Route path="/about">{() => <LazyRoute component={AboutPage} />}</Route>
+        <Route path="/loyalty-preview">{() => <LazyRoute component={LoyaltyPreview} />}</Route>
+        <Route path="/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
+        <Route path="/ar/loyalty-terms">{() => <LazyRoute component={LoyaltyTermsPage} />}</Route>
         <Route path="/contact">{() => <LazyRoute component={ContactPage} />}</Route>
         <Route path="/terms">{() => <LazyRoute component={TermsPage} />}</Route>
         <Route path="/ar/terms">{() => <LazyRoute component={TermsPage} />}</Route>
@@ -902,7 +907,9 @@ function Router() {
         <Route path="/dashboard/appearance">{() => <LazyRoute component={DashboardAppearancePage} />}</Route>
         <Route path="/profile/:userId">{() => <LazyRoute component={PublicProfile} />}</Route>
         <Route path="/profile">{() => <LazyRoute component={Profile} />}</Route>
-        <Route path="/dashboard/loyalty">{() => <LazyRoute component={LoyaltyAccount} />}</Route>
+        {/* محفظة العضو — مسار عام خارج لوحة التحكم */}
+        <Route path="/loyalty">{() => <LazyRoute component={LoyaltyAccount} />}</Route>
+        <Route path="/dashboard/loyalty">{() => <Redirect to="/loyalty" />}</Route>
         <Route path="/dashboard/loyalty-admin">{() => <LazyRoute component={LoyaltyAdminDashboard} />}</Route>
         <Route path="/dashboard/hajj-block">{() => <LazyRoute component={HajjBlockSettings} />}</Route>
         <Route path="/preferences">{() => <LazyRoute component={PreferencesCenter} />}</Route>

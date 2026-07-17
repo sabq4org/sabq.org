@@ -166,6 +166,7 @@ import { SortableAttachmentItem } from "@/components/article-editor/SortableAtta
 import { ImageCaptionForm } from "@/components/article-editor/ImageCaptionForm";
 import { generateSlug } from "@/lib/slug";
 import { cn } from "@/lib/utils";
+import { isAvifFile, transcodeAvifInBrowser } from "@/lib/browserImageTranscode";
 
 // تعطيل مؤقت لحاجز توثيق حقوق الصورة عند النشر.
 // غيّر القيمة إلى true لإعادة الخطوة دون استرجاع الكود المحذوف.
@@ -1089,15 +1090,47 @@ export default function ArticleEditor() {
     setIsUploadingImage(true);
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("purpose", "article-hero");
-      formData.append("entityType", "article");
-      const uploaded = (await apiRequest("/api/media/upload", {
-        method: "POST",
-        body: formData,
-        isFormData: true,
-      })) as { id: string; url: string; duplicateOf?: { title?: string | null } | null };
+      type UploadedImage = {
+        id: string;
+        url: string;
+        duplicateOf?: { title?: string | null } | null;
+      };
+
+      const uploadFile = async (uploadFileValue: File): Promise<UploadedImage> => {
+        const formData = new FormData();
+        formData.append("file", uploadFileValue);
+        formData.append("purpose", "article-hero");
+        formData.append("entityType", "article");
+        return (await apiRequest("/api/media/upload", {
+          method: "POST",
+          body: formData,
+          isFormData: true,
+        })) as UploadedImage;
+      };
+
+      const declaredFile = isAvifFile(file) && file.type.toLowerCase() !== "image/avif"
+        ? new File([file], file.name, { type: "image/avif", lastModified: file.lastModified })
+        : file;
+
+      let uploaded: UploadedImage;
+      let usedBrowserFallback = false;
+      try {
+        uploaded = await uploadFile(declaredFile);
+      } catch (initialError) {
+        if (!isAvifFile(declaredFile)) throw initialError;
+
+        console.warn("[AVIF Upload] Server conversion failed; retrying in browser");
+        let browserConvertedFile: File;
+        try {
+          browserConvertedFile = await transcodeAvifInBrowser(declaredFile);
+        } catch (browserConversionError) {
+          console.warn("[AVIF Upload] Browser conversion also failed:", browserConversionError);
+          throw initialError;
+        }
+
+        uploaded = await uploadFile(browserConvertedFile);
+        usedBrowserFallback = true;
+      }
 
       setImageUrl(uploaded.url);
       setIsAiGeneratedImage(false);
@@ -1111,8 +1144,10 @@ export default function ArticleEditor() {
         });
       } else {
         toast({
-          title: "تم الرفع بنجاح",
-          description: `الرابط: ${uploaded.url.substring(0, 50)}...`,
+          title: usedBrowserFallback ? "تم تحويل AVIF ورفعه بنجاح" : "تم الرفع بنجاح",
+          description: usedBrowserFallback
+            ? "حوّل المتصفح الصورة تلقائياً إلى WEBP قبل رفعها."
+            : `الرابط: ${uploaded.url.substring(0, 50)}...`,
         });
       }
       return true;
@@ -1133,9 +1168,11 @@ export default function ArticleEditor() {
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = "";
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    const hasSupportedImageExtension = /\.(jpe?g|png|webp|avif|heic|heif)$/i.test(file.name);
+    if (!file.type.startsWith('image/') && !hasSupportedImageExtension) {
       toast({
         title: "خطأ",
         description: "الرجاء اختيار ملف صورة فقط",
