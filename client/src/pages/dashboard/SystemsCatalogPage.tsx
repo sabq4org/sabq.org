@@ -1,13 +1,23 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Boxes, ExternalLink, FileText, Search } from "lucide-react";
+import {
+  Boxes,
+  Coins,
+  ExternalLink,
+  FileStack,
+  FileText,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { Link } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useAuth, hasPermission } from "@/hooks/useAuth";
+import type { LucideIcon } from "lucide-react";
 
 interface SystemAiToday {
   requests: number;
@@ -66,6 +76,50 @@ function inventoryLabel(mode: CatalogResponse["inventoryMode"]): string {
   return "جرد الملفات غير متاح على هذا الخادم";
 }
 
+/** يطابق MetricCard في NewsroomPulseDashboard */
+function CatalogMetricCard({
+  title,
+  value,
+  icon: Icon,
+  helper,
+  loading,
+}: {
+  title: string;
+  value: string;
+  icon: LucideIcon;
+  helper?: string;
+  loading?: boolean;
+}) {
+  return (
+    <Card className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-none sm:rounded-2xl sm:shadow-sm">
+      <CardContent className="flex h-full flex-col p-0">
+        <div className="flex flex-1 flex-col gap-2 p-3 sm:gap-3 sm:p-5">
+          <div className="flex items-start justify-between gap-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary sm:h-10 sm:w-10 sm:rounded-xl">
+              <Icon className="h-4 w-4 sm:h-[18px] sm:w-[18px]" />
+            </span>
+          </div>
+          <div>
+            <p className="text-xs font-semibold leading-snug text-foreground sm:text-[13px]">{title}</p>
+            {loading ? (
+              <Skeleton className="mt-2 h-7 w-16 sm:h-9 sm:w-20" />
+            ) : (
+              <p className="mt-1 text-xl font-bold tabular-nums tracking-tight sm:mt-1.5 sm:text-[2rem]">
+                {value}
+              </p>
+            )}
+          </div>
+        </div>
+        {helper ? (
+          <div className="hidden border-t border-border/60 bg-muted/30 px-4 py-2.5 sm:block">
+            <p className="text-[11px] leading-relaxed text-muted-foreground">{helper}</p>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SystemsCatalogPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [q, setQ] = useState("");
@@ -89,16 +143,16 @@ export default function SystemsCatalogPage() {
     let files = 0;
     let tokens = 0;
     let cost = 0;
-    let withAi = 0;
+    let documented = 0;
     for (const s of systems) {
       files += s.fileCount || 0;
+      if (s.docExists) documented += 1;
       if (s.aiToday) {
-        withAi += 1;
         tokens += s.aiToday.inputTokens + s.aiToday.outputTokens;
         cost += s.aiToday.estimatedCostUsd;
       }
     }
-    return { files, tokens, cost, withAi };
+    return { files, tokens, cost, documented };
   }, [systems]);
 
   if (authLoading) {
@@ -106,7 +160,11 @@ export default function SystemsCatalogPage() {
       <DashboardLayout>
         <div className="space-y-4 mt-4">
           <Skeleton className="h-24 rounded-2xl" />
-          <Skeleton className="h-96 rounded-2xl" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-32 rounded-xl" />
+            ))}
+          </div>
         </div>
       </DashboardLayout>
     );
@@ -131,18 +189,36 @@ export default function SystemsCatalogPage() {
           description="خريطة أنظمة سبق: عدد الملفات، وثيقة SYSTEM.md، واستهلاك الذكاء الاصطناعي اليوم (إن وُجدت مفاتيح الاستخدام)."
         />
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <SummaryStat label="عدد الأنظمة" value={String(dataRaw?.count ?? "—")} />
-          <SummaryStat label="ملفات مطابقة" value={isLoading ? "…" : String(totals.files)} />
-          <SummaryStat
-            label="توكنات اليوم (AI)"
-            value={isLoading ? "…" : formatTokens(totals.tokens)}
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <CatalogMetricCard
+            title="عدد الأنظمة"
+            value={dataRaw?.count != null ? String(dataRaw.count) : "—"}
+            icon={Boxes}
+            helper="أنظمة مسجّلة في registry.json"
+            loading={isLoading}
           />
-          <SummaryStat
-            label="تكلفة تقديرية اليوم"
-            value={isLoading ? "…" : `$${totals.cost.toFixed(2)}`}
+          <CatalogMetricCard
+            title="ملفات مطابقة"
+            value={String(totals.files)}
+            icon={FileStack}
+            helper={`${totals.documented} نظاماً بوثيقة SYSTEM.md`}
+            loading={isLoading}
           />
-        </div>
+          <CatalogMetricCard
+            title="توكنات اليوم (AI)"
+            value={formatTokens(totals.tokens)}
+            icon={Sparkles}
+            helper="مجموع الإدخال والإخراج عبر Gateway"
+            loading={isLoading}
+          />
+          <CatalogMetricCard
+            title="تكلفة تقديرية اليوم"
+            value={`$${totals.cost.toFixed(2)}`}
+            icon={Coins}
+            helper="تقدير من سجلات ai_usage_logs"
+            loading={isLoading}
+          />
+        </section>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-md flex-1">
@@ -171,9 +247,12 @@ export default function SystemsCatalogPage() {
             <Skeleton className="h-28 rounded-xl" />
           </div>
         ) : (
-          <div className="divide-y rounded-xl border border-border/60 bg-background">
+          <div className="grid gap-3">
             {filtered.map((sys) => (
-              <article key={sys.id} className="grid gap-3 p-4 md:grid-cols-[1fr_auto] md:items-start">
+              <article
+                key={sys.id}
+                className="grid gap-3 rounded-2xl border border-border/70 bg-card p-4 shadow-none sm:grid-cols-[1fr_auto] sm:items-start sm:p-5"
+              >
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <h2 className="text-base font-semibold">{sys.nameAr}</h2>
@@ -204,17 +283,17 @@ export default function SystemsCatalogPage() {
                     )}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 md:justify-end">
+                <div className="flex flex-wrap gap-2 sm:justify-end">
                   {sys.dashboardPath && (
                     <Link
                       href={sys.dashboardPath}
-                      className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
+                      className="inline-flex items-center gap-1 rounded-xl border border-border/70 px-3 py-1.5 text-sm transition hover:bg-muted/40"
                     >
                       اللوحة
                       <ExternalLink className="h-3.5 w-3.5" />
                     </Link>
                   )}
-                  <span className="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-1 rounded-xl border border-border/70 px-3 py-1.5 text-sm text-muted-foreground">
                     <FileText className="h-3.5 w-3.5" />
                     {sys.docExists ? "موثّق" : "ناقص"}
                   </span>
@@ -222,20 +301,13 @@ export default function SystemsCatalogPage() {
               </article>
             ))}
             {filtered.length === 0 && (
-              <p className="p-6 text-sm text-muted-foreground">لا نتائج مطابقة.</p>
+              <p className="rounded-2xl border border-dashed border-border/80 bg-muted/20 p-6 text-sm text-muted-foreground">
+                لا نتائج مطابقة.
+              </p>
             )}
           </div>
         )}
       </div>
     </DashboardLayout>
-  );
-}
-
-function SummaryStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/60 px-4 py-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight">{value}</p>
-    </div>
   );
 }
