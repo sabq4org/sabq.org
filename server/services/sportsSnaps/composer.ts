@@ -77,7 +77,9 @@ async function aiSnaps(facts: TeamSnapFacts): Promise<AiSnap[]> {
   const isDerby = Boolean(facts.bigMatch && facts.bigMatch.importance >= 88);
   const parsed = await generateJson<AiResponse>(promptFor(facts, isDerby), {
     feature: "sports-snaps",
-    tier: "cheap",
+    // mini تكفي هنا: نصوص ≤140 حرفًا يحرسها validateSnapCandidate مع سقوط دائم
+    // إلى القوالب الحتمية عند أي انزلاق.
+    tier: "mini",
     maxTokens: 600,
   });
   return Array.isArray(parsed?.snaps) ? parsed.snaps : [];
