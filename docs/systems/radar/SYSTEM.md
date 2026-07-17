@@ -18,6 +18,7 @@
 
 ## عقود مهمة / Gotchas
 - التنبيهات والمصدّرات (exporter) جزء من الحلقة — اختبرها عند تغيير المستودعات.
+- **رادار الفجوات التحريرية** (نظام `editorial`، `coverage-gap-matcher`) يستهلك مواد الرادار النشطة (الحالات `new/analyzed/ready`) ويعيد استخدام `transformItem` و`exportItemToArticle` لإنشاء مسودات التغطية؛ يعمل بعد كل دورة رادار من `cycle.ts`. أي تغيير في حالات المواد أو عقد التصدير (`RADAR_DRAFT_MISSING`) يؤثر عليه.
 
 ## صحة وتشغيل
 - لوحة: `/dashboard/radar`

@@ -1179,6 +1179,62 @@ export type RadarItem = typeof radarItems.$inferSelect;
 export type RadarAlertRule = typeof radarAlertRules.$inferSelect;
 export type InsertRadarAlertRule = z.infer<typeof insertRadarAlertRuleSchema>;
 
+// ============================================
+// رادار الفجوات التحريرية (Coverage Gap Radar) — مواضيع رائجة خارجيًا رصدها
+// الرادار الذكي بلا تغطية داخلية مقابلة (منشور/مسودة/مجدول).
+// المحرك: server/services/coverageGapMatcher.ts — المسارات: server/routes/coverageGaps.ts
+// ============================================
+
+export const coverageGaps = pgTable("coverage_gaps", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  radarItemId: varchar("radar_item_id").references(() => radarItems.id, { onDelete: "cascade" }).notNull(),
+  topicFingerprint: text("topic_fingerprint").notNull(), // مفتاح موضوع مُطبَّع للمطابقة ومنع التكرار
+  heatScore: integer("heat_score").notNull().default(0), // حرارة الموضوع (من قيمة الرادار الإخبارية)
+  // open → drafting → scheduled → covered | dismissed
+  status: text("status").notNull().default("open"),
+  firstDetectedAt: timestamp("first_detected_at").defaultNow().notNull(),
+  coveredByArticleId: varchar("covered_by_article_id").references(() => articles.id, { onDelete: "set null" }),
+  assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: "set null" }),
+  dismissedBy: varchar("dismissed_by").references(() => users.id, { onDelete: "set null" }),
+  dismissedAt: timestamp("dismissed_at"),
+  dismissReason: text("dismiss_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_coverage_gaps_radar_item").on(table.radarItemId),
+  index("idx_coverage_gaps_status").on(table.status, table.firstDetectedAt.desc()),
+  index("idx_coverage_gaps_fingerprint").on(table.topicFingerprint),
+]);
+
+export const coverageGapsRelations = relations(coverageGaps, ({ one }) => ({
+  radarItem: one(radarItems, {
+    fields: [coverageGaps.radarItemId],
+    references: [radarItems.id],
+  }),
+  coveredByArticle: one(articles, {
+    fields: [coverageGaps.coveredByArticleId],
+    references: [articles.id],
+  }),
+  assignee: one(users, {
+    fields: [coverageGaps.assignedTo],
+    references: [users.id],
+  }),
+  dismissedByUser: one(users, {
+    fields: [coverageGaps.dismissedBy],
+    references: [users.id],
+  }),
+}));
+
+export const insertCoverageGapSchema = createInsertSchema(coverageGaps).omit({
+  id: true,
+  firstDetectedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type CoverageGap = typeof coverageGaps.$inferSelect;
+export type InsertCoverageGap = z.infer<typeof insertCoverageGapSchema>;
+
 // User reading history for recommendations (ENHANCED for advanced analytics)
 export const readingHistory = pgTable("reading_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
