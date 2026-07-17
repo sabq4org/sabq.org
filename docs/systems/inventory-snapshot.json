@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-17T12:05:50.356Z",
+  "generatedAt": "2026-07-17T12:13:14.762Z",
   "systems": [
     {
       "id": "loyalty",
@@ -31,21 +31,21 @@
     },
     {
       "id": "editorial",
-      "fileCount": 13,
+      "fileCount": 46,
       "samplePaths": [
         "server/routes/articleEditLocks.ts",
         "server/routes/editorAlerts.ts",
         "server/routes/editorPresence.ts",
         "server/routes/dashboardPulse.ts",
-        "server/services/editorialNotifications.ts",
-        "server/services/editorAlerts.ts",
-        "server/services/dashboardPulseService.ts",
-        "server/services/aiArticleGenerator.ts"
+        "server/routes/whatsappAgent.ts",
+        "server/routes/emailAgent.ts",
+        "server/routes/visualAiRoutes.ts",
+        "server/routes/nanoBananaRoutes.ts"
       ]
     },
     {
       "id": "ifox",
-      "fileCount": 44,
+      "fileCount": 48,
       "samplePaths": [
         "server/services/ifox/budgetService.ts",
         "server/services/ifox/calendarService.ts",
@@ -59,16 +59,16 @@
     },
     {
       "id": "ai-hub",
-      "fileCount": 29,
+      "fileCount": 32,
       "samplePaths": [
-        "server/ai/commentModeration.ts",
-        "server/ai/contentAnalyzer.ts",
         "server/ai/gateway/adapters/anthropic.ts",
         "server/ai/gateway/adapters/elevenlabs.ts",
         "server/ai/gateway/adapters/gemini.ts",
         "server/ai/gateway/adapters/openai.ts",
         "server/ai/gateway/circuitBreaker.ts",
-        "server/ai/gateway/configStore.ts"
+        "server/ai/gateway/configStore.ts",
+        "server/ai/gateway/costs.ts",
+        "server/ai/gateway/defaults.ts"
       ]
     },
     {
@@ -101,16 +101,16 @@
     },
     {
       "id": "audio-newsletter",
-      "fileCount": 9,
+      "fileCount": 11,
       "samplePaths": [
         "server/services/audioNewsletterService.ts",
         "server/services/aiNewsletterService.ts",
+        "server/services/aiNewsletterEnhancer.ts",
         "server/services/newsletterScheduler.ts",
         "server/services/ttsProviderRegistry.ts",
+        "server/services/smartNewsletterTemplates.ts",
         "server/routes/audioNewsletterRoutes.ts",
-        "server/routes/smartNewsletterRoutes.ts",
-        "server/routes/newsletterAnalyticsRoutes.ts",
-        "client/src/pages/dashboard/NewsletterAnalytics.tsx"
+        "server/routes/smartNewsletterRoutes.ts"
       ]
     },
     {
@@ -129,7 +129,7 @@
     },
     {
       "id": "sports-tournaments",
-      "fileCount": 70,
+      "fileCount": 80,
       "samplePaths": [
         "server/services/gulfCupData.ts",
         "server/services/gulfCupFixtureIdentity.ts",
@@ -199,15 +199,16 @@
     },
     {
       "id": "comments",
-      "fileCount": 7,
+      "fileCount": 10,
       "samplePaths": [
         "server/services/commentInsightsService.ts",
         "server/services/commentModerationService.ts",
         "server/services/commentReactionsService.ts",
         "server/routes/commentModeration.ts",
         "server/routes/commentReactions.ts",
+        "server/routes/topicComments.ts",
         "server/ai/commentModeration.ts",
-        "server/routes/topicComments.ts"
+        "server/sentiment-analyzer.ts"
       ]
     },
     {
@@ -221,25 +222,28 @@
     },
     {
       "id": "calendar",
-      "fileCount": 3,
+      "fileCount": 6,
       "samplePaths": [
         "server/services/calendarAi.ts",
         "server/routes/calendar.ts",
+        "client/src/pages/CalendarPage.tsx",
+        "client/src/pages/CalendarEventForm.tsx",
+        "client/src/pages/CalendarEventDetail.tsx",
         "docs/architecture/CALENDAR_SYSTEM.md"
       ]
     },
     {
       "id": "systems-catalog",
-      "fileCount": 27,
+      "fileCount": 28,
       "samplePaths": [
+        "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
         "docs/systems/README.md",
         "docs/systems/ads/SYSTEM.md",
         "docs/systems/ai-hub/SYSTEM.md",
         "docs/systems/audio-newsletter/SYSTEM.md",
         "docs/systems/auth-rbac/SYSTEM.md",
-        "docs/systems/calendar/SYSTEM.md",
-        "docs/systems/comments/SYSTEM.md"
+        "docs/systems/calendar/SYSTEM.md"
       ]
     }
   ]

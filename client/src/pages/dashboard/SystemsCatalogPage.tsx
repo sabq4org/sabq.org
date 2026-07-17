@@ -49,6 +49,14 @@ interface CatalogResponse {
   count: number;
   inventoryMode: "live" | "snapshot" | "unavailable";
   snapshotGeneratedAt: string | null;
+  aiTodayUnique?: {
+    requests: number;
+    inputTokens: number;
+    outputTokens: number;
+    estimatedCostUsd: number;
+    featureKeyCount: number;
+  };
+  duplicateFeatureKeys?: Array<{ featureKey: string; systemIds: string[] }>;
   systems: SystemCatalogEntry[];
 }
 
@@ -141,19 +149,23 @@ export default function SystemsCatalogPage() {
 
   const totals = useMemo(() => {
     let files = 0;
-    let tokens = 0;
-    let cost = 0;
     let documented = 0;
+    let linkedAi = 0;
     for (const s of systems) {
       files += s.fileCount || 0;
       if (s.docExists) documented += 1;
-      if (s.aiToday) {
-        tokens += s.aiToday.inputTokens + s.aiToday.outputTokens;
-        cost += s.aiToday.estimatedCostUsd;
-      }
+      if (s.aiFeatureKeys.length > 0) linkedAi += 1;
     }
-    return { files, tokens, cost, documented };
-  }, [systems]);
+    const unique = dataRaw?.aiTodayUnique;
+    return {
+      files,
+      documented,
+      linkedAi,
+      tokens: unique ? unique.inputTokens + unique.outputTokens : 0,
+      cost: unique?.estimatedCostUsd ?? 0,
+      featureKeyCount: unique?.featureKeyCount ?? 0,
+    };
+  }, [systems, dataRaw?.aiTodayUnique]);
 
   if (authLoading) {
     return (
@@ -201,24 +213,31 @@ export default function SystemsCatalogPage() {
             title="ملفات مطابقة"
             value={String(totals.files)}
             icon={FileStack}
-            helper={`${totals.documented} نظاماً بوثيقة SYSTEM.md`}
+            helper={`${totals.documented} نظاماً بوثيقة · ${totals.linkedAi} مربوط بـ AI`}
             loading={isLoading}
           />
           <CatalogMetricCard
             title="توكنات اليوم (AI)"
             value={formatTokens(totals.tokens)}
             icon={Sparkles}
-            helper="مجموع الإدخال والإخراج عبر Gateway"
+            helper={`${totals.featureKeyCount} مفتاح فريد — بلا تكرار بين الأنظمة`}
             loading={isLoading}
           />
           <CatalogMetricCard
             title="تكلفة تقديرية اليوم"
             value={`$${totals.cost.toFixed(2)}`}
             icon={Coins}
-            helper="تقدير من سجلات ai_usage_logs"
+            helper="من ai_usage_logs لمفاتيح السجل فقط"
             loading={isLoading}
           />
         </section>
+
+        {Array.isArray(dataRaw?.duplicateFeatureKeys) && dataRaw!.duplicateFeatureKeys.length > 0 && (
+          <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            تحذير: مفاتيح AI مكررة بين أنظمة — راجع السجل (
+            {dataRaw!.duplicateFeatureKeys.map((d) => d.featureKey).join("، ")})
+          </p>
+        )}
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-md flex-1">

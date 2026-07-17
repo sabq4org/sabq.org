@@ -3,27 +3,14 @@
 > آخر مراجعة: 2026-07-17 | المالك: sports
 
 ## الغرض
-تغطية البطولات (خليجي، آسيا، كأس الملك، كأس العالم)، المجالس، الفانتازي، ومصادر البيانات (Sportmonks وغيرها).
+تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
+
+## مفاتيح AI (حصرية)
+`world-cup-news`, `sportmonks-news`, `sports-names`, `sports-snaps`, `sports-intel-trends`, `sports-intel-prediction`, `sports-intel-scene`, `sports-intel-digest`, `sports-intel-copilot`
 
 ## الحدود
-- **داخل النطاق:** خدمات/مسارات البطولات، المجالس، الأسماء الرياضية، البث الحي.
-- **خارج النطاق:** محرك التوقعات الموحّد (`predictions-core`) — يُستهلك ولا يُعاد بناؤه هنا.
-- **كأس العالم 2026:** محرك `wc*` legacy يبقى حتى نهاية البطولة.
-
-## نقاط الدخول
-| الطبقة | المسار |
-|--------|--------|
-| Backend | `gulfCup*`, `asianCup*`, `kingsCup*`, `worldCup*`, `gc*`, `sports*` |
-| Web | صفحات البطولات + `SportsTournamentsAdmin` |
-| Docs | `docs/SPORTS_*.md`, `docs/gulf-live-guide.md` |
-
-## عقود مهمة / Gotchas
-- توقعات البطولات الجديدة عبر Prediction Core فقط.
-- هويات المباريات (fixture identity) حسّاسة — لا تغيّر مفاتيح المطابقة بلا هجرة بيانات.
-
-## صحة وتشغيل
-- لوحة: `/dashboard/sports-tournaments`
-- تنبيهات المباريات: `docs/MATCH_EVENT_ALERTS.md`
+- توقعات البطولات الجديدة عبر `predictions-core` — لا محركات جديدة.
+- كأس العالم 2026 يبقى على `wc*` legacy حتى نهاية البطولة.
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
