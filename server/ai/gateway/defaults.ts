@@ -117,6 +117,8 @@ export const DEFAULT_FEATURES: DefaultFeature[] = [
   { featureKey: "entity-extraction", displayName: "استخراج الكيانات", category: "search", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
   // رادار الفجوات التحريرية — مثبت على نفس نموذج المتجهات حتى تبقى الأبعاد متوافقة
   { featureKey: "coverage-gap-matcher", displayName: "رادار الفجوات التحريرية", category: "analysis", primary: EMBED_LARGE, fallbackChain: [], allowFailover: false },
+  { featureKey: "radar-clustering", displayName: "تجميع قصص الرادار", category: "analysis", primary: EMBED_LARGE, fallbackChain: [], allowFailover: false },
+  { featureKey: "radar-relevance", displayName: "صلة رادار سبق", category: "analysis", primary: GPT_4O_MINI, fallbackChain: CHAIN_AFTER_MINI },
 
   // ── Media generation (same-provider output differs; chains start empty) ──
   { featureKey: "image-generation", displayName: "توليد الصور", category: "media", primary: GPT_IMAGE, fallbackChain: [] },

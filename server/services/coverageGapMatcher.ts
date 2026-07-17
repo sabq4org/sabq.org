@@ -16,21 +16,37 @@ import {
   coverageGaps,
   radarItems,
   radarSources,
+  radarStories,
   users,
   type CoverageGap,
+  type RadarStory,
 } from "@shared/schema";
 import { aiGateway } from "../ai/gateway";
 import { cosineSimilarity } from "../embeddingsService";
+import { isGapV2Enabled } from "./radar/flags";
+
+export { isGapV2Enabled };
 
 const FEATURE_KEY = "coverage-gap-matcher";
 const MATCH_THRESHOLD = Number(process.env.COVERAGE_GAP_MATCH_THRESHOLD || 0.82);
 const WINDOW_HOURS = Number(process.env.COVERAGE_GAP_WINDOW_HOURS || 72);
 const ARTICLE_LOOKBACK_DAYS = Number(process.env.COVERAGE_GAP_ARTICLE_LOOKBACK_DAYS || 7);
 const MAX_ITEMS = Number(process.env.COVERAGE_GAP_MAX_ITEMS || 60);
+const MAX_STORIES = Number(process.env.COVERAGE_GAP_MAX_STORIES || 40);
 const MAX_ARTICLES = Number(process.env.COVERAGE_GAP_MAX_ARTICLES || 300);
 const EMBED_BATCH = 100;
 const KEYWORD_OVERLAP_THRESHOLD = 0.6;
 const STALE_MS = 2 * 60 * 1000; // دقيقتان — التحديث الكسول من مسار GET
+
+function gapMinRelevance(): number {
+  const n = Number(process.env.RADAR_GAP_MIN_RELEVANCE ?? 50);
+  return Number.isFinite(n) ? n : 50;
+}
+
+function gapMinMomentum(): number {
+  const n = Number(process.env.RADAR_GAP_MIN_MOMENTUM ?? 40);
+  return Number.isFinite(n) ? n : 40;
+}
 
 export const COVERAGE_GAP_STATUSES = ["open", "drafting", "scheduled", "covered", "dismissed"] as const;
 export type CoverageGapStatus = (typeof COVERAGE_GAP_STATUSES)[number];
@@ -128,7 +144,228 @@ export interface CoverageGapRefreshSummary {
   articlesScanned: number;
   gapsCreated: number;
   gapsUpdated: number;
+  gapsDismissed?: number;
   mode: "embeddings" | "keywords";
+  version?: "v1" | "v2";
+}
+
+async function loadArticleCandidates(articlesSince: Date): Promise<ArticleCandidate[]> {
+  return (
+    await db
+      .select({
+        id: articles.id,
+        status: articles.status,
+        title: articles.title,
+        excerpt: articles.excerpt,
+        aiSummary: articles.aiSummary,
+      })
+      .from(articles)
+      .where(
+        and(
+          inArray(articles.status, ["draft", "scheduled", "published"]),
+          gte(articles.createdAt, articlesSince)
+        )
+      )
+      .orderBy(desc(articles.createdAt))
+      .limit(MAX_ARTICLES)
+  ).map((a) => ({
+    id: a.id,
+    status: a.status,
+    text: `${a.title}\n${a.excerpt || a.aiSummary || ""}`.trim(),
+  }));
+}
+
+function bestMatch(
+  text: string,
+  textVector: number[] | null,
+  candidates: ArticleCandidate[],
+  articleVectors: number[][] | null
+): { article: ArticleCandidate; score: number } | null {
+  let best: { article: ArticleCandidate; score: number } | null = null;
+  if (textVector && articleVectors) {
+    for (let j = 0; j < candidates.length; j++) {
+      const score = cosineSimilarity(textVector, articleVectors[j]);
+      if (!best || score > best.score) best = { article: candidates[j], score };
+    }
+    if (best && best.score < MATCH_THRESHOLD) return null;
+    return best;
+  }
+  for (const candidate of candidates) {
+    const score = keywordOverlap(text, candidate.text);
+    if (score >= KEYWORD_OVERLAP_THRESHOLD && (!best || score > best.score)) {
+      best = { article: candidate, score };
+    }
+  }
+  return best;
+}
+
+function storyGapReasons(story: RadarStory, uncovered: boolean): string[] {
+  const reasons: string[] = [];
+  if (story.sourceCount >= 2) reasons.push(`${story.sourceCount} مصادر`);
+  if (story.momentumScore >= gapMinMomentum()) reasons.push(`زخم ${story.momentumScore}`);
+  if (story.saudiRelevance >= gapMinRelevance()) reasons.push(`صلة سعودية ${story.saudiRelevance}`);
+  if (uncovered) reasons.push("لا تغطية داخلية مطابقة");
+  return reasons;
+}
+
+/** فجوات v2: وحدة القصة + عتبات صلة/زخم — خلف RADAR_GAP_V2_ENABLED */
+async function refreshCoverageGapsV2(
+  trigger: string,
+  since: Date,
+  articlesSince: Date
+): Promise<CoverageGapRefreshSummary> {
+  const candidates = await loadArticleCandidates(articlesSince);
+  const stories = (
+    await db
+      .select()
+      .from(radarStories)
+      .where(and(eq(radarStories.status, "active"), gte(radarStories.lastSeenAt, since)))
+      .orderBy(desc(radarStories.momentumScore), desc(radarStories.lastSeenAt))
+      .limit(MAX_STORIES * 2)
+  ).filter(
+    (s) =>
+      s.saudiRelevance >= gapMinRelevance() &&
+      (s.momentumScore >= gapMinMomentum() || s.sourceCount >= 3)
+  ).slice(0, MAX_STORIES);
+
+  const summary: CoverageGapRefreshSummary = {
+    radarItemsScanned: stories.length,
+    articlesScanned: candidates.length,
+    gapsCreated: 0,
+    gapsUpdated: 0,
+    gapsDismissed: 0,
+    mode: "embeddings",
+    version: "v2",
+  };
+
+  const storyTexts = stories.map((s) => `${s.title}\n${s.summary || ""}`.trim());
+  let storyVectors: number[][] | null = null;
+  let articleVectors: number[][] | null = null;
+  if (stories.length && candidates.length) {
+    try {
+      const all = await embedTexts([...storyTexts, ...candidates.map((c) => c.text)]);
+      storyVectors = all.slice(0, stories.length);
+      articleVectors = all.slice(stories.length);
+    } catch (error) {
+      summary.mode = "keywords";
+      lastRunMode = "keywords";
+      console.warn(
+        "[CoverageGap] v2 embeddings unavailable — keyword fallback:",
+        error instanceof Error ? error.message : error
+      );
+    }
+  } else {
+    summary.mode = "keywords";
+  }
+
+  const existingRows = await db.select().from(coverageGaps);
+  const byStoryId = new Map(existingRows.filter((g) => g.storyId).map((g) => [g.storyId!, g]));
+  const now = new Date();
+  const activeStoryIds = new Set(stories.map((s) => s.id));
+
+  for (let i = 0; i < stories.length; i++) {
+    const story = stories[i];
+    const items = await db
+      .select()
+      .from(radarItems)
+      .where(eq(radarItems.storyId, story.id))
+      .orderBy(desc(radarItems.newsValue), desc(radarItems.fetchedAt))
+      .limit(1);
+    const representative = items[0];
+    if (!representative) continue;
+
+    const match = bestMatch(
+      storyTexts[i],
+      storyVectors?.[i] ?? null,
+      candidates,
+      articleVectors
+    );
+    const computedStatus: CoverageGapStatus = match
+      ? (gapStatusFromArticle(match.article.status) ?? "open")
+      : "open";
+    const computedArticleId = match?.article.id ?? null;
+    const heatScore = Math.max(story.topNewsValue, story.momentumScore);
+    const gapReason = storyGapReasons(story, !match);
+
+    const existing = byStoryId.get(story.id);
+    if (existing) {
+      if (existing.status === "dismissed") {
+        if (existing.heatScore !== heatScore) {
+          await db
+            .update(coverageGaps)
+            .set({
+              heatScore,
+              relevanceScore: story.saudiRelevance,
+              momentumScore: story.momentumScore,
+              gapReason,
+              updatedAt: now,
+            })
+            .where(eq(coverageGaps.id, existing.id));
+        }
+        continue;
+      }
+      const keepCovered =
+        existing.coveredByArticleId &&
+        ["drafting", "scheduled", "covered"].includes(existing.status) &&
+        !computedArticleId;
+      await db
+        .update(coverageGaps)
+        .set({
+          radarItemId: representative.id,
+          heatScore,
+          relevanceScore: story.saudiRelevance,
+          momentumScore: story.momentumScore,
+          gapReason,
+          status: keepCovered ? existing.status : computedStatus,
+          coveredByArticleId: computedArticleId ?? (keepCovered ? existing.coveredByArticleId : null),
+          updatedAt: now,
+        })
+        .where(eq(coverageGaps.id, existing.id));
+      summary.gapsUpdated++;
+    } else {
+      await db.insert(coverageGaps).values({
+        radarItemId: representative.id,
+        storyId: story.id,
+        topicFingerprint: topicFingerprintFor(story.title),
+        heatScore,
+        relevanceScore: story.saudiRelevance,
+        momentumScore: story.momentumScore,
+        gapReason,
+        status: computedStatus,
+        coveredByArticleId: computedArticleId,
+      });
+      summary.gapsCreated++;
+    }
+  }
+
+  // تنظيف: فجوات open قديمة بلا قصة أو قصتها لم تعد مؤهلة
+  const staleOpen = existingRows.filter(
+    (g) =>
+      g.status === "open" &&
+      (!g.storyId || !activeStoryIds.has(g.storyId))
+  );
+  for (const gap of staleOpen) {
+    await db
+      .update(coverageGaps)
+      .set({
+        status: "dismissed",
+        dismissReason: "auto-irrelevant",
+        dismissedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(coverageGaps.id, gap.id));
+    summary.gapsDismissed = (summary.gapsDismissed ?? 0) + 1;
+  }
+
+  await reconcileLinkedGaps();
+  lastRunAt = Date.now();
+  lastRunMode = summary.mode;
+  if (summary.gapsCreated || summary.gapsUpdated || summary.gapsDismissed) {
+    console.log(
+      `[CoverageGap] (${trigger}/v2/${summary.mode}) stories=${summary.radarItemsScanned} articles=${summary.articlesScanned} created=${summary.gapsCreated} updated=${summary.gapsUpdated} dismissed=${summary.gapsDismissed}`
+    );
+  }
+  return summary;
 }
 
 export async function refreshCoverageGaps(trigger = "manual"): Promise<CoverageGapRefreshSummary | null> {
@@ -137,6 +374,10 @@ export async function refreshCoverageGaps(trigger = "manual"): Promise<CoverageG
   try {
     const since = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
     const articlesSince = new Date(Date.now() - ARTICLE_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+
+    if (isGapV2Enabled()) {
+      return await refreshCoverageGapsV2(trigger, since, articlesSince);
+    }
 
     // مواد الرادار النشطة والحديثة — المستبعدة والمُصدَّرة لا تُنشئ فجوات
     const items = await db
@@ -151,30 +392,7 @@ export async function refreshCoverageGaps(trigger = "manual"): Promise<CoverageG
       .orderBy(desc(radarItems.fetchedAt))
       .limit(MAX_ITEMS);
 
-    // المحتوى الداخلي المرشح للتغطية
-    const candidates: ArticleCandidate[] = (
-      await db
-        .select({
-          id: articles.id,
-          status: articles.status,
-          title: articles.title,
-          excerpt: articles.excerpt,
-          aiSummary: articles.aiSummary,
-        })
-        .from(articles)
-        .where(
-          and(
-            inArray(articles.status, ["draft", "scheduled", "published"]),
-            gte(articles.createdAt, articlesSince)
-          )
-        )
-        .orderBy(desc(articles.createdAt))
-        .limit(MAX_ARTICLES)
-    ).map((a) => ({
-      id: a.id,
-      status: a.status,
-      text: `${a.title}\n${a.excerpt || a.aiSummary || ""}`.trim(),
-    }));
+    const candidates = await loadArticleCandidates(articlesSince);
 
     const summary: CoverageGapRefreshSummary = {
       radarItemsScanned: items.length,
@@ -182,6 +400,7 @@ export async function refreshCoverageGaps(trigger = "manual"): Promise<CoverageG
       gapsCreated: 0,
       gapsUpdated: 0,
       mode: "embeddings",
+      version: "v1",
     };
 
     // المتجهات — نصوص الرادار ثم نصوص المقالات في دفعات؛ السقوط للكلمات عند الفشل
@@ -341,17 +560,22 @@ export function refreshCoverageGapsIfStale(): void {
 export interface CoverageGapView {
   id: string;
   radarItemId: string;
+  storyId: string | null;
   title: string;
   originalTitle: string;
   link: string;
   imageUrl: string | null;
   sourceName: string | null;
   sourceType: string | null;
+  sourceCount: number | null;
   publishedAt: Date | null;
   isBreaking: boolean;
   newsValue: number | null;
   topicFingerprint: string;
   heatScore: number;
+  relevanceScore: number | null;
+  momentumScore: number | null;
+  gapReason: string[] | null;
   status: CoverageGapStatus;
   firstDetectedAt: Date;
   coveredByArticleId: string | null;
@@ -368,6 +592,7 @@ export async function listCoverageGaps(statuses?: CoverageGapStatus[]): Promise<
     .select({
       gap: coverageGaps,
       item: radarItems,
+      story: radarStories,
       sourceName: radarSources.name,
       sourceType: radarSources.type,
       assigneeFirstName: users.firstName,
@@ -376,26 +601,37 @@ export async function listCoverageGaps(statuses?: CoverageGapStatus[]): Promise<
     })
     .from(coverageGaps)
     .innerJoin(radarItems, eq(coverageGaps.radarItemId, radarItems.id))
+    .leftJoin(radarStories, eq(coverageGaps.storyId, radarStories.id))
     .leftJoin(radarSources, eq(radarItems.sourceId, radarSources.id))
     .leftJoin(users, eq(coverageGaps.assignedTo, users.id))
     .where(where)
-    .orderBy(desc(coverageGaps.heatScore), desc(coverageGaps.firstDetectedAt))
+    .orderBy(
+      desc(coverageGaps.relevanceScore),
+      desc(coverageGaps.momentumScore),
+      desc(coverageGaps.heatScore),
+      desc(coverageGaps.firstDetectedAt)
+    )
     .limit(200);
 
   return rows.map((row) => ({
     id: row.gap.id,
     radarItemId: row.gap.radarItemId,
-    title: row.item.translatedTitle || row.item.originalTitle,
+    storyId: row.gap.storyId,
+    title: row.story?.title || row.item.translatedTitle || row.item.originalTitle,
     originalTitle: row.item.originalTitle,
     link: row.item.link,
     imageUrl: row.item.imageUrl,
     sourceName: row.sourceName,
     sourceType: row.sourceType,
+    sourceCount: row.story?.sourceCount ?? null,
     publishedAt: row.item.publishedAt,
     isBreaking: row.item.isBreaking,
     newsValue: row.item.newsValue,
     topicFingerprint: row.gap.topicFingerprint,
     heatScore: row.gap.heatScore,
+    relevanceScore: row.gap.relevanceScore,
+    momentumScore: row.gap.momentumScore,
+    gapReason: row.gap.gapReason ?? null,
     status: row.gap.status as CoverageGapStatus,
     firstDetectedAt: row.gap.firstDetectedAt,
     coveredByArticleId: row.gap.coveredByArticleId,

@@ -121,6 +121,7 @@ export interface NormalizedRadarItem {
   excerpt?: string;
   imageUrl?: string;
   publishedAt?: Date;
+  metrics?: { likes?: number; retweets?: number; replies?: number; views?: number };
 }
 
 /** إدراج دفعة مواد مع منع التكرار على (sourceId, guid) — يعيد المُدرَج فعليًا فقط */
@@ -141,6 +142,7 @@ export async function insertItems(
         originalLanguage: source.language,
         imageUrl: item.imageUrl,
         publishedAt: item.publishedAt,
+        metrics: item.metrics ?? null,
       }))
     )
     .onConflictDoNothing({ target: [radarItems.sourceId, radarItems.guid] })

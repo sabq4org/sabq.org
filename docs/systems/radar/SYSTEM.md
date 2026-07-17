@@ -3,38 +3,38 @@
 > آخر مراجعة: 2026-07-17 | المالك: editorial
 
 ## الغرض
-رصد إخباري كثيف (RSS + حسابات X) وتنبيهات للمحررين — شبكة أمريكية/عالمية/خليجية مع فورية تشغيلية للحسابات الأولوية.
+رصد إخباري كثيف (RSS + حسابات X) + إشارات كمية (قصص/زخم/صلة) وتنبيهات للمحررين.
 
 ## الحدود
-- **داخل النطاق:** `server/services/radar/**`, `server/routes/radar.ts`, `SmartRadar`, حزم البذر `scripts/seed-packs/**`, `scripts/seed-radar-pack.ts`.
-- **خارج النطاق:** SEO crawlers وSSR — نظام `seo-ssr`. تجميع القصص/الزخم/الصلة (المرحلة 1 من خطة التطور) — قيد التنفيذ لاحقاً.
+- **داخل النطاق:** `server/services/radar/**`, `server/routes/radar.ts`, `SmartRadar`, حزم البذر، تقارير القبول.
+- **خارج النطاق:** SEO/SSR. فجوات التغطية — نظام `editorial` (`coverageGapMatcher`) يستهلك قصص/مواد الرادار.
 
 ## نقاط الدخول
 | الطبقة | المسار |
 |--------|--------|
-| Backend | `server/services/radar/`, `server/routes/radar.ts` |
+| Backend | `server/services/radar/` (cycle, clusterer, momentum, relevance, topicFilter) |
 | Web | `client/src/pages/dashboard/SmartRadar.tsx` |
 | بذر | `npx tsx scripts/seed-radar-pack.ts --all` |
-| صحة | `GET /api/radar/health` · `npx tsx scripts/radar-coverage-report.ts` |
-| Docs | `docs/RADAR_X_WATCHES.md`, `docs/radar-source-licensing.md`, `docs/proposals/2026-07-17-radar-evolution-plan.md` |
+| قبول المرحلة أ | `npx tsx scripts/radar-phase1-acceptance.ts` |
+| Docs | `docs/RADAR_X_WATCHES.md`, `docs/proposals/2026-07-17-radar-evolution-plan.md` |
+
+## مفاتيح AI
+`radar-clustering` · `radar-relevance` (عبر ai-hub؛ الفجوات تبقى `coverage-gap-matcher` تحت editorial)
 
 ## عقود مهمة / Gotchas
-- التنبيهات والمصدّرات (alerts/exporter) جزء من الحلقة — اختبرها عند تغيير المستودعات.
-- **رادار الفجوات التحريرية** (نظام `editorial`، `coverage-gap-matcher`) يستهلك مواد الرادار النشطة (الحالات `new/analyzed/ready`) ويعيد استخدام `transformItem` و`exportItemToArticle` لإنشاء مسودات التغطية؛ يعمل بعد كل دورة رادار من `cycle.ts`. أي تغيير في حالات المواد أو عقد التصدير (`RADAR_DRAFT_MISSING`) يؤثر عليه.
-- رصدة X = صف في `radar_sources` بـ `type=x` و`url` اصطناعي `x:{type}:{value}`.
-- قائمة المواد تعيد `sourceType` + `xValue`؛ الفلتر `channel=x|feed` يفصل إكس عن الصحف/RSS.
-- حسابات X الأولوية: `fetchIntervalMinutes=1` + `since_id` (SLA ≤ دقيقتين). السقف: `RADAR_X_MAX_ACTIVE_WATCHES` (افتراضي 80).
-- أعمدة تشغيلية additive: `tier`, `region`, `weight`, `pack_id`.
-- وكالات AP/Reuters/AFP بلا RSS عام موثوق — الرصد عبر حزمة `x-news-accounts`.
-- **فلتر اهتمام سبق** (`topicFilter.ts`): على المصادر الأجنبية (`region=us|global`) لا يُدخل إلا ما يمس السعودية / أمريكا–إيران / المونديال / لاعبين مشهورين / حدثاً كبيراً. الخليج بلا فلتر. عطّل بـ `RADAR_TOPIC_FILTER_ENABLED=false`.
-- الترجمة العربية تتم في خطوة التحليل (`analyst`) — المادة `new` بلا `translatedTitle` تظهر بالإنجليزي حتى تُحلَّل. السعة: `RADAR_MAX_ANALYZE_PER_RUN` (افتراضي 20) × `RADAR_MAX_ANALYZE_ROUNDS` (افتراضي 3) لكل دقيقة.
-- التفعيل التشغيلي: `RADAR_ENABLED=true` + مفتاح X (`X_API_BEARER_TOKEN` و/أو `TWITTERAPI_IO_API_KEY`).
+- **قصص:** `radar_stories` + `radar_items.story_id` خلف `RADAR_CLUSTERING_ENABLED` (افتراضي false). عتبة cosine `RADAR_CLUSTER_THRESHOLD` (0.85) مع سقوط كلمات ≥ 0.7.
+- **زخم:** `radar_story_snapshots` + `radar_items.metrics` خلف `RADAR_MOMENTUM_ENABLED`.
+- **صلة:** `saudi_relevance` خلف `RADAR_RELEVANCE_ENABLED` — قواميس `server/services/radar/data/*.json`.
+- **فجوات v2:** `RADAR_GAP_V2_ENABLED` في editorial matcher — وحدة القصة لا المادة؛ لا تُفعَّل قبل ثبات المرحلة أ.
+- فلتر اهتمام سبق على المصادر الأجنبية: `RADAR_TOPIC_FILTER_ENABLED` (افتراضي مفعّل).
+- التفعيل التشغيلي: `RADAR_ENABLED=true` + مفاتيح X.
 
-## صحة وتشغيل
-- لوحة: `/dashboard/radar` — أزرار «المصادر» و«رصدات X».
-- بعد `db:push`: بذر staging ثم قياس تكلفة X قبل توسيع كل حسابات Tier A على الإنتاج.
+## SQL additive (يدوي إن لزم)
+انظر `docs/radar-phase1-sql.md` — يفضّل `npm run db:push` على staging.
+
+## أسبوع ثبات المرحلة أ
+قبل `RADAR_GAP_V2_ENABLED`: فعّل clustering/momentum/relevance أسبوعاً + `scripts/radar-phase1-acceptance.ts` يومياً (تعدد مصادر ≥ 3، إيران ≤ 1 قصة).
 
 ## عند التعديل
 - [ ] قرأت هذا الملف
-- [ ] حدّثت `docs/RADAR_X_WATCHES.md` إن تغيّرت فترات الجلب أو سقف الرصدات
-- [ ] حدّثت `docs/radar-source-licensing.md` عند إضافة مصدر جديد بلا/مع RSS
+- [ ] حدّثت flags/docs عند تغيير العقد
