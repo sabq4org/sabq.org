@@ -83,7 +83,7 @@
 
 ### الظهور في الواجهة
 
-- **قائمة الحساب:** بطاقة نوع العضوية + رصيد النقاط ظاهرة لكل عضو مسجّل (رابط محفظتي → `/dashboard/loyalty`).
+- **قائمة الحساب:** بطاقة نوع العضوية + رصيد النقاط ظاهرة لكل عضو مسجّل (رابط محفظتي → `/loyalty`).
 - **صفحات المعاينة/الشروط** (`/loyalty-preview`، `/loyalty-terms`): بالرابط المباشر فقط — بلا رابط في الفوتر أو التنقّل العام.
 
 ### المسار والهيكل
@@ -109,7 +109,7 @@
 | حالة المستخدم | الوجهة |
 |---------------|--------|
 | غير مسجّل | `/register` |
-| مسجّل | `/dashboard/loyalty` |
+| مسجّل | `/loyalty` |
 
 ---
 
@@ -136,7 +136,7 @@
 ## مراجع مرتبطة
 
 - مصدر قيم الإنتاج الحالي: `shared/loyalty.ts`
-- محفظة العضو: `/dashboard/loyalty` → `client/src/pages/dashboard/LoyaltyAccount.tsx`
+- محفظة العضو: `/loyalty` → `client/src/pages/LoyaltyAccount.tsx` (ليست تحت `/dashboard`؛ إعادة توجيه من المسار القديم)
 - بطاقة العضوية: `client/src/components/loyalty/LoyaltyCard.tsx`
 - هاندوف iOS للولاء: `docs/LOYALTY_iOS_HANDOFF.md`
 - **شروط الولاء الخاصة بسبق:** `/loyalty-terms` → `client/src/pages/LoyaltyTermsPage.tsx`

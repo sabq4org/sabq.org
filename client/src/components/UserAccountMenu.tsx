@@ -81,7 +81,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
 
       <div className="px-2 pb-2" dir="rtl">
         <a
-          href="/dashboard/loyalty"
+          href="/loyalty"
           className="block rounded-lg border border-amber-500/25 bg-gradient-to-br from-amber-500/10 to-primary/5 px-3 py-2.5 hover:border-primary/40 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid={`link-loyalty-wallet${suffix}`}
         >

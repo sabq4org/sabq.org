@@ -104,7 +104,7 @@ export function LoyaltyBlock() {
         </div>
 
         <Button asChild variant="outline" className="w-full justify-between" data-testid="button-loyalty-account">
-          <Link href="/dashboard/loyalty">
+          <Link href="/loyalty">
             <span className="flex items-center gap-2">
               <Coins className="h-4 w-4" />
               نقاطي والمكافآت

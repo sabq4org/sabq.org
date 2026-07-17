@@ -124,7 +124,7 @@ export default function LoyaltyPreview() {
     return { pts, sarDay, sarMonth: sarDay * 30 };
   }, [articles, deepClamped, shares]);
 
-  const ctaHref = isAuthenticated ? "/dashboard/loyalty" : "/register";
+  const ctaHref = isAuthenticated ? "/loyalty" : "/register";
   const ctaLabel = isAuthenticated ? "افتح محفظة نقاطي" : "اشترك الآن وابدأ الاكتساب";
 
   return (
