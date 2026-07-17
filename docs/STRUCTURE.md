@@ -45,6 +45,11 @@
 ## docs/notes/ — ملاحظات
 - `sultan.md`
 
+## ولاء / عضوية
+- `LOYALTY_iOS_HANDOFF.md` — تسليم Phase 3 للولاء على iOS
+- `LOYALTY_WALAONE_ACQUISITION_PREVIEW.md` — معاينة اكتساب النقاط × ولاء ون (2026-07-17): صفحة `/loyalty-preview` والقيم المقترحة — لم تُطبَّق على الإنتاج
+- `LOYALTY_WALAONE_TERMS_RISK_MAP.md` — خريطة مخاطر شروط ولاء ون → حماية سبق + صفحة `/loyalty-terms`
+
 ## مقترحات لم تُنفَّذ (تتطلّب قرار الفريق)
 - إنشاء `SECURITY.md` جذري يفهرس وثائق الأمن وسياسة الإفصاح.
 - ملفات ثنائية في الجذر يُنصح بنقلها/أرشفتها يدوياً: `sabq-clean.tar.gz` (≈19MB),
