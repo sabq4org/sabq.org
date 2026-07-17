@@ -13,7 +13,7 @@ import {
   Newspaper,
   Settings,
   Trophy,
-  User,
+  User as UserIcon,
 } from "lucide-react";
 import {
   DropdownMenuItem,
@@ -22,7 +22,7 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
-import { hasPermission, type User } from "@/hooks/useAuth";
+import { hasPermission, type User as AuthUser } from "@/hooks/useAuth";
 import { tierProgress } from "@shared/loyalty";
 import { formatNumber } from "@/lib/format";
 
@@ -144,7 +144,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
           className="flex w-full items-center cursor-pointer"
           data-testid={`link-profile${suffix}`}
         >
-          <User className="ml-2 h-4 w-4" aria-hidden="true" />
+          <UserIcon className="ml-2 h-4 w-4" aria-hidden="true" />
           الملف الشخصي
         </a>
       </DropdownMenuItem>
@@ -178,7 +178,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
         </DropdownMenuSubContent>
       </DropdownMenuSub>
 
-      {hasPermission(user as User, "dashboard.view") && (
+      {hasPermission(user as AuthUser, "dashboard.view") && (
         <>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
@@ -191,7 +191,7 @@ export function UserAccountMenu({ user, onLogout, testIdSuffix = "" }: Props) {
               لوحة التحكم
             </a>
           </DropdownMenuItem>
-          {hasPermission(user as User, "dashboard.view_messages") && (
+          {hasPermission(user as AuthUser, "dashboard.view_messages") && (
             <DropdownMenuItem asChild>
               <a
                 href="/dashboard/communications"
