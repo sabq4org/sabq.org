@@ -8,6 +8,7 @@ import { db } from "../../db";
 import { sportsFollows, sportsMatchViews, type SportsInsight } from "@shared/schema";
 import { pruneExpiredInsights, queryInsights, saveInsights } from "../sportsIntelligence/insightsStore";
 import { listFollows } from "../sportsFollowsService";
+import { withSWR } from "../../memoryCache";
 import { buildTeamFacts, type TeamSnapFacts } from "./factsBuilder";
 import { composeSnaps } from "./composer";
 import {
@@ -202,9 +203,18 @@ export async function getUserFeed(userId: string): Promise<SnapDto[]> {
     }
   }
 
+  // توازي جلب لقطات الفرق: زمن الاستجابة = أبطأ فريق بدل مجموع الفرق.
+  // Promise.all يحافظ على ترتيب teams، ولكل فريق عزل فشل خاص به (catch → [])
+  // فيبقى سلوك الدمج والـdedupe اللاحق مطابقًا للحلقة التسلسلية.
+  const perTeam = await Promise.all(
+    teams.slice(0, 8).map(async (team) => {
+      const snaps = await getTeamSnaps(team.id).catch(() => [] as SnapDto[]);
+      return { team, snaps };
+    }),
+  );
+
   const items: SnapDto[] = [];
-  for (const team of teams.slice(0, 8)) {
-    const snaps = await getTeamSnaps(team.id).catch(() => []);
+  for (const { team, snaps } of perTeam) {
     for (const snap of snaps) {
       if (team.source === "follow") {
         items.push(withBody(snap, personalizeForFavorite(snap.body)));
@@ -223,6 +233,21 @@ export async function getUserFeed(userId: string): Promise<SnapDto[]> {
   }
 
   return [...deduped.values()].slice(0, SNAP_FEED_LIMIT);
+}
+
+// كاش قصير للخلاصة المجمّعة لكل مستخدم. المفاتيح per-user لكنها محدودة:
+// swrCache سقفه 5000 مدخل مع إخلاء (المنتهي أولًا ثم الأقدم دفعة)، وTTL قصير
+// أصلًا، وله سابقة داخل المشروع (intel:digest:{userId}). بعد إصلاح
+// single-flight في withSWR تتشارك الطلبات المتزامنة لنفس المستخدم جلبًا واحدًا.
+export const SNAPS_FEED_CACHE_TTL_MS = 30 * 1000;
+
+export async function getCachedUserFeed(userId: string): Promise<SnapDto[]> {
+  return withSWR(
+    `snaps:feed:${userId}`,
+    SNAPS_FEED_CACHE_TTL_MS,
+    SNAPS_FEED_CACHE_TTL_MS * 2,
+    () => getUserFeed(userId),
+  );
 }
 
 export async function getActiveSnapTeamIds(limit = 60): Promise<number[]> {

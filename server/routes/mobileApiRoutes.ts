@@ -5878,9 +5878,11 @@ router.get("/sports/snaps", async (req: Request, res: Response) => {
     if (!session) return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
     const { isSportsSnapsEnabled } = await import("../services/sportsSnaps/config");
     if (!isSportsSnapsEnabled()) return res.status(404).json({ success: false, message: "غير متاح" });
-    const { getUserFeed } = await import("../services/sportsSnaps/feed");
-    const snaps = await getUserFeed(session.userId);
-    res.set("Cache-Control", "private, no-store");
+    const { getCachedUserFeed, SNAPS_FEED_CACHE_TTL_MS } = await import("../services/sportsSnaps/feed");
+    const snaps = await getCachedUserFeed(session.userId);
+    // الخادم يكاش الخلاصة 30 ثانية (single-flight عبر withSWR)، فالترويسة
+    // تعكس الواقع: كاش خاص قصير بنفس مدة TTL بدل no-store.
+    res.set("Cache-Control", `private, max-age=${Math.floor(SNAPS_FEED_CACHE_TTL_MS / 1000)}`);
     res.json({ success: true, snaps });
   } catch (error) {
     console.error("[Mobile API] GET /sports/snaps error:", error);
