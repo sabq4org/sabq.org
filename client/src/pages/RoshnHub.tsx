@@ -21,7 +21,6 @@ import { TeamOfTheWeekSection } from "@/components/worldcup/TeamOfTheWeekSection
 import { RslHero } from "@/components/rsl/RslHero";
 import { RslFacts } from "@/components/rsl/RslFacts";
 import { RslMatches, type RslMatchBuckets } from "@/components/rsl/RslMatches";
-import { RslPredictionsCTA } from "@/components/rsl/RslPredictionsCTA";
 import { RslStandings } from "@/components/rsl/RslStandings";
 import { RslScorers } from "@/components/rsl/RslScorers";
 import { RslTeams } from "@/components/rsl/RslTeams";
@@ -87,7 +86,6 @@ export default function RoshnHub() {
         <RslHero hero={hero} isLoading={heroLoading} onOpenMatch={setOpenMatchId} />
         <RslFacts hero={hero} />
         <RslMatches buckets={buckets} isLoading={matchesLoading} onOpenMatch={setOpenMatchId} />
-        <RslPredictionsCTA enabled={hero?.predictionsEnabled ?? false} />
         <RslStandings
           standings={standings}
           isLoading={standingsLoading}

@@ -6,7 +6,6 @@ import { NavigationBar } from "@/components/NavigationBar";
 import { useAuth } from "@/hooks/useAuth";
 import { AcHero } from "@/components/asiancup/AcHero";
 import { AcFacts } from "@/components/asiancup/AcFacts";
-import { AcPredictionsCTA } from "@/components/asiancup/AcPredictionsCTA";
 import { AcSaudiSpotlight } from "@/components/asiancup/AcSaudiSpotlight";
 import { AcGroups } from "@/components/asiancup/AcGroups";
 import { AcSchedule } from "@/components/asiancup/AcSchedule";
@@ -70,7 +69,6 @@ export default function AsianCup() {
       <main className="flex-1">
         <AcHero overview={overview} onJump={handleJump} />
         <AcFacts />
-        <AcPredictionsCTA />
         <AcSaudiSpotlight saudi={overview?.saudi} onOpenMatch={setOpenFixtureId} />
         <AcGroups groups={groups} />
         <AcSchedule fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />

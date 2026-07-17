@@ -2041,56 +2041,12 @@ if (!(globalThis as any).__sabqServer) {
       }
 
       // تسوية توقّعات كأس آسيا الذكية: نفس نمط المونديال — تسجيل دائم وفحص
-      // القيادة داخل الدورة، يمنح كل مستخدم نقاطه المهاريّة فور انتهاء المباراة.
-      if (enableBackgroundWorkers) {
-        setTimeout(async () => {
-          try {
-            const { startAcPredictionsJob } = await import("./jobs/acPredictionsJob");
-            startAcPredictionsJob();
-          } catch (error) {
-            console.error("[Server] Error starting asian cup predictions job:", error);
-          }
-        }, BACKGROUND_JOB_DELAY);
-      }
 
       // تسوية توقّعات دوري روشن (محرّك المونديال على الدوري المحلي): تسجيل دائم
-      // وفحص القيادة داخل الدورة — يمنح الفائزين نقاطهم فور صافرة النهاية.
-      if (enableBackgroundWorkers) {
-        setTimeout(async () => {
-          try {
-            const { startRslPredictionsJob } = await import("./jobs/rslPredictionsJob");
-            startRslPredictionsJob();
-          } catch (error) {
-            console.error("[Server] Error starting roshn league predictions job:", error);
-          }
-        }, BACKGROUND_JOB_DELAY);
-      }
 
       // تسوية توقّعات الكؤوس المحلية (كأس الملك + كأس السوبر) على المحرّك المُعمّم
-      // الموحّد — نفس نمط روشن: تسجيل دائم وفحص القيادة/الأعلام داخل الدورة.
-      if (enableBackgroundWorkers) {
-        setTimeout(async () => {
-          try {
-            const { startCupPredictionsJob } = await import("./jobs/cupPredictionsJob");
-            startCupPredictionsJob();
-          } catch (error) {
-            console.error("[Server] Error starting cup predictions job:", error);
-          }
-        }, BACKGROUND_JOB_DELAY);
-      }
 
       // تسوية توقّعات خليجي 27 (بركة متدرّجة + جائزة متراكمة + شارات + إشعار):
-      // نفس نمط كأس آسيا — تسجيل دائم وفحص القيادة داخل الدورة.
-      if (enableBackgroundWorkers) {
-        setTimeout(async () => {
-          try {
-            const { startGcPredictionsJob } = await import("./jobs/gcPredictionsJob");
-            startGcPredictionsJob();
-          } catch (error) {
-            console.error("[Server] Error starting gulf cup predictions job:", error);
-          }
-        }, BACKGROUND_JOB_DELAY);
-      }
 
       // المنصة المركزية للتوقعات: عامل تسوية واحد لكل البطولات (Prediction Core)
       if (enableBackgroundWorkers) {
@@ -2140,17 +2096,6 @@ if (!(globalThis as any).__sabqServer) {
         }, BACKGROUND_JOB_DELAY);
       }
 
-      // تسوية توقّعات المباريات (المرحلة 4): نفس النمط — فحص القيادة داخل الدورة
-      if (enableBackgroundWorkers) {
-        setTimeout(async () => {
-          try {
-            const { startSportsPredictionsJob } = await import("./jobs/sportsPredictionsJob");
-            startSportsPredictionsJob();
-          } catch (error) {
-            console.error("[Server] Error starting sports predictions job:", error);
-          }
-        }, BACKGROUND_JOB_DELAY);
-      }
 
       // عامل النشاط المباشر (iOS Live Activity): يدفع تحديثات شاشة القفل عبر
       // APNs كل 10 ثوانٍ. نفس النمط — تسجيل دائم وفحص القيادة داخل الدورة.
