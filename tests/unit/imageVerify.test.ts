@@ -2,6 +2,7 @@ import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import {
   needsWebpTranscode,
+  normalizeImageForUpload,
   transcodeAvifToWebp,
   verifyImageMagicBytes,
 } from "../../server/utils/imageVerify";
@@ -46,6 +47,17 @@ describe("image upload verification", () => {
       ok: true,
       detectedFormat: "webp",
     });
+  });
+
+  it("normalizes AVIF to webp or jpeg via soft fallback ladder", async () => {
+    const avif = await sharp(await samplePng()).avif({ quality: 40 }).toBuffer();
+    const normalized = await normalizeImageForUpload(avif);
+
+    expect(["image/webp", "image/jpeg"]).toContain(normalized.mimeType);
+    expect(["webp", "jpg"]).toContain(normalized.extension);
+    await expect(
+      verifyImageMagicBytes(normalized.buffer, normalized.mimeType),
+    ).resolves.toMatchObject({ ok: true });
   });
 
   it("flags AVIF and HEIC MIME types for WebP transcode", () => {
