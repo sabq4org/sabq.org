@@ -151,6 +151,7 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
       "system_settings",
       "sports_tournaments",
       "admin_tools",
+      "systems_catalog",
       "ai_hub",
     ],
   },

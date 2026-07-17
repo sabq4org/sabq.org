@@ -6,6 +6,20 @@
 > ملاحظة: لم يُنقل أو يُحذف أي ملف كود أو إعداد. كود TypeScript لا يستورد ملفات `.md`،
 > وتم التحقق بعد النقل عبر `npm run check`.
 
+## docs/systems/ — كتالوج الأنظمة (مصدر الحقيقة للمنتج)
+
+خريطة الأنظمة التشغيلية + حوكمة Agents + جرد الملفات/استهلاك AI.
+
+| ملف | الدور |
+|-----|--------|
+| `README.md` | نقطة الدخول |
+| `GOVERNANCE.md` | قواعد التحديث والقالب |
+| `registry.json` | سجل آلي (id، globs، روابط) |
+| `inventory-snapshot.json` | لقطة أعداد الملفات للإنتاج |
+| `<id>/SYSTEM.md` | وثيقة إلزامية لكل نظام قبل تعديله |
+
+لوحة التحكم: `/dashboard/systems-catalog` · CLI: `node scripts/systems-inventory.mjs`
+
 ## docs/security/ — الأمن
 - `SECURITY_AUDIT_REPORT.md` — تقرير تدقيق أمني سابق
 - `SECURITY_LINK_INJECTION_AUDIT_AR.md` — تدقيق حقن الروابط
