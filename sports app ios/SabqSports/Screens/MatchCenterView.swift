@@ -100,6 +100,12 @@ struct SpMatchCenter: View {
     @State private var homeScorers: [SpScorer] = []
     @State private var awayScorers: [SpScorer] = []
     @State private var recordedMatchView = false
+    /// جلبة لحظية واحدة في كل لحظة — ختم الموجز + حلقة الاستطلاع + عودة المقدمة
+    /// كانت تتراكب فتتضاعف جلبات التفاصيل/التعليق للمباراة نفسها في آنٍ واحد.
+    @State private var refreshInFlight = false
+    /// آخر تحديث لحظي ناجح — يحوّل حلقة الاستطلاع وعودة المقدمة إلى شبكة أمان
+    /// صرفة ما دام البث الحيّ متصلًا ويغذّي الشاشة عبر ختم الموجز.
+    @State private var lastLiveRefresh: Date = .distantPast
 
     private enum Segment: String, CaseIterable {
         case preview, events, commentary, analysis, ratings, lineups, stats, h2h
@@ -301,6 +307,8 @@ struct SpMatchCenter: View {
         // عودة التطبيق للمقدّمة أثناء مباراة جارية = تحديث فوري.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, (detail?.fixture ?? preview)?.status.live == true {
+                // بث متصل وتحديث عبر ختمه قبل لحظات؟ الشاشة طازجة — لا جلب مكرر.
+                if liveStream.connected, Date().timeIntervalSince(lastLiveRefresh) < 10 { return }
                 Task { await refreshLive() }
             }
         }
@@ -1889,14 +1897,21 @@ struct SpMatchCenter: View {
             let seconds: UInt64 = live ? 10 : 25
             try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
             if Task.isCancelled { return }
+            // شبكة أمان صرفة: البث الحيّ متصل وتحديث عبر ختمه قبل < 10ث → الجلب مكرر.
+            if liveStream.connected, Date().timeIntervalSince(lastLiveRefresh) < 10 { continue }
             await refreshLive()
         }
     }
 
     /// إعادة جلب التفاصيل اللحظية فقط (طازجة بلا كاش) — خفيفة مقارنةً بـ load الكامل.
+    /// جلبة واحدة في كل لحظة: نبضتا الختم «s:»/«w:» والاستطلاع تصل معًا أحيانًا.
     private func refreshLive() async {
+        guard !refreshInFlight else { return }
+        refreshInFlight = true
+        defer { refreshInFlight = false }
         guard let fresh = try? await APIClient.shared.fetchMatchDetail(id: fixtureId, ignoreCache: true)
         else { return }
+        lastLiveRefresh = Date()
         self.detail = fresh
         // حدّث نشاط شاشة القفل بأحدث نتيجة/حدث (no-op إن لم يكن قائمًا).
         liveActivity.update(with: liveActivityFixture(fresh.fixture), lastEvent: lastEventText(fresh.events))

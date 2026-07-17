@@ -20,6 +20,9 @@ final class SpLiveStream {
     private(set) var sportsVersion = 0
     private(set) var wcVersion = 0
     private(set) var connected = false
+    /// آخر عناصر الموجز مفهرسة بمفتاحها («s:»/«w:») — تحقنها الشاشات في نسخها
+    /// المحلية مباشرة (نتيجة/دقيقة/مرساة ساعة) فتتحدّث لحظيًّا بلا رحلة شبكة.
+    private(set) var liveItems: [String: SpLiveDigestItem] = [:]
 
     private var task: Task<Void, Never>?
 
@@ -83,6 +86,7 @@ final class SpLiveStream {
         let sportsChanged = subset(fresh, "s:") != subset(previous, "s:")
         let wcChanged = subset(fresh, "w:") != subset(previous, "w:")
         stamps = fresh
+        liveItems = Dictionary(digest.items.map { ($0.k, $0) }, uniquingKeysWith: { a, _ in a })
         if sportsChanged { sportsVersion &+= 1 }
         if wcChanged { wcVersion &+= 1 }
 

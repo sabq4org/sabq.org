@@ -194,6 +194,12 @@ struct MatchesCenterView: View {
     @State private var liveOnly = false
     /// نبضة موجز/دورة استطلاع وصلت والتبويب مخفي — تُصرف بتحميل واحد عند العودة.
     @State private var pendingLiveReload = false
+    /// جلبة جدول واحدة في كل لحظة — طلبات متزامنة (نبضة موجز + سحب يدوي +
+    /// عودة مقدمة + استطلاع) كانت تتراكب فيتضاعف الجلب/الفكّ/الفرز على نفس النافذة.
+    @State private var loadInFlight = false
+    /// مهمة التحميل الكامل المؤجَّل بعد نبضة الموجز (trailing edge 30ث) — تُلغى
+    /// وتُعاد جدولتها مع كل نبضة جديدة، وتُلغى عند اختفاء الشاشة.
+    @State private var liveReloadDebounce: Task<Void, Never>?
     @State private var selection = SpCenterFilter.load()
     // نطاق «العدسة» — يُفلتر شرائح البطولات الظاهرة ويُميّز الحبّة المتصدّرة.
     // مستقلّ عن selection: عند التعمّق في بطولة واحدة يبقى النطاق كما هو فتظلّ
@@ -274,7 +280,10 @@ struct MatchesCenterView: View {
         .onChange(of: liveStream.sportsVersion &+ liveStream.wcVersion) { _, _ in
             guard registryReady, !fixtures.isEmpty else { pendingLiveReload = true; return }
             guard router.selectedTab == .matches else { pendingLiveReload = true; return }
-            Task { await load(force: true) }
+            // حقن موجز موضعي فوري (نتيجة/دقيقة/حالة — بلا شبكة) ثم تحميل كامل
+            // مؤجَّل 30ث يلتقط الهيكليات (مباريات جديدة/ليبلات النهاية).
+            applyLiveDigest()
+            scheduleDebouncedLiveReload()
         }
         .onChange(of: router.selectedTab) { _, tab in
             guard tab == .matches, pendingLiveReload else { return }
@@ -282,6 +291,10 @@ struct MatchesCenterView: View {
             Task { await load(force: true) }
         }
         .refreshable { await load(force: true) }
+        .onDisappear {
+            liveReloadDebounce?.cancel()
+            liveReloadDebounce = nil
+        }
         .sheet(isPresented: $showDatePicker) { datePickerSheet }
         .navigationDestination(item: $deepLinkedMatch) { box in
             SpMatchCenter(fixtureId: box.id, preview: nil)
@@ -1402,7 +1415,23 @@ struct MatchesCenterView: View {
         return [selection]
     }
 
+    /// منسّق التحميل: لا جلبة كاملة تتراكب فوق جارية — طلب وصل أثناءها ينتظر
+    /// خلوّ المضمار ثم ينفّذ (انتظار متسلسل على الممثّل الرئيسي، لا سباق).
+    /// إلغاء المهمة (تبديل فلتر/اختفاء) يفكّ الانتظار معها فلا تنفّذ طلبًا بائتًا.
     private func load(force: Bool = false) async {
+        // تحميل صريح (سحب/فلتر/عودة مقدمة) يلغي المؤجَّل — طازجته تغني عنه.
+        liveReloadDebounce?.cancel()
+        liveReloadDebounce = nil
+        while loadInFlight {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            if Task.isCancelled { return }
+        }
+        loadInFlight = true
+        await performLoad(force: force)
+        loadInFlight = false
+    }
+
+    private func performLoad(force: Bool) async {
         if !force, fixtures.isEmpty { loading = true }
         // اختيار يتيم (بطولة أُزيلت من المفضّلة وشريحتها اختفت) → عودة لـ«الكل».
         if selection != "all", !selection.hasPrefix("lens:"), !favorites.items.isEmpty, !favorites.isFavorite(selection) {
@@ -1437,6 +1466,63 @@ struct MatchesCenterView: View {
             if selection != "world-cup" { wcBracket = nil }
         }
         loading = false
+    }
+
+    /// حقن موجز SSE في نسخ الجدول المحمَّلة مباشرةً — نفس نمط
+    /// SpMatchFollows.applyDigest: النتيجة/الدقيقة/الحالة/مرساة الساعة تصل
+    /// بطزاجة TheSports فتتحدّث الصفوف الحية فورًا بلا رحلة شبكة لكل نبضة.
+    /// لا يضيف/يزيل مباريات ولا يصحّح الليبلات — تلك «هيكليات» يلتقطها
+    /// التحميل الكامل المؤجَّل (scheduleDebouncedLiveReload).
+    private func applyLiveDigest() {
+        let items = liveStream.liveItems
+        guard !items.isEmpty, !fixtures.isEmpty else { return }
+        var changed = false
+        for (i, f) in fixtures.enumerated() {
+            // مفتاح الموجز: المونديال «w:» وسواه «s:» (مطابق SpMatchFollows.digestKey).
+            let key = f.competitionSlug == "world-cup" ? "w:\(f.id)" : "s:\(f.id)"
+            guard let d = items[key] else { continue }
+            let differs = d.gh != (f.goals.home ?? -1) || d.ga != (f.goals.away ?? -1)
+                || d.el != f.status.elapsed || d.ex != f.status.extra
+                || d.liv != f.status.live || d.fin != f.status.finished
+                || (!d.st.isEmpty && d.st != f.status.code)
+                || d.cs != f.status.clockStartEpoch
+            guard differs else { continue }
+            // الليبل يبقى من آخر لقطة كاملة (الموجز لا يحمله) — يصحّحه التحميل
+            // المؤجَّل؛ عرض الدقيقة يُشتق من الكود/المرساة فلا يتأثر.
+            fixtures[i] = SpFixture(
+                id: f.id, date: f.date, timestamp: f.timestamp,
+                status: SpStatus(
+                    code: d.st.isEmpty ? f.status.code : d.st,
+                    label: f.status.label,
+                    elapsed: d.el,
+                    extra: d.ex,
+                    live: d.liv,
+                    finished: d.fin,
+                    clockStartEpoch: d.cs
+                ),
+                round: f.round, venue: f.venue, home: f.home, away: f.away,
+                goals: SpScore(home: d.gh, away: d.ga), penalties: f.penalties,
+                competition: f.competition, competitionSlug: f.competitionSlug
+            )
+            changed = true
+        }
+        guard changed else { return }
+        rebuildDays(keepSelection: true)
+    }
+
+    /// جدولة تحميل كامل واحد بعد 30ث من آخر نبضة موجز (trailing edge): الحقن
+    /// الموضعي يُبقي الصفوف طازجة لحظيًّا، وهذا يلتقط ما لا يحمله الموجز —
+    /// مباريات دخلت/غادرت الحيّ وليبلات الحالات النهائية. كل نبضة جديدة تُلغي
+    /// السابقة وتعيد الجدولة، ففي الأيام المزدحمة يحدث جلب واحد لا 30.
+    private func scheduleDebouncedLiveReload() {
+        liveReloadDebounce?.cancel()
+        liveReloadDebounce = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            guard !Task.isCancelled else { return }
+            // صفّر المرجع قبل التحميل كي لا يلغي load مهمتنا الجارية بنفسها.
+            liveReloadDebounce = nil
+            await load(force: true)
+        }
     }
 
     /// `/sports/fixtures` لا يعيد خانات المونديال الصناعية التي يبنيها مسار
