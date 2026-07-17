@@ -13450,6 +13450,8 @@ export const appMemberSessions = pgTable("app_member_sessions", {
   index("idx_app_sessions_member").on(table.memberId),
   index("idx_app_sessions_active").on(table.isActive),
   index("idx_app_sessions_expires").on(table.expiresAt),
+  // فهرس البحث بالتوكن — verifyMemberSession يستعلم به في كل طلب Bearer
+  index("idx_app_sessions_token_hash").on(table.tokenHash),
 ]);
 
 // Type for mobile app sessions

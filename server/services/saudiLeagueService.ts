@@ -3049,8 +3049,11 @@ export async function getMatchPlayerRatings(fixtureId: number): Promise<SplMatch
     const rows = await apiGet("fixtures/players", { fixture: fixtureId });
     if (rows.length === 0) return null;
 
+    // skipAi: لا ننتظر ترجمة AI متزامنة داخل الطلب (كانت تعلّق أول فتح
+    // لتبويب التقييمات ثوانيَ) — الناقص يُسجَّل pending ويملؤه الكرون الليلي.
     const tr = await resolveNames(
       rows.flatMap((teamRow: any) => (teamRow.players ?? []).map((e: any) => e.player?.name)),
+      { skipAi: true },
     );
     const players: SplMatchPlayerRating[] = [];
     for (const teamRow of rows) {
