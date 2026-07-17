@@ -13,7 +13,7 @@ import { Router } from "express";
 import rateLimit from "express-rate-limit";
 import { requireAuth } from "../rbac";
 import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
-import { isGcPredictionsEnabled } from "../services/gcPredictionsService";
+import { isGcPredictionsEnabled } from "../services/gcFeatureFlags";
 import {
   createMajlis,
   getMajlisLeaderboard,

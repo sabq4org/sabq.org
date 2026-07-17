@@ -11,7 +11,6 @@ import { KcBracket } from "@/components/kingscup/KcBracket";
 import { KcScorers } from "@/components/kingscup/KcScorers";
 import { KcTeams } from "@/components/kingscup/KcTeams";
 import { KcHistorySection } from "@/components/kingscup/KcHistorySection";
-import { KcPredictionsCTA } from "@/components/kingscup/KcPredictionsCTA";
 import { KcMatchDialog } from "@/components/kingscup/KcMatchDialog";
 import { KcPlayerDialog } from "@/components/kingscup/KcPlayerDialog";
 import type { KcFixture, KcOverview, KcScorer, KcTeam } from "@/components/kingscup/kcTypes";
@@ -71,7 +70,6 @@ export default function KingsCup() {
         />
         <KcFacts onOpenPlayer={setOpenPlayerId} />
         <KcMatches fixtures={fixtures} isLoading={fixturesLoading} onOpenMatch={setOpenFixtureId} />
-        <KcPredictionsCTA />
         <KcBracket onOpenMatch={setOpenFixtureId} />
         <KcScorers
           scorers={scorers}

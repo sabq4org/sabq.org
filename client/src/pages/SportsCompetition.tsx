@@ -43,7 +43,6 @@ import {
   COMP_CATEGORY_LABELS,
   COMP_STATUS_LABELS,
   FollowControls,
-  LeaderboardBoard,
   MatchDialog,
   PodiumCard,
   StandingsTable,
@@ -135,7 +134,7 @@ const COMP_EDITORIAL_NOTES: Record<string, string[]> = {
   ],
 };
 
-type TabKey = "standings" | "scorers" | "assists" | "cards" | "matches" | "news" | "predictions";
+type TabKey = "standings" | "scorers" | "assists" | "cards" | "matches" | "news";
 
 const TAB_META: Record<TabKey, { label: string; icon: typeof Trophy }> = {
   standings: { label: "الترتيب", icon: Trophy },
@@ -144,7 +143,6 @@ const TAB_META: Record<TabKey, { label: string; icon: typeof Trophy }> = {
   cards: { label: "البطاقات", icon: Square },
   matches: { label: "المباريات", icon: CalendarDays },
   news: { label: "الأخبار", icon: Newspaper },
-  predictions: { label: "التوقّعات", icon: Sparkles },
 };
 
 // ---------- بطاقة حامل اللقب / هدّاف الموسم الماضي ----------
@@ -529,229 +527,6 @@ function NewsPane({ comp }: { comp: SpCompetition | undefined }) {
   );
 }
 
-// ---------- توقّعات الجمهور — المجمّع الموحّد (نفس محرك تطبيق سبق الرياضي) ----------
-// GET /api/sports/predictions/board (نافذة 48س لبطولات التوقّع) + POST /pool للإرسال
-// + لوحة متصدّري المجمّع. قرار المالك 2026-07-05: الويب يطبّق نظام نقاط التطبيق.
-
-interface PoolMyPrediction { predHome: number; predAway: number; status: string; outcomeHit: boolean; marginHit: boolean; exactHit: boolean; pointsAwarded: number; }
-interface PoolSettlement { status: string; finalHome: number | null; finalAway: number | null; predictionsCount: number; exactWinners: number; marginWinners: number; outcomeWinners: number; poolBase: number; poolCarryIn: number; carryOut: number; }
-interface PoolFixtureLite {
-  id: number; timestamp: number; competition: string | null; competitionSlug: string | null;
-  status: { code: string; label: string; live: boolean; finished: boolean };
-  home: { id: number; name: string; logo: string }; away: { id: number; name: string; logo: string };
-  goals: { home: number | null; away: number | null };
-}
-interface PoolMatch {
-  fixture: PoolFixtureLite; locked: boolean;
-  probs: { home: number; draw: number; away: number };
-  crowd: { home: number; draw: number; away: number; total: number };
-  predictionsCount: number; poolAvailable: number;
-  myPrediction: PoolMyPrediction | null; settlement: PoolSettlement | null;
-}
-interface PoolMeStats { points: number; correct: number; exact: number; played: number; currentStreak: number; rank: number | null; badges: string[]; }
-
-const poolKickFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: true });
-
-function ScoreStepper({ value, onChange, disabled, label }: { value: number; onChange: (v: number) => void; disabled?: boolean; label: string }) {
-  return (
-    <div className="flex items-center gap-1.5" aria-label={label}>
-      <button
-        type="button"
-        disabled={disabled || value >= 9}
-        onClick={() => onChange(value + 1)}
-        className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-background text-base font-black text-foreground transition-colors hover:border-primary/50 disabled:opacity-30"
-      >
-        +
-      </button>
-      <span className="w-9 text-center text-2xl font-black tabular-nums text-foreground">{value}</span>
-      <button
-        type="button"
-        disabled={disabled || value <= 0}
-        onClick={() => onChange(value - 1)}
-        className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-background text-base font-black text-foreground transition-colors hover:border-primary/50 disabled:opacity-30"
-      >
-        −
-      </button>
-    </div>
-  );
-}
-
-function PoolMatchCard({ m, loggedIn }: { m: PoolMatch; loggedIn: boolean }) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const fx = m.fixture;
-  const [h, setH] = useState(m.myPrediction?.predHome ?? 0);
-  const [a, setA] = useState(m.myPrediction?.predAway ?? 0);
-  const submitted = m.myPrediction != null;
-  const settled = m.myPrediction != null && m.myPrediction.status !== "pending";
-  const canPredict = !m.locked && !fx.status.live && !fx.status.finished;
-
-  const submit = useMutation({
-    mutationFn: () =>
-      apiRequest("/api/sports/predictions/pool", {
-        method: "POST",
-        body: JSON.stringify({
-          fixtureId: fx.id,
-          kickoffTs: fx.timestamp,
-          competitionSlug: fx.competitionSlug,
-          homeId: fx.home.id,
-          awayId: fx.away.id,
-          homeName: fx.home.name,
-          awayName: fx.away.name,
-          homeLogo: fx.home.logo,
-          awayLogo: fx.away.logo,
-          predHome: h,
-          predAway: a,
-        }),
-      }),
-    onSuccess: () => {
-      toast({ title: "سُجّل توقّعك ✔", description: `${fx.home.name} ${h} - ${a} ${fx.away.name}` });
-      qc.invalidateQueries({ queryKey: ["/api/sports/predictions/board"] });
-    },
-    onError: (err: any) => {
-      toast({ title: "تعذر حفظ التوقّع", description: err?.message || "حاول مجددًا", variant: "destructive" });
-    },
-  });
-
-  const crowdTotal = m.crowd.total;
-  const side = (t: PoolFixtureLite["home"], v: number, onV: (n: number) => void) => (
-    <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
-      {t.logo ? <img src={t.logo} alt="" className="h-12 w-12 object-contain" loading="lazy" /> : <span className="h-12 w-12 rounded-full bg-muted" />}
-      <span className="line-clamp-2 min-h-[2.5em] text-center text-[13px] font-bold leading-tight text-foreground">{t.name}</span>
-      {canPredict && loggedIn && <ScoreStepper value={v} onChange={onV} disabled={submit.isPending} label={`توقّع أهداف ${t.name}`} />}
-    </div>
-  );
-
-  return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      {/* الترويسة: البطولة + الموعد الكامل (التاريخ ظاهر دائمًا) */}
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/40 px-3.5 py-2">
-        <span className="truncate text-[11px] font-bold text-muted-foreground">{fx.competition || "مباراة"}</span>
-        <span className="shrink-0 text-[11px] font-bold tabular-nums text-muted-foreground">{poolKickFmt.format(new Date(fx.timestamp * 1000))}</span>
-      </div>
-
-      <div className="flex items-start gap-2 px-3.5 pb-3 pt-4">
-        {side(fx.home, h, setH)}
-        <div className="flex shrink-0 flex-col items-center gap-1 pt-3">
-          {settled && m.settlement?.finalHome != null ? (
-            <span className="rounded-lg bg-muted px-2 py-1 text-lg font-black tabular-nums text-foreground" dir="ltr">
-              {m.settlement.finalAway} - {m.settlement.finalHome}
-            </span>
-          ) : (
-            <span className="text-xs font-bold text-muted-foreground">×</span>
-          )}
-          {m.poolAvailable > 0 && (
-            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-black tabular-nums text-primary">
-              وعاء {m.poolAvailable.toLocaleString("en")}
-            </span>
-          )}
-        </div>
-        {side(fx.away, a, setA)}
-      </div>
-
-      {/* اتجاه الجمهور */}
-      {crowdTotal > 0 && (
-        <div className="px-3.5 pb-2">
-          <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted" dir="rtl">
-            <span className="bg-primary" style={{ width: `${(m.crowd.home / crowdTotal) * 100}%` }} />
-            <span className="bg-muted-foreground/40" style={{ width: `${(m.crowd.draw / crowdTotal) * 100}%` }} />
-            <span className="bg-primary/40" style={{ width: `${(m.crowd.away / crowdTotal) * 100}%` }} />
-          </div>
-          <div className="mt-1 text-center text-[10px] tabular-nums text-muted-foreground">{crowdTotal.toLocaleString("en")} توقّع من الجمهور</div>
-        </div>
-      )}
-
-      {/* الحالة / زر الإرسال */}
-      <div className="mt-auto border-t border-border px-3.5 py-2.5">
-        {settled && m.myPrediction ? (
-          <div className="flex items-center justify-between gap-2 text-[12px] font-bold">
-            <span className="text-muted-foreground tabular-nums">توقّعت <span dir="ltr">{m.myPrediction.predAway} - {m.myPrediction.predHome}</span></span>
-            <span className={`rounded-full px-2.5 py-0.5 font-black tabular-nums ${m.myPrediction.pointsAwarded > 0 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
-              {m.myPrediction.pointsAwarded > 0 ? `+${m.myPrediction.pointsAwarded.toLocaleString("en")} نقطة` : "لم تُصب"}
-            </span>
-          </div>
-        ) : !canPredict ? (
-          <div className="text-center text-[12px] font-bold text-muted-foreground">أُقفلت التوقّعات — {fx.status.live ? "المباراة جارية" : fx.status.finished ? "بانتظار التسوية" : "اقترب الانطلاق"}</div>
-        ) : !loggedIn ? (
-          <Link href="/login" className="block rounded-xl bg-primary/10 py-2 text-center text-[12.5px] font-black text-primary transition-colors hover:bg-primary/15">
-            سجّل دخولك للمشاركة في التوقّعات
-          </Link>
-        ) : (
-          <button
-            type="button"
-            disabled={submit.isPending}
-            onClick={() => submit.mutate()}
-            className="w-full rounded-xl bg-primary py-2 text-[12.5px] font-black text-white transition-opacity disabled:opacity-60"
-          >
-            {submit.isPending ? "جارٍ الحفظ…" : submitted ? "تعديل توقّعي" : "سجّل توقّعي"}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PredictionsPane({ slug }: { slug: string }) {
-  const { user } = useAuth();
-  const { data, isLoading } = useQuery<{ matches: PoolMatch[]; me: PoolMeStats | null; jackpot: number }>({
-    queryKey: ["/api/sports/predictions/board"],
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    refetchIntervalInBackground: false,
-  });
-  const all = Array.isArray(data?.matches) ? data!.matches : [];
-  // مباريات هذه البطولة أولًا ثم بقية مباريات المجمّع (اللعبة موحّدة والوعاء مشترك).
-  const mine = all.filter((m) => m.fixture.competitionSlug === slug);
-  const others = all.filter((m) => m.fixture.competitionSlug !== slug);
-  const me = data?.me ?? null;
-
-  if (isLoading) return <TabLoader />;
-
-  return (
-    <div className="space-y-5">
-      {/* شريط المجمّع + إحصائياتي */}
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/20 bg-primary/[0.04] px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-[11px] font-bold text-primary">مجمّع النقاط الحالي</div>
-          <div className="text-2xl font-black tabular-nums text-foreground">{(data?.jackpot ?? 0).toLocaleString("en")} <span className="text-xs font-bold text-muted-foreground">نقطة</span></div>
-        </div>
-        {me && (
-          <div className="flex shrink-0 items-center gap-4 text-center">
-            <div><div className="text-lg font-black tabular-nums text-foreground">{me.points.toLocaleString("en")}</div><div className="text-[10px] text-muted-foreground">نقاطي</div></div>
-            <div><div className="text-lg font-black tabular-nums text-foreground">{me.exact}</div><div className="text-[10px] text-muted-foreground">تامة</div></div>
-            <div><div className="text-lg font-black tabular-nums text-foreground">{me.currentStreak}</div><div className="text-[10px] text-muted-foreground">سلسلتي</div></div>
-            {me.rank != null && <div><div className="text-lg font-black tabular-nums text-primary">#{me.rank}</div><div className="text-[10px] text-muted-foreground">ترتيبي</div></div>}
-          </div>
-        )}
-      </div>
-
-      {all.length === 0 ? (
-        <TabEmpty text="لا مباريات مفتوحة للتوقّع خلال الـ48 ساعة القادمة — عُد قُبيل الجولة." />
-      ) : (
-        <>
-          {mine.length > 0 && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {mine.map((m) => <PoolMatchCard key={m.fixture.id} m={m} loggedIn={!!user} />)}
-            </div>
-          )}
-          {others.length > 0 && (
-            <div>
-              <div className="mb-2.5 text-[12.5px] font-black text-muted-foreground">
-                {mine.length > 0 ? "بقية مباريات المجمّع المفتوحة" : "مباريات المجمّع المفتوحة الآن (الوعاء مشترك عبر البطولات)"}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {others.map((m) => <PoolMatchCard key={m.fixture.id} m={m} loggedIn={!!user} />)}
-              </div>
-            </div>
-          )}
-        </>
-      )}
-
-      <LeaderboardBoard />
-    </div>
-  );
-}
-
 // ---------- حالات مشتركة ----------
 
 function TabLoader() {
@@ -826,7 +601,7 @@ export default function SportsCompetition() {
     const t: TabKey[] = ["matches"];
     if (!comp || comp.hasStandings) t.push("standings");
     if (!comp || comp.hasScorers) t.push("scorers", "assists", "cards");
-    t.push("news", "predictions");
+    t.push("news");
     return t;
   }, [comp]);
 
@@ -951,7 +726,6 @@ export default function SportsCompetition() {
             {tab === "cards" && <CardsPane slug={slug} />}
             {tab === "matches" && <MatchesPane slug={slug} onOpen={setOpenMatch} />}
             {tab === "news" && <NewsPane comp={comp} />}
-            {tab === "predictions" && <PredictionsPane slug={slug} />}
           </div>
 
           <div className="flex items-center justify-center pt-2">

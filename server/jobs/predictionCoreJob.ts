@@ -4,11 +4,16 @@
 // نسخ متعددة آمنًا حتى لو تزامن قائدان لحظيًا.
 
 import cron from "node-cron";
+import { and, eq, gte, inArray } from "drizzle-orm";
+import { db } from "../db";
+import { predictionCompetitions, predictionContests } from "@shared/schema";
 import { isLeader } from "../leaderElection";
 import { isPredictionCoreEnabled } from "../services/predictions/predictionCoreService";
 import { lockDueContests, settleReadyContests } from "../services/predictions/settlementService";
 import { deliverPendingAwards } from "../services/predictions/outboxService";
 import { syncCompetitionFixtures } from "../services/predictions/fixtureAdapter";
+import { isGcPredictionsEnabled } from "../services/gcFeatureFlags";
+import { settleMajlisDuels } from "../services/gcDuelsService";
 
 let isRunning = false;
 
@@ -23,6 +28,7 @@ async function tick(trigger: string): Promise<void> {
     const locked = await lockDueContests();
     const settlement = await settleReadyContests();
     const outbox = await deliverPendingAwards();
+    await settleGulfDuels();
 
     const activity =
       sync.created + sync.rescheduled + sync.resultsSet + sync.voided + sync.errors.length;
@@ -37,6 +43,36 @@ async function tick(trigger: string): Promise<void> {
     console.error("[Prediction Core Job] tick failed:", error);
   } finally {
     isRunning = false;
+  }
+}
+
+/**
+ * تحديات المجلس (رهانات P2P على مباريات خليجي 27) تُسوّى من حالة المباريات
+ * النهائية — كان محفزها job المحرك القديم المتقاعد. settleMajlisDuels
+ * idempotent وتفحص حالة المزود بنفسها، فنمررها مباريات الخليج التي بلغت
+ * حالة نهائية في الساعات الأخيرة.
+ */
+async function settleGulfDuels(): Promise<void> {
+  if (!isGcPredictionsEnabled()) return;
+  try {
+    const rows = await db
+      .select({ ref: predictionContests.externalRef })
+      .from(predictionContests)
+      .innerJoin(
+        predictionCompetitions,
+        eq(predictionCompetitions.id, predictionContests.competitionId),
+      )
+      .where(and(
+        eq(predictionCompetitions.slug, "gulf-cup-27"),
+        eq(predictionContests.contestType, "match_score"),
+        inArray(predictionContests.status, ["settled", "void"]),
+        gte(predictionContests.updatedAt, new Date(Date.now() - 6 * 3_600_000)),
+      ));
+    if (rows.length > 0) {
+      await settleMajlisDuels(rows.map((row) => row.ref));
+    }
+  } catch (error) {
+    console.error("[Prediction Core Job] gulf duels settlement failed:", error);
   }
 }
 
