@@ -1091,6 +1091,7 @@ export default function ArticleEditor() {
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("purpose", "article-hero");
       formData.append("entityType", "article");
       const uploaded = (await apiRequest("/api/media/upload", {
         method: "POST",
@@ -1119,7 +1120,9 @@ export default function ArticleEditor() {
       console.error("Error uploading image:", error);
       toast({
         title: "خطأ",
-        description: "فشل رفع الصورة",
+        description: error instanceof Error && error.message
+          ? error.message
+          : "فشل رفع الصورة — الصيغ المدعومة: JPEG و PNG و WEBP (و HEIC من الآيفون)",
         variant: "destructive",
       });
       return false;
@@ -2904,7 +2907,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   <input
                     id="image-upload"
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/jpg,image/png,image/webp,image/avif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.avif,.heic,.heif"
                     onChange={handleImageUpload}
                     className="hidden"
                   />

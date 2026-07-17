@@ -5,7 +5,12 @@ import { notifySearchEngines, INDEXNOW_KEY } from "./indexNow";
 import { storage } from "./storage";
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
 import { validatePassword } from "./utils/passwordPolicy";
-import { transcodeAvifToWebp, verifyImageMagicBytes } from "./utils/imageVerify";
+import {
+  needsWebpTranscode,
+  transcodeAvifToWebp,
+  transcodeHeicToWebp,
+  verifyImageMagicBytes,
+} from "./utils/imageVerify";
 import { isAllowedMediaUrl } from "./utils/mediaUrl";
 import { extractPgError } from "./utils/pgError";
 import { deleteMediaBlob } from "./services/mediaStorage";
@@ -1716,17 +1721,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
     },
     fileFilter: (req, file, cb) => {
       // GIF removed (security audit M8, 2026-05-11).
+      // HEIC/HEIF accepted then transcoded to WebP (iPhone Camera default).
       const allowedTypes = [
         'image/jpeg',
         'image/jpg',
         'image/png',
         'image/webp',
         'image/avif',
+        'image/heic',
+        'image/heif',
+        'image/heic-sequence',
+        'image/heif-sequence',
       ];
       if (allowedTypes.includes(file.mimetype)) {
         cb(null, true);
       } else {
-        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP, AVIF'));
+        cb(new Error('نوع الملف غير مسموح. الأنواع المسموحة: JPEG, PNG, WEBP, AVIF, HEIC'));
       }
     },
   });
@@ -1770,21 +1780,51 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // (security audit M1, 2026-05-11). multer's fileFilter only
       // trusts the client-declared header; sharp reads the real format.
       if (req.file.mimetype.startsWith('image/')) {
-        const verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        let verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        // iPhone / some browsers mislabel HEIC/AVIF as image/jpeg. If the
+        // bytes are clearly HEIF/AVIF, trust the bytes and continue to
+        // WebP transcode instead of a confusing 400/500.
+        if (
+          !verify.ok &&
+          (verify.detectedFormat === "heif" || verify.detectedFormat === "avif")
+        ) {
+          req.file.mimetype = verify.detectedFormat === "avif" ? "image/avif" : "image/heic";
+          verify = await verifyImageMagicBytes(req.file.buffer, req.file.mimetype);
+        }
         if (!verify.ok) {
           console.warn("[Media Upload] Magic byte verification failed:", verify.reason);
-          return res.status(400).json({ message: "نوع الملف لا يطابق محتواه الفعلي" });
+          const detected = verify.detectedFormat ? ` (المكتشف: ${verify.detectedFormat})` : "";
+          return res.status(400).json({
+            message: `صيغة الصورة غير مدعومة أو لا تطابق نوع الملف المُعلَن${detected}. استخدم JPEG أو PNG أو WEBP (أو HEIC من الآيفون وسيُحوَّل تلقائياً).`,
+          });
         }
       }
 
-      // AVIF input support in Cloudflare Images is plan-dependent. Convert it
-      // once here to universally supported WebP before choosing CF, GCS, or
-      // local storage. The verified source remains subject to the same 10MB cap.
-      if (req.file.mimetype.toLowerCase() === 'image/avif') {
-        req.file.buffer = await transcodeAvifToWebp(req.file.buffer);
-        req.file.mimetype = 'image/webp';
-        req.file.size = req.file.buffer.length;
-        req.file.originalname = req.file.originalname.replace(/\.avif$/i, '.webp');
+      // AVIF / HEIC → WebP before Cloudflare Images or R2 (plan limitations +
+      // iPhone Camera default). Same 10MB cap still applies to the source.
+      const transcodeKind = needsWebpTranscode(req.file.mimetype);
+      if (transcodeKind) {
+        try {
+          req.file.buffer = transcodeKind === "heic"
+            ? await transcodeHeicToWebp(req.file.buffer)
+            : await transcodeAvifToWebp(req.file.buffer);
+          req.file.mimetype = 'image/webp';
+          req.file.size = req.file.buffer.length;
+          req.file.originalname = req.file.originalname.replace(
+            /\.(avif|heic|heif)$/i,
+            '.webp',
+          );
+        } catch (transcodeErr) {
+          console.warn(
+            `[Media Upload] ${transcodeKind.toUpperCase()}→WebP failed:`,
+            transcodeErr instanceof Error ? transcodeErr.message : transcodeErr,
+          );
+          return res.status(400).json({
+            message: transcodeKind === "heic"
+              ? "تعذّر تحويل صورة HEIC من الآيفون. صدّرها كـ JPEG من الصور ثم أعد الرفع."
+              : "تعذّر تحويل صورة AVIF. جرّب JPEG أو PNG أو WEBP.",
+          });
+        }
       }
 
       console.log("[Media Upload] File received:", {
@@ -1975,7 +2015,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Save to media_files table with storage path
+      // Save to media_files. IMPORTANT: return ONLY columns that predate recent
+      // media-library phases. Bare `.returning()` expands to every schema column
+      // (including perceptual_hash from #888). If production hasn't run
+      // push-to-production.sh yet, Postgres rejects RETURNING that column and
+      // the whole upload 500s with "فشل في رفع ملف الوسائط" even after the file
+      // landed in R2/Cloudflare.
       const [mediaFile] = await db
         .insert(mediaFiles)
         .values({
@@ -1999,22 +2044,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           usedIn: entityId ? [entityId] : [],
           usageCount: entityId ? 1 : 0,
         })
-        .returning();
-
-      // Auto-save to mediaUsageLog if entityId provided
-      if (entityType && entityId) {
-        await db.insert(mediaUsageLog).values({
-          mediaId: mediaFile.id,
-          entityType,
-          entityId,
-          usedBy: userId,
-        });
-      }
-
-      // Fetch complete details with folder and uploader
-      // Note: We keep the gs:// path in the database for the proxy to use
-      const [mediaFileWithDetails] = await db
-        .select({
+        .returning({
           id: mediaFiles.id,
           fileName: mediaFiles.fileName,
           originalName: mediaFiles.originalName,
@@ -2033,33 +2063,86 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           keywords: mediaFiles.keywords,
           isFavorite: mediaFiles.isFavorite,
           category: mediaFiles.category,
-          aiAnalysisStatus: mediaFiles.aiAnalysisStatus,
-          aiQualityScore: mediaFiles.aiQualityScore,
-          aiHasSensitiveContent: mediaFiles.aiHasSensitiveContent,
-          isAiGenerated: mediaFiles.isAiGenerated,
-          licenseType: mediaFiles.licenseType,
-          creditText: mediaFiles.creditText,
-          copyrightHolder: mediaFiles.copyrightHolder,
-          rightsVerified: mediaFiles.rightsVerified,
-          rightsNote: mediaFiles.rightsNote,
           usedIn: mediaFiles.usedIn,
           usageCount: mediaFiles.usageCount,
           uploadedBy: mediaFiles.uploadedBy,
           createdAt: mediaFiles.createdAt,
           updatedAt: mediaFiles.updatedAt,
-          folder: mediaFolders,
-          uploader: {
-            id: users.id,
-            email: users.email,
-            firstName: users.firstName,
-            lastName: users.lastName,
-            profileImageUrl: users.profileImageUrl,
-          },
-        })
-        .from(mediaFiles)
-        .leftJoin(mediaFolders, eq(mediaFiles.folderId, mediaFolders.id))
-        .leftJoin(users, eq(mediaFiles.uploadedBy, users.id))
-        .where(eq(mediaFiles.id, mediaFile.id));
+        });
+
+      // Auto-save to mediaUsageLog if entityId provided (best-effort)
+      if (entityType && entityId) {
+        try {
+          await db.insert(mediaUsageLog).values({
+            mediaId: mediaFile.id,
+            entityType,
+            entityId,
+            usedBy: userId,
+          });
+        } catch (usageErr) {
+          console.warn("[Media Upload] mediaUsageLog insert failed:", usageErr instanceof Error ? usageErr.message : usageErr);
+        }
+      }
+
+      // Enrich with folder/uploader + newer library columns. Best-effort: if
+      // production is mid-schema-rollout (missing ai_*/rights_* columns), fall
+      // back to the row we just inserted so the client still gets a usable URL.
+      let mediaFileWithDetails: any = mediaFile;
+      try {
+        const [enriched] = await db
+          .select({
+            id: mediaFiles.id,
+            fileName: mediaFiles.fileName,
+            originalName: mediaFiles.originalName,
+            folderId: mediaFiles.folderId,
+            url: mediaFiles.url,
+            thumbnailUrl: mediaFiles.thumbnailUrl,
+            type: mediaFiles.type,
+            mimeType: mediaFiles.mimeType,
+            size: mediaFiles.size,
+            width: mediaFiles.width,
+            height: mediaFiles.height,
+            title: mediaFiles.title,
+            description: mediaFiles.description,
+            altText: mediaFiles.altText,
+            caption: mediaFiles.caption,
+            keywords: mediaFiles.keywords,
+            isFavorite: mediaFiles.isFavorite,
+            category: mediaFiles.category,
+            aiAnalysisStatus: mediaFiles.aiAnalysisStatus,
+            aiQualityScore: mediaFiles.aiQualityScore,
+            aiHasSensitiveContent: mediaFiles.aiHasSensitiveContent,
+            isAiGenerated: mediaFiles.isAiGenerated,
+            licenseType: mediaFiles.licenseType,
+            creditText: mediaFiles.creditText,
+            copyrightHolder: mediaFiles.copyrightHolder,
+            rightsVerified: mediaFiles.rightsVerified,
+            rightsNote: mediaFiles.rightsNote,
+            usedIn: mediaFiles.usedIn,
+            usageCount: mediaFiles.usageCount,
+            uploadedBy: mediaFiles.uploadedBy,
+            createdAt: mediaFiles.createdAt,
+            updatedAt: mediaFiles.updatedAt,
+            folder: mediaFolders,
+            uploader: {
+              id: users.id,
+              email: users.email,
+              firstName: users.firstName,
+              lastName: users.lastName,
+              profileImageUrl: users.profileImageUrl,
+            },
+          })
+          .from(mediaFiles)
+          .leftJoin(mediaFolders, eq(mediaFiles.folderId, mediaFolders.id))
+          .leftJoin(users, eq(mediaFiles.uploadedBy, users.id))
+          .where(eq(mediaFiles.id, mediaFile.id));
+        if (enriched) mediaFileWithDetails = enriched;
+      } catch (enrichErr) {
+        console.warn(
+          "[Media Upload] Detail enrich failed; returning base row:",
+          enrichErr instanceof Error ? enrichErr.message : enrichErr,
+        );
+      }
 
       console.log("[Media Upload] Media file created:", mediaFileWithDetails.id);
 
@@ -2079,10 +2162,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Phase 7: perceptual-hash dedup — persist the hash and surface an
       // existing visually-identical file so the client can warn the uploader.
+      // assignPerceptualHash is already best-effort (swallows missing-column).
       let duplicateOf = null;
       if (fileType === 'image') {
-        const { assignPerceptualHash } = await import("./services/mediaHashService");
-        duplicateOf = await assignPerceptualHash(mediaFile.id, req.file.buffer);
+        try {
+          const { assignPerceptualHash } = await import("./services/mediaHashService");
+          duplicateOf = await assignPerceptualHash(mediaFile.id, req.file.buffer);
+        } catch (hashErr) {
+          console.warn("[Media Upload] Hash step failed:", hashErr instanceof Error ? hashErr.message : hashErr);
+        }
       }
 
       res.json({
@@ -2100,6 +2188,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       if (error.message?.includes('نوع الملف')) {
         return res.status(400).json({ message: error.message });
+      }
+
+      // Schema drift (e.g. perceptual_hash / ai_* columns in code but not in prod DB)
+      const pgMessage = String(error?.message || error?.cause?.message || "");
+      if (/perceptual_hash|ai_analysis_status|rights_verified|column .* does not exist/i.test(pgMessage)) {
+        return res.status(500).json({
+          message: "فشل في رفع ملف الوسائط — مخطط قاعدة البيانات غير محدَّث. شغّل ./push-to-production.sh ثم أعد المحاولة.",
+          code: "SCHEMA_DRIFT",
+        });
       }
 
       res.status(500).json({ message: "فشل في رفع ملف الوسائط" });
