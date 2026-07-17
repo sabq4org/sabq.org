@@ -42,12 +42,18 @@ export function isSportmonksConfigured(): boolean {
   return Boolean((process.env.SPORTMONKS_API_TOKEN || "").trim());
 }
 
+/** مهلة قصيرة افتراضياً — إثراءات مركز المباراة أفضل أن تفشل سريعاً من أن تعلّق الصفحة 15ث. */
+function smHttpTimeoutMs(): number {
+  const n = Number(process.env.SPORTMONKS_HTTP_TIMEOUT_MS ?? 3500);
+  return Number.isFinite(n) && n >= 1000 ? Math.min(n, 15_000) : 3500;
+}
+
 async function smFetch(url: URL): Promise<any> {
   const token = (process.env.SPORTMONKS_API_TOKEN || "").trim();
   if (!token) throw new Error("SPORTMONKS_API_TOKEN is not set");
   url.searchParams.set("api_token", token);
 
-  const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  const response = await fetch(url, { signal: AbortSignal.timeout(smHttpTimeoutMs()) });
   if (!response.ok) {
     throw new Error(`[SportMonks] HTTP ${response.status} for ${url.pathname}`);
   }

@@ -124,7 +124,10 @@ struct SpMatchCenter: View {
     }
 
     private var hasAnalysis: Bool {
-        (xg?.available ?? false) || (momentum?.available ?? false)
+        // للمباريات التي بدأت: أظهر التبويب فورًا وحمّل الإثراء عند الدخول
+        // (سابقًا كان ينتظر 4–5 طلبات SportMonks متوازية قبل ظهور التبويب).
+        if fixture?.started == true { return true }
+        return (xg?.available ?? false) || (momentum?.available ?? false)
             || (pressure?.available ?? false) || (facts?.available ?? false)
     }
 
@@ -301,6 +304,10 @@ struct SpMatchCenter: View {
         .task(id: fixtureId) { await load() }
         // الحكم بعد ظهور التفاصيل — لا يزاحم طلب التفاصيل الأساسي على الشبكة البطيئة.
         .task(id: detail?.fixture.id) { await loadReferee() }
+        // إثراء ثقيل حسب التبويب فقط — يمنع عاصفة طلبات SportMonks عند الفتح.
+        .onChange(of: segment) { _, s in
+            Task { await ensureSegmentData(s) }
+        }
         // تحديث لحظي تلقائي أثناء اللعب — الأهداف/الكروت/الدقيقة/النتيجة تتجدّد
         // ذاتيًّا كما في الويب دون سحب-لتحديث يدوي. يتوقّف عند الانتهاء/البُعد.
         .task(id: detail?.fixture.id) { await pollLive() }
@@ -1957,14 +1964,13 @@ struct SpMatchCenter: View {
         await loadSecondaryEnrichments()
     }
 
-    /// موجة 1 — تعليق/تشكيلة/H2H/ترتيب/توقّع/تقديم (ما يظهر قرب الترويسة).
+    /// موجة 1 — ما يظهر قرب الترويسة دون عاصفة طلبات ثقيلة.
     private func loadPrimaryEnrichments() async {
         let f = preview ?? detail?.fixture
         let needExpected = detail.map { d in
             !d.fixture.status.finished && !d.lineups.contains(where: { !$0.startXI.isEmpty })
         } ?? false
         let slug = f?.competitionSlug ?? ""
-        let upcoming = f.map { !$0.started } ?? false
 
         async let commentaryOpt = (try? APIClient.shared.fetchCommentary(matchId: fixtureId))
         async let expectedOpt: SpExpectedLineups? = needExpected
@@ -1986,47 +1992,84 @@ struct SpMatchCenter: View {
             for row in st.standings { m[row.team.id] = VaraTeamStrength(row: row) }
             return m.isEmpty ? nil : m
         }()
-        async let previewOpt: SpMatchPreview? = upcoming
-            ? (try? await APIClient.shared.get(
-                SpMatchPreview.self, path: "/sports/match/\(fixtureId)/preview", apiRoot: URLConstants.publicAPI))
-            : nil
-        async let tvOpt: SpMatchTv? = upcoming
+        // tv خفيف؛ المعاينة الذكية/الهدافون تُؤجَّل لتبويب «تقديم» (كانت ~10ث)
+        async let tvOpt: SpMatchTv? = (f.map { !$0.started } ?? false)
             ? (try? await APIClient.shared.get(
                 SpMatchTv.self, path: "/sports/match/\(fixtureId)/tv", apiRoot: URLConstants.publicAPI))
             : nil
-        async let homeScOpt: SpTeamScorersResponse? = {
-            guard upcoming, let f else { return nil }
-            return try? await APIClient.shared.get(
-                SpTeamScorersResponse.self, path: "/sports/team/\(f.home.id)/scorers", apiRoot: URLConstants.publicAPI)
-        }()
-        async let awayScOpt: SpTeamScorersResponse? = {
-            guard upcoming, let f else { return nil }
-            return try? await APIClient.shared.get(
-                SpTeamScorersResponse.self, path: "/sports/team/\(f.away.id)/scorers", apiRoot: URLConstants.publicAPI)
-        }()
 
         self.commentary = await commentaryOpt
         self.expectedLineup = await expectedOpt
         self.h2h = await h2hOpt
         if let m = await strengthOpt { self.strength = m }
-        self.previewNote = await previewOpt
         self.tv = await tvOpt
-        self.homeScorers = (await homeScOpt)?.scorers ?? []
-        self.awayScorers = (await awayScOpt)?.scorers ?? []
     }
 
-    /// موجة 2 — مخططات اختيارية بعد أول محتوى مفيد.
+    /// موجة 2 — حقائق للأحداث فقط؛ بقية المخططات عند فتح تبويبها.
     private func loadSecondaryEnrichments() async {
-        async let xgOpt = (try? APIClient.shared.fetchXg(matchId: fixtureId))
-        async let momOpt = (try? APIClient.shared.fetchMomentum(matchId: fixtureId))
-        async let presOpt = (try? APIClient.shared.fetchPressure(matchId: fixtureId))
-        async let factsOpt = (try? APIClient.shared.fetchMatchFacts(matchId: fixtureId))
-        async let ratingsOpt = (try? APIClient.shared.fetchMatchPlayers(matchId: fixtureId))
-        self.xg = await xgOpt
-        self.momentum = await momOpt
-        self.pressure = await presOpt
-        self.facts = await factsOpt
-        self.ratings = await ratingsOpt
+        if facts == nil {
+            self.facts = try? await APIClient.shared.fetchMatchFacts(matchId: fixtureId)
+        }
+        await ensureSegmentData(effectiveSegment)
+    }
+
+    /// جلب كسول لإثراء التبويب الحالي — يمنع 5+ طلبات SportMonks عند كل فتح.
+    private func ensureSegmentData(_ s: Segment) async {
+        switch s {
+        case .preview:
+            let f = preview ?? detail?.fixture
+            guard let f, !f.started else { return }
+            if previewNote == nil {
+                previewNote = try? await APIClient.shared.get(
+                    SpMatchPreview.self, path: "/sports/match/\(fixtureId)/preview", apiRoot: URLConstants.publicAPI)
+            }
+            if homeScorers.isEmpty {
+                homeScorers = (try? await APIClient.shared.get(
+                    SpTeamScorersResponse.self, path: "/sports/team/\(f.home.id)/scorers", apiRoot: URLConstants.publicAPI)
+                )?.scorers ?? []
+            }
+            if awayScorers.isEmpty {
+                awayScorers = (try? await APIClient.shared.get(
+                    SpTeamScorersResponse.self, path: "/sports/team/\(f.away.id)/scorers", apiRoot: URLConstants.publicAPI)
+                )?.scorers ?? []
+            }
+        case .analysis:
+            async let xgOpt: SpXg? = {
+                if let xg { return xg }
+                return try? await APIClient.shared.fetchXg(matchId: fixtureId)
+            }()
+            async let momOpt: SpMomentum? = {
+                if let momentum { return momentum }
+                return try? await APIClient.shared.fetchMomentum(matchId: fixtureId)
+            }()
+            async let presOpt: SpPressure? = {
+                if let pressure { return pressure }
+                return try? await APIClient.shared.fetchPressure(matchId: fixtureId)
+            }()
+            self.xg = await xgOpt
+            self.momentum = await momOpt
+            self.pressure = await presOpt
+            if facts == nil {
+                self.facts = try? await APIClient.shared.fetchMatchFacts(matchId: fixtureId)
+            }
+        case .ratings:
+            if ratings == nil {
+                self.ratings = try? await APIClient.shared.fetchMatchPlayers(matchId: fixtureId)
+            }
+        case .stats:
+            if xg == nil {
+                self.xg = try? await APIClient.shared.fetchXg(matchId: fixtureId)
+            }
+            if facts == nil {
+                self.facts = try? await APIClient.shared.fetchMatchFacts(matchId: fixtureId)
+            }
+        case .events:
+            if facts == nil {
+                self.facts = try? await APIClient.shared.fetchMatchFacts(matchId: fixtureId)
+            }
+        case .commentary, .lineups, .h2h:
+            break
+        }
     }
 
     private func recordMatchViewIfNeeded() async {

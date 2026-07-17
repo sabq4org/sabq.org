@@ -393,11 +393,13 @@ async function tsGet(path: string, params: Record<string, string> = {}): Promise
   let json: any;
   try {
     json = await httpsGetJson(url, TS_HTTP_TIMEOUT_MS);
-  } catch {
-    // خطأ شبكة عابر (socket hang up / مهلة): محاولة ثانية واحدة قبل إشهار
-    // الفشل — تقي من تفعيل قاطع الدائرة (60ث) بسبب عطل لحظة واحدة
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // المهلة = المزود بطيء؛ إعادة المحاولة تضاعف انتظار المستخدم (~8ث) بلا فائدة.
+    // نعيد المحاولة فقط لأعطال شبكة عابرة (hang up / reset).
+    if (msg.includes("انتهت المهلة") || /timeout/i.test(msg)) throw err;
     await new Promise((r) => setTimeout(r, 150));
-    json = await httpsGetJson(url, TS_HTTP_TIMEOUT_MS);
+    json = await httpsGetJson(url, Math.min(TS_HTTP_TIMEOUT_MS, 2500));
   }
   // الأخطاء تأتي 200 بجسم {err:"..."} (نقطة محجوبة / IP غير مُدرَج)
   if (json && typeof json === "object" && "err" in json) {

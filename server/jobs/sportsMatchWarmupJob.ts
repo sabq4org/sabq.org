@@ -15,9 +15,20 @@ import { isLeader } from "../leaderElection";
 import {
   getGlobalTodayFixtures,
   getMatchDetail,
+  getSportsFixtureIdentity,
   isSaudiLeagueConfigured,
   type SplLiveBoardItem,
 } from "../services/saudiLeagueService";
+import {
+  getCommentary,
+  getMatchFacts,
+  getMatchReferee,
+  getMomentum,
+  getPressure,
+  getXg,
+  isSportmonksConfigured,
+  resolveSmIdByNames,
+} from "../services/sportmonksService";
 
 let isRunning = false;
 
@@ -49,7 +60,31 @@ async function tick(trigger: string): Promise<void> {
 
     const limit = pLimit(2);
     const results = await Promise.allSettled(
-      targets.map((fx) => limit(() => getMatchDetail(fx.id))),
+      targets.map((fx) =>
+        limit(async () => {
+          await getMatchDetail(fx.id);
+          // تسخين إثراء SportMonks (حقائق/xG/زخم…) حتى لا يتجمّد مركز المباراة على أول فتح
+          if (!isSportmonksConfigured()) return;
+          const identity = await getSportsFixtureIdentity(fx.id).catch(() => null);
+          if (!identity) return;
+          const smId = await resolveSmIdByNames({
+            key: `spl:${fx.id}`,
+            kickoffIso: identity.kickoffIso,
+            homeNameEn: identity.homeNameEn,
+            awayNameEn: identity.awayNameEn,
+          }).catch(() => null);
+          if (!smId) return;
+          const opts = { directSmId: smId };
+          await Promise.allSettled([
+            getMatchFacts(fx.id, opts),
+            getXg(fx.id, opts),
+            getMomentum(fx.id, opts),
+            getPressure(fx.id, opts),
+            getCommentary(fx.id, opts),
+            getMatchReferee(fx.id, opts),
+          ]);
+        }),
+      ),
     );
     const warmed = results.filter((r) => r.status === "fulfilled").length;
     if (trigger === "startup" || warmed < targets.length) {
