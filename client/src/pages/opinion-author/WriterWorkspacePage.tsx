@@ -162,6 +162,87 @@ function greeting(): string {
   return "مساء الإبداع";
 }
 
+const WEEKDAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+
+type ScheduleBannerData = {
+  weekday: number;
+  publishTime: string;
+  nextPublishAt: string;
+  submitDeadline: string;
+  state: "ok" | "reminder" | "late";
+  hasUpcoming: boolean;
+  lastPublishedAt: string | null;
+};
+
+/** بانر ثابت أعلى لوحة الكاتب: يومه المخصص وموعد مقالته القادمة، بثلاث حالات */
+function WriterScheduleBanner() {
+  const { data } = useQuery<{ banner: ScheduleBannerData | null }>({
+    queryKey: ["/api/opinion-author/schedule"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const banner = data?.banner;
+  if (!banner) return null;
+
+  const fmt = (iso: string, withTime = true) =>
+    format(new Date(iso), withTime ? "EEEE d MMMM — h:mm a" : "EEEE d MMMM", { locale: ar });
+
+  const styles = {
+    ok: {
+      card: "border-r-4 border-r-primary",
+      iconWrap: "bg-primary/10 text-primary",
+      Icon: CalendarClock,
+    },
+    reminder: {
+      card: "border-r-4 border-r-amber-500",
+      iconWrap: "bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-400",
+      Icon: BellRing,
+    },
+    late: {
+      card: "border-r-4 border-r-red-500",
+      iconWrap: "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400",
+      Icon: CircleX,
+    },
+  }[banner.state];
+
+  return (
+    <Card className={`${styles.card} shadow-none`} dir="rtl">
+      <CardContent className="flex items-start gap-3 p-3 sm:p-4">
+        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${styles.iconWrap}`}>
+          <styles.Icon className="h-5 w-5" />
+        </span>
+        <div className="space-y-0.5">
+          <p className="text-sm font-bold sm:text-base">
+            {banner.state === "late"
+              ? "فات موعد النشر لهذا الأسبوع"
+              : banner.state === "reminder"
+                ? "تذكير: اقترب موعد مقالتك"
+                : `يومك المخصص للنشر: ${WEEKDAYS_AR[banner.weekday]}`}
+          </p>
+          <p className="text-xs text-muted-foreground sm:text-sm">
+            {banner.state === "late" ? (
+              <>
+                لم تُنشر مقالة في موعدك الماضي. عند إرسال مقالتك الآن ستُجدول ليوم{" "}
+                <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>، أو تواصل مع
+                المحررين عبر الاستفسارات.
+              </>
+            ) : banner.hasUpcoming ? (
+              <>
+                مقالتك القادمة في مسار النشر — موعدها{" "}
+                <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>. شكراً لالتزامك.
+              </>
+            ) : (
+              <>
+                مقالتك القادمة تُنشر <b className="text-foreground">{fmt(banner.nextPublishAt)}</b>.
+                آخر موعد للإرسال: <b className="text-foreground">{fmt(banner.submitDeadline, false)}</b>.
+              </>
+            )}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function WriterWorkspacePage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
@@ -293,6 +374,7 @@ export default function WriterWorkspacePage() {
     <DashboardLayout>
       <div className="relative min-h-full w-full text-right" dir="rtl" style={{ direction: "rtl" }}>
         <div className="w-full space-y-3 p-1 sm:space-y-5 sm:p-0" dir="rtl">
+          <WriterScheduleBanner />
           <section className="rounded-xl border border-border bg-card p-3 sm:rounded-2xl sm:p-5 md:p-6" dir="rtl">
             <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-2 sm:space-y-3">

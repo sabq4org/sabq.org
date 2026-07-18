@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -98,6 +98,8 @@ type OpinionMetrics = {
 };
 
 type StatusKey = "total" | "pending_review" | "approved" | "published";
+
+const WEEKDAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
 function SortableRow({ article, children }: { article: OpinionArticle; children: React.ReactNode }) {
   const {
@@ -219,6 +221,11 @@ export default function OpinionManagement() {
   const [reviewAction, setReviewAction] = useState<"approve" | "reject" | "request_revision" | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
 
+  // حوار النشر: يُعبَّأ الموعد تلقائياً من اليوم المخصص للكاتب ويبقى قابلاً للتغيير
+  const [publishingArticle, setPublishingArticle] = useState<OpinionArticle | null>(null);
+  const [publishScheduledAt, setPublishScheduledAt] = useState("");
+  const publishPrefilledForRef = useRef<string | null>(null);
+
   const [selectedArticles, setSelectedArticles] = useState<Set<string>>(new Set());
   const [localArticles, setLocalArticles] = useState<OpinionArticle[]>([]);
 
@@ -331,16 +338,26 @@ export default function OpinionManagement() {
   });
 
   const publishMutation = useMutation({
-    mutationFn: async (articleId: string) => {
+    mutationFn: async ({ articleId, scheduledAt }: { articleId: string; scheduledAt?: string }) => {
       await apiRequest(`/api/dashboard/opinion/${articleId}/publish`, {
         method: "POST",
+        ...(scheduledAt
+          ? {
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ scheduledAt }),
+            }
+          : {}),
       });
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/opinion"] });
+      setPublishingArticle(null);
+      setPublishScheduledAt("");
       toast({
-        title: "تم النشر",
-        description: "تم نشر المقال بنجاح",
+        title: variables.scheduledAt ? "تمت الجدولة" : "تم النشر",
+        description: variables.scheduledAt
+          ? "سيُنشر المقال تلقائياً في الموعد المحدد"
+          : "تم نشر المقال بنجاح",
       });
     },
     onError: () => {
@@ -351,6 +368,32 @@ export default function OpinionManagement() {
       });
     },
   });
+
+  // الموعد المقترح من اليوم المخصص لكاتب المقال قيد النشر
+  const { data: nextSlotData } = useQuery<{
+    suggestion: { weekday: number; publishTime: string; nextSlot: string } | null;
+  }>({
+    queryKey: [`/api/opinion-writers/${publishingArticle?.author?.id}/next-slot`],
+    enabled: !!publishingArticle?.author?.id,
+    staleTime: 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (!publishingArticle || !nextSlotData?.suggestion?.nextSlot) return;
+    if (publishPrefilledForRef.current === publishingArticle.id) return;
+    publishPrefilledForRef.current = publishingArticle.id;
+    const d = new Date(nextSlotData.suggestion.nextSlot);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setPublishScheduledAt(
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    );
+  }, [publishingArticle, nextSlotData]);
+
+  const handlePublishClick = (article: OpinionArticle) => {
+    publishPrefilledForRef.current = null;
+    setPublishScheduledAt("");
+    setPublishingArticle(article);
+  };
 
   const handleApprove = (article: OpinionArticle) => {
     setReviewingArticle(article);
@@ -753,7 +796,7 @@ export default function OpinionManagement() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    onClick={() => publishMutation.mutate(article.id)}
+                                    onClick={() => handlePublishClick(article)}
                                     className="text-indigo-600 hover:text-indigo-700"
                                     data-testid={`button-publish-${article.id}`}
                                     title="نشر"
@@ -900,7 +943,7 @@ export default function OpinionManagement() {
                       <Button
                         size="sm"
                         variant="default"
-                        onClick={() => publishMutation.mutate(article.id)}
+                        onClick={() => handlePublishClick(article)}
                         className="flex-1"
                         data-testid={`button-publish-mobile-${article.id}`}
                       >
@@ -996,6 +1039,92 @@ export default function OpinionManagement() {
                 : reviewAction === "request_revision"
                   ? "إرسال طلب التعديل"
                   : "تأكيد الرفض"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!publishingArticle}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPublishingArticle(null);
+            setPublishScheduledAt("");
+          }
+        }}
+      >
+        <DialogContent data-testid="dialog-publish-opinion">
+          <DialogHeader>
+            <DialogTitle>نشر المقال</DialogTitle>
+            <DialogDescription>{publishingArticle?.title}</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {nextSlotData?.suggestion ? (
+              <p className="text-sm text-muted-foreground">
+                اليوم المخصص للكاتب هو{" "}
+                <b className="text-foreground">
+                  {WEEKDAYS_AR[nextSlotData.suggestion.weekday]} — {nextSlotData.suggestion.publishTime}
+                </b>
+                ، وعُبِّئ الموعد المقترح تلقائياً. يمكنك تعديله أو النشر فوراً.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                لا يوجد يوم نشر مخصص لهذا الكاتب — يمكنك النشر فوراً أو تحديد موعد يدوياً.
+              </p>
+            )}
+            <div>
+              <label className="text-sm font-medium mb-1 block" htmlFor="publish-scheduled-at">
+                موعد النشر
+              </label>
+              <Input
+                id="publish-scheduled-at"
+                type="datetime-local"
+                value={publishScheduledAt}
+                onChange={(e) => setPublishScheduledAt(e.target.value)}
+                data-testid="input-publish-scheduled-at"
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPublishingArticle(null);
+                setPublishScheduledAt("");
+              }}
+              data-testid="button-cancel-publish"
+            >
+              إلغاء
+            </Button>
+            <Button
+              variant="outline"
+              disabled={publishMutation.isPending}
+              onClick={() =>
+                publishingArticle && publishMutation.mutate({ articleId: publishingArticle.id })
+              }
+              data-testid="button-publish-now"
+            >
+              نشر فوراً
+            </Button>
+            <Button
+              disabled={
+                publishMutation.isPending ||
+                !publishScheduledAt ||
+                new Date(publishScheduledAt).getTime() <= Date.now()
+              }
+              onClick={() =>
+                publishingArticle &&
+                publishMutation.mutate({
+                  articleId: publishingArticle.id,
+                  scheduledAt: new Date(publishScheduledAt).toISOString(),
+                })
+              }
+              data-testid="button-publish-scheduled"
+            >
+              <Send className="ml-1.5 h-4 w-4" />
+              جدولة للموعد
             </Button>
           </DialogFooter>
         </DialogContent>
