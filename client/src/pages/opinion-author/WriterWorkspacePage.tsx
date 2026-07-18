@@ -356,9 +356,11 @@ export default function WriterWorkspacePage() {
   const unreadNotificationsCount = notificationsQuery.data?.unread ?? unreadNotifications.length;
   const openEditorialNotification = (notification: EditorialNotification) => {
     markNotificationReadMutation.mutate(notification.id);
-    // دعوات الاستطلاع تفتح رابط المدعو الشخصي بدل تبويب المقالات
+    // دعوات الاستطلاع تفتح رابط المدعو الشخصي بدل تبويب المقالات.
+    // deepLink يُخزَّن بعرف المنصة sabq://survey/<token>؛ الويب يحوّله لمساره.
     if (notification.type === "survey_invite") {
-      if (notification.deepLink) window.open(notification.deepLink, "_blank", "noopener");
+      const token = notification.deepLink?.split("/").filter(Boolean).pop();
+      if (token) window.open(`/survey/${token}`, "_blank", "noopener");
       return;
     }
     setActiveTab("articles");

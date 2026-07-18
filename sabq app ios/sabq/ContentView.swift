@@ -128,6 +128,9 @@ struct ContentView: View {
                 .navigationDestination(for: EditorialNotificationsRoute.self) { _ in
                     EditorialNotificationsView()
                 }
+                .navigationDestination(for: SurveyDeepLinkRoute.self) { route in
+                    SurveyView(token: route.token)
+                }
                 .navigationDestination(for: ContributorDashboardRoute.self) { _ in
                     ContributorDashboardView()
                 }
@@ -349,6 +352,9 @@ struct ContentView: View {
         case .asianCupMatch(let id):
             SabqAnalytics.notificationOpen(type: "asian-cup-match", articleId: String(id))
             deepLinkMatch = DeepLinkMatch(id: id, competition: "asian-cup")
+        case .survey(let token):
+            SabqAnalytics.notificationOpen(type: "survey", articleId: nil)
+            navigationPath.append(SurveyDeepLinkRoute(token: token))
         }
     }
 }
@@ -391,3 +397,9 @@ struct DraftDeepLinkRoute: Hashable {
 /// Opens the list of articles the editor sent back for revision. Used
 /// by the "مقالات تنتظر التعديل" card in Settings.
 struct ArticleRevisionsRoute: Hashable {}
+
+/// Opens the personal survey screen from a `sabq://survey/<token>` deep
+/// link (push tap) or from the pending-survey card / notifications list.
+struct SurveyDeepLinkRoute: Hashable {
+    let token: String
+}

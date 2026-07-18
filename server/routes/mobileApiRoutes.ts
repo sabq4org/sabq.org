@@ -6075,7 +6075,23 @@ router.delete("/live-activity/start-token", async (req: Request, res: Response) 
 // POST   /api/v1/notifications/read-all        — mark every unread row read
 // GET    /api/v1/notifications/preferences     — current per-type toggles
 // PUT    /api/v1/notifications/preferences     — update toggles
+// GET    /api/v1/surveys/mine                  — دعوات الاستطلاع المفتوحة لبطاقة «بانتظارك»
 // ==========================================
+router.get("/surveys/mine", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "تسجيل الدخول مطلوب" });
+    }
+    const { getOpenInvitationsForUser } = await import("../services/surveyService");
+    const items = await getOpenInvitationsForUser(session.userId);
+    res.json({ success: true, items });
+  } catch (error) {
+    console.error("[Mobile API] GET /surveys/mine error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب الاستطلاعات" });
+  }
+});
+
 router.get("/notifications", async (req: Request, res: Response) => {
   try {
     const session = await verifyMemberSession(req);

@@ -128,6 +128,11 @@ const EXEMPT_PATHS = [
   // real protection. Exact route only (the authenticated /optimize variant
   // does NOT start with this string and remains CSRF-protected).
   "/api/prompt-studio/optimize-public",
+  // Survey responses via personal token links (/survey/<token>). The token
+  // itself is the credential (unauthenticated, unguessable, one response per
+  // invitation enforced server-side) and the native apps submit without any
+  // cookie session, so the session-bound CSRF token adds no real protection.
+  "/api/public/surveys/",
 ];
 
 // Precise exemptions for anonymous, header-less telemetry routes that live

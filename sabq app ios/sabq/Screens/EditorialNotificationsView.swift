@@ -341,6 +341,7 @@ struct EditorialNotificationsView: View {
         case "rejected":       return ("xmark.octagon.fill", SabqTheme.coral)
         case "needs_revision": return ("pencil.and.scribble", SabqTheme.primaryEnd)
         case "archived":       return ("archivebox.fill", SabqTheme.tertiaryInk)
+        case "survey_invite":  return ("checklist", SabqTheme.sky)
         default:               return ("bell.fill", SabqTheme.secondaryInk)
         }
     }
@@ -515,6 +516,7 @@ struct EditorialNotificationDetailView: View {
         case "rejected":       return ("xmark.octagon.fill", SabqTheme.coral, "اعتذار")
         case "needs_revision": return ("pencil.and.scribble", SabqTheme.primaryEnd, "طلب تعديل")
         case "archived":       return ("archivebox.fill", SabqTheme.tertiaryInk, "أرشفة")
+        case "survey_invite":  return ("checklist", SabqTheme.sky, "دعوة استطلاع")
         default:               return ("bell.fill", SabqTheme.secondaryInk, "إشعار")
         }
     }
@@ -728,6 +730,12 @@ struct EditorialNotificationDetailView: View {
             guard let id = item.articleId, !id.isEmpty else { return nil }
             if isResubmittedRevision { return nil }
             return ActionDescriptor(title: "افتح للتعديل", icon: "pencil.and.list.clipboard", deepLink: .draft(id: id))
+        case "survey_invite":
+            // deepLink carries sabq://survey/<token>; reuse the shared
+            // parser so the button lands on SurveyView like a push tap.
+            guard let raw = item.deepLink, let url = URL(string: raw),
+                  case let .survey(token)? = NotificationsStore.shared.parseSabqDeepLink(url: url) else { return nil }
+            return ActionDescriptor(title: "شارك برأيك الآن", icon: "checklist", deepLink: .survey(token: token))
         case "scheduled", "rejected", "archived":
             // No actionable destination: scheduled has no detail page
             // until publish, and rejected/archived articles aren't
