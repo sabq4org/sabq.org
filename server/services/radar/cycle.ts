@@ -11,7 +11,12 @@ import { analyzeItems } from "./analyst";
 import { processAlerts } from "./alerts";
 import { clusterRadarItems, itemsNeedingClustering } from "./clusterer";
 import { fetchSource } from "./fetcher";
-import { isClusteringEnabled, isMomentumEnabled, isRelevanceEnabled } from "./flags";
+import {
+  isClusteringEnabled,
+  isMomentumEnabled,
+  isRadarForceDisabled,
+  isRelevanceEnabled,
+} from "./flags";
 import { refreshStoryMomentum } from "./momentum";
 import { refreshStoryRelevance } from "./relevance";
 import {
@@ -48,6 +53,9 @@ export interface RadarCycleSummary {
 
 /** جلب مصدر واحد يدويًا (زر "جلب الآن" في الواجهة) — يعيد عدد الجديد */
 export async function fetchSingleSource(sourceId: string): Promise<number> {
+  if (isRadarForceDisabled()) {
+    throw new Error("RADAR_FORCE_DISABLED");
+  }
   const source = await getSource(sourceId);
   if (!source) throw new Error("RADAR_SOURCE_NOT_FOUND");
   try {
@@ -74,6 +82,10 @@ export async function runRadarCycle(): Promise<RadarCycleSummary> {
     cleaned: 0,
     errors: 0,
   };
+
+  if (isRadarForceDisabled()) {
+    return summary;
+  }
 
   // 1) الجلب — فشل مصدر واحد لا يوقف البقية
   const due = await sourcesDueForFetch();

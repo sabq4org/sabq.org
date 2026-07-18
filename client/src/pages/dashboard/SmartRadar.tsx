@@ -59,7 +59,6 @@ import {
   Globe,
   Plus,
   Radar,
-  RefreshCw,
   RotateCcw,
   Satellite,
   Send,
@@ -292,23 +291,6 @@ export default function SmartRadar() {
       toast({ title: "❌ فشلت الاستعادة", description: error.message, variant: "destructive" }),
   });
 
-  const runMutation = useMutation({
-    mutationFn: () => apiRequest<{ summary: any }>("/api/radar/run", { method: "POST" }),
-    onSuccess: (data) => {
-      invalidateRadar();
-      queryClient.invalidateQueries({ queryKey: ["/api/radar/sources"] });
-      const s = data?.summary;
-      toast({
-        title: "✅ اكتملت دورة الرادار",
-        description: s
-          ? `مصادر: ${s.sourcesFetched} · جديد: ${s.newItems} · حُلِّل: ${s.analyzed} · تنبيهات: ${s.alertsSent}`
-          : undefined,
-      });
-    },
-    onError: (error: Error) =>
-      toast({ title: "❌ فشلت دورة الرادار", description: error.message, variant: "destructive" }),
-  });
-
   const pendingItemId =
     transformMutation.isPending || exportMutation.isPending
       ? (transformMutation.variables ?? exportMutation.variables)
@@ -321,18 +303,9 @@ export default function SmartRadar() {
         <DashboardPageHeader
           icon={Radar}
           title="رادار سبق الذكي"
-          description="رصد المصادر العالمية وفلترتها بالقيمة الإخبارية وتحويلها إلى مواد جاهزة للتحرير."
+          description="الرصد الآلي والجلب اليدوي متوقفان إجبارياً. يمكن مراجعة المواد والمصادر الموجودة فقط."
           actions={
             <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => runMutation.mutate()}
-              disabled={runMutation.isPending}
-            >
-              <RefreshCw className={`ml-1 h-4 w-4 ${runMutation.isPending ? "animate-spin" : ""}`} />
-              {runMutation.isPending ? "جارٍ الرصد..." : "تشغيل دورة الآن"}
-            </Button>
             <SourcesSheet sources={sources} categories={categories} />
             <WatchesSheet watches={xWatches} categories={categories} />
             <RulesDialog rules={rules} telegramConfigured={stats?.telegramConfigured ?? false} />
@@ -662,7 +635,7 @@ function SourcesSheet({
     onSuccess: () => {
       invalidate();
       setForm(EMPTY_SOURCE_FORM);
-      toast({ title: "✅ أُضيف المصدر — سيُجلب في الدورة القادمة" });
+      toast({ title: "✅ أُضيف المصدر (الجلب متوقف إجبارياً)" });
     },
     onError: (error: Error) =>
       toast({ title: "❌ فشلت إضافة المصدر", description: error.message, variant: "destructive" }),
@@ -677,18 +650,6 @@ function SourcesSheet({
     onSuccess: invalidate,
     onError: (error: Error) =>
       toast({ title: "❌ فشل التعديل", description: error.message, variant: "destructive" }),
-  });
-
-  const fetchNowMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiRequest<{ inserted: number }>(`/api/radar/sources/${id}/fetch`, { method: "POST" }),
-    onSuccess: (data) => {
-      invalidate();
-      queryClient.invalidateQueries({ queryKey: ["/api/radar/items"] });
-      toast({ title: `✅ اكتمل الجلب — ${data?.inserted ?? 0} مادة جديدة` });
-    },
-    onError: (error: Error) =>
-      toast({ title: "❌ فشل الجلب", description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -839,31 +800,14 @@ function SourcesSheet({
                   كل {source.fetchIntervalMinutes} د
                   {source.lastFetchedAt ? ` · آخر جلب ${timeAgo(source.lastFetchedAt)}` : " · لم يُجلب بعد"}
                 </span>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    disabled={fetchNowMutation.isPending}
-                    onClick={() => fetchNowMutation.mutate(source.id)}
-                  >
-                    <RefreshCw
-                      className={`h-3.5 w-3.5 ${
-                        fetchNowMutation.isPending && fetchNowMutation.variables === source.id
-                          ? "animate-spin"
-                          : ""
-                      }`}
-                    />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2 text-red-500"
-                    onClick={() => setDeleteId(source.id)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-red-500"
+                  onClick={() => setDeleteId(source.id)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
               {source.lastError && (
                 <p className="mt-1 text-xs text-red-500 line-clamp-2" dir="ltr">
@@ -955,16 +899,10 @@ function WatchesSheet({
           }),
         }
       ),
-    onSuccess: (data) => {
+    onSuccess: () => {
       invalidate();
       setForm(EMPTY_WATCH_FORM);
-      const inserted = data?.inserted ?? 0;
-      const err = data?.fetchError;
-      toast({
-        title: err ? "⚠️ أُضيفت الرصدة مع خطأ جلب" : `✅ رصدة نشطة — ${inserted} مادة`,
-        description: err ?? undefined,
-        variant: err ? "destructive" : "default",
-      });
+      toast({ title: "✅ أُضيفت الرصدة (الجلب متوقف إجبارياً)" });
     },
     onError: (error: Error) =>
       toast({ title: "❌ فشلت إضافة الرصدة", description: error.message, variant: "destructive" }),
@@ -979,18 +917,6 @@ function WatchesSheet({
     onSuccess: invalidate,
     onError: (error: Error) =>
       toast({ title: "❌ فشل التعديل", description: error.message, variant: "destructive" }),
-  });
-
-  const fetchNowMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiRequest<{ inserted: number }>(`/api/radar/sources/${id}/fetch`, { method: "POST" }),
-    onSuccess: (data) => {
-      invalidate();
-      queryClient.invalidateQueries({ queryKey: ["/api/radar/items"] });
-      toast({ title: `✅ اكتمل الجلب — ${data?.inserted ?? 0} تغريدة جديدة` });
-    },
-    onError: (error: Error) =>
-      toast({ title: "❌ فشل الجلب", description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -1016,7 +942,7 @@ function WatchesSheet({
         <SheetHeader className="text-right">
           <SheetTitle>رصدات إكس</SheetTitle>
           <SheetDescription>
-            حساب أو كلمة أو هاشتاق أو ترند — الحسابات الأولوية تُجلب كل دقيقة (since_id)
+            حساب أو كلمة أو هاشتاق أو ترند — الجلب الآلي واليدوي متوقفان إجبارياً حالياً
           </SheetDescription>
         </SheetHeader>
 
@@ -1129,7 +1055,7 @@ function WatchesSheet({
             disabled={!form.value.trim() || createMutation.isPending}
             onClick={() => createMutation.mutate(form)}
           >
-            {createMutation.isPending ? "جارٍ الإضافة..." : "إضافة الرصدة وجلب فوري"}
+            {createMutation.isPending ? "جارٍ الإضافة..." : "إضافة الرصدة"}
           </Button>
         </div>
 
@@ -1169,21 +1095,6 @@ function WatchesSheet({
                   {watch.lastFetchedAt ? ` · آخر جلب ${timeAgo(watch.lastFetchedAt)}` : " · لم يُجلب بعد"}
                 </span>
                 <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 px-2"
-                    disabled={fetchNowMutation.isPending}
-                    onClick={() => fetchNowMutation.mutate(watch.id)}
-                  >
-                    <RefreshCw
-                      className={`h-3.5 w-3.5 ${
-                        fetchNowMutation.isPending && fetchNowMutation.variables === watch.id
-                          ? "animate-spin"
-                          : ""
-                      }`}
-                    />
-                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
