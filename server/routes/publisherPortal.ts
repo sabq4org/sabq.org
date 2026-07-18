@@ -3,18 +3,28 @@ import { z } from "zod";
 import { getUserPermissions, requireAuth } from "../rbac";
 import {
   addPublisherMemberByEmail,
+  closePublisherRequest,
+  createGuideSection,
   createPublisherMember,
+  createPublisherRequest,
+  deleteGuideSection,
   getPortalArticle,
   getPortalArticles,
   getPortalCreditLogs,
   getPortalOverview,
+  getPublishedGuideSections,
+  listAgencyReviewQueue,
+  listGuideSectionsAdmin,
+  listOpenPublisherRequests,
   listPublisherMembers,
+  listPublishersRich,
   removePublisherMember,
   requestArticleChanges,
   resolvePublisherForUser,
   runPublisherDailyAlerts,
   sendPublisherMonthlyReports,
   submitPortalArticle,
+  updateGuideSection,
 } from "../services/publisherPortalService";
 
 /**
@@ -264,5 +274,151 @@ router.post(
     }
   },
 );
+
+// ============================================
+// دليل الناشر
+// ============================================
+
+router.get("/api/publisher/portal/guide", async (_req, res) => {
+  try {
+    res.json({ sections: await getPublishedGuideSections() });
+  } catch (error) {
+    console.error("[Publisher Portal] guide failed:", error);
+    res.status(500).json({ message: "تعذر جلب دليل الناشر" });
+  }
+});
+
+const guideSectionSchema = z.object({
+  title: z.string().trim().min(2, "العنوان مطلوب"),
+  content: z.string().trim().min(10, "المحتوى مطلوب (10 أحرف على الأقل)"),
+  displayOrder: z.coerce.number().int().min(0).optional(),
+  isPublished: z.boolean().optional(),
+});
+
+router.get("/api/admin/publishers/guide", requireAuth, requirePublisherManagement, async (_req, res) => {
+  try {
+    res.json({ sections: await listGuideSectionsAdmin() });
+  } catch (error) {
+    console.error("[Publisher Portal] admin guide list failed:", error);
+    res.status(500).json({ message: "تعذر جلب أقسام الدليل" });
+  }
+});
+
+router.post("/api/admin/publishers/guide", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const parsed = guideSectionSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+    }
+    const section = await createGuideSection((req.user as { id: string }).id, parsed.data);
+    res.status(201).json(section);
+  } catch (error) {
+    console.error("[Publisher Portal] guide create failed:", error);
+    res.status(500).json({ message: "تعذر إضافة القسم" });
+  }
+});
+
+router.patch("/api/admin/publishers/guide/:id", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const parsed = guideSectionSchema.partial().safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+    }
+    const section = await updateGuideSection((req.user as { id: string }).id, req.params.id, parsed.data);
+    if (!section) return res.status(404).json({ message: "القسم غير موجود" });
+    res.json(section);
+  } catch (error) {
+    console.error("[Publisher Portal] guide update failed:", error);
+    res.status(500).json({ message: "تعذر تحديث القسم" });
+  }
+});
+
+router.delete("/api/admin/publishers/guide/:id", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const deleted = await deleteGuideSection(req.params.id);
+    if (!deleted) return res.status(404).json({ message: "القسم غير موجود" });
+    res.json({ message: "حُذف القسم" });
+  } catch (error) {
+    console.error("[Publisher Portal] guide delete failed:", error);
+    res.status(500).json({ message: "تعذر حذف القسم" });
+  }
+});
+
+// ============================================
+// طلبات الناشرين (تجديد الباقة ...)
+// ============================================
+
+const portalRequestSchema = z.object({
+  type: z.enum(["renewal", "window_extension", "other"]).optional(),
+  message: z.string().trim().max(1000).optional(),
+});
+
+router.post("/api/publisher/portal/requests", async (req, res) => {
+  try {
+    const parsed = portalRequestSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+    }
+    const result = await createPublisherRequest(
+      (req as any).publisher,
+      requestUserId(req),
+      parsed.data,
+    );
+    if (!result.ok) return res.status(result.status).json({ message: result.message });
+    res.status(201).json({ message: result.message });
+  } catch (error) {
+    console.error("[Publisher Portal] request create failed:", error);
+    res.status(500).json({ message: "تعذر إرسال الطلب" });
+  }
+});
+
+router.get("/api/admin/publishers/requests", requireAuth, requirePublisherManagement, async (_req, res) => {
+  try {
+    res.json({ requests: await listOpenPublisherRequests() });
+  } catch (error) {
+    console.error("[Publisher Portal] requests list failed:", error);
+    res.status(500).json({ message: "تعذر جلب الطلبات" });
+  }
+});
+
+router.post("/api/admin/publishers/requests/:id/close", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const closed = await closePublisherRequest(req.params.id, (req.user as { id: string }).id);
+    if (!closed) return res.status(404).json({ message: "الطلب غير موجود أو مغلق بالفعل" });
+    res.json({ message: "أُغلق الطلب" });
+  } catch (error) {
+    console.error("[Publisher Portal] request close failed:", error);
+    res.status(500).json({ message: "تعذر إغلاق الطلب" });
+  }
+});
+
+// ============================================
+// قائمة الناشرين الغنية (بطاقات الإدارة)
+// ============================================
+
+// طابور مراجعة مواد الوكالات — GET كان مفقوداً كلياً (الواجهة كانت
+// تسقط على مسار /:id القديم). المعلقة الأقدم إرسالاً أولاً (SLA).
+router.get("/api/admin/publishers/articles", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    res.json(await listAgencyReviewQueue({ page, limit, status: req.query.status as string | undefined }));
+  } catch (error) {
+    console.error("[Publisher Portal] review queue failed:", error);
+    res.status(500).json({ message: "تعذر جلب طابور المراجعة" });
+  }
+});
+
+router.get("/api/admin/publishers/rich-list", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(60, Math.max(1, parseInt(req.query.limit as string) || 24));
+    const isActive = req.query.isActive === "true" ? true : req.query.isActive === "false" ? false : undefined;
+    res.json(await listPublishersRich({ page, limit, isActive }));
+  } catch (error) {
+    console.error("[Publisher Portal] rich list failed:", error);
+    res.status(500).json({ message: "تعذر جلب قائمة الناشرين" });
+  }
+});
 
 export default router;

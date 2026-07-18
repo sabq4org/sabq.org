@@ -44,6 +44,28 @@ interface PublisherArticle extends Article {
   publisherName?: string;
 }
 
+/** مؤقت SLA للمواد المعلقة: أخضر <4 ساعات، كهرماني <24، أحمر بعدها */
+function SlaChip({ submittedAt }: { submittedAt: string | Date | null }) {
+  if (!submittedAt) return null;
+  const hours = (Date.now() - new Date(submittedAt).getTime()) / 3_600_000;
+  const className = hours < 4
+    ? "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/40 dark:text-green-200"
+    : hours < 24
+      ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-200"
+      : "bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-200";
+  const label = hours < 1
+    ? `${Math.max(1, Math.round(hours * 60))} دقيقة`
+    : hours < 48
+      ? `${Math.round(hours)} ساعة`
+      : `${Math.round(hours / 24)} يوم`;
+  return (
+    <Badge variant="outline" className={`gap-1 ${className}`} data-testid="badge-sla">
+      <Clock className="h-3 w-3" />
+      بانتظار المراجعة منذ {label}
+    </Badge>
+  );
+}
+
 export default function AdminPublisherArticles() {
   useRoleProtection('admin');
   const { toast } = useToast();
@@ -338,10 +360,14 @@ export default function AdminPublisherArticles() {
                         )}
                         {article.status === "draft" && (
                           <div className="flex flex-col items-start gap-1">
-                            <Badge variant="secondary" className="gap-1">
-                              <Clock className="h-3 w-3" />
-                              {article.publisherStatus === "pending" ? "بانتظار المراجعة" : "مسودة"}
-                            </Badge>
+                            {article.publisherStatus === "pending" ? (
+                              <SlaChip submittedAt={article.publisherSubmittedAt as any} />
+                            ) : (
+                              <Badge variant="secondary" className="gap-1">
+                                <Clock className="h-3 w-3" />
+                                مسودة
+                              </Badge>
+                            )}
                             {article.publisherStatus === "needs_changes" && (
                               <Badge variant="outline" className="gap-1 bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/40 dark:text-orange-200">
                                 <MessageSquareWarning className="h-3 w-3" />

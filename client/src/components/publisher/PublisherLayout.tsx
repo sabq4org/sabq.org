@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { LogOut, ChevronDown, Globe, LayoutDashboard, FileText, CreditCard } from "lucide-react";
+import { LogOut, ChevronDown, Globe, LayoutDashboard, FileText, CreditCard, BookOpen } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -58,6 +58,13 @@ const navItems: NavItem[] = [
     label: "سجل الرصيد",
     icon: CreditCard,
     testId: "nav-publisher-credits",
+  },
+  {
+    id: "publisher-guide",
+    href: "/dashboard/publisher/guide",
+    label: "دليل الناشر",
+    icon: BookOpen,
+    testId: "nav-publisher-guide",
   },
 ];
 
