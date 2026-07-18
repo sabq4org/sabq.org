@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { useRoleProtection } from "@/hooks/useRoleProtection";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { AdminPublisherNav } from "@/components/admin/publishers/AdminPublisherNav";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -261,6 +262,8 @@ export default function AdminPublisherArticles() {
         description="راجع المقالات المقدمة من الناشرين واتخذ الإجراء المناسب."
         titleTestId="text-page-title"
       />
+
+      <AdminPublisherNav />
 
       <Card>
         <CardHeader>

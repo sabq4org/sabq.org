@@ -120,10 +120,10 @@ export function PublisherMembersCard({ publisherId }: { publisherId: string }) {
       && createForm.lastName.trim().length >= 2;
 
   return (
-    <Card data-testid="card-publisher-members">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
+    <Card className="border-border/60 h-full" data-testid="card-publisher-members">
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Users className="h-4 w-4" />
           مستخدمو الوكالة
           {members.length > 0 && <Badge variant="secondary">{members.length}</Badge>}
         </CardTitle>
@@ -134,29 +134,29 @@ export function PublisherMembersCard({ publisherId }: { publisherId: string }) {
       </CardHeader>
       <CardContent>
         {isLoading ? (
-          <div className="space-y-3">
-            {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-14" />)}
+          <div className="space-y-2">
+            {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-12" />)}
           </div>
         ) : members.length === 0 ? (
-          <p className="text-muted-foreground text-center py-6">لا يوجد مستخدمون مرتبطون بالوكالة</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">لا يوجد مستخدمون مرتبطون بالوكالة</p>
         ) : (
-          <div className="space-y-2">
+          <div className="divide-y rounded-xl border">
             {members.map((member) => (
               <div
                 key={member.id}
-                className="flex items-center gap-3 rounded-lg border p-3"
+                className="flex items-center gap-3 px-3 py-2.5"
                 data-testid={`member-row-${member.id}`}
               >
                 <Avatar className="h-9 w-9">
                   {member.profileImageUrl && <AvatarImage src={member.profileImageUrl} alt={memberName(member)} />}
                   <AvatarFallback>{memberName(member).slice(0, 1)}</AvatarFallback>
                 </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{memberName(member)}</p>
-                  <p className="text-xs text-muted-foreground truncate" dir="ltr">{member.email}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{memberName(member)}</p>
+                  <p className="truncate text-xs text-muted-foreground" dir="ltr">{member.email}</p>
                 </div>
                 {member.isOwner ? (
-                  <Badge className="gap-1 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" variant="outline">
+                  <Badge className="gap-1 border-amber-200 bg-amber-50 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" variant="outline">
                     <Crown className="h-3 w-3" />
                     مالك الحساب
                   </Badge>
@@ -165,7 +165,8 @@ export function PublisherMembersCard({ publisherId }: { publisherId: string }) {
                     <Badge variant="secondary">موظف</Badge>
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="icon"
+                      className="h-8 w-8 shrink-0"
                       onClick={() => setRemoveTarget(member)}
                       disabled={removeMutation.isPending}
                       title="فك الربط عن الوكالة"
