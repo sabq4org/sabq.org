@@ -450,6 +450,7 @@
         "server/rbac.ts",
         "server/csrf.ts",
         "server/twoFactor.ts",
+        "server/sessionFailoverStore.ts",
         "server/services/memberSessionService.ts",
         "shared/rbac-constants.ts",
         "client/src/hooks/useAuth.ts",
@@ -458,7 +459,7 @@
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
       "owners": ["platform"],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-07-18"
     },
     {
       "id": "seo-ssr",
