@@ -54,6 +54,14 @@
                 <data android:scheme="sabq" android:host="push" />
             </intent-filter>
 
+            <!-- دعوة استطلاع شخصية (sabq://survey/<token>) — نقرة إشعار الدعوة -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="sabq" android:host="survey" />
+            </intent-filter>
+
             <!-- Gulf Cup Majlis universal links and the iOS-parity fallback schemes. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />

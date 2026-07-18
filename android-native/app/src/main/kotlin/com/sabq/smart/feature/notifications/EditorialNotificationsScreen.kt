@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatQuote
@@ -468,6 +469,7 @@ private fun rowStyle(type: String): RowStyle {
         "rejected" -> RowStyle(Icons.Filled.Cancel, colors.coral)
         "needs_revision" -> RowStyle(Icons.Filled.Edit, colors.primaryEnd)
         "archived" -> RowStyle(Icons.Filled.Archive, colors.tertiaryInk)
+        "survey_invite" -> RowStyle(Icons.Filled.Checklist, colors.sky)
         else -> RowStyle(Icons.Filled.Notifications, colors.secondaryInk)
     }
 }

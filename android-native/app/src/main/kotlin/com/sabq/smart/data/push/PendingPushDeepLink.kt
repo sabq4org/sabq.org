@@ -30,17 +30,32 @@ class PendingPushDeepLink @Inject constructor() {
         val notificationId: String?,
         val kind: String?,
         val deepLinkPath: String? = null,
+        /** توكن دعوة استطلاع من sabq://survey/<token> أو https://sabq.org/survey/<token> */
+        val surveyToken: String? = null,
     )
 
     private val _target = MutableStateFlow<Target?>(null)
     val target: StateFlow<Target?> = _target.asStateFlow()
 
-    fun set(articleSlug: String?, notificationId: String?, kind: String?, deepLinkPath: String? = null) {
+    fun set(
+        articleSlug: String?,
+        notificationId: String?,
+        kind: String?,
+        deepLinkPath: String? = null,
+        surveyToken: String? = null,
+    ) {
         val slug = articleSlug?.takeIf { it.isNotBlank() }
         val id = notificationId?.takeIf { it.isNotBlank() }
         val path = deepLinkPath?.takeIf { it.startsWith("/asian-cup") }
-        if (slug == null && id == null && path == null) return
-        _target.value = Target(articleSlug = slug, notificationId = id, kind = kind?.takeIf { it.isNotBlank() }, deepLinkPath = path)
+        val survey = surveyToken?.takeIf { it.isNotBlank() }
+        if (slug == null && id == null && path == null && survey == null) return
+        _target.value = Target(
+            articleSlug = slug,
+            notificationId = id,
+            kind = kind?.takeIf { it.isNotBlank() },
+            deepLinkPath = path,
+            surveyToken = survey,
+        )
     }
 
     fun consume() {
