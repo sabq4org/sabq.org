@@ -30,6 +30,8 @@ import androidx.lifecycle.viewModelScope
 import com.sabq.smart.data.api.*
 import com.sabq.smart.ui.theme.SabqTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -63,17 +65,20 @@ class ContributorDashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = DashboardState(isLoading = true)
             try {
-                val analytics = api.getContributorAnalytics()
-                val ranking = runCatching { api.getContributorRanking() }.getOrNull()
-                val pendingSurveys = runCatching { api.getMySurveys().items }.getOrDefault(emptyList())
-                val schedule = runCatching { api.getContributorSchedule() }.getOrNull()
-                _state.value = DashboardState(
-                    isLoading = false,
-                    analytics = analytics,
-                    ranking = ranking,
-                    pendingSurveys = pendingSurveys,
-                    schedule = schedule,
-                )
+                // رحلات الشبكة الأربع بالتوازي — التسلسل كان يضاعف زمن فتح اللوحة
+                coroutineScope {
+                    val analytics = async { api.getContributorAnalytics() }
+                    val ranking = async { runCatching { api.getContributorRanking() }.getOrNull() }
+                    val pendingSurveys = async { runCatching { api.getMySurveys().items }.getOrDefault(emptyList()) }
+                    val schedule = async { runCatching { api.getContributorSchedule() }.getOrNull() }
+                    _state.value = DashboardState(
+                        isLoading = false,
+                        analytics = analytics.await(),
+                        ranking = ranking.await(),
+                        pendingSurveys = pendingSurveys.await(),
+                        schedule = schedule.await(),
+                    )
+                }
             } catch (e: Exception) {
                 _state.value = DashboardState(isLoading = false, error = "تعذّر تحميل البيانات")
             }
@@ -573,7 +578,7 @@ private fun PendingSurveyCard(invite: ApiMySurveyInvite, onOpen: () -> Unit) {
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
-                "استطلاع بانتظارك: ${'$'}{invite.title}",
+                "استطلاع بانتظارك: ${invite.title}",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = SabqTheme.typography.cardTitle.copy(
@@ -583,8 +588,8 @@ private fun PendingSurveyCard(invite: ApiMySurveyInvite, onOpen: () -> Unit) {
                 ),
             )
             Text(
-                invite.purpose?.let { "رأيك يساعدنا في ${'$'}it — ${'$'}{invite.questionsCount} أسئلة" }
-                    ?: "${'$'}{invite.questionsCount} أسئلة قصيرة، دقائق معدودة",
+                invite.purpose?.let { "رأيك يساعدنا في $it — ${invite.questionsCount} أسئلة" }
+                    ?: "${invite.questionsCount} أسئلة قصيرة، دقائق معدودة",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = SabqTheme.typography.metaSmall.copy(
