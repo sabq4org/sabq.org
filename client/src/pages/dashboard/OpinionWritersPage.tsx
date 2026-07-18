@@ -151,9 +151,12 @@ export default function OpinionWritersPage() {
     },
   });
 
+  const todayWeekday = new Date().getDay();
+
   const kpis = useMemo(() => {
     const now = Date.now();
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const twoMonthsAgo = now - 60 * 24 * 60 * 60 * 1000;
     return {
       total: writers.length,
       publishedThisWeek: writers.filter(
@@ -161,8 +164,15 @@ export default function OpinionWritersPage() {
       ).length,
       dueSoon: writers.filter((w) => w.commitment === "due_soon").length,
       late: writers.filter((w) => w.commitment === "late").length,
+      choseToday: writers.filter(
+        (w) => w.schedule?.active && w.schedule.weekday === todayWeekday,
+      ).length,
+      inactiveTwoMonths: writers.filter(
+        (w) =>
+          !w.lastArticle || new Date(w.lastArticle.publishedAt).getTime() < twoMonthsAgo,
+      ).length,
     };
-  }, [writers]);
+  }, [writers, todayWeekday]);
 
   const byWeekday = useMemo(() => {
     const map: WriterSummary[][] = Array.from({ length: 7 }, () => []);
@@ -171,8 +181,6 @@ export default function OpinionWritersPage() {
     }
     return map;
   }, [writers]);
-
-  const todayWeekday = new Date().getDay();
 
   const handleDayChange = (writer: WriterSummary, value: string) => {
     if (value === "none") {
@@ -218,7 +226,7 @@ export default function OpinionWritersPage() {
         </div>
 
         {/* KPI cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <Card>
             <CardContent className="p-4">
               <div className="text-2xl font-extrabold tabular-nums">{kpis.total}</div>
@@ -229,6 +237,14 @@ export default function OpinionWritersPage() {
             <CardContent className="p-4">
               <div className="text-2xl font-extrabold tabular-nums">{kpis.publishedThisWeek}</div>
               <div className="text-sm text-muted-foreground">نشروا خلال آخر ٧ أيام</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-2xl font-extrabold tabular-nums text-primary">
+                {kpis.choseToday}
+              </div>
+              <div className="text-sm text-muted-foreground">اختاروا اليوم</div>
             </CardContent>
           </Card>
           <Card>
@@ -245,6 +261,14 @@ export default function OpinionWritersPage() {
                 {kpis.late}
               </div>
               <div className="text-sm text-muted-foreground">متأخرون عن مواعيدهم</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4">
+              <div className="text-2xl font-extrabold tabular-nums text-muted-foreground">
+                {kpis.inactiveTwoMonths}
+              </div>
+              <div className="text-sm text-muted-foreground">بلا نشاط أكثر من شهرين</div>
             </CardContent>
           </Card>
         </div>
