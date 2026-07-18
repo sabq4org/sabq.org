@@ -26,7 +26,9 @@ import {
   ChevronLeft,
   Link2,
   ExternalLink,
-  BookOpenCheck
+  BookOpenCheck,
+  FileText,
+  BadgeCheck
 } from "lucide-react";
 import {
   Table,
@@ -458,15 +460,103 @@ export default function CorrespondentApplications() {
                   <p className="text-sm text-muted-foreground">رقم الهاتف</p>
                   <p className="font-medium" data-testid="text-detail-phone">{selectedApplication.phone}</p>
                 </div>
+                {selectedApplication.nationalId && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">رقم الهوية / الإقامة</p>
+                    <p className="font-medium tabular-nums" data-testid="text-detail-national-id">{selectedApplication.nationalId}</p>
+                  </div>
+                )}
                 <div>
-                  <p className="text-sm text-muted-foreground">المدينة</p>
-                  <p className="font-medium" data-testid="text-detail-city">{selectedApplication.city}</p>
+                  <p className="text-sm text-muted-foreground">المنطقة / المدينة</p>
+                  <p className="font-medium" data-testid="text-detail-city">
+                    {selectedApplication.region ? `${selectedApplication.region} — ` : ""}{selectedApplication.city}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">المسمى الوظيفي</p>
                   <p className="font-medium" data-testid="text-detail-job">{selectedApplication.jobTitle}</p>
                 </div>
+                {selectedApplication.licenseNumber && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">رقم الترخيص المهني</p>
+                    <p className="font-medium" data-testid="text-detail-license-number">
+                      {selectedApplication.licenseNumber}
+                      {selectedApplication.licenseExpiresAt && (
+                        <span className="text-sm text-muted-foreground tabular-nums">
+                          {" "}(ينتهي {new Date(selectedApplication.licenseExpiresAt).toLocaleDateString("ar-SA-u-ca-gregory-nu-latn")})
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                )}
+                {selectedApplication.specializations && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">مجالات التغطية</p>
+                    <p className="font-medium" data-testid="text-detail-specializations">{selectedApplication.specializations}</p>
+                  </div>
+                )}
+                {selectedApplication.yearsOfExperience != null && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">سنوات الخبرة</p>
+                    <p className="font-medium tabular-nums">{selectedApplication.yearsOfExperience}</p>
+                  </div>
+                )}
+                {selectedApplication.currentEmployer && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">جهة العمل الحالية / الأخيرة</p>
+                    <p className="font-medium">{selectedApplication.currentEmployer}</p>
+                  </div>
+                )}
               </div>
+
+              {selectedApplication.portfolioLinks && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">روابط أعمال منشورة</p>
+                  <div className="space-y-1">
+                    {selectedApplication.portfolioLinks.split(/\s+/).filter(l => l.startsWith("http")).map((link, i) => (
+                      <a
+                        key={i}
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-sm text-primary hover:underline truncate"
+                        dir="ltr"
+                      >
+                        {link}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(selectedApplication.licenseFileKey || selectedApplication.cvFileKey) && (
+                <div className="flex flex-wrap gap-2">
+                  {selectedApplication.licenseFileKey && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => window.open(apiUrl(`/api/admin/correspondent-applications/${selectedApplication.id}/file/license`), "_blank", "noopener")}
+                      data-testid="button-download-license"
+                    >
+                      <BadgeCheck className="w-4 h-4" />
+                      عرض الترخيص المهني
+                    </Button>
+                  )}
+                  {selectedApplication.cvFileKey && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => window.open(apiUrl(`/api/admin/correspondent-applications/${selectedApplication.id}/file/cv`), "_blank", "noopener")}
+                      data-testid="button-download-cv"
+                    >
+                      <FileText className="w-4 h-4" />
+                      السيرة الذاتية
+                    </Button>
+                  )}
+                </div>
+              )}
 
               {selectedApplication.bio && (
                 <div>

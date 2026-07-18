@@ -7,10 +7,12 @@
 // ADR-001: لا وصول لقاعدة البيانات هنا — كل الاستعلامات في correspondentApplicationService.
 import { Router, type Request, type Response } from "express";
 import rateLimit from "express-rate-limit";
+import { randomUUID } from "crypto";
 import { requireAuth, requireRole, logActivity } from "../rbac";
 import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
 import { upload } from "../utils/uploadMiddleware";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
+import { ObjectStorageService } from "../objectStorage";
 import {
   sendCorrespondentApprovalEmail,
   sendCorrespondentRejectionEmail,
@@ -36,25 +38,57 @@ const applicationSubmitLimiter = rateLimit({
   validate: cfValidate,
 });
 
-// POST /api/correspondent-applications - Public registration with photo upload
+// POST /api/correspondent-applications - Public registration (photo + license + CV)
 router.post(
   "/api/correspondent-applications",
   applicationSubmitLimiter,
-  upload.single("profilePhoto"),
+  upload.fields([
+    { name: "profilePhoto", maxCount: 1 },
+    { name: "licenseFile", maxCount: 1 },
+    { name: "cvFile", maxCount: 1 },
+  ]),
   async (req: Request, res: Response) => {
     try {
-      const { arabicName, englishName, email, phone, jobTitle, bio, city } = req.body;
+      const {
+        arabicName, englishName, email, phone, jobTitle, bio, city,
+        nationalId, region, licenseNumber, licenseExpiresAt,
+        specializations, portfolioLinks, yearsOfExperience, currentEmployer, consent,
+      } = req.body;
+      const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+      const profilePhoto = files?.profilePhoto?.[0];
+      const licenseFile = files?.licenseFile?.[0];
+      const cvFile = files?.cvFile?.[0];
 
-      if (!arabicName || !englishName || !email || !phone || !city) {
+      if (!arabicName || !englishName || !email || !phone || !city || !region
+        || !nationalId || !licenseNumber || !specializations) {
         return res.status(400).json({ message: "جميع الحقول المطلوبة يجب ملؤها" });
       }
 
-      if (!req.file) {
-        return res.status(400).json({ message: "الصورة الشخصية مطلوبة" });
+      if (consent !== "true") {
+        return res.status(400).json({ message: "يجب الإقرار بصحة البيانات والموافقة على معالجتها" });
       }
 
-      if (!req.file.mimetype.startsWith("image/")) {
-        return res.status(400).json({ message: "الملف المرفوع يجب أن يكون صورة" });
+      if (!/^[12]\d{9}$/.test(String(nationalId).trim())) {
+        return res.status(400).json({ message: "رقم الهوية/الإقامة يجب أن يكون 10 أرقام ويبدأ بـ 1 أو 2" });
+      }
+
+      if (!profilePhoto) {
+        return res.status(400).json({ message: "الصورة الشخصية مطلوبة" });
+      }
+      if (!profilePhoto.mimetype.startsWith("image/")) {
+        return res.status(400).json({ message: "الصورة الشخصية يجب أن تكون ملف صورة" });
+      }
+      if (!licenseFile) {
+        return res.status(400).json({ message: "صورة الترخيص المهني مطلوبة" });
+      }
+      if (!licenseFile.mimetype.startsWith("image/") && licenseFile.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "الترخيص المهني يجب أن يكون صورة أو ملف PDF" });
+      }
+      if (!cvFile) {
+        return res.status(400).json({ message: "السيرة الذاتية مطلوبة" });
+      }
+      if (cvFile.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "السيرة الذاتية يجب أن تكون ملف PDF" });
       }
 
       const normalizedEmail = String(email).toLowerCase().trim();
@@ -69,13 +103,14 @@ router.post(
         });
       }
 
+      // Profile photo → Cloudflare Images (public delivery URL, shown in dashboard)
       let profilePhotoUrl: string | null = null;
       if (cloudflareImagesService.isCloudflareConfigured()) {
         const cfResult = await cloudflareImagesService.uploadToCloudflare(
-          req.file.buffer,
-          req.file.originalname || "profile.jpg",
+          profilePhoto.buffer,
+          profilePhoto.originalname || "profile.jpg",
           { type: "correspondent-application", email: normalizedEmail },
-          req.file.mimetype,
+          profilePhoto.mimetype,
         );
         if (cfResult.success && cfResult.deliveryUrl) {
           profilePhotoUrl = cfResult.deliveryUrl;
@@ -88,6 +123,27 @@ router.post(
         return res.status(502).json({ message: "خدمة رفع الصورة غير متاحة حالياً. حاول لاحقاً." });
       }
 
+      // License + CV are sensitive documents → PRIVATE object storage. Only
+      // storage keys are persisted; admins fetch them via the protected
+      // /file/:kind route below (short-lived signed URLs, never public).
+      const objectStorage = new ObjectStorageService();
+      const docId = randomUUID();
+      const licenseExt = licenseFile.mimetype === "application/pdf" ? "pdf"
+        : (licenseFile.mimetype.split("/")[1] || "jpg");
+      const [licenseUpload, cvUpload] = await Promise.all([
+        objectStorage.uploadFile(
+          `correspondent-docs/${docId}-license.${licenseExt}`,
+          licenseFile.buffer, licenseFile.mimetype, "private",
+        ),
+        objectStorage.uploadFile(
+          `correspondent-docs/${docId}-cv.pdf`,
+          cvFile.buffer, cvFile.mimetype, "private",
+        ),
+      ]);
+
+      const expYears = parseInt(String(yearsOfExperience), 10);
+      const expiresAt = licenseExpiresAt ? new Date(String(licenseExpiresAt)) : null;
+
       const application = await createCorrespondentApplication({
         arabicName,
         englishName,
@@ -96,6 +152,17 @@ router.post(
         jobTitle: jobTitle || "مراسل صحفي",
         bio: bio || null,
         city,
+        region,
+        nationalId: String(nationalId).trim(),
+        licenseNumber: String(licenseNumber).trim(),
+        licenseExpiresAt: expiresAt && !isNaN(expiresAt.getTime()) ? expiresAt : null,
+        licenseFileKey: licenseUpload.path,
+        cvFileKey: cvUpload.path,
+        specializations: String(specializations),
+        portfolioLinks: portfolioLinks ? String(portfolioLinks) : null,
+        yearsOfExperience: Number.isFinite(expYears) && expYears >= 0 ? expYears : null,
+        currentEmployer: currentEmployer ? String(currentEmployer) : null,
+        consentAt: new Date(),
         profilePhotoUrl,
       });
 
@@ -108,6 +175,35 @@ router.post(
       const err = error as Error;
       console.error("Error creating correspondent application:", err);
       res.status(500).json({ message: "حدث خطأ في تقديم الطلب: " + err.message });
+    }
+  },
+);
+
+// GET /api/admin/correspondent-applications/:id/file/:kind - Signed download
+// for the private license/CV documents (admin only; 5-minute URL).
+router.get(
+  "/api/admin/correspondent-applications/:id/file/:kind",
+  requireAuth,
+  requireRole("admin", "system_admin"),
+  async (req: Request, res: Response) => {
+    try {
+      const { id, kind } = req.params;
+      if (kind !== "license" && kind !== "cv") {
+        return res.status(400).json({ message: "نوع الملف غير صحيح" });
+      }
+      const application = await getCorrespondentApplicationById(id);
+      if (!application) {
+        return res.status(404).json({ message: "الطلب غير موجود" });
+      }
+      const key = kind === "license" ? application.licenseFileKey : application.cvFileKey;
+      if (!key) {
+        return res.status(404).json({ message: "لا يوجد ملف مرفق لهذا الطلب" });
+      }
+      const url = await new ObjectStorageService().getPrivateFileDownloadURL(key, 300);
+      res.redirect(url);
+    } catch (error: unknown) {
+      console.error("Error fetching correspondent application file:", error);
+      res.status(500).json({ message: "فشل في جلب الملف" });
     }
   },
 );
