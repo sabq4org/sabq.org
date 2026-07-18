@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { DashboardFavoriteToggle } from "@/components/dashboard/DashboardFavoriteToggle";
 
 interface DashboardPageHeaderProps {
   icon: LucideIcon;
@@ -9,6 +10,8 @@ interface DashboardPageHeaderProps {
   actions?: ReactNode;
   className?: string;
   titleTestId?: string;
+  /** نجمة التفضيل بجانب العنوان — افتراضيًا مفعّلة */
+  showFavoriteToggle?: boolean;
 }
 
 /**
@@ -22,6 +25,7 @@ export function DashboardPageHeader({
   actions,
   className,
   titleTestId,
+  showFavoriteToggle = true,
 }: DashboardPageHeaderProps) {
   return (
     <header
@@ -40,12 +44,15 @@ export function DashboardPageHeader({
             <Icon className="h-5 w-5 sm:h-6 sm:w-6" aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <h1
-              className="text-xl font-bold tracking-tight text-foreground sm:text-2xl"
-              data-testid={titleTestId}
-            >
-              {title}
-            </h1>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <h1
+                className="min-w-0 text-xl font-bold tracking-tight text-foreground sm:text-2xl"
+                data-testid={titleTestId}
+              >
+                {title}
+              </h1>
+              {showFavoriteToggle ? <DashboardFavoriteToggle /> : null}
+            </div>
             {description ? (
               <p className="mt-1 text-sm leading-6 text-muted-foreground">{description}</p>
             ) : null}
