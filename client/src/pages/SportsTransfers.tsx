@@ -4,8 +4,9 @@
  * تبويبان رئيسيان: سعودية | عالمية، وداخل كلٍّ: مؤكّدة | إشاعات | إعارات |
  * تجديد عقود — بتمييز بصري صارم بين المؤكّد والإشاعة.
  *
- * المصادر: المؤكّد السعودي من /api/sports/transfers (API-Football)،
- * والإشاعات + المؤكّد العالمي من /api/transfer-center/* (SportMonks).
+ * المصادر: المؤكّد السعودي من /api/sports/transfers (API-Football + دمج
+ * SportMonks بمسارات فرق روشن)، والإشاعات + المؤكّد العالمي من
+ * /api/transfer-center/* (SportMonks).
  * مبالغ الإشاعات قيم متداولة من مصادرها — نعرضها بوسمها فقط. RTL كامل.
  *
  * الهوية البصرية: تلميع ضمن بوابة /sports (أسطح فاتحة، primary، قوائم نظيفة).
@@ -555,7 +556,7 @@ export default function SportsTransfers() {
   }, []);
 
   const { data, isLoading } = useQuery<TransfersResponse>({
-    queryKey: ["/api/sports/transfers"],
+    queryKey: ["/api/sports/transfers", { since: 4 }],
     staleTime: 10 * 60_000,
   });
   const { data: rumoursRaw, isLoading: rumoursLoading } = useQuery<RumoursResponse>({
@@ -583,6 +584,8 @@ export default function SportsTransfers() {
   const [sortMode, setSortMode] = useState<SortMode>("latest");
   const [windowFilter, setWindowFilter] = useState<WindowFilter>("all");
   const [majorsOnly, setMajorsOnly] = useState(true);
+  const [saudiVisible, setSaudiVisible] = useState(60);
+  useEffect(() => { setSaudiVisible(60); }, [tab, scope, club, dir, kind, q]);
 
   // المؤكّد العالمي — يُجلب عند الحاجة فقط
   const wantGlobalConfirmed = scope === "global" && (tab === "confirmed" || tab === "loans");
@@ -634,10 +637,12 @@ export default function SportsTransfers() {
     return list;
   }, [rumours, scope, tab, league, saudiRumourClub, prob, position, windowFilter, query, sortMode]);
 
-  // ---------- فلترة المؤكّد السعودي (كما كانت) ----------
+  // ---------- فلترة المؤكّد السعودي ----------
+  // تبويب «مؤكّدة» يستبعد الإعارات (لها تبويب منفصل) حتى لا تُغرق القائمة.
   const filteredSaudiConfirmed = useMemo(() => {
     let list = transfers;
     if (tab === "loans") list = list.filter((t) => t.kind === "loan" || t.kind === "loanend");
+    else list = list.filter((t) => t.kind !== "loan" && t.kind !== "loanend");
     return list.filter((t) => {
       if (club != null) {
         const isIn = t.to.id === club;
@@ -660,13 +665,16 @@ export default function SportsTransfers() {
   const groupedSaudi = useMemo(() => {
     const out: { month: string; items: LeagueTransfer[] }[] = [];
     let cur: { month: string; items: LeagueTransfer[] } | null = null;
+    let shown = 0;
     for (const t of filteredSaudiConfirmed) {
+      if (shown >= saudiVisible) break;
       const m = monthKey(t.date);
       if (!cur || cur.month !== m) { cur = { month: m, items: [] }; out.push(cur); }
       cur.items.push(t);
+      shown += 1;
     }
     return out;
-  }, [filteredSaudiConfirmed]);
+  }, [filteredSaudiConfirmed, saudiVisible]);
 
   // ---------- فلترة المؤكّد العالمي ----------
   const filteredGlobalConfirmed = useMemo(() => {
@@ -977,6 +985,15 @@ export default function SportsTransfers() {
                     </div>
                   </div>
                 ))}
+                {filteredSaudiConfirmed.length > saudiVisible && (
+                  <button
+                    type="button"
+                    onClick={() => setSaudiVisible((n) => n + 60)}
+                    className="w-full rounded-xl border border-border bg-card py-2.5 text-sm font-bold text-primary transition-colors hover:bg-primary/10"
+                  >
+                    عرض المزيد ({filteredSaudiConfirmed.length - saudiVisible})
+                  </button>
+                )}
               </div>
             )
           )}

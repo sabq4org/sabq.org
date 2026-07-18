@@ -12,8 +12,9 @@
  * فخاخ SportMonks المُثبَتة بالفحص (2026-07-04):
  *   - بارامتر filters= يُتجاهَل صامتًا → كل الفلترة (سعودي/عالمي، النوع) هنا
  *     في الكود، أو عبر مسار الفريق /transfer-rumours/teams/{id}.
- *   - التغطية السعودية في الفيد العام نحيفة (~12 من آخر 500) → نجمع القسم
- *     السعودي بمسارات فرق روشن الـ18 مباشرة، لا نعتمد على الفيد العام.
+ *   - التغطية السعودية في الفيد العام نحيفة (إشاعات ~12/500؛ مؤكّد 0/150 في
+ *     الإنتاج) → نجمع القسم السعودي بمسارات فرق روشن مباشرة للإشاعات
+ *     (`transfer-rumours/teams/{id}`) والمؤكّد (`transfers/teams/{id}`).
  *   - status_id (90319-90323) دلالته مجهولة (لا يُفكّ عبر core/types) → نتجاهله.
  *
  * كل شيء «أفضل جهد»: غياب أي مفتاح يرجّع { configured:false } بلا عطل.
@@ -701,30 +702,85 @@ export async function getGlobalConfirmed(): Promise<TcConfirmed[]> {
   });
 }
 
-// الصفقات السعودية المؤكّدة من فيد SportMonks، محوّلةً إلى شكل الانتقال السعودي
-// (SplLeagueTransfer) كي تُعرض في تبويب «سعودية». السبب: فيد API-Football
-// (getLeagueTransfers) قد يتأخّر أسابيع عن نافذة روشن، بينما يرصد SportMonks
-// الصفقة فور تأكيدها ويعلّم أطرافها السعودية بـ saudi=true. بدون هذا التحويل
-// تختفي صفقات النافذة الحالية كليًّا: تُستبعد من تبويب «عالمية» بحكم النطاق ولا
-// مصدر آخر يعرضها. player.id=0 لأنّ معرّف SportMonks لا يصلح لصفحة اللاعب
-// (فضاء معرّفات مختلف) — فيُعرض الاسم بلا رابط. أفضل جهد: غياب المفتاح = [].
+// الصفقات السعودية المؤكّدة من SportMonks عبر مسارات فرق روشن
+// (`transfers/teams/{id}`)، لا من الفيد العالمي `/transfers`.
+// السبب: الفيد العام يُغرق بآلاف صفقات الدوريات الأخرى فيختفي روشن (0 من
+// آخر 150 في الإنتاج 2026-07-18)، بينما API-Football يتأخّر أسابيع عن النافذة.
+// نجمع فرق روشن مباشرة — نفس أسلوب الإشاعات — ونقتصر على ميركاتو الحالي
+// (MERCATO_START). player.id=0 لأنّ معرّف SportMonks ≠ فضاء API-Football.
+// أفضل جهد: غياب المفتاح = [].
 export async function getSaudiConfirmedFromGlobal(): Promise<SplLeagueTransfer[]> {
   if (!isTransferRumoursConfigured()) return [];
-  const global = await getGlobalConfirmed();
-  return global
-    .filter((t) => t.saudi)
-    .map((t) => ({
-      id: `sm-${t.id}`,
-      date: t.date,
-      type: t.kind === "loan" ? "إعارة" : t.kind === "free" ? "انتقال حر" : "انتقال",
-      kind: t.kind === "loan" ? "loan" : t.kind === "free" ? "free" : "money",
-      feeValue: t.amount ?? null,
-      player: { id: 0, name: t.player.name },
-      from: { id: t.from.id, name: t.from.name, logo: t.from.image ?? "" },
-      to: { id: t.to.id, name: t.to.name, logo: t.to.image ?? "" },
-      inClubId: t.to.saudi ? t.to.id : null,
-      outClubId: t.from.saudi ? t.from.id : null,
-    }));
+  return withSWR(`tc:saudi-confirmed-roshn`, CONFIRMED_TTL, CONFIRMED_TTL * 2, async () => {
+    const roshn = await getRoshnSmTeams();
+    const roshnIds = new Set(roshn.ids);
+
+    const responses = await Promise.all(
+      roshn.ids.map((id) =>
+        smGet(`transfers/teams/${id}`, {
+          order: "desc",
+          per_page: "50",
+          include: RUMOUR_INCLUDE,
+        }).catch(() => null),
+      ),
+    );
+
+    const rawById = new Map<number, any>();
+    for (const res of responses) {
+      for (const row of res?.data ?? []) {
+        if (
+          row?.id != null &&
+          !rawById.has(row.id) &&
+          row?.completed !== false &&
+          row?.career_ended !== true &&
+          typeof row?.date === "string" &&
+          row.date >= MERCATO_START
+        ) {
+          rawById.set(row.id, row);
+        }
+      }
+    }
+    const raw = [...rawById.values()];
+    if (!raw.length) return [];
+
+    const names = raw.map((r) => playerRawName(r?.player));
+    const [arName, tr] = await Promise.all([
+      resolveNames(names, { skipAi: true }),
+      transferTranslators(raw),
+    ]);
+    void resolveNames(names).catch(() => {});
+
+    const en = isEnglishSports();
+    return raw
+      .map((r): SplLeagueTransfer | null => {
+        const from = normalizeParty(r?.fromteam, null, roshnIds, tr.club);
+        const to = normalizeParty(r?.toteam, null, roshnIds, tr.club);
+        if (!from.saudi && !to.saudi) return null;
+        const kind = CONFIRMED_KIND_BY_TYPE[r?.type_id] ?? "transfer";
+        const amount = typeof r?.amount === "number" ? r.amount : null;
+        const splKind = kind === "loan" ? "loan" : kind === "free" ? "free" : "money";
+        const typeLabel =
+          kind === "loan"
+            ? en ? "Loan" : "إعارة"
+            : kind === "free"
+              ? en ? "Free" : "انتقال حر"
+              : en ? "Transfer" : "انتقال";
+        return {
+          id: `sm-${r.id}`,
+          date: r.date,
+          type: typeLabel,
+          kind: splKind,
+          feeValue: amount,
+          player: { id: 0, name: arName(playerRawName(r?.player)) },
+          from: { id: from.id, name: from.name, logo: from.image ?? "" },
+          to: { id: to.id, name: to.name, logo: to.image ?? "" },
+          inClubId: to.saudi ? to.id : null,
+          outClubId: from.saudi ? from.id : null,
+        };
+      })
+      .filter((t): t is SplLeagueTransfer => t != null && Boolean(t.date))
+      .sort((a, b) => b.date.localeCompare(a.date) || a.id.localeCompare(b.id));
+  });
 }
 
 // ---------- 3) قصة انتقال لاعب (كل الإشاعات مرتّبة زمنيًّا) ----------

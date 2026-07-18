@@ -1595,7 +1595,7 @@ extension APIClient {
                       ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }
 
-    func fetchLeagueTransfers(since: Int = 18, ignoreCache: Bool = false) async throws -> SpLeagueTransfersResponse {
+    func fetchLeagueTransfers(since: Int = 4, ignoreCache: Bool = false) async throws -> SpLeagueTransfersResponse {
         try await get(SpLeagueTransfersResponse.self, path: "/sports/transfers",
                       query: ["since": String(since)], ignoreCache: ignoreCache, apiRoot: URLConstants.publicAPI)
     }

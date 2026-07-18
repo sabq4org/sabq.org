@@ -39,23 +39,23 @@ struct LiveView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, router.selectedTab == .world { Task { await load(force: true) } }
         }
-        // البث الحيّ (SSE): أي تغيّر في مباريات العالم الجارية = تحديث فوري —
-        // والتبويب المخفي يؤجَّل تحديثه لعودة الظهور (لا شبكة وهو غير مرئي).
+        // البث الحيّ (SSE): تحديث صامت بالكاش — لا force مع كل نبضة (وميض + عاصفة شبكة).
         .onChange(of: liveStream.sportsVersion) { _, _ in
             guard router.selectedTab == .world else { pendingLiveReload = true; return }
-            Task { await load(force: true) }
+            Task { await load(force: false) }
         }
         .onChange(of: router.selectedTab) { _, tab in
             guard tab == .world, pendingLiveReload else { return }
             pendingLiveReload = false
-            Task { await load(force: true) }
+            Task { await load(force: false) }
         }
     }
 
     @ViewBuilder private var content: some View {
-        if loading {
+        // أبقِ القائمة السابقة أثناء التحديث الصامت — لا شاشة دوران كاملة.
+        if loading && world.isEmpty {
             SpLoading()
-        } else if let loadError {
+        } else if let loadError, world.isEmpty {
             SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
         } else if world.isEmpty {
             SpEmptyState(icon: "globe",
@@ -334,30 +334,34 @@ struct LiveView: View {
     // MARK: - التحميل + التحديث اللحظي
 
     private func load(force: Bool = false) async {
-        if !force { loading = true }
+        if world.isEmpty { loading = true }
         async let worldOpt = try? APIClient.shared.fetchWorldLive(ignoreCache: force)
         async let compsOpt = try? APIClient.shared.fetchCompetitions(ignoreCache: force)
         if let comps = (await compsOpt)?.competitions {
             self.catBySlug = Dictionary(comps.map { ($0.slug, $0.category) }, uniquingKeysWith: { a, _ in a })
         }
         let worldResp = await worldOpt
-        self.world = worldResp?.matches ?? []
-        self.loadError = worldResp == nil ? L("تعذّر الاتصال بخادم البيانات") : nil
+        if let matches = worldResp?.matches {
+            self.world = matches
+            self.loadError = nil
+        } else if world.isEmpty {
+            self.loadError = L("تعذّر الاتصال بخادم البيانات")
+        }
         self.loading = false
     }
 
-    // تحديث صامت أثناء العرض — السياسة الموحّدة: حيّ = 10ث، ويتباطأ (30ث) حين لا مباريات.
+    // تحديث صامت أثناء العرض — حيّ = 10ث، ويتباطأ (30ث) حين لا مباريات.
+    // بلا ignoreCache في الاستطلاع: السحب للتحديث / عودة المقدّمة يكسران الكاش.
     private func pollLive() async {
         while !Task.isCancelled {
             let delay: UInt64 = world.isEmpty ? 30_000_000_000 : 10_000_000_000
             try? await Task.sleep(nanoseconds: delay)
             if Task.isCancelled { break }
-            // التبويب مخفي: لا شبكة — يؤجَّل التحديث لعودة الظهور.
             guard router.selectedTab == .world else {
                 pendingLiveReload = true
                 continue
             }
-            await load(force: true)
+            await load(force: false)
         }
     }
 }

@@ -90,7 +90,7 @@ struct HomeView: View {
         let favMatch = favorites.team.flatMap { fav in matches.flatMap { favoriteMatch($0, fav.id) } }
         let activeAlerts = [auth.alertPrefs.kickoff, auth.alertPrefs.goals, auth.alertPrefs.cards,
                             auth.alertPrefs.varReview, auth.alertPrefs.fulltime].filter { $0 }.count
-        let upcoming = (favMatch != nil && !favMatch!.started)
+        let upcoming = favMatch.map { !$0.started } ?? false
         return VaraInsightContext(
             isLoggedIn: auth.isLoggedIn,
             favoriteName: favorites.team?.name,
@@ -187,19 +187,21 @@ struct HomeView: View {
     /// الأثقل (xG/زخم/ضغط) يبقى على loadAll (السحب اليدوي) — الأرقام الحيوية هنا
     /// هي النتيجة والأحداث وحراك الجدول.
     private func refreshHero() async {
-        if let m = try? await APIClient.shared.fetchMatches(comp: SportsConstants.defaultComp, ignoreCache: true) {
+        // كسر الكاش فقط أثناء مباراة جارية — قرب الانطلاق يكفي كاش البروتوكول.
+        let bust = featured?.status.live == true || standings.contains { $0.live == true }
+        if let m = try? await APIClient.shared.fetchMatches(comp: SportsConstants.defaultComp, ignoreCache: bust) {
             matches = m
         }
         // الترتيب اللحظي: الجدول المصغّر وسباق اللقب يتحرّكان مع الأهداف بدل
         // التجمّد حتى السحب اليدوي — الطبقة اللحظية نفسها يحسبها الخادم.
         if Date().timeIntervalSince(lastLiveStandingsAt) >= 30,
-           let s = try? await APIClient.shared.fetchStandings(comp: SportsConstants.defaultComp, ignoreCache: true) {
+           let s = try? await APIClient.shared.fetchStandings(comp: SportsConstants.defaultComp, ignoreCache: bust) {
             standings = s.standings
             lastLiveStandingsAt = Date()
         }
         if let f = featured, f.started {
-            async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: true)
-            async let commentaryOpt = try? APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: true)
+            async let detailOpt = try? APIClient.shared.fetchMatchDetail(id: f.id, ignoreCache: bust)
+            async let commentaryOpt = try? APIClient.shared.fetchCommentary(matchId: f.id, ignoreCache: bust)
             self.featuredDetail = await detailOpt
             self.featuredCommentary = f.status.live ? await commentaryOpt : nil
         }
@@ -339,7 +341,21 @@ struct HomeView: View {
     }
 
     private var metaText: String {
-        L("الموسم سينطلق قريبًا")
+        if let o = outlook {
+            switch o.phase {
+            case "in-season":
+                return "\(o.season)/\(o.season + 1)"
+            case "pre-season":
+                if let d = o.daysUntilKickoff, d > 0 { return Lf("ينطلق خلال %d يومًا", d) }
+                return L("الموسم سينطلق قريبًا")
+            case "off-season":
+                return L("خارج الموسم")
+            default:
+                return "\(o.season)/\(o.season + 1)"
+            }
+        }
+        if let s = comp?.season { return "\(s)/\(s + 1)" }
+        return L("الموسم سينطلق قريبًا")
     }
 
     // بطاقة الهيرو الهادئة — المواجهة والنتيجة أولًا وسطر سياق واحد كحدّ أقصى.
@@ -1135,44 +1151,46 @@ struct HomeView: View {
         .buttonStyle(SpPressStyle())
     }
 
-    // MARK: - التحميل (متوازٍ)
+    // MARK: - التحميل (كشف تدريجي)
+    // المباريات + الترتيب يفتحان اللوحة فورًا؛ الباقي يُملأ في الخلفية
+    // (نفس نموذج CompetitionDetailView) — كان انتظار 7 طلبات يُبقي الدوران تحت
+    // «اختر فريقك» لثوانٍ بلا داعٍ.
 
     private func loadAll(force: Bool = false) async {
         if !force { loading = true }
         let slug = SportsConstants.defaultComp
-        async let compsOpt = try? APIClient.shared.fetchCompetitions(ignoreCache: force)
-        async let outlookOpt = try? APIClient.shared.fetchOutlook(comp: slug, ignoreCache: force)
+
         async let matchesOpt = try? APIClient.shared.fetchMatches(comp: slug, ignoreCache: force)
         async let standingsOpt = try? APIClient.shared.fetchStandings(comp: slug, ignoreCache: force)
-        async let scorersOpt = try? APIClient.shared.fetchScorers(comp: slug, ignoreCache: force)
-        async let assistsOpt = try? APIClient.shared.fetchAssists(comp: slug, ignoreCache: force)
-        async let transfersOpt = try? APIClient.shared.fetchLeagueTransfers(ignoreCache: force)
 
-        // نجمع كل النتائج أولًا (الـawait يُعلّق هنا) ثم نُسنِدها دفعةً واحدة بلا await
-        // بينها — فيُجري SwiftUI رسمًا واحدًا. يمنع وميض كتلة «بطل الموسم» قبل وصول
-        // المباريات (كان `outlook` يُسنَد قبل `matches` فيظهر الهيرو الاحتياطي لحظيًّا).
-        let compsRes = await compsOpt
-        let outlookRes = await outlookOpt
         let matchesRes = await matchesOpt
         let standingsRes = await standingsOpt
-        let scorersRes = await scorersOpt
-        let assistsRes = await assistsOpt
-        let transfersRes = await transfersOpt
-
-        self.comp = compsRes?.competitions.first { $0.slug == slug }
-        self.outlook = outlookRes?.outlook
         self.matches = matchesRes
         self.standings = standingsRes?.standings ?? []
-        self.scorers = scorersRes?.scorers ?? []
-        self.assists = assistsRes?.assists ?? []
-        self.transfers = transfersRes?.transfers ?? []
 
-        if matches == nil && standings.isEmpty && outlook == nil {
+        if matches == nil && standings.isEmpty {
             self.loadError = L("تعذّر الاتصال بخادم البيانات")
         } else {
             self.loadError = nil
         }
         self.loading = false
+        if Task.isCancelled { return }
+
+        async let compsOpt = try? APIClient.shared.fetchCompetitions(ignoreCache: force)
+        async let outlookOpt = try? APIClient.shared.fetchOutlook(comp: slug, ignoreCache: force)
+        async let scorersOpt = try? APIClient.shared.fetchScorers(comp: slug, ignoreCache: force)
+        async let assistsOpt = try? APIClient.shared.fetchAssists(comp: slug, ignoreCache: force)
+        async let transfersOpt = try? APIClient.shared.fetchLeagueTransfers(ignoreCache: force)
+
+        self.comp = (await compsOpt)?.competitions.first { $0.slug == slug }
+        self.outlook = (await outlookOpt)?.outlook
+        self.scorers = (await scorersOpt)?.scorers ?? []
+        self.assists = (await assistsOpt)?.assists ?? []
+        self.transfers = (await transfersOpt)?.transfers ?? []
+
+        if matches == nil && standings.isEmpty && outlook == nil {
+            self.loadError = L("تعذّر الاتصال بخادم البيانات")
+        }
 
         // لا نستدعي matchFollows.refresh() هنا — auto-refresh + SSE يغطيان الحالة
         // وتكرار detail كامل لكل مباراة متابَعة يضاعف زمن التحميل.
@@ -1193,7 +1211,7 @@ struct HomeView: View {
         }
 
         // مزامنة ودجت الشاشة الرئيسية «المباراة القادمة» (أفضل جهد — يكيّش الشعارين).
-        await SpWidgetBridge.sync(matches: matchesRes, follows: SpMatchFollows.shared.visibleItems, favoriteId: favorites.team?.id)
+        await SpWidgetBridge.sync(matches: matches, follows: SpMatchFollows.shared.visibleItems, favoriteId: favorites.team?.id)
     }
 
     private func loadSmartSnaps(force: Bool = false) async {

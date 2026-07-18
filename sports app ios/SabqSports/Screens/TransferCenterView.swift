@@ -6,7 +6,8 @@ import Combine
 //   • تبويبا نطاق (سعودية/عالمية) × نوع (مؤكّدة/إشاعات/إعارات/تجديد)
 //   • مقياس احتمال بصري + مصدر إلزامي بمؤشر موثوقية + وسم مؤكّد/إشاعة صريح
 //   • إحصائيات السوق: مقارنة روشن/البريميرليغ + ميزان أندية روشن
-// المؤكّد السعودي من /sports/transfers، والباقي من /transfer-center/*.
+// المؤكّد السعودي من /sports/transfers (since=4، بلا إعارات في «مؤكّدة»)،
+// والباقي من /transfer-center/*. صفوف Lazy مباشرة + «عرض المزيد».
 // الأرقام: الرقم ثم رمز العملة (TcMoney) — «85 مليون €».
 
 // MARK: - عناصر مشتركة صغيرة
@@ -610,7 +611,10 @@ struct TransferCenterView: View {
 
     @State private var loading = true
     @State private var loadedGlobal = false
+    @State private var globalLoadFailed = false
     @State private var selectedStory: IDBox?
+    /// حد العرض الأولي — تجنّب بناء مئات الصفوف دفعة واحدة داخل ScrollView.
+    @State private var saudiVisibleCount = 40
 
     var body: some View {
         ScrollView {
@@ -658,7 +662,7 @@ struct TransferCenterView: View {
 
             HStack(spacing: 8) {
                 TcMarketMetric(icon: "checkmark.seal.fill",
-                               value: "\(saudiConfirmed.count)",
+                               value: "\(filteredSaudiConfirmed.count)",
                                label: L("مؤكدة"),
                                tint: SpTheme.green)
                 TcMarketMetric(icon: "sparkles",
@@ -834,30 +838,49 @@ struct TransferCenterView: View {
         if loading && rumours.isEmpty && saudiConfirmed.isEmpty {
             SpLoading().padding(.top, 30)
         } else if showSaudiConfirmed {
-            saudiConfirmedList
+            // صفوف مباشرة داخل LazyVStack الأب — لا VStack داخلي يبني الكل دفعة واحدة.
+            saudiConfirmedContent
         } else if showGlobalConfirmed {
-            globalConfirmedList
+            globalConfirmedContent
         } else {
-            rumoursList
+            rumoursContent
         }
     }
 
-    // سعودية › مؤكّدة / إعارات مؤكّدة (من /sports/transfers)
-    private var saudiConfirmedList: some View {
-        let items = saudiConfirmed.filter { t in
-            tab == .loans ? (t.kind == "loan" || t.kind == "loanend") : true
-        }
-        return Group {
-            if items.isEmpty {
-                SpEmptyState(icon: "arrow.left.arrow.right", title: L("لا صفقات مؤكّدة"),
-                             subtitle: L("لا حركة انتقالات مؤكّدة في النافذة الحالية."))
-            } else {
-                VStack(spacing: 9) {
-                    listCount(items.count, L("صفقة مؤكّدة"))
-                    ForEach(items) { t in saudiRow(t) }
+    /// سعودية › مؤكّدة (من /sports/transfers) — بلا إعارات (لها تبويب/إشاعات منفصل).
+    @ViewBuilder private var saudiConfirmedContent: some View {
+        let items = filteredSaudiConfirmed
+        if items.isEmpty {
+            SpEmptyState(icon: "arrow.left.arrow.right", title: L("لا صفقات مؤكّدة"),
+                         subtitle: L("لا حركة انتقالات مؤكّدة في النافذة الحالية."))
+                .padding(.horizontal, 16)
+        } else {
+            listCount(items.count, L("صفقة مؤكّدة"))
+                .padding(.horizontal, 16)
+            ForEach(Array(items.prefix(saudiVisibleCount))) { t in
+                saudiRow(t)
+                    .padding(.horizontal, 16)
+            }
+            if items.count > saudiVisibleCount {
+                Button {
+                    saudiVisibleCount = min(saudiVisibleCount + 40, items.count)
+                } label: {
+                    Text(Lf("عرض المزيد (%d)", items.count - saudiVisibleCount))
+                        .font(SportsFonts.app(size: 13, weight: .bold))
+                        .foregroundStyle(SpTheme.green)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
                 }
+                .buttonStyle(SpPressStyle())
                 .padding(.horizontal, 16)
             }
+        }
+    }
+
+    /// مؤكّدة بلا إعارات/انتهاء إعارة — الضوضاء كانت تُبطئ التمرير وتُخفي الصفقات الجديدة.
+    private var filteredSaudiConfirmed: [SpLeagueTransfer] {
+        saudiConfirmed.filter { t in
+            t.kind != "loan" && t.kind != "loanend"
         }
     }
 
@@ -965,48 +988,47 @@ struct TransferCenterView: View {
         }
     }
 
-    // عالمية › مؤكّدة / إعارات مؤكّدة (من /transfer-center/global-confirmed)
-    private var globalConfirmedList: some View {
+    // عالمية › مؤكّدة — صفوف مباشرة في LazyVStack الأب (بلا VStack داخلي).
+    @ViewBuilder private var globalConfirmedContent: some View {
         let items = globalConfirmed
-            // استبعاد الصفقات السعودية: فيد المؤكّد العالمي يعلّم صفقات أندية روشن
-            // بـ saudi=true (تُبقيها الخدمة لنبض السوق)، وهي تُعرض في تبويب «سعودية»
-            // من /sports/transfers — فلا تتسرّب هنا (مطابقةً لتصفية الإشاعات بالنطاق).
             .filter { !$0.saudi }
             .filter { tab == .loans ? $0.kind == .loan : true }
             .filter { majorsOnly ? $0.major : true }
-        return Group {
-            if !loadedGlobal {
-                SpLoading().padding(.top, 30)
-            } else if items.isEmpty {
-                SpEmptyState(icon: "globe", title: L("لا نتائج"),
-                             subtitle: L("جرّب «كل الانتقالات»."))
-            } else {
-                VStack(spacing: 9) {
-                    listCount(items.count, L("انتقالًا"))
-                    ForEach(items.prefix(60)) { globalRow($0) }
-                }
+        if !loadedGlobal {
+            SpLoading().padding(.top, 30)
+        } else if globalLoadFailed && globalConfirmed.isEmpty {
+            SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"),
+                         subtitle: L("اسحب للتحديث أو أعد المحاولة لاحقًا."))
                 .padding(.horizontal, 16)
+        } else if items.isEmpty {
+            SpEmptyState(icon: "globe", title: L("لا نتائج"),
+                         subtitle: L("جرّب «كل الانتقالات»."))
+                .padding(.horizontal, 16)
+        } else {
+            listCount(items.count, L("انتقالًا"))
+                .padding(.horizontal, 16)
+            ForEach(Array(items.prefix(60))) { item in
+                globalRow(item)
+                    .padding(.horizontal, 16)
             }
         }
     }
 
-    // الإشاعات (انتقال/إعارة/تجديد بحسب التبويب)
-    private var rumoursList: some View {
+    // الإشاعات — صفوف مباشرة في LazyVStack الأب.
+    @ViewBuilder private var rumoursContent: some View {
         let items = filteredRumours
-        return Group {
-            if items.isEmpty {
-                SpEmptyState(icon: "sparkles", title: L("لا إشاعات مطابقة"),
-                             subtitle: scope == .saudi
-                                ? L("تغطية المصادر العالمية للدوري السعودي تتحرّك مع اشتعال السوق.")
-                                : L("جرّب تغيير الفلاتر."))
-            } else {
-                VStack(spacing: 11) {
-                    listCount(items.count, L("إشاعة — كل إشاعة بمصدرها ودرجة احتمالها"))
-                    ForEach(items.prefix(60)) { r in
-                        TcRumourCard(rumour: r) { selectedStory = IDBox(id: r.player.id) }
-                    }
-                }
+        if items.isEmpty {
+            SpEmptyState(icon: "sparkles", title: L("لا إشاعات مطابقة"),
+                         subtitle: scope == .saudi
+                            ? L("تغطية المصادر العالمية للدوري السعودي تتحرّك مع اشتعال السوق.")
+                            : L("جرّب تغيير الفلاتر."))
                 .padding(.horizontal, 16)
+        } else {
+            listCount(items.count, L("إشاعة — كل إشاعة بمصدرها ودرجة احتمالها"))
+                .padding(.horizontal, 16)
+            ForEach(Array(items.prefix(60))) { r in
+                TcRumourCard(rumour: r) { selectedStory = IDBox(id: r.player.id) }
+                    .padding(.horizontal, 16)
             }
         }
     }
@@ -1071,7 +1093,7 @@ struct TransferCenterView: View {
 
     private var activeListCaption: String {
         if showSaudiConfirmed {
-            return Lf("%d صفقة", saudiConfirmed.count)
+            return Lf("%d صفقة", filteredSaudiConfirmed.count)
         }
         if showGlobalConfirmed {
             let count = globalConfirmed
@@ -1112,31 +1134,42 @@ struct TransferCenterView: View {
     // MARK: التحميل
 
     private func loadInitial(force: Bool = false) async {
-        loading = true
+        if saudiConfirmed.isEmpty && rumours.isEmpty { loading = true }
         async let overviewOpt = try? APIClient.shared.fetchTransferOverview(ignoreCache: force)
         async let rumoursOpt = try? APIClient.shared.fetchTransferRumours(ignoreCache: force)
-        async let saudiOpt = try? APIClient.shared.fetchLeagueTransfers(ignoreCache: force)
+        // since=4: ميركاتو جارٍ فقط — الافتراضي القديم (18) كان يُغرق القائمة بـ250 صفًا.
+        async let saudiOpt = try? APIClient.shared.fetchLeagueTransfers(since: 4, ignoreCache: force)
 
-        let ov = await overviewOpt
-        let ru = await rumoursOpt
-        let sa = await saudiOpt
-
-        if let ov { self.overview = ov }
-        if let ru {
+        // كشف تدريجي: السعودي أولًا (التبويب الافتراضي) ثم الإشاعات/النبض.
+        if let sa = await saudiOpt {
+            self.saudiConfirmed = sa.transfers ?? sa.topDeals ?? []
+            self.saudiVisibleCount = 40
+            self.loading = false
+        }
+        if let ru = await rumoursOpt {
             self.rumours = ru.rumours ?? []
             self.leagues = ru.leagues ?? []
+            self.loading = false
         }
-        if let sa { self.saudiConfirmed = sa.transfers ?? sa.topDeals ?? [] }
-        loading = false
+        if let ov = await overviewOpt { self.overview = ov }
+        self.loading = false
+        if force {
+            loadedGlobal = false
+            globalLoadFailed = false
+        }
         await loadGlobalIfNeeded(force: force)
     }
 
     private func loadGlobalIfNeeded(force: Bool = false) async {
         guard showGlobalConfirmed, !loadedGlobal || force else { return }
-        // العلم يُرفع عند النجاح فقط — كان يُرفع دائمًا فيتحوّل فشل الشبكة
-        // العابر إلى «لا نتائج» دائمة لا يصلحها إلا سحب-للتحديث.
-        if let res = try? await APIClient.shared.fetchTransferGlobalConfirmed(ignoreCache: force) {
+        // يُرفع العلم عند النجاح والفشل معًا — وإلا يبقى SpLoading إلى الأبد.
+        do {
+            let res = try await APIClient.shared.fetchTransferGlobalConfirmed(ignoreCache: force)
             self.globalConfirmed = res.transfers ?? []
+            self.globalLoadFailed = false
+            loadedGlobal = true
+        } catch {
+            self.globalLoadFailed = true
             loadedGlobal = true
         }
     }

@@ -34,14 +34,13 @@ struct CompetitionsView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    if loading {
+                    // المفضّلات المحلية تظهر فورًا — لا نُخفي كل الواجهة خلف طلب واحد.
+                    myCompetitionsCard
+                    if loading && competitions.isEmpty {
                         SpLoading()
-                    } else if let loadError {
+                    } else if let loadError, competitions.isEmpty {
                         SpEmptyState(icon: "wifi.exclamationmark", title: L("تعذّر التحميل"), subtitle: loadError)
                     } else {
-                        // بطاقة «دليل البطولات» حُذفت — كانت تكرّر عنوان الشريط
-                        // وأعداد الأقسام والفلاتر. القائمة تبدأ مباشرة بالفلاتر.
-                        myCompetitionsCard
                         filters
                         ForEach(grouped, id: \.category) { group in
                             categorySection(group.category, group.items)
