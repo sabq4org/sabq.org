@@ -1027,7 +1027,7 @@ private fun DashboardEntryRow(onClick: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text = "مركز الأداء",
+                text = "لوحة الكاتب",
                 style = SabqTheme.typography.compactCardTitle.copy(
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
@@ -1035,7 +1035,7 @@ private fun DashboardEntryRow(onClick: () -> Unit) {
                 ),
             )
             Text(
-                text = "إحصائيات مقالاتك وتفاعل جمهورك",
+                text = "مساحتك من الفكرة إلى النشر — أفكار، مقالات، أداء",
                 style = SabqTheme.typography.metaSmall.copy(
                     fontSize = 12.sp,
                     color = SabqTheme.colors.secondaryInk,
