@@ -18,6 +18,19 @@ const RIYADH_OFFSET_MS = 3 * 60 * 60 * 1000;
 // الحد الأدنى بين مقالتين للكاتب نفسه (أسبوع مع تسامح ساعات)
 const MIN_GAP_MS = 6 * DAY_MS + 12 * 60 * 60 * 1000;
 
+/**
+ * مقالة «أُرسلت» وتنتظر التحرير: مراجعة معلّقة، أو مسودة موبايل قديمة
+ * بلا reviewStatus (إرسال iOS/Android كان يحفظ draft فقط قبل الإصلاح).
+ */
+const awaitingEditorialSql = sql`(
+  ${articles.reviewStatus} = 'pending_review'
+  OR (
+    ${articles.status} = 'draft'
+    AND ${articles.source} IN ('ios-app', 'android-app')
+    AND ${articles.reviewStatus} IS NULL
+  )
+)`;
+
 export type WriterScheduleInfo = {
   weekday: number;
   publishTime: string;
@@ -140,7 +153,7 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
       .select({
         authorId: articles.authorId,
         publishedCount: sql<number>`count(*) filter (where ${articles.status} = 'published')::int`,
-        pendingCount: sql<number>`count(*) filter (where ${articles.reviewStatus} = 'pending_review')::int`,
+        pendingCount: sql<number>`count(*) filter (where ${awaitingEditorialSql})::int`,
         totalViews: sql<number>`coalesce(sum(${articles.views}) filter (where ${articles.status} = 'published'), 0)::int`,
         maxScheduledAt: sql<string | null>`max(${articles.scheduledAt}) filter (where ${articles.status} = 'scheduled')`,
       })
@@ -542,7 +555,7 @@ export async function getWriterScheduleBanner(
   const [agg] = await db
     .select({
       lastPublishedAt: sql<string | null>`max(${articles.publishedAt}) filter (where ${articles.status} = 'published')`,
-      upcomingCount: sql<number>`count(*) filter (where (${articles.status} = 'scheduled' and ${articles.scheduledAt} >= now()) or ${articles.reviewStatus} = 'pending_review')::int`,
+      upcomingCount: sql<number>`count(*) filter (where (${articles.status} = 'scheduled' and ${articles.scheduledAt} >= now()) or ${awaitingEditorialSql})::int`,
       maxScheduledAt: sql<string | null>`max(${articles.scheduledAt}) filter (where ${articles.status} = 'scheduled')`,
     })
     .from(articles)

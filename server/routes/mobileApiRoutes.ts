@@ -4787,6 +4787,9 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       articleType: kind,
       newsType: "regular",
       status: "draft",
+      // يطابق إرسال الويب وإعادة الإرسال بعد التعديل — بدونها تبقى حالة
+      // الالتزام «لم يرسل» رغم وصول المسودة لغرفة الأخبار.
+      reviewStatus: "pending_review",
       imageUrl: heroImage,
       albumImages,
       source: (() => {
