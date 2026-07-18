@@ -457,10 +457,15 @@ fun SabqApp(
                     )
                 }
                 composable(SabqRoutes.ContributorDashboard) {
-                    com.sabq.smart.feature.settings.ContributorDashboardScreen(
+                    // «لوحة الكاتب»: كاتب الرأي يرى مساحة الكاتب بأربعة تبويبات،
+                    // وغيره لوحة الأداء وحدها — مطابقة لسلوك iOS.
+                    com.sabq.smart.feature.settings.WriterWorkspaceScreen(
                         onBack = { navController.popBackStack() },
                         onOpenSurvey = { surveyToken ->
                             navController.navigate(SabqRoutes.survey(surveyToken))
+                        },
+                        onOpenNotifications = {
+                            navController.navigate(SabqRoutes.Notifications)
                         },
                     )
                 }

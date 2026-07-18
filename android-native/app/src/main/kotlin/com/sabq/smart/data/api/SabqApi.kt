@@ -515,6 +515,26 @@ interface SabqApi {
     @POST("api/v1/contributor/schedule")
     suspend fun setContributorSchedule(@Body body: WriterSchedulePickRequest): ApiWriterSchedulePickResponse
 
+    /** مساحة الكاتب: المكتب، المتابعة، نبض القراء، الموجز الشهري، التقويم */
+    @GET("api/v1/contributor/workspace")
+    suspend fun getContributorWorkspace(): ApiWriterWorkspace
+
+    /** ثلاث أفكار AI — تُولَّد عند الطلب فقط (محدودة 30/15د) */
+    @GET("api/v1/contributor/ideas")
+    suspend fun getContributorIdeas(): ApiWriterIdeasResponse
+
+    /** مدرب الفكرة — أسئلة وأطروحات وخريطة مقال */
+    @POST("api/v1/contributor/idea-coach")
+    suspend fun postIdeaCoach(@Body body: IdeaCoachRequest): ApiWriterCoachResult
+
+    /** «قارئ سبق الأول» — مراجعة AI لمقال يملكه الكاتب */
+    @POST("api/v1/contributor/article-review")
+    suspend fun postArticleReview(@Body body: ArticleReviewRequest): ApiWriterReviewResult
+
+    /** بصمة الكاتب الأسلوبية */
+    @GET("api/v1/contributor/style-profile")
+    suspend fun getContributorStyleProfile(): ApiWriterStyleProfile
+
     // -- مُقترب (Muqtarab analytical angles) -------------------------
     // Public namespace (NOT v1), no auth. Paths mirror iOS
     // `MuqtarabModels.swift` `APIClient` extension 1:1.
