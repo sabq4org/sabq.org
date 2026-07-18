@@ -20,6 +20,7 @@ import {
 import { storage } from "../storage";
 import { deductPublisherCreditSafely } from "./publisherCreditService";
 import { invalidatePublishedContent } from "./contentInvalidation";
+import { PUBLISHER_GUIDE_DEFAULT_SECTIONS } from "@shared/publisherGuideDefaults";
 
 /**
  * بوابة الناشر (وكالات المحتوى الخارجية).
@@ -1298,6 +1299,47 @@ export async function deleteGuideSection(id: string) {
     .where(eq(publisherGuideSections.id, id))
     .returning({ id: publisherGuideSections.id });
   return !!deleted;
+}
+
+/**
+ * يزرع الأقسام الافتراضية للدليل — يتخطى أي عنوان موجود مسبقاً (آمن للإعادة).
+ */
+export async function seedDefaultGuideSections(adminId: string) {
+  const existing = await db
+    .select({ title: publisherGuideSections.title })
+    .from(publisherGuideSections);
+  const existingTitles = new Set(existing.map((row) => row.title.trim()));
+
+  const toInsert = PUBLISHER_GUIDE_DEFAULT_SECTIONS.filter(
+    (section) => !existingTitles.has(section.title.trim()),
+  );
+
+  if (toInsert.length === 0) {
+    return {
+      inserted: 0,
+      skipped: PUBLISHER_GUIDE_DEFAULT_SECTIONS.length,
+      sections: [] as Awaited<ReturnType<typeof createGuideSection>>[],
+    };
+  }
+
+  const inserted = await db
+    .insert(publisherGuideSections)
+    .values(
+      toInsert.map((section) => ({
+        title: section.title,
+        content: section.content,
+        displayOrder: section.displayOrder,
+        isPublished: section.isPublished,
+        updatedBy: adminId,
+      })),
+    )
+    .returning();
+
+  return {
+    inserted: inserted.length,
+    skipped: PUBLISHER_GUIDE_DEFAULT_SECTIONS.length - inserted.length,
+    sections: inserted,
+  };
 }
 
 /** إشعار جرس لكل مديري النظام — للأحداث التي تتطلب إجراء إدارياً. */

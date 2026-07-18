@@ -2,18 +2,15 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
-  CheckCircle,
-  Clock,
   Inbox,
-  Lock,
   MessageSquare,
+  Mic,
+  PenLine,
   Search,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
 import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,7 +22,11 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { STATUS_META, STATUS_OPTIONS, type OpinionTicketStatus } from "@/components/opinion-tickets/statusMeta";
-import { authorKindMeta, type TicketAuthorKind } from "@/components/opinion-tickets/authorKindMeta";
+import {
+  AUTHOR_KIND_META,
+  authorKindMeta,
+  type TicketAuthorKind,
+} from "@/components/opinion-tickets/authorKindMeta";
 import { apiUrl } from "@/lib/queryClient";
 
 interface AdminTicketRow {
@@ -54,11 +55,13 @@ interface WritersResponse {
   }>;
 }
 
+type KindFilter = "all" | TicketAuthorKind;
+
 function formatDate(date: string) {
   try {
     return new Date(date).toLocaleString("ar-SA-u-ca-gregory-nu-latn", {
       year: "numeric",
-      month: "long",
+      month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
@@ -68,37 +71,16 @@ function formatDate(date: string) {
   }
 }
 
-interface StatCardProps {
-  label: string;
-  value: number;
-  icon: React.ComponentType<{ className?: string }>;
-  iconColor: string;
-  iconBg: string;
-  cardClassName: string;
-}
-
-function StatCard({ label, value, icon: Icon, iconColor, iconBg, cardClassName }: StatCardProps) {
-  return (
-    <Card className={cn("rounded-2xl shadow-sm", cardClassName)}>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div className={cn("rounded-lg p-2", iconBg)}>
-            <Icon className={cn("h-5 w-5", iconColor)} />
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="text-2xl font-bold tabular-nums">{value.toLocaleString("en-US")}</p>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+function resolveKind(kind?: string | null): TicketAuthorKind {
+  if (kind && kind in AUTHOR_KIND_META) return kind as TicketAuthorKind;
+  return "other";
 }
 
 export default function OpinionTicketsAdmin() {
   const [, navigate] = useLocation();
   const [statusFilter, setStatusFilter] = useState<OpinionTicketStatus | "all">("all");
   const [writerFilter, setWriterFilter] = useState<string>("all");
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [search, setSearch] = useState("");
 
   const queryParams = useMemo(() => {
@@ -130,215 +112,331 @@ export default function OpinionTicketsAdmin() {
   const tickets = Array.isArray(data?.tickets) ? data!.tickets : [];
   const writers = Array.isArray(writersData?.writers) ? writersData!.writers : [];
 
+  const stats = useMemo(() => {
+    let open = 0;
+    let answered = 0;
+    let closed = 0;
+    let unread = 0;
+    const byKind: Record<TicketAuthorKind, number> = {
+      reporter: 0,
+      opinion_author: 0,
+      angle_writer: 0,
+      other: 0,
+    };
+    for (const t of tickets) {
+      if (t.status === "open") open += 1;
+      else if (t.status === "answered") answered += 1;
+      else if (t.status === "closed") closed += 1;
+      if (t.hasUnread) unread += 1;
+      byKind[resolveKind(t.authorKind)] += 1;
+    }
+    return {
+      total: tickets.length,
+      open,
+      answered,
+      closed,
+      unread,
+      byKind,
+    };
+  }, [tickets]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return tickets;
-    return tickets.filter(
-      (t) =>
+    return tickets.filter((t) => {
+      if (kindFilter !== "all" && resolveKind(t.authorKind) !== kindFilter) return false;
+      if (!q) return true;
+      return (
         t.title.toLowerCase().includes(q) ||
         (t.writerName || "").toLowerCase().includes(q) ||
         (t.writerEmail || "").toLowerCase().includes(q)
-    );
-  }, [tickets, search]);
+      );
+    });
+  }, [tickets, search, kindFilter]);
 
-  const stats = useMemo(() => {
-    const open = tickets.filter((t) => t.status === "open").length;
-    const answered = tickets.filter((t) => t.status === "answered").length;
-    const closed = tickets.filter((t) => t.status === "closed").length;
-    return { total: tickets.length, open, answered, closed };
-  }, [tickets]);
+  const writersForSelect = useMemo(() => {
+    if (kindFilter === "all") return writers;
+    return writers.filter((w) => resolveKind(w.authorKind) === kindFilter);
+  }, [writers, kindFilter]);
+
+  const kindTabs: Array<{ id: KindFilter; label: string; count: number; icon: typeof Mic }> = [
+    { id: "all", label: "الكل", count: stats.total, icon: Inbox },
+    { id: "reporter", label: "مراسلون", count: stats.byKind.reporter, icon: Mic },
+    { id: "opinion_author", label: "كتّاب رأي", count: stats.byKind.opinion_author, icon: PenLine },
+    { id: "angle_writer", label: "زوايا", count: stats.byKind.angle_writer, icon: PenLine },
+  ];
+
+  const statusStrip = [
+    { label: "الإجمالي", value: stats.total, tone: "text-foreground" },
+    { label: "مفتوحة", value: stats.open, tone: "text-amber-700 dark:text-amber-300" },
+    { label: "مجابة", value: stats.answered, tone: "text-emerald-700 dark:text-emerald-300" },
+    { label: "مغلقة", value: stats.closed, tone: "text-rose-700 dark:text-rose-300" },
+    { label: "غير مقروء", value: stats.unread, tone: "text-primary" },
+  ];
 
   return (
     <DashboardLayout>
       <DashboardPageShell
-        maxWidthClassName="max-w-[1600px]"
-        contentClassName="px-4 pb-10 sm:px-6"
+        maxWidthClassName="max-w-[1400px]"
+        contentClassName="px-4 pb-16 sm:px-6"
       >
         <DashboardPageHeader
           icon={MessageSquare}
-          title="استفسارات المراسلين والكتّاب"
-          description="صندوق واحد لاستفسارات المراسلين وكتّاب الرأي والزوايا"
+          title="استفسارات المساهمين"
+          description="صندوق موحّد للمراسلين وكتّاب الرأي والزوايا — مع تمييز واضح لكل دور"
           titleTestId="text-page-title"
         />
 
-        {/* Stats */}
-        {isLoading ? (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="rounded-2xl border-sky-200/55 shadow-sm dark:border-sky-900/35">
-                <CardContent className="p-4">
-                  <Skeleton className="mb-2 h-4 w-20" />
-                  <Skeleton className="h-8 w-16" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard
-              label="إجمالي الاستفسارات"
-              value={stats.total}
-              icon={Inbox}
-              iconColor="text-sky-700 dark:text-sky-300"
-              iconBg="bg-sky-100/80 dark:bg-sky-950/40"
-              cardClassName="border-sky-200/55 bg-gradient-to-br from-sky-50/50 via-card to-card dark:border-sky-900/35 dark:from-sky-950/15"
-            />
-            <StatCard
-              label="مفتوحة"
-              value={stats.open}
-              icon={Clock}
-              iconColor="text-amber-800 dark:text-amber-200"
-              iconBg="bg-amber-100/80 dark:bg-amber-950/40"
-              cardClassName="border-amber-200/55 bg-gradient-to-br from-amber-50/50 via-card to-card dark:border-amber-900/35 dark:from-amber-950/15"
-            />
-            <StatCard
-              label="تمت الإجابة"
-              value={stats.answered}
-              icon={CheckCircle}
-              iconColor="text-emerald-800 dark:text-emerald-200"
-              iconBg="bg-emerald-100/80 dark:bg-emerald-950/40"
-              cardClassName="border-emerald-200/55 bg-gradient-to-br from-emerald-50/50 via-card to-card dark:border-emerald-900/35 dark:from-emerald-950/15"
-            />
-            <StatCard
-              label="مغلقة"
-              value={stats.closed}
-              icon={Lock}
-              iconColor="text-rose-700 dark:text-rose-300"
-              iconBg="bg-rose-100/80 dark:bg-rose-950/40"
-              cardClassName="border-rose-200/55 bg-gradient-to-br from-rose-50/45 via-card to-card dark:border-rose-900/35 dark:from-rose-950/15"
-            />
-          </div>
-        )}
-
-        {/* Filters */}
-        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
-          <CardContent className="p-4">
-            <div className="grid gap-3 md:grid-cols-[1fr_200px_220px]">
-              <div className="relative">
-                <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="بحث في العنوان أو اسم المراسل/الكاتب..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pr-10"
-                  data-testid="input-search-tickets"
-                />
-              </div>
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-                <SelectTrigger data-testid="select-filter-status">
-                  <SelectValue placeholder="جميع الحالات" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">جميع الحالات</SelectItem>
-                  {STATUS_OPTIONS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {STATUS_META[s].label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={writerFilter} onValueChange={setWriterFilter}>
-                <SelectTrigger data-testid="select-filter-writer">
-                  <SelectValue placeholder="الجميع" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">جميع المراسلين والكتّاب</SelectItem>
-                  {writers.map((w) => {
-                    const kind = authorKindMeta(w.authorKind);
-                    return (
-                      <SelectItem key={w.id} value={w.id}>
-                        {kind.shortLabel}: {w.name || w.email || w.id}
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* List */}
-        <Card className="rounded-2xl border-sky-200/55 bg-gradient-to-br from-sky-50/40 via-card to-card shadow-sm dark:border-sky-900/35 dark:from-sky-950/15">
-          <CardContent className="p-4 sm:p-6">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">قائمة الاستفسارات</h2>
-              <p className="text-xs tabular-nums text-muted-foreground">
-                {isLoading ? "جاري التحميل..." : `${filtered.length.toLocaleString("en-US")} استفسار`}
+        {/* حالة الصندوق */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {statusStrip.map((item) => (
+            <div key={item.label} className="rounded-xl border bg-card px-3 py-2.5">
+              <p className="text-[11px] text-muted-foreground">{item.label}</p>
+              <p className={cn("mt-0.5 text-xl font-bold tabular-nums tracking-tight", item.tone)}>
+                {isLoading ? "—" : item.value}
               </p>
             </div>
+          ))}
+        </div>
 
-            {isLoading ? (
-              <div className="space-y-2">
-                {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-20 w-full rounded-lg" />
+        {/* توزيع الأدوار — جوهر التغيير بعد دخول المراسلين */}
+        <div className="grid gap-2 sm:grid-cols-3">
+          {(
+            [
+              {
+                kind: "reporter" as const,
+                hint: "استفسارات الميدان والتحرير",
+                ring: "border-sky-200/70 dark:border-sky-900/40",
+                fill: "from-sky-500/10",
+              },
+              {
+                kind: "opinion_author" as const,
+                hint: "كتّاب المقالات والرأي",
+                ring: "border-amber-200/70 dark:border-amber-900/40",
+                fill: "from-amber-500/10",
+              },
+              {
+                kind: "angle_writer" as const,
+                hint: "كتّاب الزوايا الثابتة",
+                ring: "border-violet-200/70 dark:border-violet-900/40",
+                fill: "from-violet-500/10",
+              },
+            ] as const
+          ).map((card) => {
+            const meta = AUTHOR_KIND_META[card.kind];
+            const Icon = meta.icon;
+            const count = stats.byKind[card.kind];
+            const share = stats.total > 0 ? Math.round((count / stats.total) * 100) : 0;
+            const selected = kindFilter === card.kind;
+            return (
+              <button
+                key={card.kind}
+                type="button"
+                onClick={() => setKindFilter(selected ? "all" : card.kind)}
+                className={cn(
+                  "rounded-2xl border bg-gradient-to-bl to-card p-3.5 text-start transition-all",
+                  card.ring,
+                  card.fill,
+                  selected && "ring-2 ring-primary/40",
+                  !selected && "hover:bg-muted/30",
+                )}
+                data-testid={`kind-card-${card.kind}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className={cn("inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium", meta.className)}>
+                    <Icon className="h-3.5 w-3.5" />
+                    {meta.label}
+                  </span>
+                  <span className="text-2xl font-bold tabular-nums">{isLoading ? "—" : count}</span>
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">{card.hint}</p>
+                <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      "h-full rounded-full",
+                      card.kind === "reporter" && "bg-sky-500",
+                      card.kind === "opinion_author" && "bg-amber-500",
+                      card.kind === "angle_writer" && "bg-violet-500",
+                    )}
+                    style={{ width: `${share}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">{share}٪ من الصندوق</p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* فلاتر مضغوطة */}
+        <div className="space-y-3 rounded-2xl border bg-card p-3 sm:p-4">
+          <div className="flex flex-wrap gap-1.5 rounded-xl bg-muted/40 p-1">
+            {kindTabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setKindFilter(tab.id)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors tabular-nums",
+                    kindFilter === tab.id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  data-testid={`filter-kind-${tab.id}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {tab.label}
+                  <span className="opacity-70">({tab.count})</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-[1fr_160px_220px]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="بحث في العنوان أو الاسم..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-10 pr-10"
+                data-testid="input-search-tickets"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as OpinionTicketStatus | "all")}>
+              <SelectTrigger className="h-10" data-testid="select-filter-status">
+                <SelectValue placeholder="الحالة" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الحالات</SelectItem>
+                {STATUS_OPTIONS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {STATUS_META[s].label}
+                  </SelectItem>
                 ))}
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="rounded-lg border bg-muted/20 py-12 text-center">
-                <Inbox className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
-                <p className="text-muted-foreground">لا توجد استفسارات مطابقة</p>
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-xl border border-sky-100/80 bg-card shadow-sm dark:border-sky-900/30">
-                {filtered.map((t, idx) => {
-                  const meta = STATUS_META[t.status] ?? STATUS_META.open;
-                  const kind = authorKindMeta(t.authorKind);
-                  const KindIcon = kind.icon;
+              </SelectContent>
+            </Select>
+            <Select
+              value={writerFilter}
+              onValueChange={(value) => {
+                setWriterFilter(value);
+                if (value !== "all") {
+                  const w = writers.find((item) => item.id === value);
+                  if (w) setKindFilter(resolveKind(w.authorKind));
+                }
+              }}
+            >
+              <SelectTrigger className="h-10" data-testid="select-filter-writer">
+                <SelectValue placeholder="المساهم" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل المساهمين</SelectItem>
+                {writersForSelect.map((w) => {
+                  const kind = authorKindMeta(w.authorKind);
                   return (
-                    <div
-                      key={t.id}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => navigate(`/dashboard/opinion-tickets/${t.id}`)}
-                      onKeyDown={(e) =>
-                        (e.key === "Enter" || e.key === " ") &&
-                        navigate(`/dashboard/opinion-tickets/${t.id}`)
-                      }
-                      className={cn(
-                        "flex cursor-pointer items-center gap-3 px-4 py-3.5 transition-colors hover:bg-muted/50",
-                        idx !== filtered.length - 1 && "border-b border-border/70",
-                        t.hasUnread && "bg-amber-50/70 dark:bg-amber-500/10"
-                      )}
-                      data-testid={`row-admin-ticket-${t.id}`}
-                    >
-                      <div
-                        className={cn(
-                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
-                          kind.className,
-                        )}
-                        title={kind.label}
-                        aria-label={kind.label}
-                      >
-                        <KindIcon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="line-clamp-1 text-sm font-semibold text-foreground">{t.title}</h3>
-                          {t.hasUnread && (
-                            <span
-                              className="inline-block h-2.5 w-2.5 rounded-full bg-amber-600 ring-2 ring-background"
-                              aria-label="جديد"
-                            />
-                          )}
-                        </div>
-                        <p className="mt-0.5 line-clamp-1 text-xs tabular-nums text-muted-foreground">
-                          <span className="font-medium text-foreground/70">{kind.label}</span>
-                          <span className="mx-1">·</span>
-                          {t.writerName || t.writerEmail || t.writerId}
-                          <span className="mx-1">·</span>
-                          {formatDate(t.lastMessageAt)}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className={cn("shrink-0 font-medium", meta.className)}>
-                        {meta.label}
-                      </Badge>
-                    </div>
+                    <SelectItem key={w.id} value={w.id}>
+                      {kind.shortLabel}: {w.name || w.email || w.id}
+                    </SelectItem>
                   );
                 })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* القائمة */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between gap-2 px-0.5">
+            <h2 className="text-sm font-semibold">قائمة الاستفسارات</h2>
+            <p className="text-xs tabular-nums text-muted-foreground">
+              {isLoading ? "جاري التحميل..." : `${filtered.length} نتيجة`}
+            </p>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-xl" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-2xl border border-dashed bg-muted/20 py-12 text-center">
+              <Inbox className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">لا توجد استفسارات مطابقة</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-2xl border bg-card">
+              {filtered.map((t, idx) => {
+                const meta = STATUS_META[t.status] ?? STATUS_META.open;
+                const kind = authorKindMeta(t.authorKind);
+                const KindIcon = kind.icon;
+                return (
+                  <div
+                    key={t.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/dashboard/opinion-tickets/${t.id}`)}
+                    onKeyDown={(e) =>
+                      (e.key === "Enter" || e.key === " ") &&
+                      navigate(`/dashboard/opinion-tickets/${t.id}`)
+                    }
+                    className={cn(
+                      "grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40 sm:px-4",
+                      idx !== filtered.length - 1 && "border-b",
+                      t.hasUnread && "bg-amber-50/60 dark:bg-amber-500/10",
+                    )}
+                    data-testid={`row-admin-ticket-${t.id}`}
+                  >
+                    <div
+                      className={cn(
+                        "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+                        kind.className,
+                      )}
+                      title={kind.label}
+                      aria-label={kind.label}
+                    >
+                      <KindIcon className="h-4 w-4" />
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <h3 className="line-clamp-1 text-sm font-semibold">{t.title}</h3>
+                        {t.hasUnread && (
+                          <span
+                            className="inline-block h-2 w-2 rounded-full bg-amber-600 ring-2 ring-background"
+                            aria-label="جديد"
+                          />
+                        )}
+                        <span
+                          className={cn(
+                            "rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                            kind.className,
+                          )}
+                        >
+                          {kind.shortLabel}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 line-clamp-1 text-[11px] tabular-nums text-muted-foreground">
+                        {t.writerName || t.writerEmail || t.writerId}
+                        <span className="mx-1 opacity-50">·</span>
+                        {formatDate(t.lastMessageAt)}
+                      </p>
+                    </div>
+
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-md border px-2 py-0.5 text-[11px] font-medium",
+                        meta.className,
+                      )}
+                    >
+                      {meta.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </DashboardPageShell>
     </DashboardLayout>
   );

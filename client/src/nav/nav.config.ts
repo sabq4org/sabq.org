@@ -457,11 +457,11 @@ export const navConfig: NavItem[] = [
     permissions: ["opinion.review"],
   },
 
-  // ===== استفسارات المراسلين والكتّاب (صندوق واحد / نفس النموذج) =====
+  // ===== استفسارات المساهمين (مراسلون + كتّاب رأي/زوايا — صندوق واحد) =====
   {
     id: "opinion_tickets",
     labelKey: "nav.opinion_tickets",
-    labelAr: "استفسارات المراسلين والكتّاب",
+    labelAr: "استفسارات المساهمين",
     path: "/dashboard/opinion-tickets",
     icon: MessageSquare,
     roles: ["admin", "editor", "system_admin"],
