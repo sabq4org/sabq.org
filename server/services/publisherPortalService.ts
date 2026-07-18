@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, lt, or, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { nanoid } from "nanoid";
 import { db } from "../db";
@@ -195,6 +195,50 @@ export async function getPortalArticles(
   };
 }
 
+/** بداية يوم تقويمي (UTC) لتواريخ الباقات المخزّنة كتاريخ بدون وقت دقيق. */
+function startOfUtcDay(d: Date) {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
+}
+
+function endOfUtcDay(d: Date) {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+}
+
+/**
+ * بداية فترة «النشر المفتوح» للوكالة:
+ * بعد انتهاء آخر باقة محدودة (إن وُجدت)، وإلا أقدم بداية لباقة مفتوحة.
+ * حتى لو أُنشئت باقة مفتوحة جديدة اليوم لا نُصفّر ما نُشر في الفترة المفتوحة.
+ */
+function resolveOpenPeriodStart(
+  packages: Array<{
+    startDate: Date;
+    expiryDate: Date | null;
+    isUnlimited: boolean;
+    packageName: string;
+  }>,
+  fallback: Date,
+): Date {
+  const now = Date.now();
+  const limitedEnds = packages
+    .filter((p) => !p.isUnlimited && !/مفتوح/.test(p.packageName) && p.expiryDate)
+    .map((p) => p.expiryDate!)
+    .filter((d) => d.getTime() < now);
+
+  if (limitedEnds.length > 0) {
+    return startOfUtcDay(new Date(Math.max(...limitedEnds.map((d) => d.getTime()))));
+  }
+
+  const openRelated = packages.filter(
+    (p) => p.isUnlimited || /مفتوح/.test(p.packageName),
+  );
+  if (openRelated.length === 0) return startOfUtcDay(fallback);
+  const earliest = openRelated.reduce(
+    (min, p) => (p.startDate.getTime() < min.getTime() ? p.startDate : min),
+    openRelated[0].startDate,
+  );
+  return startOfUtcDay(earliest);
+}
+
 /** كل باقات الوكالة (نشطة ومعطّلة) كما تظهر في لوحة الإدارة. */
 export async function getPortalCreditPackages(publisher: Publisher) {
   const now = new Date();
@@ -204,29 +248,97 @@ export async function getPortalCreditPackages(publisher: Publisher) {
     .where(eq(publisherCredits.publisherId, publisher.id))
     .orderBy(desc(publisherCredits.isActive), desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt));
 
-  return {
-    packages: rows.map((pkg) => {
-      const expired = !!(pkg.expiryDate && pkg.expiryDate.getTime() < now.getTime());
-      let status: "active" | "inactive" | "expired" = "inactive";
-      if (pkg.isActive && !expired) status = "active";
-      else if (expired) status = "expired";
-      return {
-        id: pkg.id,
-        packageName: pkg.packageName,
-        totalCredits: pkg.totalCredits,
-        usedCredits: pkg.usedCredits,
-        remainingCredits: pkg.remainingCredits,
-        isUnlimited: pkg.isUnlimited,
-        period: pkg.period,
-        startDate: pkg.startDate,
-        expiryDate: pkg.expiryDate,
-        isActive: pkg.isActive,
-        status,
-        notes: pkg.notes,
-        createdAt: pkg.createdAt,
-      };
-    }),
-  };
+  const articleCond = publisherArticlesCondition(publisher);
+  const [publishedRows, usageLogs] = await Promise.all([
+    db
+      .select({ publishedAt: articles.publishedAt })
+      .from(articles)
+      .where(and(articleCond, eq(articles.status, "published"))),
+    db
+      .select({
+        creditPackageId: publisherCreditLogs.creditPackageId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(publisherCreditLogs)
+      .where(
+        and(
+          eq(publisherCreditLogs.publisherId, publisher.id),
+          eq(publisherCreditLogs.actionType, "credit_used"),
+        ),
+      )
+      .groupBy(publisherCreditLogs.creditPackageId),
+  ]);
+
+  const publishedDates = publishedRows
+    .map((r) => r.publishedAt)
+    .filter((d): d is Date => d instanceof Date);
+  const logsByPackage = new Map(
+    usageLogs.map((r) => [r.creditPackageId, Number(r.count) || 0]),
+  );
+
+  const openPeriodStart = resolveOpenPeriodStart(rows, rows[0]?.startDate ?? now);
+
+  // صحّح usedCredits للباقات المفتوحة إن تخلّف العداد عن الواقع
+  const healUpdates: Array<{ id: string; used: number }> = [];
+
+  const packages = rows.map((pkg) => {
+    const expired = !!(pkg.expiryDate && pkg.expiryDate.getTime() < now.getTime());
+    let status: "active" | "inactive" | "expired" = "inactive";
+    if (pkg.isActive && !expired) status = "active";
+    else if (expired) status = "expired";
+
+    const windowStart = pkg.isUnlimited && status === "active"
+      ? openPeriodStart
+      : startOfUtcDay(pkg.startDate);
+    const windowEnd = pkg.expiryDate ? endOfUtcDay(pkg.expiryDate) : now;
+
+    const publishedInWindow = publishedDates.filter(
+      (d) => d.getTime() >= windowStart.getTime() && d.getTime() <= windowEnd.getTime(),
+    ).length;
+    const loggedUses = logsByPackage.get(pkg.id) ?? 0;
+
+    // الباقة المفتوحة: مصدر الحقيقة = المنشور في نافذتها (أو سجلات الاستخدام)
+    // الباقة المحدودة: نثق بعدّاد الخصم مع عدم النزول تحت سجلات الاستخدام
+    const usedCredits = pkg.isUnlimited
+      ? Math.max(pkg.usedCredits, publishedInWindow, loggedUses)
+      : Math.max(pkg.usedCredits, loggedUses);
+
+    if (pkg.isUnlimited && usedCredits !== pkg.usedCredits) {
+      healUpdates.push({ id: pkg.id, used: usedCredits });
+    }
+
+    return {
+      id: pkg.id,
+      packageName: pkg.packageName,
+      totalCredits: pkg.totalCredits,
+      usedCredits,
+      publishedCount: publishedInWindow,
+      remainingCredits: pkg.remainingCredits,
+      isUnlimited: pkg.isUnlimited,
+      period: pkg.period,
+      startDate: pkg.startDate,
+      /** بداية العدّ المعروضة للباقة المفتوحة النشطة (قد تكون أقدم من startDate) */
+      countingFrom: windowStart,
+      expiryDate: pkg.expiryDate,
+      isActive: pkg.isActive,
+      status,
+      notes: pkg.notes,
+      createdAt: pkg.createdAt,
+    };
+  });
+
+  if (healUpdates.length > 0) {
+    await Promise.all(
+      healUpdates.map((u) =>
+        db
+          .update(publisherCredits)
+          .set({ usedCredits: u.used, updatedAt: now })
+          .where(eq(publisherCredits.id, u.id)),
+      ),
+    );
+  }
+
+  return { packages };
 }
 
 /** سجل عمليات الرصيد لبوابة الناشر — كانت الصفحة تستدعي مساراً غير موجود. */
@@ -671,6 +783,39 @@ export async function getPortalOverview(userId: string) {
     });
   }
 
+  // صحّح عدّاد الباقة المفتوحة من المنشور الفعلي (لا نعتمد على usedCredits المتخلّف)
+  let enrichedActiveCredit = activeCredit ?? null;
+  if (activeCredit?.isUnlimited) {
+    const allPackages = await db
+      .select({
+        startDate: publisherCredits.startDate,
+        expiryDate: publisherCredits.expiryDate,
+        isUnlimited: publisherCredits.isUnlimited,
+        packageName: publisherCredits.packageName,
+      })
+      .from(publisherCredits)
+      .where(eq(publisherCredits.publisherId, publisher.id));
+    const countingFrom = resolveOpenPeriodStart(allPackages, activeCredit.startDate);
+    const windowEnd = activeCredit.expiryDate ? endOfUtcDay(activeCredit.expiryDate) : now;
+    const [{ count: publishedInOpen }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(articles)
+      .where(
+        and(
+          condition,
+          eq(articles.status, "published"),
+          gte(articles.publishedAt, countingFrom),
+          lte(articles.publishedAt, windowEnd),
+        ),
+      );
+    const used = Math.max(activeCredit.usedCredits, Number(publishedInOpen) || 0);
+    enrichedActiveCredit = {
+      ...activeCredit,
+      usedCredits: used,
+      countingFrom,
+    } as typeof activeCredit & { countingFrom: Date };
+  }
+
   return {
     publisher: {
       id: publisher.id,
@@ -693,7 +838,7 @@ export async function getPortalOverview(userId: string) {
       pendingReview: Number(stats?.pendingReview) || 0,
       needsChanges: needsChangesCount,
     },
-    activeCredit: activeCredit ?? null,
+    activeCredit: enrichedActiveCredit,
     recentArticles,
     topArticles,
     monthlyPublishing: monthlyPublishing.map((m) => ({

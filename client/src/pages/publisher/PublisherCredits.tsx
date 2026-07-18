@@ -20,7 +20,6 @@ import {
   Calendar,
   TrendingUp,
   TrendingDown,
-  FileText,
   Package,
   Ban,
   CheckCircle2,
@@ -51,10 +50,12 @@ interface CreditPackage {
   packageName: string;
   totalCredits: number;
   usedCredits: number;
+  publishedCount?: number;
   remainingCredits: number;
   isUnlimited: boolean;
   period: string;
   startDate: string;
+  countingFrom?: string;
   expiryDate: string | null;
   isActive: boolean;
   status: "active" | "inactive" | "expired";
@@ -69,7 +70,7 @@ const periodLabel: Record<string, string> = {
   "one-time": "مرة واحدة",
 };
 
-const formatDate = (value: string | null) =>
+const formatDate = (value: string | null | undefined) =>
   value
     ? new Date(value).toLocaleDateString("en-GB", {
         year: "numeric",
@@ -151,6 +152,9 @@ export default function PublisherCredits() {
       ? Math.round((activePackage.remainingCredits / activePackage.totalCredits) * 100)
       : 0;
 
+  const activeUsed = activePackage?.usedCredits ?? 0;
+  const activeCountingFrom = activePackage?.countingFrom || activePackage?.startDate;
+
   return (
     <PublisherLayout>
       <div className="w-full space-y-6" dir="rtl">
@@ -159,11 +163,10 @@ export default function PublisherCredits() {
             الرصيد والباقات
           </h1>
           <p className="mt-1 text-muted-foreground">
-            باقات وكالتكم كما تظهر لدى الإدارة، مع سجل كل عملية خصم أو إضافة
+            باقات وكالتكم كما تظهر لدى الإدارة، مع عدّاد المنشور الفعلي للباقة المفتوحة
           </p>
         </div>
 
-        {/* ملخص الباقة النشطة */}
         {packagesLoading ? (
           <Skeleton className="h-36 w-full rounded-xl" />
         ) : activePackage ? (
@@ -185,15 +188,26 @@ export default function PublisherCredits() {
                     من {formatDate(activePackage.startDate)}
                     {activePackage.expiryDate ? ` حتى ${formatDate(activePackage.expiryDate)}` : ""}
                   </p>
+                  {activePackage.isUnlimited && activeCountingFrom ? (
+                    <p className="text-xs text-muted-foreground">
+                      يُحتسب المنشور منذ {formatDate(activeCountingFrom)}
+                      {activeCountingFrom !== activePackage.startDate
+                        ? " (بداية فترة النشر المفتوح للوكالة)"
+                        : ""}
+                    </p>
+                  ) : null}
                 </div>
-                <div className="min-w-[220px] rounded-2xl border bg-muted/30 px-5 py-4 text-center">
+                <div className="min-w-[240px] rounded-2xl border bg-muted/30 px-5 py-4 text-center">
                   {activePackage.isUnlimited ? (
                     <>
                       <div className="text-3xl font-bold">
                         مفتوحة <span className="text-muted-foreground">∞</span>
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        نُشر منها {activePackage.usedCredits.toLocaleString("en-US")} مادة
+                      <p
+                        className="mt-2 text-base font-semibold text-foreground"
+                        data-testid="text-open-published-count"
+                      >
+                        نُشر منها {activeUsed.toLocaleString("en-US")} مادة
                       </p>
                     </>
                   ) : (
@@ -206,7 +220,9 @@ export default function PublisherCredits() {
                         </span>
                       </div>
                       <Progress value={creditPercent} className="mt-3 h-1.5" />
-                      <p className="mt-1 text-xs text-muted-foreground">الرصيد المتبقي</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        الرصيد المتبقي · مستخدم {activeUsed}
+                      </p>
                     </>
                   )}
                 </div>
@@ -222,7 +238,6 @@ export default function PublisherCredits() {
           </Card>
         )}
 
-        {/* كل الباقات بما فيها المعطّلة/المنتهية */}
         <Card data-testid="card-all-packages">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -244,6 +259,7 @@ export default function PublisherCredits() {
                 {packages.map((pkg) => {
                   const meta = statusMeta(pkg.status);
                   const StatusIcon = meta.icon;
+                  const isFakeOpenName = !pkg.isUnlimited && /مفتوح/.test(pkg.packageName);
                   return (
                     <div
                       key={pkg.id}
@@ -264,20 +280,27 @@ export default function PublisherCredits() {
                       </div>
                       <p className="mt-2 text-sm text-muted-foreground">
                         {pkg.isUnlimited ? (
-                          <span className="inline-flex items-center gap-1 font-medium text-foreground">
-                            مفتوحة ∞
+                          <span className="font-medium text-foreground">
+                            مفتوحة ∞ · نُشر {pkg.usedCredits.toLocaleString("en-US")}
                           </span>
                         ) : (
                           <span className="tabular-nums">
                             متبقي {pkg.remainingCredits} / {pkg.totalCredits}
+                            <span className="mx-1">·</span>
+                            مستخدم {pkg.usedCredits}
                           </span>
                         )}
-                        <span className="mx-1">·</span>
-                        مستخدم {pkg.usedCredits}
                       </p>
+                      {isFakeOpenName ? (
+                        <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                          ليست باقة مفتوحة فعلياً — باقة محدودة برصيد عددي
+                        </p>
+                      ) : null}
                       <p className="mt-1 text-xs text-muted-foreground">
                         {periodLabel[pkg.period] || pkg.period}
-                        {pkg.expiryDate ? ` · حتى ${formatDate(pkg.expiryDate)}` : ""}
+                        {" · من "}
+                        {formatDate(pkg.countingFrom || pkg.startDate)}
+                        {pkg.expiryDate ? ` حتى ${formatDate(pkg.expiryDate)}` : ""}
                       </p>
                     </div>
                   );
@@ -287,7 +310,6 @@ export default function PublisherCredits() {
           </CardContent>
         </Card>
 
-        {/* سجل العمليات */}
         <Card data-testid="card-credit-logs">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -314,37 +336,36 @@ export default function PublisherCredits() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="text-right">التاريخ</TableHead>
-                        <TableHead className="text-right">نوع العملية</TableHead>
-                        <TableHead className="text-right">التغيير</TableHead>
-                        <TableHead className="text-right">الرصيد بعد</TableHead>
-                        <TableHead className="text-right">الباقة</TableHead>
-                        <TableHead className="text-right">المقال</TableHead>
+                        <TableHead className="w-[100px] text-right">التاريخ</TableHead>
+                        <TableHead className="w-[110px] text-right">العملية</TableHead>
+                        <TableHead className="w-[70px] text-right">التغيير</TableHead>
+                        <TableHead className="w-[70px] text-right">بعد</TableHead>
+                        <TableHead className="w-[120px] text-right">الباقة</TableHead>
+                        <TableHead className="min-w-[280px] text-right">المقال</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {logs.map((log) => {
-                        const unlimited = log.creditPackage?.isUnlimited || log.creditsChanged === 0;
+                        const isOpenUse =
+                          log.actionType === "credit_used" &&
+                          (log.creditPackage?.isUnlimited || log.creditsChanged === 0);
                         return (
                           <TableRow key={log.id} data-testid={`row-log-${log.id}`}>
-                            <TableCell>
-                              <div className="flex items-center gap-1 text-sm">
-                                <Calendar className="h-3 w-3 text-muted-foreground" />
-                                <span>{formatDate(log.createdAt)}</span>
-                                <span className="text-muted-foreground">
-                                  {new Date(log.createdAt).toLocaleTimeString("en-GB", {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                    hour12: false,
-                                  })}
-                                </span>
+                            <TableCell className="align-top text-xs whitespace-nowrap">
+                              <div>{formatDate(log.createdAt)}</div>
+                              <div className="text-muted-foreground">
+                                {new Date(log.createdAt).toLocaleTimeString("en-GB", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  hour12: false,
+                                })}
                               </div>
                             </TableCell>
-                            <TableCell>{getActionBadge(log.actionType)}</TableCell>
-                            <TableCell>
+                            <TableCell className="align-top">{getActionBadge(log.actionType)}</TableCell>
+                            <TableCell className="align-top">
                               <span
                                 className={cn(
-                                  "font-bold",
+                                  "text-sm font-bold",
                                   log.creditsChanged > 0
                                     ? "text-green-600"
                                     : log.creditsChanged < 0
@@ -353,35 +374,26 @@ export default function PublisherCredits() {
                                 )}
                                 data-testid={`text-change-${log.id}`}
                               >
-                                {unlimited && log.actionType === "credit_used"
-                                  ? "مفتوحة"
+                                {isOpenUse
+                                  ? "∞"
                                   : log.creditsChanged > 0
                                     ? `+${log.creditsChanged}`
                                     : String(log.creditsChanged)}
                               </span>
                             </TableCell>
-                            <TableCell>
-                              <span className="font-medium tabular-nums" data-testid={`text-after-${log.id}`}>
-                                {unlimited && log.actionType === "credit_used" ? "∞" : log.creditsAfter}
+                            <TableCell className="align-top">
+                              <span className="text-sm font-medium tabular-nums" data-testid={`text-after-${log.id}`}>
+                                {isOpenUse ? "∞" : log.creditsAfter}
                               </span>
                             </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-1">
-                                <Package className="h-3 w-3 text-muted-foreground" />
-                                <span className="text-sm">{log.creditPackage.packageName}</span>
-                              </div>
+                            <TableCell className="align-top text-xs leading-snug">
+                              {log.creditPackage.packageName}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="align-top">
                               {log.article ? (
-                                <div className="flex items-center gap-1">
-                                  <FileText className="h-3 w-3 text-muted-foreground" />
-                                  <span
-                                    className="max-w-[240px] truncate text-sm"
-                                    title={log.article.title}
-                                  >
-                                    {log.article.title}
-                                  </span>
-                                </div>
+                                <p className="text-sm leading-relaxed whitespace-normal break-words">
+                                  {log.article.title}
+                                </p>
                               ) : (
                                 <span className="text-muted-foreground">—</span>
                               )}
