@@ -151,9 +151,13 @@ final class ArticlesStore {
     func checkForNewArticles() async {
         guard !isCheckingForNew, !isLoading else { return }
         isCheckingForNew = true
+        let generationAtStart = loadGeneration
         defer { isCheckingForNew = false }
 
         guard let result = await NewsService.fetchHomepage(ignoreCache: true) else { return }
+        // سحب التحديث بدأ أثناء الفحص الصامت — لا تكتب فوق نتيجته ولا تُظهر
+        // شريط "أخبار جديدة" بعد أن حدّث loadArticles القائمة فعلاً.
+        guard !isLoading, generationAtStart == loadGeneration else { return }
         guard !result.latest.isEmpty || !result.featured.isEmpty else { return }
 
         // الكاروسيل (hero) والعاجل — يتحدّثان فوراً عند اكتشاف تغيّر، لا ينتظر
@@ -171,6 +175,7 @@ final class ArticlesStore {
 
         let fresh = result.latest.filter { !knownIDs.contains($0.id) }
         guard !fresh.isEmpty else { return }
+        guard !isLoading, generationAtStart == loadGeneration else { return }
 
         // ندمج الجديد في أعلى قائمة المنتظرين ونرتّب بالأحدث
         pendingNewArticles.insert(contentsOf: fresh, at: 0)

@@ -238,9 +238,12 @@ struct HomeFeedView: View {
                 // للبطاقة الأولى حتى يراه المحرر فور السحب للتحديث.
                 featuredIndex = 0
             }
-            // شريط "⬆️ X أخبار جديدة" عائم فوق القائمة — بديل السحب المتكرر
+            // شريط "⬆️ X أخبار جديدة" عائم فوق القائمة — بديل السحب المتكرر.
+            // يسمح باللمس فقط عندما يظهر الشريط، وعلى الكبسولة نفسها حتى لا
+            // يسرق إيماءة .refreshable من أعلى ScrollView (نفس نمط LiteBanner).
             .overlay(alignment: .top) {
                 newArticlesBanner(proxy: scrollProxy)
+                    .allowsHitTesting(articlesStore.newArticlesCount > 0)
             }
             // استطلاع خفيف لإشارة إبطال الكاش (نفس نمط الويب):
             // GET /api/cache-invalidation/check كل 30ث — وجلب الرئيسية فقط
@@ -404,7 +407,9 @@ struct HomeFeedView: View {
                 .shadow(color: SabqTheme.primaryEnd.opacity(0.35), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
-            .padding(.top, 8)
+            // أبعد الكبسولة قليلاً عن حافة السحب حتى لا تتنازع مع مؤشر التحديث
+            .padding(.top, 52)
+            .contentShape(Capsule())
             .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
