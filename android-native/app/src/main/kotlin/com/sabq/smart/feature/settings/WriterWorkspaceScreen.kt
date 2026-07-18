@@ -232,9 +232,20 @@ fun WriterWorkspaceScreen(
     authViewModel: AuthViewModel = hiltViewModel(),
 ) {
     val currentUser by authViewModel.currentUser.collectAsStateWithLifecycle()
-    val isOpinionWriter = currentUser?.isWriter == true
 
-    if (!isOpinionWriter) {
+    // حالة المستخدم تصل بعد لحظة من الفتح — انتظارها يمنع تركيب لوحة الأداء
+    // خطأً (كانت تُطلق نداء analytics الثقيل مرتين وتومض قبل التبديل للمساحة)
+    val user = currentUser
+    if (user == null) {
+        Box(
+            Modifier.fillMaxSize().background(SabqTheme.colors.background),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(color = SabqTheme.colors.sky)
+        }
+        return
+    }
+    if (!user.isWriter) {
         // مراسل/مدير: لوحة الأداء وحدها — كسلوك iOS
         ContributorDashboardScreen(onBack = onBack, onOpenSurvey = onOpenSurvey)
         return
