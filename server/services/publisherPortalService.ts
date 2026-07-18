@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, or, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { nanoid } from "nanoid";
 import { db } from "../db";
@@ -8,6 +8,8 @@ import {
   notificationsInbox,
   publisherCreditLogs,
   publisherCredits,
+  publisherGuideSections,
+  publisherRequests,
   publishers,
   roles,
   userRoles,
@@ -956,4 +958,312 @@ export async function sendPublisherMonthlyReports(now = new Date()): Promise<{ r
   }
 
   return { reportsSent };
+}
+
+// ============================================
+// المرحلة 4: دليل الناشر + طلبات التجديد + قائمة الناشرين الغنية
+// ============================================
+
+export async function getPublishedGuideSections() {
+  return db
+    .select({
+      id: publisherGuideSections.id,
+      title: publisherGuideSections.title,
+      content: publisherGuideSections.content,
+      displayOrder: publisherGuideSections.displayOrder,
+      updatedAt: publisherGuideSections.updatedAt,
+    })
+    .from(publisherGuideSections)
+    .where(eq(publisherGuideSections.isPublished, true))
+    .orderBy(publisherGuideSections.displayOrder, publisherGuideSections.createdAt);
+}
+
+export async function listGuideSectionsAdmin() {
+  return db
+    .select()
+    .from(publisherGuideSections)
+    .orderBy(publisherGuideSections.displayOrder, publisherGuideSections.createdAt);
+}
+
+export async function createGuideSection(
+  adminId: string,
+  data: { title: string; content: string; displayOrder?: number; isPublished?: boolean },
+) {
+  const [section] = await db
+    .insert(publisherGuideSections)
+    .values({ ...data, updatedBy: adminId })
+    .returning();
+  return section;
+}
+
+export async function updateGuideSection(
+  adminId: string,
+  id: string,
+  data: Partial<{ title: string; content: string; displayOrder: number; isPublished: boolean }>,
+) {
+  const [section] = await db
+    .update(publisherGuideSections)
+    .set({ ...data, updatedBy: adminId, updatedAt: new Date() })
+    .where(eq(publisherGuideSections.id, id))
+    .returning();
+  return section ?? null;
+}
+
+export async function deleteGuideSection(id: string) {
+  const [deleted] = await db
+    .delete(publisherGuideSections)
+    .where(eq(publisherGuideSections.id, id))
+    .returning({ id: publisherGuideSections.id });
+  return !!deleted;
+}
+
+/** إشعار جرس لكل مديري النظام — للأحداث التي تتطلب إجراء إدارياً. */
+async function notifyAdmins(payload: { title: string; body: string; deeplink?: string }) {
+  try {
+    const admins = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(or(eq(users.role, "admin"), eq(users.role, "system_admin")));
+    for (const admin of admins) {
+      await storage.createNotification({
+        userId: admin.id,
+        type: "publisher_request",
+        title: payload.title,
+        body: payload.body,
+        deeplink: payload.deeplink ?? "/dashboard/admin/publishers",
+      });
+    }
+  } catch (err) {
+    console.error("[Publisher Portal] notifyAdmins failed:", err);
+  }
+}
+
+const REQUEST_TYPE_LABELS: Record<string, string> = {
+  renewal: "تجديد الباقة",
+  window_extension: "تمديد فترة النشر",
+  other: "طلب آخر",
+};
+
+/** طلب من الناشر للإدارة (تجديد باقة ...) — يمنع تكرار الطلب المفتوح. */
+export async function createPublisherRequest(
+  publisher: Publisher,
+  requestedBy: string,
+  data: { type?: string; message?: string },
+): Promise<{ ok: true; message: string } | { ok: false; status: number; message: string }> {
+  const type = data.type && REQUEST_TYPE_LABELS[data.type] ? data.type : "renewal";
+
+  const [existing] = await db
+    .select({ id: publisherRequests.id })
+    .from(publisherRequests)
+    .where(
+      and(
+        eq(publisherRequests.publisherId, publisher.id),
+        eq(publisherRequests.type, type),
+        eq(publisherRequests.status, "open"),
+      ),
+    )
+    .limit(1);
+  if (existing) {
+    return { ok: false, status: 409, message: "لديكم طلب مفتوح من نفس النوع قيد المعالجة بالفعل" };
+  }
+
+  await db.insert(publisherRequests).values({
+    publisherId: publisher.id,
+    requestedBy,
+    type,
+    message: data.message?.trim() || null,
+  });
+
+  await notifyAdmins({
+    title: `طلب ${REQUEST_TYPE_LABELS[type]} من وكالة`,
+    body: `«${publisher.agencyName}» أرسلت طلب ${REQUEST_TYPE_LABELS[type]}${data.message ? `: ${data.message.slice(0, 140)}` : ""}`,
+    deeplink: `/dashboard/admin/publishers/${publisher.id}`,
+  });
+
+  return { ok: true, message: "أُرسل طلبكم للإدارة وسيتم التواصل معكم قريباً" };
+}
+
+export async function listOpenPublisherRequests() {
+  return db
+    .select({
+      id: publisherRequests.id,
+      type: publisherRequests.type,
+      message: publisherRequests.message,
+      status: publisherRequests.status,
+      createdAt: publisherRequests.createdAt,
+      publisherId: publishers.id,
+      agencyName: publishers.agencyName,
+      logoUrl: publishers.logoUrl,
+    })
+    .from(publisherRequests)
+    .innerJoin(publishers, eq(publisherRequests.publisherId, publishers.id))
+    .where(eq(publisherRequests.status, "open"))
+    .orderBy(desc(publisherRequests.createdAt));
+}
+
+export async function closePublisherRequest(requestId: string, adminId: string) {
+  const [updated] = await db
+    .update(publisherRequests)
+    .set({ status: "closed", handledBy: adminId, handledAt: new Date() })
+    .where(and(eq(publisherRequests.id, requestId), eq(publisherRequests.status, "open")))
+    .returning({ id: publisherRequests.id, requestedBy: publisherRequests.requestedBy, type: publisherRequests.type });
+  if (updated?.requestedBy) {
+    await notifyPublisherUser(updated.requestedBy, {
+      title: "تمت معالجة طلبكم",
+      body: `أغلقت الإدارة طلب ${REQUEST_TYPE_LABELS[updated.type] ?? updated.type} — تواصلوا معنا لأي استفسار.`,
+      deeplink: "/dashboard/publisher",
+    });
+  }
+  return !!updated;
+}
+
+/**
+ * قائمة الناشرين الغنية للإدارة: الباقة النشطة وصحتها، آخر نشاط،
+ * عدد المواد، والطلبات المفتوحة — بأربعة استعلامات مجمعة لا N+1.
+ */
+export async function listPublishersRich(opts: { page?: number; limit?: number; isActive?: boolean } = {}) {
+  const page = Math.max(1, opts.page ?? 1);
+  const limit = Math.min(60, Math.max(1, opts.limit ?? 24));
+
+  const where = opts.isActive === undefined ? undefined : eq(publishers.isActive, opts.isActive);
+  const [rows, [{ count }]] = await Promise.all([
+    db
+      .select()
+      .from(publishers)
+      .where(where)
+      .orderBy(desc(publishers.createdAt))
+      .limit(limit)
+      .offset((page - 1) * limit),
+    db.select({ count: sql<number>`count(*)` }).from(publishers).where(where),
+  ]);
+
+  if (rows.length === 0) return { publishers: [], total: Number(count) || 0, page, limit };
+  const ids = rows.map((p) => p.id);
+  const now = new Date();
+
+  const [credits, articleAgg, openRequests] = await Promise.all([
+    db
+      .select()
+      .from(publisherCredits)
+      .where(
+        and(
+          inArray(publisherCredits.publisherId, ids),
+          eq(publisherCredits.isActive, true),
+          or(sql`${publisherCredits.expiryDate} IS NULL`, gte(publisherCredits.expiryDate, now)),
+        ),
+      )
+      .orderBy(desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt)),
+    db
+      .select({
+        publisherId: articles.publisherId,
+        totalArticles: sql<number>`count(*)`,
+        publishedArticles: sql<number>`count(*) filter (where ${articles.status} = 'published')`,
+        lastActivityAt: sql<string>`max(coalesce(${articles.publishedAt}, ${articles.createdAt}))`,
+      })
+      .from(articles)
+      .where(inArray(articles.publisherId, ids))
+      .groupBy(articles.publisherId),
+    db
+      .select({
+        publisherId: publisherRequests.publisherId,
+        openRequests: sql<number>`count(*)`,
+      })
+      .from(publisherRequests)
+      .where(and(inArray(publisherRequests.publisherId, ids), eq(publisherRequests.status, "open")))
+      .groupBy(publisherRequests.publisherId),
+  ]);
+
+  const creditByPublisher = new Map<string, typeof credits[number]>();
+  for (const credit of credits) {
+    if (!creditByPublisher.has(credit.publisherId)) creditByPublisher.set(credit.publisherId, credit);
+  }
+  const articlesByPublisher = new Map(articleAgg.map((a) => [a.publisherId, a]));
+  const requestsByPublisher = new Map(openRequests.map((r) => [r.publisherId, Number(r.openRequests) || 0]));
+
+  return {
+    publishers: rows.map((publisher) => {
+      const credit = creditByPublisher.get(publisher.id) ?? null;
+      const agg = articlesByPublisher.get(publisher.id);
+      return {
+        id: publisher.id,
+        agencyName: publisher.agencyName,
+        logoUrl: publisher.logoUrl,
+        contactPerson: publisher.contactPerson,
+        isActive: publisher.isActive,
+        autoPublish: publisher.autoPublish,
+        publishingEndsAt: publisher.publishingEndsAt,
+        createdAt: publisher.createdAt,
+        activeCredit: credit
+          ? {
+              packageName: credit.packageName,
+              isUnlimited: credit.isUnlimited,
+              totalCredits: credit.totalCredits,
+              usedCredits: credit.usedCredits,
+              remainingCredits: credit.remainingCredits,
+              expiryDate: credit.expiryDate,
+            }
+          : null,
+        totalArticles: Number(agg?.totalArticles) || 0,
+        publishedArticles: Number(agg?.publishedArticles) || 0,
+        lastActivityAt: agg?.lastActivityAt ?? null,
+        openRequests: requestsByPublisher.get(publisher.id) ?? 0,
+      };
+    }),
+    total: Number(count) || 0,
+    page,
+    limit,
+  };
+}
+
+/**
+ * طابور مراجعة مواد الوكالات (كل الناشرين): كان الواجهة تستدعي مساراً
+ * غير موجود. المعلقة أولاً (الأقدم إرسالاً في الصدارة لعدالة SLA).
+ */
+export async function listAgencyReviewQueue(opts: { status?: string; page?: number; limit?: number } = {}) {
+  const page = Math.max(1, opts.page ?? 1);
+  const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+
+  const conditions: any[] = [
+    or(sql`${articles.publisherId} IS NOT NULL`, sql`${articles.publisherStatus} IS NOT NULL`),
+  ];
+  if (opts.status && opts.status !== "all") conditions.push(eq(articles.status, opts.status));
+  const where = and(...conditions);
+
+  const joinCondition = or(
+    eq(articles.publisherId, publishers.id),
+    eq(articles.authorId, publishers.userId),
+  );
+
+  const [rows, [{ count }]] = await Promise.all([
+    db
+      .select({
+        id: articles.id,
+        title: articles.title,
+        slug: articles.slug,
+        englishSlug: articles.englishSlug,
+        status: articles.status,
+        publisherStatus: articles.publisherStatus,
+        publisherSubmittedAt: articles.publisherSubmittedAt,
+        createdAt: articles.createdAt,
+        publishedAt: articles.publishedAt,
+        authorId: articles.authorId,
+        publisherName: publishers.agencyName,
+      })
+      .from(articles)
+      .leftJoin(publishers, joinCondition)
+      .where(where)
+      .orderBy(
+        sql`case when ${articles.status} = 'draft' and ${articles.publisherStatus} = 'pending' then 0 else 1 end`,
+        sql`${articles.publisherSubmittedAt} asc nulls last`,
+        desc(articles.createdAt),
+      )
+      .limit(limit)
+      .offset((page - 1) * limit),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(articles)
+      .where(where),
+  ]);
+
+  return { articles: rows, total: Number(count) || 0, page, limit };
 }

@@ -9377,6 +9377,48 @@ export const publisherCreditLogs = pgTable("publisher_credit_logs", {
   index("publisher_credit_logs_created_at_idx").on(table.createdAt.desc()),
 ]);
 
+// دليل الناشر: صفحات إرشادية تحررها الإدارة وتظهر في بوابة الناشر
+// (سياسات المحتوى، حقوق الصور، كيف يعمل الرصيد، ...)
+export const publisherGuideSections = pgTable("publisher_guide_sections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  // نص عادي يُعرض بأسطره كما هي (بلا HTML — أبسط وأأمن)
+  content: text("content").notNull(),
+  displayOrder: integer("display_order").default(0).notNull(),
+  isPublished: boolean("is_published").default(true).notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("publisher_guide_order_idx").on(table.displayOrder),
+]);
+
+export const insertPublisherGuideSectionSchema = createInsertSchema(publisherGuideSections).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  updatedBy: true,
+});
+export type PublisherGuideSection = typeof publisherGuideSections.$inferSelect;
+
+// طلبات الناشرين للإدارة (تجديد باقة، تمديد نافذة، ...)
+export const publisherRequests = pgTable("publisher_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  publisherId: varchar("publisher_id").references(() => publishers.id, { onDelete: "cascade" }).notNull(),
+  requestedBy: varchar("requested_by").references(() => users.id),
+  type: text("type").default("renewal").notNull(), // renewal | window_extension | other
+  message: text("message"),
+  status: text("status").default("open").notNull(), // open | closed
+  handledBy: varchar("handled_by").references(() => users.id),
+  handledAt: timestamp("handled_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("publisher_requests_publisher_idx").on(table.publisherId),
+  index("publisher_requests_status_idx").on(table.status),
+]);
+
+export type PublisherRequest = typeof publisherRequests.$inferSelect;
+
 // Relations
 export const publishersRelations = relations(publishers, ({ one, many }) => ({
   user: one(users, {

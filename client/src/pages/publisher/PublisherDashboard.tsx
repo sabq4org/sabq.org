@@ -1,6 +1,7 @@
 import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePublisherAccess } from "@/hooks/usePublisherAccess";
 import { PublisherLayout } from "@/components/publisher/PublisherLayout";
@@ -22,6 +23,7 @@ import {
   Plus,
   ArrowLeft,
   TrendingUp,
+  Loader2,
 } from "lucide-react";
 import {
   BarChart,
@@ -114,6 +116,26 @@ export default function PublisherDashboard() {
 
   const { data, isLoading, error } = useQuery<PortalOverview>({
     queryKey: ["/api/publisher/portal/overview"],
+  });
+
+  // «طلب تجديد الباقة»: يفتح طلباً للإدارة تلقائياً (بلا تكرار للطلب المفتوح)
+  const renewalMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest<{ message: string }>("/api/publisher/portal/requests", {
+        method: "POST",
+        body: JSON.stringify({ type: "renewal" }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    onSuccess: (result) => {
+      toast({ title: "أُرسل الطلب ✅", description: result.message });
+    },
+    onError: (err: any) => {
+      toast({
+        variant: "destructive",
+        title: "تعذر الإرسال",
+        description: err.message || "حاول مرة أخرى لاحقاً",
+      });
+    },
   });
 
   useEffect(() => {
@@ -271,6 +293,19 @@ export default function PublisherDashboard() {
               ) : (
                 <p className="text-sm text-muted-foreground">لا توجد باقة نشطة</p>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 w-full"
+                onClick={() => renewalMutation.mutate()}
+                disabled={renewalMutation.isPending}
+                data-testid="button-request-renewal"
+              >
+                {renewalMutation.isPending
+                  ? <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                  : <Package className="ml-2 h-4 w-4" />}
+                طلب تجديد الباقة
+              </Button>
             </CardContent>
           </Card>
 

@@ -427,6 +427,8 @@ const PublisherDashboard = lazy(() => retryImport(() => import("@/pages/publishe
 const PublisherArticles = lazy(() => retryImport(() => import("@/pages/publisher/PublisherArticles")));
 const PublisherArticleEditor = lazy(() => retryImport(() => import("@/pages/publisher/PublisherArticleEditor")));
 const PublisherCredits = lazy(() => retryImport(() => import("@/pages/publisher/PublisherCredits")));
+const PublisherGuide = lazy(() => retryImport(() => import("@/pages/publisher/PublisherGuide")));
+const AdminPublisherGuide = lazy(() => retryImport(() => import("@/pages/admin/publishers/AdminPublisherGuide")));
 const AdminPublishers = lazy(() => retryImport(() => import("@/pages/admin/publishers/AdminPublishers")));
 const AdminPublisherDetails = lazy(() => retryImport(() => import("@/pages/admin/publishers/AdminPublisherDetails")));
 const AdminPublisherArticles = lazy(() => retryImport(() => import("@/pages/admin/publishers/AdminPublisherArticles")));
@@ -959,12 +961,14 @@ function Router() {
         <Route path="/dashboard/publisher/article/new">{() => <LazyRoute component={PublisherArticleEditor} />}</Route>
         <Route path="/dashboard/publisher/article/:id/edit">{() => <LazyRoute component={PublisherArticleEditor} />}</Route>
         <Route path="/dashboard/publisher/credits">{() => <LazyRoute component={PublisherCredits} />}</Route>
+        <Route path="/dashboard/publisher/guide">{() => <LazyRoute component={PublisherGuide} />}</Route>
         
         {/* Admin Publisher Management Routes */}
         <Route path="/dashboard/admin/publishers">{() => <LazyRoute component={AdminPublishers} />}</Route>
         <Route path="/dashboard/admin/publishers/:id">{() => <LazyRoute component={AdminPublisherDetails} />}</Route>
         <Route path="/dashboard/admin/publisher-articles">{() => <LazyRoute component={AdminPublisherArticles} />}</Route>
         <Route path="/dashboard/admin/publisher-analytics">{() => <LazyRoute component={AdminPublisherAnalytics} />}</Route>
+        <Route path="/dashboard/admin/publisher-guide">{() => <LazyRoute component={AdminPublisherGuide} />}</Route>
         
         {/* Correspondent Registration Routes */}
         <Route path="/correspondent/register">{() => <LazyRoute component={CorrespondentRegister} />}</Route>
