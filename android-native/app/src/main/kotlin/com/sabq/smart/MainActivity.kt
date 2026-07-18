@@ -89,6 +89,22 @@ class MainActivity : ComponentActivity() {
             notificationId = notifId,
             kind = kind,
             deepLinkPath = intent.data?.path,
+            surveyToken = surveyTokenFrom(intent.data),
         )
+    }
+
+    /**
+     * دعوات الاستطلاع تصل بصيغتين: `sabq://survey/<token>` (نقرة الإشعار)
+     * و`https://sabq.org/survey/<token>` (App Link من إيميل الدعوة).
+     */
+    private fun surveyTokenFrom(uri: Uri?): String? {
+        if (uri == null) return null
+        if (uri.scheme == "sabq" && uri.host == "survey") {
+            return uri.pathSegments.firstOrNull()
+        }
+        if (uri.pathSegments.firstOrNull() == "survey") {
+            return uri.pathSegments.getOrNull(1)
+        }
+        return null
     }
 }

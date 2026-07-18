@@ -1,6 +1,8 @@
 package com.sabq.smart.feature.settings
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -8,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -39,6 +42,8 @@ data class DashboardState(
     val error: String? = null,
     val analytics: ApiContributorAnalytics? = null,
     val ranking: ApiContributorRanking? = null,
+    /** دعوات الاستطلاع المفتوحة — بطاقة «استطلاع بانتظارك» أعلى اللوحة */
+    val pendingSurveys: List<ApiMySurveyInvite> = emptyList(),
 )
 
 @HiltViewModel
@@ -56,7 +61,13 @@ class ContributorDashboardViewModel @Inject constructor(
             try {
                 val analytics = api.getContributorAnalytics()
                 val ranking = runCatching { api.getContributorRanking() }.getOrNull()
-                _state.value = DashboardState(isLoading = false, analytics = analytics, ranking = ranking)
+                val pendingSurveys = runCatching { api.getMySurveys().items }.getOrDefault(emptyList())
+                _state.value = DashboardState(
+                    isLoading = false,
+                    analytics = analytics,
+                    ranking = ranking,
+                    pendingSurveys = pendingSurveys,
+                )
             } catch (e: Exception) {
                 _state.value = DashboardState(isLoading = false, error = "تعذّر تحميل البيانات")
             }
@@ -78,6 +89,7 @@ private val AccentRed = Color(0xFFEF4444)
 @Composable
 fun ContributorDashboardScreen(
     onBack: () -> Unit,
+    onOpenSurvey: (token: String) -> Unit = {},
     viewModel: ContributorDashboardViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -135,6 +147,9 @@ fun ContributorDashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
                     HeaderSection(data)
+                    state.pendingSurveys.forEach { invite ->
+                        PendingSurveyCard(invite = invite, onOpen = { onOpenSurvey(invite.token) })
+                    }
                     StatsCards(data)
                     OverviewSection(data)
                     if (data.topArticles.isNotEmpty()) TopArticlesSection(data.topArticles)
@@ -486,4 +501,68 @@ private fun StatusPill(status: String, reviewStatus: String?) {
 private fun trendPct(current: Int, previous: Int): Int? {
     if (previous <= 0) return if (current > 0) 100 else null
     return ((current - previous).toFloat() / previous * 100).toInt()
+}
+
+
+// ── بطاقة «استطلاع بانتظارك» ────────────────────────────────────────
+// تطابق iOS `PendingSurveysCard`: تظهر لكل دعوة مفتوحة حتى لو فات
+// الكاتبَ إشعارُ الدفع، والنقر يفتح شاشة الاستطلاع بالتوكن الشخصي.
+
+@Composable
+private fun PendingSurveyCard(invite: ApiMySurveyInvite, onOpen: () -> Unit) {
+    val shape = RoundedCornerShape(18.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(SabqTheme.colors.surface)
+            .border(1.dp, SabqTheme.colors.sky.copy(alpha = 0.35f), shape)
+            .clickable { onOpen() }
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SabqTheme.colors.sky.copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Checklist,
+                contentDescription = null,
+                tint = SabqTheme.colors.sky,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                "استطلاع بانتظارك: ${'$'}{invite.title}",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = SabqTheme.typography.cardTitle.copy(
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Black,
+                    color = SabqTheme.colors.ink,
+                ),
+            )
+            Text(
+                invite.purpose?.let { "رأيك يساعدنا في ${'$'}it — ${'$'}{invite.questionsCount} أسئلة" }
+                    ?: "${'$'}{invite.questionsCount} أسئلة قصيرة، دقائق معدودة",
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = SabqTheme.typography.metaSmall.copy(
+                    fontSize = 12.5.sp,
+                    color = SabqTheme.colors.secondaryInk,
+                ),
+            )
+        }
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+            contentDescription = null,
+            tint = SabqTheme.colors.tertiaryInk,
+            modifier = Modifier.size(18.dp),
+        )
+    }
 }

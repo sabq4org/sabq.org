@@ -850,4 +850,25 @@ interface SabqApi {
 
     @GET("api/v1/predictions/contests/{id}/settlement")
     suspend fun getPredSettlement(@Path("id") id: String): com.sabq.smart.feature.predictions.PredSettlementResponse
+
+    // -- surveys (منصة استطلاعات الرأي الداخلية) ----------------------
+
+    /**
+     * Personal survey payload — public token-gated read; the token is
+     * the credential so no Bearer session is needed. iOS counterpart:
+     * `APIClient.fetchSurvey` (Screens/SurveyView.swift).
+     */
+    @GET("api/public/surveys/{token}")
+    suspend fun getSurvey(@Path("token") token: String): ApiSurveyPublic
+
+    /** Submit answers for a personal invitation (one response per token). */
+    @POST("api/public/surveys/{token}/submit")
+    suspend fun submitSurvey(
+        @Path("token") token: String,
+        @Body body: SurveySubmitBody,
+    ): ApiSurveySubmitResult
+
+    /** Open survey invitations for the signed-in member (Bearer). */
+    @GET("api/v1/surveys/mine")
+    suspend fun getMySurveys(): ApiMySurveysResponse
 }

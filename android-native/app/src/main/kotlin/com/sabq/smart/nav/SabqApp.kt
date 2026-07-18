@@ -89,6 +89,7 @@ object SabqRoutes {
     const val Notifications = "notifications"
     const val NotificationDetail = "notifications/{id}"
     const val NotificationPreferences = "notifications/preferences"
+    const val Survey = "survey/{token}"
     const val EditProfile = "account/edit"
     const val ChangePassword = "account/change-password"
     const val ForgotPassword = "account/forgot-password"
@@ -146,6 +147,8 @@ object SabqRoutes {
     fun muqtarabWriter(id: String): String = "muqtarab/writer/${Uri.encode(id)}"
 
     fun notificationDetail(id: String): String = "notifications/${Uri.encode(id)}"
+
+    fun survey(token: String): String = "survey/${Uri.encode(token)}"
 
     val TabRoutes = setOf(Home, Explore, Bookmarks, Profile)
 
@@ -211,6 +214,9 @@ fun SabqApp(
         androidx.compose.runtime.LaunchedEffect(pendingPush) {
             val target = pendingPush ?: return@LaunchedEffect
             when {
+                // دعوة استطلاع — الأعلى أولوية: توكن شخصي يفتح شاشته مباشرة
+                !target.surveyToken.isNullOrBlank() ->
+                    navController.navigate(SabqRoutes.survey(target.surveyToken!!))
                 target.deepLinkPath == "/asian-cup" ->
                     navController.navigate(SabqRoutes.AsianCup)
                 target.deepLinkPath?.startsWith("/asian-cup/match/") == true ->
@@ -453,6 +459,9 @@ fun SabqApp(
                 composable(SabqRoutes.ContributorDashboard) {
                     com.sabq.smart.feature.settings.ContributorDashboardScreen(
                         onBack = { navController.popBackStack() },
+                        onOpenSurvey = { surveyToken ->
+                            navController.navigate(SabqRoutes.survey(surveyToken))
+                        },
                     )
                 }
                 composable(SabqRoutes.Opinions) {
@@ -708,6 +717,18 @@ fun SabqApp(
                         onOpenArticle = { slug ->
                             navController.navigate(SabqRoutes.articleDetail(slug))
                         },
+                        onOpenSurvey = { surveyToken ->
+                            navController.navigate(SabqRoutes.survey(surveyToken))
+                        },
+                    )
+                }
+                composable(
+                    route = SabqRoutes.Survey,
+                    arguments = listOf(navArgument("token") { type = NavType.StringType }),
+                ) { entry ->
+                    com.sabq.smart.feature.survey.SurveyScreen(
+                        token = entry.arguments?.getString("token").orEmpty(),
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable(SabqRoutes.NotificationPreferences) {
