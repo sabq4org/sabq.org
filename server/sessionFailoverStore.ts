@@ -73,16 +73,26 @@ export class SessionFailoverStore extends session.Store {
     });
   }
 
+  /**
+   * Passport/express-session تستدعي destroy عند regenerate أثناء login.
+   * لا نُفشل العملية بخطأ Redis إذا نجح Postgres — وإلا يظهر «خطأ في إنشاء الجلسة»
+   * رغم أن المصادقة نجحت (LocalStrategy Success).
+   */
   destroy(sid: string, callback?: SimpleCallback): void {
-    let pending = 2;
-    let firstErr: any;
-    const done = (err?: any) => {
-      if (err && !firstErr) firstErr = err;
-      pending -= 1;
-      if (pending === 0) callback?.(firstErr);
-    };
-    this.primary.destroy(sid, done);
-    this.fallback.destroy(sid, done);
+    if (this.useFallbackOnly()) {
+      this.fallback.destroy(sid, callback);
+      return;
+    }
+    this.primary.destroy(sid, (err) => {
+      if (!err) {
+        this.clearFailoverFlag();
+        // تنظيف أفضل جهد على PG؛ لا نُفشل الدخول إن فشل
+        this.fallback.destroy(sid, () => callback?.());
+        return;
+      }
+      this.markRedisUnhealthy(err?.message || "destroy failed");
+      this.fallback.destroy(sid, callback);
+    });
   }
 
   touch(sid: string, sess: session.SessionData, callback?: SimpleCallback): void {
