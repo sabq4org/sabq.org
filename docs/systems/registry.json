@@ -100,6 +100,9 @@
         "server/services/autoImageGenerationService.ts",
         "server/services/aiImageGenerator.ts",
         "server/services/opinionAuthorWorkspaceService.ts",
+        "server/services/opinionWritersService.ts",
+        "server/routes/opinionWriters.ts",
+        "client/src/pages/dashboard/OpinionWritersPage.tsx",
         "server/journalist-agent-ai.ts",
         "server/journalist-agent-routes.ts",
         "server/ai-content-tools.ts",
@@ -115,7 +118,6 @@
         "client/src/pages/dashboard/SmartJournalist.tsx",
         "client/src/pages/dashboard/SmartLinksManagement.tsx",
         "client/src/pages/dashboard/CommunicationsManagement.tsx",
-        "client/src/pages/dashboard/OpinionWritersPage.tsx",
         "client/src/pages/DataStoryGenerator.tsx",
         "docs/editorial/**"
       ],
