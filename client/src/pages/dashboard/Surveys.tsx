@@ -71,8 +71,11 @@ export default function Surveys() {
           <div className="space-y-3">
             {surveys.map((survey) => {
               const status = STATUS_LABELS[survey.status] ?? STATUS_LABELS.draft;
-              const completionRate = survey.invitedCount > 0
-                ? Math.round((survey.completedCount / survey.invitedCount) * 100)
+              const questionsCount = Number(survey.questionsCount) || 0;
+              const invitedCount = Number(survey.invitedCount) || 0;
+              const completedCount = Number(survey.completedCount) || 0;
+              const completionRate = invitedCount > 0
+                ? Math.round((completedCount / invitedCount) * 100)
                 : 0;
               return (
                 <Card key={survey.id} data-testid={`survey-row-${survey.id}`}>
@@ -83,11 +86,11 @@ export default function Surveys() {
                         <Badge variant={status.variant}>{status.label}</Badge>
                       </div>
                       <div className="text-sm text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 tabular-nums">
-                        <span>{survey.questionsCount} أسئلة</span>
+                        <span>{questionsCount} أسئلة</span>
                         {survey.status !== "draft" && (
                           <>
-                            <span>{survey.invitedCount} مدعو</span>
-                            <span>{survey.completedCount} إجابة ({completionRate}٪)</span>
+                            <span>{invitedCount} مدعو</span>
+                            <span>{completedCount} إجابة ({completionRate}٪)</span>
                           </>
                         )}
                         {survey.purpose && <span>الهدف: {survey.purpose}</span>}
