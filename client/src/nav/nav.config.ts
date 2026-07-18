@@ -1,5 +1,6 @@
 import {
   LayoutDashboard,
+  CalendarClock,
   FileText,
   FolderOpen,
   Users,
@@ -426,6 +427,17 @@ export const navConfig: NavItem[] = [
     path: "/dashboard/contact-messages",
     icon: MessageSquare,
     roles: ["admin", "editor"],
+  },
+
+  // ===== كتّاب الرأي / Opinion Writers =====
+  {
+    id: "opinion_writers",
+    labelKey: "nav.opinion_writers",
+    labelAr: "كتّاب الرأي",
+    path: "/dashboard/opinion-writers",
+    icon: CalendarClock,
+    roles: ["admin", "editor", "system_admin"],
+    permissions: ["opinion.review"],
   },
 
   // ===== استفسارات كتّاب الرأي / Opinion Tickets =====

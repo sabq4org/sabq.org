@@ -13769,6 +13769,36 @@ export type InsertOpinionTicketMessage = z.infer<typeof insertOpinionTicketMessa
 
 export type ImageMigration = typeof imageMigrations.$inferSelect;
 
+// ── Opinion Writer Schedules (اليوم الأسبوعي المخصص لكل كاتب رأي) ──
+// weekday بمصطلح JS: 0=الأحد .. 6=السبت، والوقت HH:mm بتوقيت الرياض.
+export const opinionWriterSchedules = pgTable("opinion_writer_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  writerId: varchar("writer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  weekday: integer("weekday").notNull(),
+  publishTime: varchar("publish_time", { length: 5 }).default("06:00").notNull(),
+  active: boolean("active").default(true).notNull(),
+  notes: text("notes"),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_opinion_writer_schedules_writer").on(table.writerId),
+  index("idx_opinion_writer_schedules_weekday").on(table.weekday),
+]);
+
+export const upsertOpinionWriterScheduleSchema = z.object({
+  weekday: z.number().int().min(0).max(6),
+  publishTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "صيغة الوقت يجب أن تكون HH:mm")
+    .optional(),
+  active: z.boolean().optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+
+export type OpinionWriterSchedule = typeof opinionWriterSchedules.$inferSelect;
+export type UpsertOpinionWriterSchedule = z.infer<typeof upsertOpinionWriterScheduleSchema>;
+
 // ── Article Daily Stats (time-series for contributor dashboards) ──
 export const articleDailyStats = pgTable("article_daily_stats", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

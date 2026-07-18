@@ -583,6 +583,32 @@ export default function ArticleEditor() {
   });
   const mediaAssets = Array.isArray(mediaAssetsRaw) ? mediaAssetsRaw : [];
 
+  // مقالات الرأي: اليوم الأسبوعي المخصص لكاتب المقال — يعبّئ الجدولة تلقائياً ويبقى قابلاً للتغيير
+  const writerSlotPrefillRef = useRef<string | null>(null);
+  const { data: writerSlotData } = useQuery<{
+    suggestion: { weekday: number; publishTime: string; nextSlot: string } | null;
+  }>({
+    queryKey: [`/api/opinion-writers/${opinionAuthorId}/next-slot`],
+    enabled: Boolean(canSchedule && articleType === "opinion" && opinionAuthorId),
+    staleTime: 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (!canSchedule || articleType !== "opinion" || !opinionAuthorId) return;
+    const suggestion = writerSlotData?.suggestion;
+    if (!suggestion?.nextSlot) return;
+    if (writerSlotPrefillRef.current === opinionAuthorId) return;
+    if (article && article.status !== "draft") return;
+    if (publishType === "scheduled" || scheduledAt) return;
+    writerSlotPrefillRef.current = opinionAuthorId;
+    const d = new Date(suggestion.nextSlot);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setPublishType("scheduled");
+    setScheduledAt(
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    );
+  }, [canSchedule, articleType, opinionAuthorId, writerSlotData, article, publishType, scheduledAt]);
+
   // Fetch existing social cards for this article
   const { data: existingSocialCardsRaw } = useQuery<Array<{ platform: string; imageUrl: string }>>({
     queryKey: ["/api/visual-ai/social-cards/article", id],
@@ -4271,7 +4297,17 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                             onCheckedChange={(checked) => setPublishType(checked ? "scheduled" : "instant")}
                           />
                         </div>
-                        
+
+                        {articleType === "opinion" && writerSlotData?.suggestion && (
+                          <p className="text-xs text-muted-foreground">
+                            اليوم المخصص للكاتب:{" "}
+                            <b className="text-foreground">
+                              {["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"][writerSlotData.suggestion.weekday]}{" "}
+                              — {writerSlotData.suggestion.publishTime}
+                            </b>
+                          </p>
+                        )}
+
                         {publishType === "scheduled" && (
                           <div className="space-y-2">
                             <Label>التاريخ والوقت</Label>

@@ -299,6 +299,7 @@ const ShortsEditor = lazy(() => retryImport(() => import("@/pages/ShortsEditor")
 
 // === LAZY IMPORTS (Opinion) ===
 const OpinionManagement = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionManagement")));
+const OpinionWritersPage = lazy(() => retryImport(() => import("@/pages/dashboard/OpinionWritersPage")));
 const QuizManagement = lazy(() => retryImport(() => import("@/pages/dashboard/QuizManagement")));
 
 // === LAZY IMPORTS (Dashboard Tools) ===
@@ -866,6 +867,7 @@ function Router() {
         <Route path="/dashboard/articles">{() => <LazyRoute component={ArticlesManagement} />}</Route>
         <Route path="/dashboard/quizzes">{() => <LazyRoute component={QuizManagement} />}</Route>
         <Route path="/dashboard/opinion">{() => <LazyRoute component={OpinionManagement} />}</Route>
+        <Route path="/dashboard/opinion-writers">{() => <LazyRoute component={OpinionWritersPage} />}</Route>
         <Route path="/dashboard/categories">{() => <LazyRoute component={CategoriesManagement} />}</Route>
         <Route path="/dashboard/media-library">{() => <LazyRoute component={MediaLibrary} />}</Route>
         <Route path="/dashboard/ai-tools">{() => <LazyRoute component={AITools} />}</Route>
