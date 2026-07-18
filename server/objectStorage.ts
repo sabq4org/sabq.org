@@ -57,20 +57,32 @@ function isReplitRuntime(): boolean {
 /**
  * Resolve the active object-storage backend.
  *
- * Production (sabq.org) typically has Cloudflare R2 via NEWS_IMAGES_R2_* and
- * no Tigris/S3. The legacy fallback talks to the Replit sidecar at
- * 127.0.0.1:1106 — ECONNREFUSED outside Replit — and breaks private uploads
- * (correspondent license/CV). Prefer R2 (including NEWS_IMAGES_R2_* keys),
- * then S3, and only use the Replit GCS path on Replit.
+ * Production (sabq.org) has Cloudflare R2 via NEWS_IMAGES_R2_*. Railway often
+ * still has STORAGE_PROVIDER=s3 + a dead Replit/Tigris bucket
+ * (e.g. lightweight-holder-*) which returns NoSuchBucket for correspondent
+ * license/CV uploads. Prefer R2 whenever its credentials exist, unless
+ * OBJECT_STORAGE_FORCE_S3=1. Only use the Replit GCS path on Replit.
  */
 function resolveStorageProvider(): ResolvedStorageProvider {
   const explicit = (process.env.STORAGE_PROVIDER || "").toLowerCase().trim();
+  const forceS3 = process.env.OBJECT_STORAGE_FORCE_S3 === "1";
+
+  // Live R2 wins over stale S3 env left over from the Replit → Railway move.
+  if (hasR2Credentials() && !forceS3) {
+    if (explicit === "s3") {
+      console.warn(
+        "[ObjectStorage] STORAGE_PROVIDER=s3 ignored — using R2 " +
+          "(stale S3 buckets cause NoSuchBucket). Set OBJECT_STORAGE_FORCE_S3=1 to force S3.",
+      );
+    }
+    return "r2";
+  }
+
   if (explicit === "s3") return "s3";
   if (explicit === "r2") return "r2";
   if (explicit === "gcs") return "gcs";
 
-  // unset / "local" / unknown → auto-detect (R2 first — matches sabq production)
-  if (hasR2Credentials()) return "r2";
+  // unset / "local" / unknown → auto-detect
   if (hasS3Credentials()) return "s3";
   if (isReplitRuntime()) return "gcs";
   return "local";
