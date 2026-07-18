@@ -14,7 +14,69 @@ import {
 
 const REPLIT_SIDECAR_ENDPOINT = "http://127.0.0.1:1106";
 
-const STORAGE_PROVIDER = process.env.STORAGE_PROVIDER || 'local';
+type ResolvedStorageProvider = "s3" | "r2" | "gcs" | "local";
+
+function hasS3Credentials(): boolean {
+  return !!(
+    process.env.S3_ENDPOINT &&
+    process.env.S3_BUCKET &&
+    process.env.S3_ACCESS_KEY_ID &&
+    process.env.S3_SECRET_ACCESS_KEY
+  );
+}
+
+function hasR2Credentials(): boolean {
+  return !!(
+    process.env.R2_ACCOUNT_ID &&
+    process.env.R2_ACCESS_KEY_ID &&
+    process.env.R2_SECRET_ACCESS_KEY
+  );
+}
+
+function isReplitRuntime(): boolean {
+  return !!(
+    process.env.REPL_ID ||
+    process.env.REPL_SLUG ||
+    process.env.REPLIT_DEPLOYMENT === "1"
+  );
+}
+
+/**
+ * Resolve the active object-storage backend.
+ *
+ * On Railway, STORAGE_PROVIDER is often left unset/"local" while S3 (Tigris)
+ * credentials ARE present. The legacy fallback talks to the Replit sidecar at
+ * 127.0.0.1:1106 — which returns ECONNREFUSED outside Replit and breaks
+ * private uploads (e.g. correspondent license/CV). Prefer S3/R2 whenever
+ * their credentials exist, and only use the Replit GCS path on Replit.
+ */
+function resolveStorageProvider(): ResolvedStorageProvider {
+  const explicit = (process.env.STORAGE_PROVIDER || "").toLowerCase().trim();
+  if (explicit === "s3") return "s3";
+  if (explicit === "r2") return "r2";
+  if (explicit === "gcs") return "gcs";
+
+  // unset / "local" / unknown → auto-detect
+  if (hasS3Credentials()) return "s3";
+  if (hasR2Credentials()) return "r2";
+  if (isReplitRuntime()) return "gcs";
+  return "local";
+}
+
+const STORAGE_PROVIDER: ResolvedStorageProvider = resolveStorageProvider();
+
+console.log(
+  `[ObjectStorage] provider=${STORAGE_PROVIDER}` +
+    ` (env STORAGE_PROVIDER=${process.env.STORAGE_PROVIDER || "(unset)"})`,
+);
+
+/** True when private file upload/download (license/CV, PDFs, etc.) can work. */
+export function isPrivateObjectStorageConfigured(): boolean {
+  if (STORAGE_PROVIDER === "s3") return hasS3Credentials();
+  if (STORAGE_PROVIDER === "r2") return hasR2Credentials();
+  if (STORAGE_PROVIDER === "gcs") return isReplitRuntime();
+  return false;
+}
 
 let r2Client: S3Client | null = null;
 let s3Client: S3Client | null = null;
@@ -509,7 +571,13 @@ export class ObjectStorageService {
       return getSignedUrl(client, cmd, { expiresIn: 900 });
     }
 
-    // Default GCS-via-Replit-sidecar path (legacy)
+    if (STORAGE_PROVIDER !== 'gcs') {
+      throw new Error(
+        "[ObjectStorage] Upload URL unavailable — configure STORAGE_PROVIDER=s3 or r2.",
+      );
+    }
+
+    // GCS-via-Replit-sidecar path (legacy, Replit only)
     const privateObjectDir = this.getPrivateObjectDir();
     if (!privateObjectDir) {
       throw new Error(
@@ -608,6 +676,11 @@ export class ObjectStorageService {
       const bucket = getR2Bucket();
       return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: ttlSec });
     }
+    if (STORAGE_PROVIDER !== 'gcs') {
+      throw new Error(
+        "[ObjectStorage] Private download unavailable — configure STORAGE_PROVIDER=s3 or r2.",
+      );
+    }
     const fullPath = key.startsWith('/') ? key : `${this.getPrivateObjectDir()}/${key}`;
     const { bucketName, objectName } = parseObjectPath(fullPath);
     return signObjectURL({ bucketName, objectName, method: "GET", ttlSec });
@@ -624,6 +697,16 @@ export class ObjectStorageService {
     }
     if (STORAGE_PROVIDER === 'r2') {
       return this.uploadFileR2(path, buffer, contentType, visibility);
+    }
+
+    if (STORAGE_PROVIDER !== 'gcs') {
+      // Avoid the Replit sidecar (127.0.0.1:1106) on Railway/local — it always
+      // ECONNREFUSED outside Replit and surfaces as a raw GaxiosError to users.
+      throw new Error(
+        "[ObjectStorage] No usable storage backend. Set STORAGE_PROVIDER=s3 " +
+          "(with S3_ENDPOINT/S3_BUCKET/S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY) " +
+          "or STORAGE_PROVIDER=r2 (with R2_* credentials).",
+      );
     }
 
     // Use public or private directory based on visibility

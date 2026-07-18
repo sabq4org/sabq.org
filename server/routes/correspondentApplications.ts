@@ -1,7 +1,9 @@
 // مسارات طلبات المراسلين: التقديم العام + المراجعة الإدارية (قبول/رفض).
 // نُقلت من server/routes.ts أثناء إعادة هيكلة الخدمة 2026-07-18، مع:
-//  - رفع الصورة عبر Cloudflare Images بدل حاوية Replit المحذوفة (كانت ترجع
-//    ECONNREFUSED 127.0.0.1:1106 على Railway — نفس إصلاح طلبات كتّاب الرأي).
+//  - رفع الصورة عبر Cloudflare Images (لا Replit Object Storage).
+//  - رفع الترخيص والسيرة عبر تخزين خاص S3/R2 فقط (objectStorage يرفض
+//    مسار Replit sidecar خارج Replit — كان يكسر التقديم على Railway بـ
+//    ECONNREFUSED 127.0.0.1:1106).
 //  - منع تكرار التقديم أثناء وجود طلب قيد المراجعة بنفس البريد.
 //  - ترقية حساب القارئ الموجود بدل إنشاء حساب مكرر عند القبول.
 // ADR-001: لا وصول لقاعدة البيانات هنا — كل الاستعلامات في correspondentApplicationService.
@@ -12,7 +14,7 @@ import { requireAuth, requireRole, logActivity } from "../rbac";
 import { cfKeyGenerator, cfValidate } from "../utils/rateLimiting";
 import { upload } from "../utils/uploadMiddleware";
 import { cloudflareImagesService } from "../services/cloudflareImagesService";
-import { ObjectStorageService } from "../objectStorage";
+import { ObjectStorageService, isPrivateObjectStorageConfigured } from "../objectStorage";
 import {
   sendCorrespondentApprovalEmail,
   sendCorrespondentRejectionEmail,
@@ -123,9 +125,20 @@ router.post(
         return res.status(502).json({ message: "خدمة رفع الصورة غير متاحة حالياً. حاول لاحقاً." });
       }
 
-      // License + CV are sensitive documents → PRIVATE object storage. Only
-      // storage keys are persisted; admins fetch them via the protected
-      // /file/:kind route below (short-lived signed URLs, never public).
+      // License + CV are sensitive documents → PRIVATE object storage (S3/R2).
+      // Never fall through to the Replit GCS sidecar on Railway — that returns
+      // ECONNREFUSED 127.0.0.1:1106. Only storage keys are persisted; admins
+      // fetch via the protected /file/:kind route (short-lived signed URLs).
+      if (!isPrivateObjectStorageConfigured()) {
+        console.error(
+          "[Correspondent] Private object storage not configured " +
+            "(need STORAGE_PROVIDER=s3|r2 with credentials)",
+        );
+        return res.status(502).json({
+          message: "خدمة رفع المستندات غير متاحة حالياً. حاول لاحقاً.",
+        });
+      }
+
       const objectStorage = new ObjectStorageService();
       const docId = randomUUID();
       const licenseExt = licenseFile.mimetype === "application/pdf" ? "pdf"
@@ -172,9 +185,12 @@ router.post(
         applicationId: application.id,
       });
     } catch (error: unknown) {
-      const err = error as Error;
-      console.error("Error creating correspondent application:", err);
-      res.status(500).json({ message: "حدث خطأ في تقديم الطلب: " + err.message });
+      console.error("Error creating correspondent application:", error);
+      // Do not leak backend/storage internals (e.g. ECONNREFUSED 127.0.0.1:1106)
+      // into the public registration form.
+      res.status(500).json({
+        message: "حدث خطأ في تقديم الطلب. يرجى المحاولة مرة أخرى لاحقاً.",
+      });
     }
   },
 );
