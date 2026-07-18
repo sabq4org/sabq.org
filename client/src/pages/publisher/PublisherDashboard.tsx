@@ -1,9 +1,9 @@
-import { useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, type ReactNode, type ComponentType } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
-import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePublisherAccess } from "@/hooks/usePublisherAccess";
+import { useAuth } from "@/hooks/useAuth";
 import { PublisherLayout } from "@/components/publisher/PublisherLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -12,18 +12,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import {
   FileText,
-  CheckCircle,
-  Clock,
   Eye,
   Package,
   Calendar,
-  Building,
   AlertTriangle,
-  Zap,
   Plus,
   ArrowLeft,
   TrendingUp,
-  Loader2,
+  Clock,
+  Sparkles,
+  ExternalLink,
 } from "lucide-react";
 import {
   BarChart,
@@ -34,6 +32,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { cn } from "@/lib/utils";
 
 interface PortalOverview {
   publisher: {
@@ -60,7 +59,6 @@ interface PortalOverview {
     totalCredits: number;
     usedCredits: number;
     remainingCredits: number;
-    isUnlimited: boolean;
     expiryDate: string | null;
   } | null;
   recentArticles: Array<{
@@ -96,55 +94,84 @@ const formatViews = (views: number | null | undefined) => {
 const statusBadge = (status: string) => {
   const map: Record<string, { label: string; className: string }> = {
     draft: { label: "مسودة", className: "bg-muted text-muted-foreground" },
-    pending_review: { label: "قيد المراجعة", className: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-200" },
-    published: { label: "منشور", className: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200" },
-    archived: { label: "مؤرشف", className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200" },
+    pending_review: {
+      label: "قيد المراجعة",
+      className: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+    },
+    published: {
+      label: "منشور",
+      className: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200",
+    },
+    archived: {
+      label: "مؤرشف",
+      className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200",
+    },
   };
   const config = map[status] || { label: status, className: "bg-muted text-muted-foreground" };
-  return <Badge variant="outline" className={config.className}>{config.label}</Badge>;
+  return (
+    <Badge variant="outline" className={cn("border-0", config.className)}>
+      {config.label}
+    </Badge>
+  );
 };
+
+function KpiCard({
+  title,
+  value,
+  hint,
+  icon: Icon,
+  iconClass,
+  testId,
+  children,
+}: {
+  title: string;
+  value: ReactNode;
+  hint?: string;
+  icon: ComponentType<{ className?: string }>;
+  iconClass: string;
+  testId: string;
+  children?: ReactNode;
+}) {
+  return (
+    <Card
+      data-testid={testId}
+      className="group relative overflow-hidden border-border/60 shadow-sm transition-shadow hover:shadow-md"
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -start-6 -top-6 h-24 w-24 rounded-full bg-primary/[0.06] transition-transform group-hover:scale-110"
+      />
+      <CardHeader className="relative flex flex-row items-start justify-between space-y-0 pb-2">
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
+        <div className={cn("rounded-xl p-2", iconClass)}>
+          <Icon className="h-4 w-4" />
+        </div>
+      </CardHeader>
+      <CardContent className="relative">
+        <div className="text-3xl font-bold tracking-tight">{value}</div>
+        {hint ? <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p> : null}
+        {children}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function PublisherDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user } = usePublisherAccess();
-
-  // هوية المستخدم المسجل دخولاً (موظفاً كان أو مالكاً) — لا مسؤول الوكالة
-  const memberName = user
-    ? [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email
-    : "";
+  const { user } = useAuth();
+  usePublisherAccess();
 
   const { data, isLoading, error } = useQuery<PortalOverview>({
     queryKey: ["/api/publisher/portal/overview"],
-  });
-
-  // «طلب تجديد الباقة»: يفتح طلباً للإدارة تلقائياً (بلا تكرار للطلب المفتوح)
-  const renewalMutation = useMutation({
-    mutationFn: async () =>
-      apiRequest<{ message: string }>("/api/publisher/portal/requests", {
-        method: "POST",
-        body: JSON.stringify({ type: "renewal" }),
-        headers: { "Content-Type": "application/json" },
-      }),
-    onSuccess: (result) => {
-      toast({ title: "أُرسل الطلب ✅", description: result.message });
-    },
-    onError: (err: any) => {
-      toast({
-        variant: "destructive",
-        title: "تعذر الإرسال",
-        description: err.message || "حاول مرة أخرى لاحقاً",
-      });
-    },
   });
 
   useEffect(() => {
     if (error) {
       toast({
         variant: "destructive",
-        title: "تعذر الدخول",
-        // عند تعليق الوكالة يعيد الخادم رسالة واضحة — نعرضها كما هي
-        description: (error as Error)?.message || "لا يمكن الوصول إلى لوحة الناشر. يرجى التأكد من صلاحياتك.",
+        title: "خطأ",
+        description: "لا يمكن الوصول إلى لوحة الناشر. يرجى التأكد من صلاحياتك.",
       });
       setLocation("/");
     }
@@ -154,13 +181,13 @@ export default function PublisherDashboard() {
     return (
       <PublisherLayout>
         <div className="space-y-6" dir="rtl">
-          <Skeleton className="h-28 w-full rounded-xl" />
+          <Skeleton className="h-20 w-full rounded-2xl" />
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[...Array(4)].map((_, i) => (
-              <Skeleton key={i} className="h-32" />
+              <Skeleton key={i} className="h-36 rounded-xl" />
             ))}
           </div>
-          <Skeleton className="h-72 w-full" />
+          <Skeleton className="h-72 w-full rounded-xl" />
         </div>
       </PublisherLayout>
     );
@@ -175,69 +202,51 @@ export default function PublisherDashboard() {
     ? Math.ceil((new Date(publisher.publishingEndsAt).getTime() - Date.now()) / 86_400_000)
     : null;
 
-  const creditPercent = activeCredit && activeCredit.totalCredits > 0
-    ? Math.round((activeCredit.remainingCredits / activeCredit.totalCredits) * 100)
-    : 0;
+  const creditPercent =
+    activeCredit && activeCredit.totalCredits > 0
+      ? Math.round((activeCredit.remainingCredits / activeCredit.totalCredits) * 100)
+      : 0;
+
+  const isOpenEndedCredit =
+    !!activeCredit &&
+    activeCredit.remainingCredits >= 9999 &&
+    activeCredit.totalCredits >= 9999;
+
+  const firstName = user?.firstName?.trim();
+  const greeting = firstName ? `أهلاً ${firstName}` : "أهلاً بك";
 
   return (
     <PublisherLayout>
-      <div className="space-y-6" dir="rtl">
-        {/* رأس هوية الوكالة */}
-        <Card data-testid="card-agency-header" className="overflow-hidden">
-          <CardContent className="pt-6">
-            <div className="flex flex-col md:flex-row md:items-center gap-4">
-              {publisher.logoUrl ? (
-                <img
-                  src={publisher.logoUrl}
-                  alt={publisher.agencyName}
-                  className="h-16 w-16 rounded-xl object-contain border bg-white p-1"
-                  data-testid="img-agency-logo"
-                />
-              ) : (
-                <div className="h-16 w-16 rounded-xl border flex items-center justify-center bg-muted">
-                  <Building className="h-8 w-8 text-muted-foreground" />
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <h1 className="text-2xl font-bold truncate" data-testid="text-agency-name">
-                  {publisher.agencyName}
-                </h1>
-                <p className="text-muted-foreground text-sm truncate" data-testid="text-member-identity">
-                  {memberName}
-                  {user?.email && ` · ${user.email}`}
-                </p>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {publisher.autoPublish && (
-                    <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200" data-testid="badge-auto-publish">
-                      <Zap className="h-3 w-3 ml-1" />
-                      نشر فوري بدون مراجعة
-                    </Badge>
-                  )}
-                  {publisher.publishingEndsAt && windowDaysLeft !== null && (
-                    windowDaysLeft >= 0 ? (
-                      <Badge variant="outline" data-testid="badge-window">
-                        <Calendar className="h-3 w-3 ml-1" />
-                        النشر متاح حتى {formatDate(publisher.publishingEndsAt)}
-                      </Badge>
-                    ) : (
-                      <Badge variant="destructive" data-testid="badge-window-closed">
-                        انتهت فترة النشر في {formatDate(publisher.publishingEndsAt)}
-                      </Badge>
-                    )
-                  )}
-                  {!publisher.isActive && <Badge variant="destructive">الحساب معطل</Badge>}
-                </div>
-              </div>
-              {/* الناشر الموثوق يكتب من المحرر الأساسي الكامل مباشرة */}
-              <Link href={publisher.autoPublish ? "/dashboard/articles/new" : "/dashboard/publisher/article/new"}>
-                <Button size="lg" data-testid="button-new-article" disabled={windowDaysLeft !== null && windowDaysLeft < 0}>
-                  <Plus className="ml-2 h-4 w-4" />
-                  خبر جديد
-                </Button>
-              </Link>
+      <div className="mx-auto max-w-6xl space-y-6" dir="rtl">
+        {/* ترحيب + إجراء سريع */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-1.5 text-xs font-medium text-primary">
+              <Sparkles className="h-3.5 w-3.5" />
+              لوحة أداء الوكالة
             </div>
-          </CardContent>
-        </Card>
+            <h1 className="text-2xl font-bold tracking-tight md:text-3xl" data-testid="text-dashboard-greeting">
+              {greeting}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              ملخص نشر {publisher.agencyName}
+              {publisher.publishingEndsAt && windowDaysLeft !== null && windowDaysLeft >= 0
+                ? ` · متاح حتى ${formatDate(publisher.publishingEndsAt)}`
+                : ""}
+            </p>
+          </div>
+          <Link href="/dashboard/publisher/article/new">
+            <Button
+              size="lg"
+              className="rounded-xl shadow-sm"
+              data-testid="button-new-article"
+              disabled={windowDaysLeft !== null && windowDaysLeft < 0}
+            >
+              <Plus className="ml-2 h-4 w-4" />
+              خبر جديد
+            </Button>
+          </Link>
+        </div>
 
         {/* يتطلب انتباهك */}
         {attention.length > 0 && (
@@ -245,15 +254,16 @@ export default function PublisherDashboard() {
             {attention.map((item) => (
               <div
                 key={item.type}
-                className={`flex items-center gap-3 rounded-lg border p-3 text-sm ${
+                className={cn(
+                  "flex items-start gap-3 rounded-xl border p-3.5 text-sm shadow-sm",
                   item.severity === "critical"
-                    ? "border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200"
-                    : "border-yellow-300 bg-yellow-50 text-yellow-900 dark:border-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-200"
-                }`}
+                    ? "border-red-200 bg-red-50/90 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+                    : "border-amber-200 bg-amber-50/90 text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200",
+                )}
                 data-testid={`attention-${item.type}`}
               >
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span>{item.message}</span>
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="leading-relaxed">{item.message}</span>
               </div>
             ))}
           </div>
@@ -261,106 +271,112 @@ export default function PublisherDashboard() {
 
         {/* مؤشرات الأداء */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card data-testid="card-kpi-credits">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">الرصيد المتبقي</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              {activeCredit ? (
-                activeCredit.isUnlimited ? (
-                  <>
-                    <div className="text-2xl font-bold" data-testid="text-remaining-credits">
-                      مفتوح <span className="text-lg">∞</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {activeCredit.packageName} · نشر غير محدود
-                      {activeCredit.expiryDate && ` حتى ${formatDate(activeCredit.expiryDate)}`}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <div className="text-2xl font-bold" data-testid="text-remaining-credits">
+          <KpiCard
+            testId="card-kpi-credits"
+            title="الرصيد المتبقي"
+            icon={Package}
+            iconClass="bg-teal-500/10 text-teal-600 dark:text-teal-300"
+            value={
+              activeCredit ? (
+                <span data-testid="text-remaining-credits">
+                  {isOpenEndedCredit ? (
+                    <span className="inline-flex items-baseline gap-1">
+                      مفتوح
+                      <span className="text-2xl text-muted-foreground">∞</span>
+                    </span>
+                  ) : (
+                    <>
                       {activeCredit.remainingCredits}
-                      <span className="text-sm font-normal text-muted-foreground"> / {activeCredit.totalCredits}</span>
-                    </div>
-                    <Progress value={creditPercent} className="h-2 mt-2" />
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {activeCredit.packageName}
-                      {activeCredit.expiryDate && ` · تنتهي ${formatDate(activeCredit.expiryDate)}`}
-                    </p>
-                  </>
-                )
+                      <span className="text-base font-normal text-muted-foreground">
+                        {" "}
+                        / {activeCredit.totalCredits}
+                      </span>
+                    </>
+                  )}
+                </span>
               ) : (
-                <p className="text-sm text-muted-foreground">لا توجد باقة نشطة</p>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3 w-full"
-                onClick={() => renewalMutation.mutate()}
-                disabled={renewalMutation.isPending}
-                data-testid="button-request-renewal"
-              >
-                {renewalMutation.isPending
-                  ? <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                  : <Package className="ml-2 h-4 w-4" />}
-                طلب تجديد الباقة
-              </Button>
-            </CardContent>
-          </Card>
+                <span className="text-lg font-semibold text-muted-foreground">لا توجد باقة</span>
+              )
+            }
+            hint={
+              activeCredit
+                ? `${activeCredit.packageName}${
+                    activeCredit.expiryDate ? ` · حتى ${formatDate(activeCredit.expiryDate)}` : ""
+                  }`
+                : undefined
+            }
+          >
+            {activeCredit && !isOpenEndedCredit ? (
+              <Progress value={creditPercent} className="mt-3 h-1.5" />
+            ) : null}
+          </KpiCard>
 
-          <Card data-testid="card-kpi-month">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">منشور هذا الشهر</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-published-month">{stats.publishedThisMonth}</div>
-              <p className="text-xs text-muted-foreground mt-1">من إجمالي {stats.publishedArticles} منشور</p>
-            </CardContent>
-          </Card>
+          <KpiCard
+            testId="card-kpi-month"
+            title="منشور هذا الشهر"
+            icon={TrendingUp}
+            iconClass="bg-sky-500/10 text-sky-600 dark:text-sky-300"
+            value={<span data-testid="text-published-month">{stats.publishedThisMonth}</span>}
+            hint={`من إجمالي ${stats.publishedArticles} منشور`}
+          />
 
-          <Card data-testid="card-kpi-pending">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">مسودات / قيد المراجعة</CardTitle>
-              <Clock className="h-4 w-4 text-yellow-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600" data-testid="text-draft-count">{stats.draftArticles}</div>
-              <p className="text-xs text-muted-foreground mt-1">بانتظار الاستكمال أو الموافقة</p>
-            </CardContent>
-          </Card>
+          <KpiCard
+            testId="card-kpi-pending"
+            title="مسودات / قيد المراجعة"
+            icon={Clock}
+            iconClass="bg-amber-500/10 text-amber-600 dark:text-amber-300"
+            value={
+              <span className="text-amber-600 dark:text-amber-300" data-testid="text-draft-count">
+                {stats.draftArticles}
+              </span>
+            }
+            hint="بانتظار الاستكمال أو الموافقة"
+          />
 
-          <Card data-testid="card-kpi-views">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">إجمالي المشاهدات</CardTitle>
-              <Eye className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-total-views">{formatViews(stats.totalViews)}</div>
-              <p className="text-xs text-muted-foreground mt-1">على {stats.publishedArticles} مادة منشورة</p>
-            </CardContent>
-          </Card>
+          <KpiCard
+            testId="card-kpi-views"
+            title="إجمالي المشاهدات"
+            icon={Eye}
+            iconClass="bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"
+            value={<span data-testid="text-total-views">{formatViews(stats.totalViews)}</span>}
+            hint={`على ${stats.publishedArticles} مادة منشورة`}
+          />
         </div>
 
         {/* النشر الشهري */}
         {monthlyPublishing.length > 0 && (
-          <Card data-testid="card-monthly-chart">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
+          <Card
+            data-testid="card-monthly-chart"
+            className="border-border/60 shadow-sm"
+          >
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="rounded-lg bg-primary/10 p-1.5 text-primary">
+                  <TrendingUp className="h-4 w-4" />
+                </span>
                 النشر خلال الأشهر الأخيرة
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={monthlyPublishing}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" reversed />
-                  <YAxis orientation="right" allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="published" name="مواد منشورة" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border/60" vertical={false} />
+                  <XAxis dataKey="month" reversed tickLine={false} axisLine={false} fontSize={12} />
+                  <YAxis orientation="right" allowDecimals={false} tickLine={false} axisLine={false} fontSize={12} />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: 12,
+                      border: "1px solid hsl(var(--border))",
+                      background: "hsl(var(--background))",
+                    }}
+                  />
+                  <Bar
+                    dataKey="published"
+                    name="مواد منشورة"
+                    fill="hsl(var(--primary))"
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={48}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -368,39 +384,56 @@ export default function PublisherDashboard() {
         )}
 
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* آخر المواد */}
-          <Card data-testid="card-recent-articles">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
+          <Card data-testid="card-recent-articles" className="border-border/60 shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="rounded-lg bg-sky-500/10 p-1.5 text-sky-600 dark:text-sky-300">
+                  <FileText className="h-4 w-4" />
+                </span>
                 آخر المواد
               </CardTitle>
               <Link href="/dashboard/publisher/articles">
-                <Button variant="ghost" size="sm" data-testid="button-view-all-articles">
+                <Button variant="ghost" size="sm" className="rounded-lg" data-testid="button-view-all-articles">
                   عرض الكل
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <ArrowLeft className="mr-1.5 h-4 w-4" />
                 </Button>
               </Link>
             </CardHeader>
             <CardContent>
               {recentArticles.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">لا توجد مواد بعد</p>
+                <div className="rounded-xl border border-dashed py-10 text-center text-sm text-muted-foreground">
+                  لا توجد مواد بعد — ابدأ بخبر جديد
+                </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {recentArticles.map((article) => (
                     <div
                       key={article.id}
-                      className="flex items-center justify-between gap-3 p-3 rounded-lg border"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-transparent bg-muted/30 px-3 py-2.5 transition-colors hover:border-border hover:bg-muted/50"
                       data-testid={`recent-article-${article.id}`}
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{article.title}</p>
-                        <p className="text-xs text-muted-foreground">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{article.title}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
                           {formatDate(article.publishedAt || article.createdAt)}
                           {article.status === "published" && ` · ${formatViews(article.views)} مشاهدة`}
                         </p>
                       </div>
-                      {statusBadge(article.status)}
+                      <div className="flex shrink-0 items-center gap-2">
+                        {statusBadge(article.status)}
+                        {article.status === "published" && article.englishSlug ? (
+                          <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                            <a
+                              href={`/article/${article.englishSlug}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label="فتح المادة"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -408,34 +441,46 @@ export default function PublisherDashboard() {
             </CardContent>
           </Card>
 
-          {/* الأعلى مشاهدة */}
-          <Card data-testid="card-top-articles">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5" />
+          <Card data-testid="card-top-articles" className="border-border/60 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <span className="rounded-lg bg-emerald-500/10 p-1.5 text-emerald-600 dark:text-emerald-300">
+                  <Eye className="h-4 w-4" />
+                </span>
                 الأعلى مشاهدة
               </CardTitle>
             </CardHeader>
             <CardContent>
               {topArticles.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">لا توجد مواد منشورة بعد</p>
+                <div className="rounded-xl border border-dashed py-10 text-center text-sm text-muted-foreground">
+                  لا توجد مواد منشورة بعد
+                </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {topArticles.map((article, index) => (
                     <div
                       key={article.id}
-                      className="flex items-center gap-3 p-3 rounded-lg border"
+                      className="flex items-center gap-3 rounded-xl border border-transparent bg-muted/30 px-3 py-2.5 transition-colors hover:border-border hover:bg-muted/50"
                       data-testid={`top-article-${article.id}`}
                     >
-                      <span className="text-lg font-bold text-muted-foreground w-6 text-center">
+                      <span
+                        className={cn(
+                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold",
+                          index === 0
+                            ? "bg-amber-400/20 text-amber-700 dark:text-amber-300"
+                            : "bg-muted text-muted-foreground",
+                        )}
+                      >
                         {index + 1}
                       </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{article.title}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(article.publishedAt)}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-medium">{article.title}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {formatDate(article.publishedAt)}
+                        </p>
                       </div>
-                      <Badge variant="secondary" className="shrink-0">
-                        <Eye className="h-3 w-3 ml-1" />
+                      <Badge variant="secondary" className="shrink-0 rounded-lg font-medium">
+                        <Eye className="ml-1 h-3 w-3" />
                         {formatViews(article.views)}
                       </Badge>
                     </div>
@@ -445,6 +490,27 @@ export default function PublisherDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* شريط معلومات خفيف */}
+        {(publisher.publishingEndsAt || activeCredit) && (
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-border/80 bg-muted/20 px-4 py-3 text-xs text-muted-foreground">
+            {publisher.publishingEndsAt ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5" />
+                نافذة النشر: حتى {formatDate(publisher.publishingEndsAt)}
+              </span>
+            ) : null}
+            {activeCredit ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Package className="h-3.5 w-3.5" />
+                الباقة النشطة: {activeCredit.packageName}
+              </span>
+            ) : null}
+            <Link href="/dashboard/publisher/credits" className="ms-auto text-primary hover:underline">
+              تفاصيل الرصيد
+            </Link>
+          </div>
+        )}
       </div>
     </PublisherLayout>
   );
