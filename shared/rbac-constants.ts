@@ -11,6 +11,7 @@ export const ROLE_NAMES = {
   COMMENTS_MODERATOR: "comments_moderator",
   MEDIA_MANAGER: "media_manager",
   ANGLE_WRITER: "angle_writer",
+  PUBLISHER: "publisher",
   READER: "reader",
 } as const;
 
@@ -37,6 +38,7 @@ export const ROLE_LABELS_AR = {
   [ROLE_NAMES.COMMENTS_MODERATOR]: "مشرف تعليقات",
   [ROLE_NAMES.MEDIA_MANAGER]: "مدير وسائط",
   [ROLE_NAMES.ANGLE_WRITER]: "كاتب زاوية",
+  [ROLE_NAMES.PUBLISHER]: "ناشر",
   [ROLE_NAMES.READER]: "قارئ",
 } as const;
 
@@ -50,6 +52,7 @@ export const ROLE_LABELS_EN = {
   [ROLE_NAMES.COMMENTS_MODERATOR]: "Comments Moderator",
   [ROLE_NAMES.MEDIA_MANAGER]: "Media Manager",
   [ROLE_NAMES.ANGLE_WRITER]: "Angle Writer",
+  [ROLE_NAMES.PUBLISHER]: "Publisher",
   [ROLE_NAMES.READER]: "Reader",
 } as const;
 
@@ -63,6 +66,7 @@ export const ROLE_DESCRIPTIONS_AR = {
   [ROLE_NAMES.COMMENTS_MODERATOR]: "إدارة التعليقات: الموافقة والرفض والتعديل والحذف والحظر",
   [ROLE_NAMES.MEDIA_MANAGER]: "إدارة المكتبة الإعلامية والألبومات",
   [ROLE_NAMES.ANGLE_WRITER]: "كاتب زاوية في مُقترب: يدير زاويته الخاصة ويضيف مواضيع ويرسلها لمراجعة الإدارة قبل النشر",
+  [ROLE_NAMES.PUBLISHER]: "ناشر خارجي (وكالة إعلامية): يضيف مواده الخاصة فقط عبر بوابة الناشرين، ويخضع نشره لباقة رصيد ونافذة نشر زمنية، مع مراجعة تحريرية ما لم يُفعَّل له النشر الفوري",
   [ROLE_NAMES.READER]: "مستخدم عادي بدون صلاحيات تحريرية",
 } as const;
 
@@ -351,6 +355,20 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.MUQTARAB_OWN_TOPIC_CREATE,
     PERMISSION_CODES.MUQTARAB_OWN_TOPIC_EDIT,
     PERMISSION_CODES.MUQTARAB_OWN_TOPIC_SUBMIT,
+    PERMISSION_CODES.DASHBOARD_VIEW,
+  ],
+
+  // الناشر (وكالة خارجية): كان الدور معرّفاً في seed قاعدة البيانات فقط وغائباً
+  // عن هذه الخريطة، فكان /api/auth/user يعيد permissions فارغة لأصحابه.
+  // الحد الأدنى عمداً — بوابة الناشر تُحرَس بالملكية على مستوى المسارات،
+  // وdashboard.view مطلوب ليظهر رابط «لوحة التحكم» في الهيدر.
+  [ROLE_NAMES.PUBLISHER]: [
+    PERMISSION_CODES.ARTICLES_VIEW,
+    PERMISSION_CODES.ARTICLES_CREATE,
+    PERMISSION_CODES.ARTICLES_EDIT_OWN,
+    PERMISSION_CODES.MEDIA_VIEW,
+    PERMISSION_CODES.MEDIA_UPLOAD,
+    PERMISSION_CODES.ANALYTICS_VIEW_OWN,
     PERMISSION_CODES.DASHBOARD_VIEW,
   ],
 

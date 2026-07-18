@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { useRoleProtection } from "@/hooks/useRoleProtection";
+import { usePublisherAccess } from "@/hooks/usePublisherAccess";
 import { PublisherLayout } from "@/components/publisher/PublisherLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,15 +45,17 @@ interface Article {
 }
 
 export default function PublisherArticles() {
-  useRoleProtection('publisher');
+  usePublisherAccess();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
   const limit = 10;
 
+  // بوابة الناشر الجديدة: تعيد مواد المستخدم + كل مواد الوكالة المنسوبة
+  // إليها (publisherId) — يشمل الأرشيف المرحَّل، مع ترقيم فعلي في الخادم.
   const { data, isLoading, error } = useQuery<{ articles: Article[]; total: number }>({
-    queryKey: ["/api/publisher/articles", { status: statusFilter !== "all" ? statusFilter : undefined, searchQuery, page, limit }],
+    queryKey: ["/api/publisher/portal/articles", { status: statusFilter !== "all" ? statusFilter : undefined, searchQuery, page, limit }],
   });
 
   if (error) {
