@@ -98,7 +98,7 @@ final class ArticlesStore {
             }
         }
 
-        if !result.latest.isEmpty || !result.featured.isEmpty {
+        if !result.latest.isEmpty {
             allFetchedArticles = result.latest
             applyFeaturedCarousel(result.featured)
             breakingNews = result.breaking
@@ -124,26 +124,41 @@ final class ArticlesStore {
                 .compactMap { $0.imageURL.flatMap(URL.init(string:)) }
             if !heroURLs.isEmpty { ImageCache.prefetch(urls: heroURLs, maxPixelSize: 2000) }
             if !cardURLs.isEmpty { ImageCache.prefetch(urls: cardURLs, maxPixelSize: 1200) }
+        } else if !result.featured.isEmpty {
+            // لا تمسح قائمة «آخر الأخبار» إن عادت الرئيسية بلا latest
+            // (فشل جزئي) — حدّث الهيرو فقط.
+            applyFeaturedCarousel(result.featured)
+            if !result.breaking.isEmpty { breakingNews = result.breaking }
+            if !result.stories.isEmpty { stories = result.stories }
+            if !result.trending.isEmpty { trendingKeywords = result.trending }
         }
         guard generation == loadGeneration else { return }
         // الخلاصة الأساسية ظاهرة الآن — لا تُبقِ زر "تحميل المزيد"
         // معطّلاً بينما تكمّل الأقسام الثانوية تحميلها أدناه.
         isLoading = false
 
+        // عند سحب التحديث: أنهِ await فوراً بعد الرئيسية حتى يختفي مؤشر
+        // .refreshable، وكمل الترند/المباشر/الرأي في الخلفية. انتظارها
+        // كان يعلّق السحب إذا بطؤ أحد الطلبات الثانوية أو انتهى بمهلة.
+        if ignoreCache {
+            Task { @MainActor in
+                let trending = await trendingTask
+                let live = await liveTask
+                let opinionsResult = await opinionsTask
+                guard generation == loadGeneration else { return }
+                trendingArticles = trending
+                liveData = live
+                opinions = opinionsResult
+                await NewsService.clearCategoryCache()
+            }
+            return
+        }
+
         // الأقسام الثانوية تُملأ عند جهوزيتها. كل إسناد يحدّث خاصيته
         // الخاصة في @Observable فيُعاد رسم قسمه فقط دون حجب الخلاصة.
         trendingArticles = await trendingTask
         liveData = await liveTask
         opinions = await opinionsTask
-
-        guard generation == loadGeneration else { return }
-        // امسح كاش التصنيفات فقط عند سحب التحديث (ignoreCache). في
-        // التحميل الكاشي (الإقلاع/العودة للتبويب) أبقِه حيّاً ليكون
-        // التنقّل بين التصنيفات والرئيسية فورياً — لا يلاحظ المتابع
-        // أي فرق لأن سحب التحديث يبقى يُجدّد كل شيء.
-        if ignoreCache {
-            await NewsService.clearCategoryCache()
-        }
     }
 
     /// فحص صامت للأخبار الجديدة دون تعطيل القائمة الحالية أو إظهار مؤشر تحميل.

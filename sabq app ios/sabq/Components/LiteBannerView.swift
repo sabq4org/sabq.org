@@ -44,6 +44,8 @@ struct LiteBannerView: View {
         .animation(.easeOut(duration: 0.25), value: lite.banner)
         .padding(.horizontal, 14)
         .padding(.top, 8)
+        // لا تعترض لمسات السحب للتحديث عندما لا يوجد شريط ظاهر
+        .allowsHitTesting(lite.banner != .none)
     }
 
     @ViewBuilder
