@@ -99,7 +99,8 @@ function NameCompletionGuard() {
       path === "/verify-email" ||
       path === "/set-password" ||
       path === "/two-factor" ||
-      path === "/admin-login";
+      path === "/admin-login" ||
+      path.startsWith("/survey/");
     if (exempt) return;
 
     rememberPostAuthReturnIfAbsent(
@@ -277,6 +278,12 @@ const AudioNewsletterVoiceCompare = lazy(() => retryImport(() => import("@/pages
 const AudioNewsletterTtsStats = lazy(() => retryImport(() => import("@/pages/AudioNewsletterTtsStats")));
 const AudioBriefsDashboard = lazy(() => retryImport(() => import("@/pages/AudioBriefsDashboard")));
 const AudioBriefEditor = lazy(() => retryImport(() => import("@/pages/AudioBriefEditor")));
+
+// === LAZY IMPORTS (Surveys) ===
+const SurveyRespond = lazy(() => retryImport(() => import("@/pages/SurveyRespond")));
+const SurveysAdmin = lazy(() => retryImport(() => import("@/pages/dashboard/Surveys")));
+const SurveyEditor = lazy(() => retryImport(() => import("@/pages/dashboard/SurveyEditor")));
+const SurveyResults = lazy(() => retryImport(() => import("@/pages/dashboard/SurveyResults")));
 
 // === LAZY IMPORTS (Announcements) ===
 const AnnouncementsList = lazy(() => retryImport(() => import("@/pages/AnnouncementsList")));
@@ -943,6 +950,13 @@ function Router() {
         <Route path="/dashboard/opinion-author/tickets">{() => <LazyRoute component={OpinionTicketsList} />}</Route>
         <Route path="/dashboard/opinion-tickets/:id">{() => <LazyRoute component={OpinionTicketAdminDetail} />}</Route>
         <Route path="/dashboard/opinion-tickets">{() => <LazyRoute component={OpinionTicketsAdmin} />}</Route>
+
+        {/* Surveys Platform Routes */}
+        <Route path="/survey/:token">{() => <LazyRoute component={SurveyRespond} />}</Route>
+        <Route path="/dashboard/surveys/new">{() => <LazyRoute component={SurveyEditor} />}</Route>
+        <Route path="/dashboard/surveys/:id/edit">{() => <LazyRoute component={SurveyEditor} />}</Route>
+        <Route path="/dashboard/surveys/:id/results">{() => <LazyRoute component={SurveyResults} />}</Route>
+        <Route path="/dashboard/surveys">{() => <LazyRoute component={SurveysAdmin} />}</Route>
         
         {/* iFox Admin Dashboard Routes */}
         <Route path="/dashboard/admin/ifox">{() => <LazyRoute component={IFoxDashboard} />}</Route>
