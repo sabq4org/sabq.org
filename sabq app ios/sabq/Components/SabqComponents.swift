@@ -1489,22 +1489,24 @@ struct FeaturedArticleCard: View {
                 // the long Arabic title bled past the card edge, clipping
                 // the start of every line (looked like "أبو" was missing
                 // from "أبوظبي").
-                Text(article.title)
+                Text(article.title.sabqForcedRTL)
                     .font(SabqFonts.app(size: 19, weight: .semibold))
                     .foregroundStyle(SabqTheme.ink)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(4)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .environment(\.layoutDirection, .rightToLeft)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text(article.excerpt)
+                Text(article.excerpt.sabqForcedRTL)
                     .font(SabqFonts.app(size: 14, weight: .regular))
                     .foregroundStyle(SabqTheme.secondaryInk)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .lineSpacing(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .environment(\.layoutDirection, .rightToLeft)
                     .fixedSize(horizontal: false, vertical: true)
 
                 HStack(spacing: 12) {
@@ -1619,7 +1621,7 @@ struct CompactArticleRow: View {
                     if isNew { newPill }
                 }
 
-                Text(article.title)
+                Text(article.title.sabqForcedRTL)
                     // Lighter than Bold — SemiBold reads cleaner in dense
                     // list rows without the heavy newspaper weight.
                     .font(SabqFonts.subhead(size: 16))
@@ -1628,6 +1630,7 @@ struct CompactArticleRow: View {
                     .multilineTextAlignment(.leading)
                     .lineSpacing(4)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .environment(\.layoutDirection, .rightToLeft)
                     .fixedSize(horizontal: false, vertical: true)
 
                 metadataRow
@@ -1659,13 +1662,14 @@ struct CompactArticleRow: View {
         VStack(alignment: .leading, spacing: 12) {
             heroImage
 
-            Text(article.title)
+            Text(article.title.sabqForcedRTL)
                 .font(SabqFonts.subhead(size: 17))
                 .foregroundStyle(SabqTheme.ink)
                 .lineLimit(3)
                 .multilineTextAlignment(.leading)
                 .lineSpacing(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .environment(\.layoutDirection, .rightToLeft)
                 .fixedSize(horizontal: false, vertical: true)
 
             metadataRow
