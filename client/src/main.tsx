@@ -60,9 +60,16 @@ if (import.meta.env.PROD) {
       // (بصيغتي Chrome وSafari/WebKit)
       /xbrowser is not defined|Can't find variable: xbrowser/,
       // fetch محجوب (مانع إعلانات) نحو نطاقات إعلانات/تحليلات خارجية —
-      // منذ SDK v8 تُلحق الرسالة بمضيف الطلب الفاشل فنطابق عليه. طلباتنا
-      // نحو cdn.sabq.org تمرّ عمدًا: فشلها إنذار CDN حقيقي.
+      // منذ SDK v8 تُلحق الرسالة بمضيف الطلب الفاشل فنطابق عليه.
       /(?:Failed to fetch|Load failed|NetworkError)[^(]*\([^)]*(?:googlesyndication|doubleclick|googletagmanager|google-analytics|analytics\.google|adservice|spadsync)/i,
+      // polyfill الـmodulepreload من Vite يجلب chunks مسبقًا بـfetch — فشله
+      // (شبكة متقطعة، إغلاق الصفحة أثناء الجلب، دوران build بعد النشر) لا
+      // يكسر شيئًا: الاستيراد الفعلي له مسار خطئه وdeployRecovery يعالج
+      // الشاشة البيضاء. 1,428 حدثًا في 16 يومًا (JAVASCRIPT-REACT-D) صفر
+      // مستخدم متأثر. إنذار CDN الحقيقي محفوظ: رسائل فشل الاستيراد
+      // الديناميكي (Failed to fetch dynamically imported module /
+      // Importing a module script failed) بلا لاحقة "(host)" فلا تطابق.
+      /(?:Failed to fetch|Load failed|NetworkError)[^(]*\(cdn\.sabq\.org\)/,
     ],
     // allowUrls لا يكفي وحده: غلاف Sentry (browserApiErrors) يلفّ callbacks
     // setInterval/addEventListener حتى للسكربتات المحقونة (إضافات متصفح،
