@@ -57,7 +57,8 @@ if (import.meta.env.PROD) {
       // نمط عالمي معروف، يصل بلا إطارات فلا يسقطه beforeSend أدناه
       "Object Not Found Matching Id",
       // إضافة «تعبئة تلقائية» في متصفحات أندرويد تستدعي دالة غير معرّفة
-      "xbrowser is not defined",
+      // (بصيغتي Chrome وSafari/WebKit)
+      /xbrowser is not defined|Can't find variable: xbrowser/,
       // fetch محجوب (مانع إعلانات) نحو نطاقات إعلانات/تحليلات خارجية —
       // منذ SDK v8 تُلحق الرسالة بمضيف الطلب الفاشل فنطابق عليه. طلباتنا
       // نحو cdn.sabq.org تمرّ عمدًا: فشلها إنذار CDN حقيقي.
@@ -76,7 +77,12 @@ if (import.meta.env.PROD) {
       if (!frames?.length) return event;
       for (let i = frames.length - 1; i >= 0; i--) {
         const filename = frames[i]?.filename;
-        if (!filename || filename === "[native code]" || filename === "[wasm code]") continue;
+        // native/wasm فقط تُتخطى نزولًا. إطار بلا ملف = كود eval محقون
+        // (JAVASCRIPT-REACT-V تسرّب من هنا: أعلى إطاره `eval` بلا filename
+        // فسقط الفحص على إطار غلاف Sentry من حزمتنا) — حزمة Vite الإنتاجية
+        // لا تستخدم eval إطلاقًا، فاعتباره دخيلًا آمن.
+        if (filename === "[native code]" || filename === "[wasm code]") continue;
+        if (!filename) return null;
         return FIRST_PARTY_FRAME.test(filename) ? event : null;
       }
       // كل الإطارات مجهولة الملف — callback خارجي ملفوف بغلاف Sentry

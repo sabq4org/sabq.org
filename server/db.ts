@@ -32,6 +32,12 @@ const DB_DRIVER = (process.env.DB_DRIVER || 'neon').toLowerCase();
 let pool: any;
 let db: NeonDatabase<typeof schema> | NodePgDatabase<typeof schema>;
 let _dbConnected = false;
+// مزلاج «جاهز مرة واحدة»: يثبت true بعد أول تحقق ناجح ولا يعود false مع
+// الأعطال العابرة. يقود بوابة /health حتى لا يحوّل Railway الترافيك إلى
+// حاوية جديدة قبل أن تكون قاعدة البيانات (وربما Neon بعد suspend) جاهزة —
+// عاصفتا النشر 2026-07-18 (18:05 و18:45 UTC) كانتا كلها «timeout exceeded
+// when trying to connect» في الدقائق الأولى بعد الإقلاع.
+let _dbEverConnected = false;
 let _dbLastError: string | null = null;
 let _reconnectTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -87,6 +93,7 @@ async function verifyConnection(): Promise<boolean> {
     await pool.query('SELECT 1');
     const elapsed = Date.now() - start;
     _dbConnected = true;
+    _dbEverConnected = true;
     _dbLastError = null;
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[DB] Connection verified (${elapsed}ms)`);
@@ -97,6 +104,22 @@ async function verifyConnection(): Promise<boolean> {
     _dbLastError = error.message || 'Unknown error';
     console.error(`[DB] Connection verification failed: ${_dbLastError}`);
     return false;
+  }
+}
+
+// تدفئة الـpool قبل استقبال الترافيك: min=2 لا يكفي لحظة تحويل Railway
+// الترافيك إلى الحاوية الجديدة — أول موجة طلبات كانت تتكدس كلها على
+// pool.connect (بحد 10 ثوانٍ) فوق Neon بارد. فتح عدة اتصالات بالتوازي
+// هنا يدفع كلفة الإقلاع مرة واحدة قبل أن يمر أي طلب حقيقي.
+async function warmPool(target: number): Promise<void> {
+  try {
+    const warmers = Array.from({ length: target }, () =>
+      pool.query('SELECT 1').catch(() => {}),
+    );
+    await Promise.all(warmers);
+    console.log(`[DB] Pool warmed (${target} parallel connections)`);
+  } catch {
+    // أفضل جهد — التحقق الأساسي تم في verifyConnection
   }
 }
 
@@ -213,6 +236,7 @@ function startReconnectLoop(): void {
       if (connected) {
         console.log('[DB] Reconnection successful');
         stopReconnectLoop();
+        warmPool(8);
         runStartupMaintenance();
       }
     } catch (error: any) {
@@ -266,6 +290,7 @@ try {
     if (!connected) {
       startReconnectLoop();
     } else {
+      warmPool(8);
       runStartupMaintenance();
     }
   });
@@ -285,6 +310,13 @@ try {
 
 export function isDatabaseAvailable(): boolean {
   return pool !== undefined && db !== undefined && _dbConnected;
+}
+
+// بوابة جاهزية الإقلاع لـ/health: تعود true بعد أول تحقق ناجح وتبقى كذلك.
+// عمدًا لا تهبط مع الأعطال العابرة — فحص Railway وقت النشر فقط، وإسقاطها
+// لاحقًا قد يجعل منصة النشر تعتبر حاوية سليمة فاشلة.
+export function isDatabaseReadyOnce(): boolean {
+  return _dbEverConnected;
 }
 
 export function getDatabaseStatus(): { connected: boolean; lastError: string | null; reconnecting: boolean } {
