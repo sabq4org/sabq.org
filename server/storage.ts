@@ -17319,14 +17319,18 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(publisherCredits.publisherId, publisherId),
           eq(publisherCredits.isActive, true),
-          sql`${publisherCredits.remainingCredits} > 0`,
+          // الباقة المفتوحة صالحة دائماً بغض النظر عن الرصيد المتبقي
+          or(
+            eq(publisherCredits.isUnlimited, true),
+            sql`${publisherCredits.remainingCredits} > 0`
+          ),
           or(
             isNull(publisherCredits.expiryDate),
             gte(publisherCredits.expiryDate, now)
           )
         )
       )
-      .orderBy(asc(publisherCredits.expiryDate))
+      .orderBy(desc(publisherCredits.isUnlimited), asc(publisherCredits.expiryDate))
       .limit(1);
     return credit;
   }
@@ -17698,7 +17702,8 @@ export class DatabaseStorage implements IStorage {
       }
 
       // Re-validate credit balance inside the locked transaction
-      if (activeCredit.remainingCredits < 1) {
+      // (الباقة المفتوحة لا تُقيَّد برصيد)
+      if (!activeCredit.isUnlimited && activeCredit.remainingCredits < 1) {
         throw new Error('رصيد الناشر غير كافٍ');
       }
 
@@ -17714,8 +17719,9 @@ export class DatabaseStorage implements IStorage {
         .returning();
 
       // Step 4: Deduct credit (within transaction)
+      // الباقة المفتوحة: نُحصي الاستخدام للتقارير دون إنقاص الرصيد
       const creditsBefore = activeCredit.remainingCredits;
-      const creditsAfter = creditsBefore - 1;
+      const creditsAfter = activeCredit.isUnlimited ? creditsBefore : creditsBefore - 1;
 
       await tx
         .update(publisherCredits)
@@ -17735,10 +17741,12 @@ export class DatabaseStorage implements IStorage {
           articleId,
           actionType: 'credit_used',
           creditsBefore,
-          creditsChanged: -1,
+          creditsChanged: activeCredit.isUnlimited ? 0 : -1,
           creditsAfter,
           performedBy,
-          notes: `تم خصم رصيد مقابل نشر خبر: ${article.title}`,
+          notes: activeCredit.isUnlimited
+            ? `نشر خبر ضمن باقة مفتوحة: ${article.title}`
+            : `تم خصم رصيد مقابل نشر خبر: ${article.title}`,
         });
 
       // If we reach here, all operations succeeded

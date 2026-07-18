@@ -18,7 +18,7 @@
 //     line with full context — grep Railway logs for RECONCILE to find
 //     articles published without a deduction.
 
-import { and, asc, eq, gte, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { publisherCredits, publisherCreditLogs } from "@shared/schema";
 import { storage } from "../storage";
@@ -48,7 +48,8 @@ async function deductOnce(
   const now = new Date();
   return db.transaction(async (tx) => {
     // Same package-selection rules as storage.getActivePublisherCredit:
-    // active, has balance, not expired, soonest-expiring first.
+    // active, (unlimited OR has balance), not expired — unlimited first,
+    // then soonest-expiring.
     const [credit] = await tx
       .select()
       .from(publisherCredits)
@@ -56,17 +57,45 @@ async function deductOnce(
         and(
           eq(publisherCredits.publisherId, publisherId),
           eq(publisherCredits.isActive, true),
-          sql`${publisherCredits.remainingCredits} > 0`,
+          or(
+            eq(publisherCredits.isUnlimited, true),
+            sql`${publisherCredits.remainingCredits} > 0`,
+          ),
           or(
             isNull(publisherCredits.expiryDate),
             gte(publisherCredits.expiryDate, now),
           ),
         ),
       )
-      .orderBy(asc(publisherCredits.expiryDate))
+      .orderBy(desc(publisherCredits.isUnlimited), asc(publisherCredits.expiryDate))
       .limit(1);
 
     if (!credit) return "no_credits";
+
+    // الباقة المفتوحة: إحصاء الاستخدام فقط دون إنقاص الرصيد
+    if (credit.isUnlimited) {
+      await tx
+        .update(publisherCredits)
+        .set({
+          usedCredits: sql`${publisherCredits.usedCredits} + 1`,
+          updatedAt: now,
+        })
+        .where(eq(publisherCredits.id, credit.id));
+
+      await tx.insert(publisherCreditLogs).values({
+        publisherId,
+        creditPackageId: credit.id,
+        articleId,
+        actionType: "credit_used",
+        creditsBefore: credit.remainingCredits,
+        creditsChanged: 0,
+        creditsAfter: credit.remainingCredits,
+        performedBy,
+        notes: "نشر خبر ضمن باقة مفتوحة",
+      });
+
+      return "deducted";
+    }
 
     const [updated] = await tx
       .update(publisherCredits)

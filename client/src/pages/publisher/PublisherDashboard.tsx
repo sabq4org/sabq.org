@@ -58,6 +58,7 @@ interface PortalOverview {
     totalCredits: number;
     usedCredits: number;
     remainingCredits: number;
+    isUnlimited: boolean;
     expiryDate: string | null;
   } | null;
   recentArticles: Array<{
@@ -237,17 +238,29 @@ export default function PublisherDashboard() {
             </CardHeader>
             <CardContent>
               {activeCredit ? (
-                <>
-                  <div className="text-2xl font-bold" data-testid="text-remaining-credits">
-                    {activeCredit.remainingCredits}
-                    <span className="text-sm font-normal text-muted-foreground"> / {activeCredit.totalCredits}</span>
-                  </div>
-                  <Progress value={creditPercent} className="h-2 mt-2" />
-                  <p className="text-xs text-muted-foreground mt-2">
-                    {activeCredit.packageName}
-                    {activeCredit.expiryDate && ` · تنتهي ${formatDate(activeCredit.expiryDate)}`}
-                  </p>
-                </>
+                activeCredit.isUnlimited ? (
+                  <>
+                    <div className="text-2xl font-bold" data-testid="text-remaining-credits">
+                      مفتوح <span className="text-lg">∞</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {activeCredit.packageName} · نشر غير محدود
+                      {activeCredit.expiryDate && ` حتى ${formatDate(activeCredit.expiryDate)}`}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold" data-testid="text-remaining-credits">
+                      {activeCredit.remainingCredits}
+                      <span className="text-sm font-normal text-muted-foreground"> / {activeCredit.totalCredits}</span>
+                    </div>
+                    <Progress value={creditPercent} className="h-2 mt-2" />
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {activeCredit.packageName}
+                      {activeCredit.expiryDate && ` · تنتهي ${formatDate(activeCredit.expiryDate)}`}
+                    </p>
+                  </>
+                )
               ) : (
                 <p className="text-sm text-muted-foreground">لا توجد باقة نشطة</p>
               )}

@@ -73,7 +73,7 @@ import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sen
 import { awardPoints } from "./services/loyalty";
 import { safeErrorPayload } from "./utils/safeError";
 import { deductPublisherCreditSafely } from "./services/publisherCreditService";
-import { getPublishingGate, submitPortalArticle, notifyPublisherUser } from "./services/publisherPortalService";
+import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles } from "./services/publisherPortalService";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
@@ -8169,8 +8169,30 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
         try {
           const result = await db.transaction(async (tx) => {
+            // باقة مفتوحة نشطة؟ نُحصي الاستخدام دون إنقاص الرصيد
+            const [unlimitedPackage] = await tx
+              .update(publisherCredits)
+              .set({
+                usedCredits: sql`${publisherCredits.usedCredits} + 1`,
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(publisherCredits.publisherId, currentUser.linkedPublisherId!),
+                  eq(publisherCredits.isActive, true),
+                  eq(publisherCredits.isUnlimited, true),
+                  or(
+                    isNull(publisherCredits.expiryDate),
+                    gte(publisherCredits.expiryDate, new Date())
+                  )
+                )
+              )
+              .returning();
+
             // Atomically find and decrement credits in one query
-            const [decrementedPackage] = await tx
+            const [decrementedPackage] = unlimitedPackage
+              ? [unlimitedPackage]
+              : await tx
               .update(publisherCredits)
               .set({
                 usedCredits: sql`${publisherCredits.usedCredits} + 1`,
@@ -8206,17 +8228,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               .where(eq(articles.id, articleId))
               .returning();
 
-            // Log the credit usage
+            // Log the credit usage (باقة مفتوحة = بلا خصم)
+            const wasUnlimited = !!unlimitedPackage;
             await tx.insert(publisherCreditLogs).values({
               publisherId: currentUser.linkedPublisherId!,
               creditPackageId: decrementedPackage.id,
               articleId,
               actionType: "credit_used",
-              creditsBefore: decrementedPackage.remainingCredits + 1,
-              creditsChanged: -1,
+              creditsBefore: wasUnlimited
+                ? decrementedPackage.remainingCredits
+                : decrementedPackage.remainingCredits + 1,
+              creditsChanged: wasUnlimited ? 0 : -1,
               creditsAfter: decrementedPackage.remainingCredits,
               performedBy: userId,
-              notes: `نشر مقال: ${article.title}`,
+              notes: wasUnlimited
+                ? `نشر مقال ضمن باقة مفتوحة: ${article.title}`
+                : `نشر مقال: ${article.title}`,
             });
 
             console.log(`📰 [PUBLISHER] Credit deducted for publisher ${currentUser.linkedPublisherId}. Remaining: ${decrementedPackage.remainingCredits}`);
@@ -31835,29 +31862,28 @@ Sitemap: https://sabq.org/sitemap-news.xml
   );
 
   // GET /api/admin/publishers/:id/articles - Get articles published by this publisher
+  // نفس شرط بوابة الناشر الموحّد (publisherId أو مواد المالك) حتى تظهر
+  // مواد كل موظفي الوكالة، مع ترقيم صفحات حقيقي بدل limit 50 صامت.
   app.get("/api/admin/publishers/:id/articles",
     requireAuth,
     requirePermission("publishers.view"),
     async (req: any, res) => {
       try {
-        const publisherId = req.params.id;
-        
-        const publisherArticles = await db
-          .select({
-            id: articles.id,
-            title: articles.title,
-            slug: articles.slug,
-            status: articles.status,
-            publishedAt: articles.publishedAt,
-            createdAt: articles.createdAt,
-            views: articles.views,
-          })
-          .from(articles)
-          .where(eq(articles.publisherId, publisherId))
-          .orderBy(desc(articles.publishedAt), desc(articles.createdAt))
-          .limit(50);
-        
-        res.json(publisherArticles);
+        const publisher = await storage.getPublisher(req.params.id);
+        if (!publisher) {
+          return res.status(404).json({ message: "الناشر غير موجود" });
+        }
+
+        const page = Math.max(1, parseInt(req.query.page as string) || 1);
+        const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 10));
+        const result = await getPortalArticles(publisher, {
+          page,
+          limit,
+          status: req.query.status as string | undefined,
+          searchQuery: req.query.searchQuery as string | undefined,
+        });
+
+        res.json(result);
       } catch (error: any) {
         console.error("Error fetching publisher articles:", error);
         res.status(500).json({ message: "فشل في جلب مقالات الناشر" });
