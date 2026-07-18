@@ -58,6 +58,8 @@ function fullName(user: { firstName: string | null; lastName: string | null; ema
 // ============ CRUD ============
 
 export async function listSurveys() {
+  // مهم: sql`…` بلا `.as()` يُرجع أعمدة بلا اسم (?column?) فتُفقد
+  // invitedCount / completedCount / questionsCount ويظهر 0 في لوحة الاستطلاعات.
   const rows = await db
     .select({
       id: surveys.id,
@@ -67,9 +69,15 @@ export async function listSurveys() {
       sentAt: surveys.sentAt,
       closesAt: surveys.closesAt,
       createdAt: surveys.createdAt,
-      invitedCount: sql<number>`(select count(*)::int from survey_invitations i where i.survey_id = ${surveys.id})`,
-      completedCount: sql<number>`(select count(*)::int from survey_invitations i where i.survey_id = ${surveys.id} and i.completed_at is not null)`,
-      questionsCount: sql<number>`(select count(*)::int from survey_questions q where q.survey_id = ${surveys.id})`,
+      invitedCount: sql<number>`(select count(*)::int from survey_invitations i where i.survey_id = ${surveys.id})`
+        .mapWith(Number)
+        .as("invitedCount"),
+      completedCount: sql<number>`(select count(*)::int from survey_invitations i where i.survey_id = ${surveys.id} and i.completed_at is not null)`
+        .mapWith(Number)
+        .as("completedCount"),
+      questionsCount: sql<number>`(select count(*)::int from survey_questions q where q.survey_id = ${surveys.id})`
+        .mapWith(Number)
+        .as("questionsCount"),
     })
     .from(surveys)
     .orderBy(desc(surveys.createdAt));
@@ -429,7 +437,9 @@ export async function getOpenInvitationsForUser(userId: string) {
       surveyTitle: surveys.title,
       purpose: surveys.purpose,
       closesAt: surveys.closesAt,
-      questionsCount: sql<number>`(select count(*)::int from survey_questions q where q.survey_id = ${surveys.id})`,
+      questionsCount: sql<number>`(select count(*)::int from survey_questions q where q.survey_id = ${surveys.id})`
+        .mapWith(Number)
+        .as("questionsCount"),
     })
     .from(surveyInvitations)
     .innerJoin(surveys, eq(surveys.id, surveyInvitations.surveyId))

@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
-import { LogOut, ChevronDown, Globe, User, Search, Star, Plus } from "lucide-react";
+import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine } from "lucide-react";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
   Sidebar,
@@ -26,6 +26,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +48,7 @@ import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvide
 import type { UserRole } from "@/nav/types";
 import { resolveUserRole } from "@/lib/roleMapping";
 import type { NavItem } from "@/nav/types";
+import { cn } from "@/lib/utils";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -203,6 +205,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return 'س';
   };
 
+  // بطاقة هوية أعلى الشريط — لكتّاب الرأي/الزاوية فقط (مثل بطاقة الوكالة في بوابة الناشر)
+  const isWriterWorkspace = role === "opinion_author" || role === "angle_writer";
+  const writerDisplayName =
+    user.firstName && user.lastName
+      ? `${user.firstName} ${user.lastName}`
+      : user.firstName || user.name || user.email || "كاتب";
+  const writerRoleLabel = role === "angle_writer" ? "كاتب زاوية" : "كاتب رأي";
+
   const renderNavItem = (item: NavItem) => {
     const Icon = item.icon;
     const isActive = activeItem?.id === item.id;
@@ -331,6 +341,56 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
                 </div>
               </SidebarGroupLabel>
+              {isWriterWorkspace && (
+                <div className="mb-3 px-2" data-testid="sidebar-writer-card">
+                  <div className="relative overflow-hidden rounded-2xl border border-sidebar-border bg-sidebar-accent/30">
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-0 bg-gradient-to-b from-primary/12 via-primary/5 to-transparent"
+                    />
+                    <div className="relative space-y-2.5 p-3">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-12 w-12 border shadow-sm">
+                          {user.profileImageUrl ? (
+                            <AvatarImage src={user.profileImageUrl} alt={writerDisplayName} />
+                          ) : null}
+                          <AvatarFallback className="bg-primary text-sm text-primary-foreground">
+                            {getInitials(user.firstName, user.lastName, user.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate text-sm font-bold leading-snug tracking-tight"
+                            data-testid="sidebar-writer-name"
+                            title={writerDisplayName}
+                          >
+                            {writerDisplayName}
+                          </p>
+                          {user.email && (
+                            <p
+                              className="mt-0.5 truncate text-[11px] text-muted-foreground"
+                              data-testid="sidebar-writer-email"
+                              title={user.email}
+                              dir="ltr"
+                            >
+                              {user.email}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <Badge
+                        className={cn(
+                          "gap-1 border-0 bg-primary/12 text-primary hover:bg-primary/15",
+                        )}
+                        data-testid="sidebar-writer-role-badge"
+                      >
+                        <PenLine className="h-3 w-3" />
+                        {writerRoleLabel}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+              )}
               <div className="mb-3 space-y-3 px-2">
                 {quickCreateItem && (
                   <Button asChild className="w-full justify-start gap-2 shadow-sm">
