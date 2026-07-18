@@ -1840,6 +1840,15 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting staff comms scheduler:", error);
           }
         }, BACKGROUND_JOB_DELAY + 80000);
+
+        setTimeout(async () => {
+          try {
+            const { startPublisherAlertsJob } = await import("./jobs/publisherAlertsJob");
+            startPublisherAlertsJob();
+          } catch (error) {
+            console.error("[Server] Error starting publisher alerts job:", error);
+          }
+        }, BACKGROUND_JOB_DELAY + 85000);
         
         setTimeout(async () => {
           try {

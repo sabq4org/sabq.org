@@ -11,6 +11,8 @@ import {
   removePublisherMember,
   requestArticleChanges,
   resolvePublisherForUser,
+  runPublisherDailyAlerts,
+  sendPublisherMonthlyReports,
   submitPortalArticle,
 } from "../services/publisherPortalService";
 
@@ -206,6 +208,36 @@ router.delete(
     } catch (error) {
       console.error("[Publisher Portal] remove member failed:", error);
       res.status(500).json({ message: "تعذر فك ربط المستخدم" });
+    }
+  },
+);
+
+// تشغيل يدوي للتنبيهات/التقارير (للاختبار والتشغيل الفوري من الإدارة).
+// منع التكرار مدمج في المحرك نفسه، فالاستدعاء المتكرر آمن.
+router.post(
+  "/api/admin/publishers/alerts/run",
+  requireAuth,
+  requirePublisherManagement,
+  async (_req, res) => {
+    try {
+      res.json(await runPublisherDailyAlerts());
+    } catch (error) {
+      console.error("[Publisher Portal] manual alerts run failed:", error);
+      res.status(500).json({ message: "تعذر تشغيل التنبيهات" });
+    }
+  },
+);
+
+router.post(
+  "/api/admin/publishers/monthly-reports/run",
+  requireAuth,
+  requirePublisherManagement,
+  async (_req, res) => {
+    try {
+      res.json(await sendPublisherMonthlyReports());
+    } catch (error) {
+      console.error("[Publisher Portal] manual monthly reports failed:", error);
+      res.status(500).json({ message: "تعذر إرسال التقارير الشهرية" });
     }
   },
 );
