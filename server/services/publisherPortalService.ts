@@ -1,9 +1,12 @@
-import { and, desc, eq, gte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, or, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import { nanoid } from "nanoid";
 import { db } from "../db";
+import { sendEmailNotification } from "./email";
 import {
   articles,
+  notificationsInbox,
+  publisherCreditLogs,
   publisherCredits,
   publishers,
   roles,
@@ -560,4 +563,337 @@ export async function getPortalOverview(userId: string) {
     })),
     attention,
   };
+}
+
+// ============================================
+// حماية الإيراد: تنبيهات استباقية + تقرير شهري
+// تُستدعى من server/jobs/publisherAlertsJob.ts (على القائد فقط).
+// منع التكرار عبر notificationsInbox (metadata.alertKey) بدل أعمدة جديدة.
+// ============================================
+
+const ALERT_TYPE = "publisher_alert";
+const REPORT_TYPE = "publisher_monthly_report";
+
+const arDate = (d: Date | string | null | undefined) =>
+  d ? new Date(d).toLocaleDateString("ar-SA-u-ca-gregory") : "—";
+
+/** هل أُرسل تنبيه بنفس المفتاح لهذا المستخدم خلال آخر N يوماً؟ */
+async function alertRecentlySent(userId: string, alertKey: string, days: number): Promise<boolean> {
+  const since = new Date(Date.now() - days * 86_400_000);
+  const [row] = await db
+    .select({ id: notificationsInbox.id })
+    .from(notificationsInbox)
+    .where(
+      and(
+        eq(notificationsInbox.userId, userId),
+        eq(notificationsInbox.type, ALERT_TYPE),
+        gte(notificationsInbox.createdAt, since),
+        sql`${notificationsInbox.metadata} ->> 'alertKey' = ${alertKey}`,
+      ),
+    )
+    .limit(1);
+  return !!row;
+}
+
+function alertEmailHtml(agencyName: string, title: string, body: string): string {
+  return `<!DOCTYPE html><html dir="rtl" lang="ar"><body style="font-family:Tahoma,Arial,sans-serif;background:#f5f7f8;padding:24px">
+  <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:10px;padding:28px;border:1px solid #e2e8f0">
+    <h2 style="margin:0 0 4px;color:#0f172a">صحيفة سبق — بوابة الناشرين</h2>
+    <p style="color:#64748b;margin:0 0 20px">${agencyName}</p>
+    <h3 style="color:#b45309;margin:0 0 8px">${title}</h3>
+    <p style="color:#334155;line-height:1.8;margin:0 0 20px">${body}</p>
+    <a href="https://sabq.org/dashboard/publisher" style="display:inline-block;background:#0369a1;color:#fff;text-decoration:none;padding:10px 22px;border-radius:8px">فتح لوحة الناشر</a>
+    <p style="color:#94a3b8;font-size:12px;margin:24px 0 0">للاستفسار أو التجديد يرجى التواصل مع إدارة سبق.</p>
+  </div></body></html>`;
+}
+
+type PublisherAlertEvent = {
+  alertKey: string;
+  title: string;
+  body: string;
+  /** أيام منع التكرار */
+  cooldownDays: number;
+};
+
+function collectAlertEvents(
+  publisher: Publisher,
+  activeCredit: typeof publisherCredits.$inferSelect | null,
+  now: Date,
+): PublisherAlertEvent[] {
+  const events: PublisherAlertEvent[] = [];
+
+  if (activeCredit) {
+    const ratio = activeCredit.totalCredits > 0
+      ? activeCredit.remainingCredits / activeCredit.totalCredits
+      : 0;
+    if (activeCredit.remainingCredits <= 0) {
+      events.push({
+        alertKey: `credits_exhausted:${activeCredit.id}`,
+        title: "نفد رصيد باقتكم",
+        body: `استُهلك كامل رصيد باقة «${activeCredit.packageName}». لا يمكن نشر مواد جديدة حتى تجديد الباقة.`,
+        cooldownDays: 7,
+      });
+    } else if (ratio <= 0.2) {
+      events.push({
+        alertKey: `credits_low:${activeCredit.id}`,
+        title: "رصيد باقتكم يوشك على النفاد",
+        body: `تبقى ${activeCredit.remainingCredits} من أصل ${activeCredit.totalCredits} في باقة «${activeCredit.packageName}». نوصي بترتيب التجديد مبكراً لتفادي انقطاع النشر.`,
+        cooldownDays: 7,
+      });
+    }
+    if (activeCredit.expiryDate) {
+      const days = Math.ceil((new Date(activeCredit.expiryDate).getTime() - now.getTime()) / 86_400_000);
+      if (days >= 0 && days <= 7) {
+        events.push({
+          alertKey: `package_expiring:${activeCredit.id}`,
+          title: "باقتكم تنتهي قريباً",
+          body: `تنتهي صلاحية باقة «${activeCredit.packageName}» بتاريخ ${arDate(activeCredit.expiryDate)} (خلال ${days} ${days <= 10 ? "أيام" : "يوماً"}).`,
+          cooldownDays: 7,
+        });
+      }
+    }
+  } else {
+    events.push({
+      alertKey: `no_active_package:${publisher.id}`,
+      title: "لا توجد باقة نشطة لحسابكم",
+      body: "لا توجد باقة رصيد نشطة مرتبطة بحسابكم في سبق — لن يكون النشر متاحاً حتى تفعيل باقة جديدة.",
+      cooldownDays: 14,
+    });
+  }
+
+  if (publisher.publishingEndsAt) {
+    const days = Math.ceil((new Date(publisher.publishingEndsAt).getTime() - now.getTime()) / 86_400_000);
+    if (days >= 0 && days <= 7) {
+      events.push({
+        alertKey: `window_ending:${publisher.id}:${arDate(publisher.publishingEndsAt)}`,
+        title: "فترة النشر المتاحة لحسابكم توشك على الانتهاء",
+        body: `ينتهي النشر المتاح لحسابكم بتاريخ ${arDate(publisher.publishingEndsAt)}. للتمديد يرجى التواصل مع إدارة سبق.`,
+        cooldownDays: 7,
+      });
+    } else if (days < 0 && days >= -2) {
+      events.push({
+        alertKey: `window_closed:${publisher.id}:${arDate(publisher.publishingEndsAt)}`,
+        title: "انتهت فترة النشر المتاحة لحسابكم",
+        body: `انتهت فترة النشر بتاريخ ${arDate(publisher.publishingEndsAt)} وتوقف قبول المواد الجديدة. للتجديد يرجى التواصل مع إدارة سبق.`,
+        cooldownDays: 30,
+      });
+    }
+  }
+
+  return events;
+}
+
+/** التنبيهات اليومية: رصيد منخفض/منتهٍ، باقة تنتهي، نافذة نشر تنتهي/انتهت. */
+export async function runPublisherDailyAlerts(): Promise<{ publishersChecked: number; alertsSent: number }> {
+  const now = new Date();
+  const activePublishers = await db.select().from(publishers).where(eq(publishers.isActive, true));
+  let alertsSent = 0;
+
+  for (const publisher of activePublishers) {
+    try {
+      const [activeCredit] = await db
+        .select()
+        .from(publisherCredits)
+        .where(
+          and(
+            eq(publisherCredits.publisherId, publisher.id),
+            eq(publisherCredits.isActive, true),
+            or(sql`${publisherCredits.expiryDate} IS NULL`, gte(publisherCredits.expiryDate, now)),
+          ),
+        )
+        .orderBy(desc(publisherCredits.createdAt))
+        .limit(1);
+
+      const events = collectAlertEvents(publisher, activeCredit ?? null, now);
+      if (events.length === 0) continue;
+
+      const members = (await listPublisherMembers(publisher.id)) ?? [];
+      const dedupUserId = publisher.userId ?? members[0]?.id;
+      if (!dedupUserId) continue;
+
+      for (const event of events) {
+        if (await alertRecentlySent(dedupUserId, event.alertKey, event.cooldownDays)) continue;
+
+        // تنبيه داخل اللوحة لكل أعضاء الوكالة
+        for (const member of members) {
+          try {
+            await storage.createNotification({
+              userId: member.id,
+              type: ALERT_TYPE,
+              title: event.title,
+              body: event.body,
+              deeplink: "/dashboard/publisher",
+              metadata: { alertKey: event.alertKey, publisherId: publisher.id },
+            });
+          } catch (err) {
+            console.error(`[Publisher Alerts] in-app failed for ${member.id}:`, err);
+          }
+        }
+
+        // بريد إلى صندوق الوكالة الرسمي
+        if (publisher.email) {
+          await sendEmailNotification({
+            to: publisher.email,
+            subject: `سبق | ${event.title}`,
+            html: alertEmailHtml(publisher.agencyName, event.title, event.body),
+          });
+        }
+        alertsSent++;
+      }
+    } catch (err) {
+      console.error(`[Publisher Alerts] failed for publisher ${publisher.id}:`, err);
+    }
+  }
+
+  return { publishersChecked: activePublishers.length, alertsSent };
+}
+
+function monthlyReportHtml(params: {
+  agencyName: string;
+  monthLabel: string;
+  published: number;
+  totalViews: number;
+  creditsUsed: number;
+  remainingCredits: number | null;
+  packageName: string | null;
+  topArticles: Array<{ title: string; views: number | null }>;
+}): string {
+  const rows = params.topArticles
+    .map(
+      (a, i) =>
+        `<tr><td style="padding:8px;border-bottom:1px solid #e2e8f0">${i + 1}. ${a.title}</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:left;white-space:nowrap">${Number(a.views) || 0} مشاهدة</td></tr>`,
+    )
+    .join("");
+  const stat = (label: string, value: string) =>
+    `<td style="padding:12px;background:#f8fafc;border-radius:8px;text-align:center"><div style="font-size:22px;font-weight:bold;color:#0f172a">${value}</div><div style="font-size:12px;color:#64748b">${label}</div></td>`;
+
+  return `<!DOCTYPE html><html dir="rtl" lang="ar"><body style="font-family:Tahoma,Arial,sans-serif;background:#f5f7f8;padding:24px">
+  <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:10px;padding:28px;border:1px solid #e2e8f0">
+    <h2 style="margin:0 0 4px;color:#0f172a">التقرير الشهري — ${params.monthLabel}</h2>
+    <p style="color:#64748b;margin:0 0 20px">${params.agencyName} · صحيفة سبق</p>
+    <table width="100%" cellspacing="8"><tr>
+      ${stat("مادة منشورة", String(params.published))}
+      ${stat("إجمالي المشاهدات", String(params.totalViews))}
+      ${stat("رصيد مستهلك", String(params.creditsUsed))}
+      ${stat("رصيد متبقٍ", params.remainingCredits === null ? "—" : String(params.remainingCredits))}
+    </tr></table>
+    ${params.packageName ? `<p style="color:#334155;margin:16px 0 0">الباقة الحالية: <b>${params.packageName}</b></p>` : ""}
+    ${rows ? `<h3 style="color:#0f172a;margin:24px 0 8px">الأعلى مشاهدة هذا الشهر</h3><table width="100%" style="border-collapse:collapse">${rows}</table>` : ""}
+    <a href="https://sabq.org/dashboard/publisher" style="display:inline-block;background:#0369a1;color:#fff;text-decoration:none;padding:10px 22px;border-radius:8px;margin-top:24px">فتح لوحة الناشر</a>
+    <p style="color:#94a3b8;font-size:12px;margin:24px 0 0">يصلكم هذا الكشف مطلع كل شهر تلقائياً. لتجديد الباقات يرجى التواصل مع إدارة سبق.</p>
+  </div></body></html>`;
+}
+
+/** التقرير الشهري: يُرسل مطلع كل شهر عن الشهر المنقضي لكل وكالة نشطة. */
+export async function sendPublisherMonthlyReports(now = new Date()): Promise<{ reportsSent: number }> {
+  const monthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthKey = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, "0")}`;
+  const monthLabel = monthStart.toLocaleDateString("ar-SA-u-ca-gregory", { month: "long", year: "numeric" });
+
+  const activePublishers = await db.select().from(publishers).where(eq(publishers.isActive, true));
+  let reportsSent = 0;
+
+  for (const publisher of activePublishers) {
+    try {
+      const dedupUserId = publisher.userId;
+      if (dedupUserId) {
+        const since = new Date(now.getTime() - 40 * 86_400_000);
+        const [already] = await db
+          .select({ id: notificationsInbox.id })
+          .from(notificationsInbox)
+          .where(
+            and(
+              eq(notificationsInbox.userId, dedupUserId),
+              eq(notificationsInbox.type, REPORT_TYPE),
+              gte(notificationsInbox.createdAt, since),
+              sql`${notificationsInbox.metadata} ->> 'month' = ${monthKey}`,
+            ),
+          )
+          .limit(1);
+        if (already) continue;
+      }
+
+      const condition = publisherArticlesCondition(publisher);
+      const publishedInMonth = and(
+        condition,
+        eq(articles.status, "published"),
+        gte(articles.publishedAt, monthStart),
+        lt(articles.publishedAt, monthEnd),
+      );
+
+      const [[monthStats], topArticles, [creditUsage], [activeCredit]] = await Promise.all([
+        db
+          .select({
+            published: sql<number>`count(*)`,
+            totalViews: sql<number>`coalesce(sum(${articles.views}), 0)`,
+          })
+          .from(articles)
+          .where(publishedInMonth),
+        db
+          .select({ title: articles.title, views: articles.views })
+          .from(articles)
+          .where(publishedInMonth)
+          .orderBy(desc(articles.views))
+          .limit(3),
+        db
+          .select({ used: sql<number>`count(*)` })
+          .from(publisherCreditLogs)
+          .where(
+            and(
+              eq(publisherCreditLogs.publisherId, publisher.id),
+              eq(publisherCreditLogs.actionType, "credit_used"),
+              gte(publisherCreditLogs.createdAt, monthStart),
+              lt(publisherCreditLogs.createdAt, monthEnd),
+            ),
+          ),
+        db
+          .select()
+          .from(publisherCredits)
+          .where(and(eq(publisherCredits.publisherId, publisher.id), eq(publisherCredits.isActive, true)))
+          .orderBy(desc(publisherCredits.createdAt))
+          .limit(1),
+      ]);
+
+      const published = Number(monthStats?.published) || 0;
+      const creditsUsed = Number(creditUsage?.used) || 0;
+      // لا نراسل وكالة بلا أي نشاط ولا باقة — لا قيمة للكشف الفارغ
+      if (published === 0 && creditsUsed === 0 && !activeCredit) continue;
+
+      const html = monthlyReportHtml({
+        agencyName: publisher.agencyName,
+        monthLabel,
+        published,
+        totalViews: Number(monthStats?.totalViews) || 0,
+        creditsUsed,
+        remainingCredits: activeCredit ? activeCredit.remainingCredits : null,
+        packageName: activeCredit?.packageName ?? null,
+        topArticles,
+      });
+
+      if (publisher.email) {
+        await sendEmailNotification({
+          to: publisher.email,
+          subject: `سبق | التقرير الشهري لوكالة ${publisher.agencyName} — ${monthLabel}`,
+          html,
+        });
+      }
+
+      if (dedupUserId) {
+        await storage.createNotification({
+          userId: dedupUserId,
+          type: REPORT_TYPE,
+          title: `تقريركم الشهري — ${monthLabel}`,
+          body: `نُشر ${published} مادة بإجمالي ${Number(monthStats?.totalViews) || 0} مشاهدة، واستُهلك ${creditsUsed} من الرصيد.`,
+          deeplink: "/dashboard/publisher",
+          metadata: { month: monthKey, publisherId: publisher.id },
+        });
+      }
+      reportsSent++;
+    } catch (err) {
+      console.error(`[Publisher Monthly Report] failed for publisher ${publisher.id}:`, err);
+    }
+  }
+
+  return { reportsSent };
 }
