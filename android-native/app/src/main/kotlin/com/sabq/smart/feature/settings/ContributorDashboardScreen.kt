@@ -32,6 +32,7 @@ import com.sabq.smart.ui.theme.SabqTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -44,6 +45,9 @@ data class DashboardState(
     val ranking: ApiContributorRanking? = null,
     /** دعوات الاستطلاع المفتوحة — بطاقة «استطلاع بانتظارك» أعلى اللوحة */
     val pendingSurveys: List<ApiMySurveyInvite> = emptyList(),
+    val schedule: ApiWriterScheduleResponse? = null,
+    val savingDay: Boolean = false,
+    val scheduleError: String? = null,
 )
 
 @HiltViewModel
@@ -62,14 +66,30 @@ class ContributorDashboardViewModel @Inject constructor(
                 val analytics = api.getContributorAnalytics()
                 val ranking = runCatching { api.getContributorRanking() }.getOrNull()
                 val pendingSurveys = runCatching { api.getMySurveys().items }.getOrDefault(emptyList())
+                val schedule = runCatching { api.getContributorSchedule() }.getOrNull()
                 _state.value = DashboardState(
                     isLoading = false,
                     analytics = analytics,
                     ranking = ranking,
                     pendingSurveys = pendingSurveys,
+                    schedule = schedule,
                 )
             } catch (e: Exception) {
                 _state.value = DashboardState(isLoading = false, error = "تعذّر تحميل البيانات")
+            }
+        }
+    }
+
+    /** تثبيت اليوم الأسبوعي المختار — مرة واحدة؛ الخادم يرفض التغيير بعدها */
+    fun pickDay(weekday: Int) {
+        viewModelScope.launch {
+            _state.update { it.copy(savingDay = true, scheduleError = null) }
+            try {
+                api.setContributorSchedule(WriterSchedulePickRequest(weekday))
+                val schedule = runCatching { api.getContributorSchedule() }.getOrNull()
+                _state.update { it.copy(savingDay = false, schedule = schedule) }
+            } catch (e: Exception) {
+                _state.update { it.copy(savingDay = false, scheduleError = "تعذر حفظ اليوم — حاول مرة أخرى") }
             }
         }
     }
@@ -147,6 +167,21 @@ fun ContributorDashboardScreen(
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
                     HeaderSection(data)
+                    // موعد النشر الأسبوعي — لكتّاب الرأي فقط: بانر لمن له يوم،
+                    // أو بطاقة الاختيار (مرة واحدة) لمن لا يوم له
+                    if (data.role == "writer") {
+                        state.schedule?.let { sched ->
+                            sched.banner?.let { WriterScheduleBannerCard(it) }
+                                ?: if (sched.canChoose) {
+                                    WriterDayPickerCard(
+                                        dayLoads = sched.dayLoads,
+                                        saving = state.savingDay,
+                                        errorText = state.scheduleError,
+                                        onPick = viewModel::pickDay,
+                                    )
+                                } else Unit
+                        }
+                    }
                     state.pendingSurveys.forEach { invite ->
                         PendingSurveyCard(invite = invite, onOpen = { onOpenSurvey(invite.token) })
                     }

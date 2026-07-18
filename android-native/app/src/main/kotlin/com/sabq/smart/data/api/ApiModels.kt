@@ -563,3 +563,42 @@ data class ApiContributorRanking(
     val isTopTen: Boolean = false,
 )
 
+// -- موعد النشر الأسبوعي لكاتب الرأي ------------------------------
+
+/** بانر الموعد بثلاث حالات: ok | reminder | late */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterScheduleBanner(
+    val weekday: Int = 0,
+    @JsonNames("publishTime", "publish_time")
+    val publishTime: String = "06:00",
+    @JsonNames("nextPublishAt", "next_publish_at")
+    val nextPublishAt: String? = null,
+    @JsonNames("submitDeadline", "submit_deadline")
+    val submitDeadline: String? = null,
+    val state: String = "ok",
+    @JsonNames("hasUpcoming", "has_upcoming")
+    val hasUpcoming: Boolean = false,
+)
+
+/** بانر لمن له يوم، أو canChoose + ازدحام الأيام لمن لا يوم له */
+@OptIn(ExperimentalSerializationApi::class)
+@Serializable
+data class ApiWriterScheduleResponse(
+    val success: Boolean = true,
+    val banner: ApiWriterScheduleBanner? = null,
+    @JsonNames("canChoose", "can_choose")
+    val canChoose: Boolean = false,
+    @JsonNames("dayLoads", "day_loads")
+    val dayLoads: List<Int> = emptyList(),
+)
+
+@Serializable
+data class WriterSchedulePickRequest(val weekday: Int)
+
+@Serializable
+data class ApiWriterSchedulePickResponse(
+    val success: Boolean = false,
+    val message: String? = null,
+)
+
