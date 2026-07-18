@@ -113,15 +113,10 @@ struct HomeFeedView: View {
             }
             LiteBannerView()
         }
-        // Prevent horizontal scrolling — reported 2026-05-24. One of
-        // the inner blocks (LoyaltyCelebrationBanner or the featured
-        // TabView) renders slightly wider than the screen on some
-        // devices, which let the user drag the entire page left/right.
-        // clipped() + contentShape ensures only the visible frame
-        // receives touches.
+        // لا تستخدم .clipped() هنا: يقصّ منطقة الـ rubber-band في أعلى
+        // ScrollView فيتعطّل سحب التحديث (.refreshable) بالكامل على iOS.
+        // منع السحب الأفقي يتم بتقييد عرض الأبناء داخل القائمة نفسها.
         .frame(maxWidth: .infinity)
-        .clipped()
-        .contentShape(Rectangle())
     }
 
     private var fullBody: some View {
@@ -243,9 +238,12 @@ struct HomeFeedView: View {
                 // للبطاقة الأولى حتى يراه المحرر فور السحب للتحديث.
                 featuredIndex = 0
             }
-            // شريط "⬆️ X أخبار جديدة" عائم فوق القائمة — بديل السحب المتكرر
+            // شريط "⬆️ X أخبار جديدة" عائم فوق القائمة — بديل السحب المتكرر.
+            // يسمح باللمس فقط عندما يظهر الشريط، وعلى الكبسولة نفسها حتى لا
+            // يسرق إيماءة .refreshable من أعلى ScrollView (نفس نمط LiteBanner).
             .overlay(alignment: .top) {
                 newArticlesBanner(proxy: scrollProxy)
+                    .allowsHitTesting(articlesStore.newArticlesCount > 0)
             }
             // استطلاع خفيف لإشارة إبطال الكاش (نفس نمط الويب):
             // GET /api/cache-invalidation/check كل 30ث — وجلب الرئيسية فقط
@@ -409,7 +407,9 @@ struct HomeFeedView: View {
                 .shadow(color: SabqTheme.primaryEnd.opacity(0.35), radius: 10, x: 0, y: 4)
             }
             .buttonStyle(.plain)
-            .padding(.top, 8)
+            // أبعد الكبسولة قليلاً عن حافة السحب حتى لا تتنازع مع مؤشر التحديث
+            .padding(.top, 52)
+            .contentShape(Capsule())
             .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
@@ -627,11 +627,12 @@ struct HomeFeedView: View {
                         .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.coral)
 
-                    Text(article.title)
+                    Text(article.title.sabqForcedRTL)
                         .font(SabqFonts.app(size: 15, weight: .semibold))
                         .foregroundStyle(SabqTheme.ink)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
+                        .environment(\.layoutDirection, .rightToLeft)
 
                     Spacer(minLength: 0)
 
@@ -874,12 +875,13 @@ struct HomeFeedView: View {
                                     .foregroundStyle(index < 3 ? .orange : SabqTheme.tertiaryInk)
                                     .frame(width: 28)
 
-                                Text(article.title)
+                                Text(article.title.sabqForcedRTL)
                                     .font(SabqFonts.app(size: 14, weight: .semibold))
                                     .foregroundStyle(SabqTheme.ink)
                                     .lineLimit(2)
                                     .multilineTextAlignment(.leading)
                                     .frame(maxWidth: .infinity, alignment: .leading)
+                                    .environment(\.layoutDirection, .rightToLeft)
                             }
                             .padding(.vertical, 4)
                         }

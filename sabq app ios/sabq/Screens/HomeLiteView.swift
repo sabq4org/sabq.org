@@ -36,6 +36,9 @@ struct HomeLiteView: View {
             .padding(.bottom, 32)
         }
         .background(SabqTheme.background.ignoresSafeArea())
+        .refreshable {
+            await articlesStore.loadArticles(ignoreCache: true)
+        }
         .task {
             // Same first-load pattern as the full feed — fetch once
             // if the store hasn't populated yet. Subsequent navigations

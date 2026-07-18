@@ -932,7 +932,7 @@ struct ArticleDetailView: View {
     // MARK: - Title
 
     private var articleTitle: some View {
-        Text(displayArticle.title)
+        Text(displayArticle.title.sabqForcedRTL)
             // Editorial headline font — IBM Plex Sans Arabic Bold matches
             // the web brand and reads more "newspaper" than SF Arabic.
             .font(SabqFonts.headline(size: CGFloat(fontSize + 8)))
@@ -944,6 +944,7 @@ struct ArticleDetailView: View {
             .lineLimit(nil)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .environment(\.layoutDirection, .rightToLeft)
             .padding(.horizontal, 4)
     }
 
