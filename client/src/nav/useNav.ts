@@ -271,6 +271,14 @@ function itemPassesAccessCheck(
     }
   }
 
+  // requireRoles: raw role names only (e.g. system_admin) — bypasses
+  // resolveUserRole mapping and permission wildcards so regular admin
+  // with "*" cannot see system_admin-only items.
+  if (item.requireRoles && item.requireRoles.length > 0) {
+    const roles = allRoles && allRoles.length > 0 ? allRoles : [role];
+    return item.requireRoles.some((r) => roles.includes(r));
+  }
+
   // If item has permissions defined, check permissions (permission-first).
   // "*" in userPermissions is a wildcard issued to admin/system_admin —
   // grants access regardless of the specific permission asked for.

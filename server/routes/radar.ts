@@ -1,16 +1,14 @@
 /**
  * مسارات رادار سبق الذكي — لوحة التحكم فقط (لا شيء هنا عام).
  *
- * الصلاحيات تعتمد رموز المقالات القائمة (مبذورة في كل البيئات — لا حاجة
- * لبذر رموز جديدة): العرض articles.view، التحويل/التصدير articles.create،
- * إدارة المصادر والقواعد والتشغيل اليدوي articles.publish.
+ * الوصول محصور بمسؤول النظام (system_admin / system.admin / superadmin).
+ * لا يُمرَّر "admin" هنا حتى لا يفتح requireRole الباب لكل السوبر يوزر.
  *
  * وفق ADR-001: لا استيراد db هنا — كل الاستعلامات في services/radar/repo.ts.
  */
 import type { Express } from "express";
 import { z } from "zod";
-import { requireAuth, requirePermission } from "../rbac";
-import { PERMISSION_CODES } from "@shared/rbac-constants";
+import { requireAuth, requireRole } from "../rbac";
 import { insertRadarAlertRuleSchema, insertRadarSourceSchema } from "@shared/schema";
 import {
   countActiveXWatches,
@@ -34,9 +32,15 @@ import { exportItemToArticle } from "../services/radar/exporter";
 import { isTelegramConfigured } from "../services/radar/alerts";
 import { detectWatchType, xProvidersConfigured } from "../services/radar/xProvider";
 
-const canView = requirePermission(PERMISSION_CODES.ARTICLES_VIEW);
-const canWork = requirePermission(PERMISSION_CODES.ARTICLES_CREATE);
-const canManage = requirePermission(PERMISSION_CODES.ARTICLES_PUBLISH);
+const SYSTEM_ADMIN_ONLY = requireRole(
+  "system_admin",
+  "system.admin",
+  "superadmin",
+  "super_admin",
+);
+const canView = SYSTEM_ADMIN_ONLY;
+const canWork = SYSTEM_ADMIN_ONLY;
+const canManage = SYSTEM_ADMIN_ONLY;
 
 const RADAR_STATUSES = ["new", "analyzed", "ready", "exported", "dismissed"] as const;
 

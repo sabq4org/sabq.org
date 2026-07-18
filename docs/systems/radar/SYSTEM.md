@@ -1,6 +1,6 @@
 # المِرقَب / الرادار (`radar`)
 
-> آخر مراجعة: 2026-07-17 | المالك: editorial
+> آخر مراجعة: 2026-07-19 | المالك: editorial
 
 ## الغرض
 رصد إخباري كثيف (RSS + حسابات X) + إشارات كمية (قصص/زخم/صلة) وتنبيهات للمحررين.
@@ -22,6 +22,7 @@
 `radar-clustering` · `radar-relevance` (عبر ai-hub؛ الفجوات تبقى `coverage-gap-matcher` تحت editorial)
 
 ## عقود مهمة / Gotchas
+- **الوصول (منذ 2026-07-19):** واجهة `/dashboard/radar` وواجهات `/api/radar/*` لمسؤول النظام فقط (`system_admin` / `system.admin` / `superadmin`). لا تُفتح لـ `admin` العادي ولا للمحررين — القائمة تستخدم `requireRoles` لتفادي تحويل الدور وwildcard الصلاحيات.
 - **قصص:** `radar_stories` + `radar_items.story_id` خلف `RADAR_CLUSTERING_ENABLED` (افتراضي false). عتبة cosine `RADAR_CLUSTER_THRESHOLD` (0.85) مع سقوط كلمات ≥ 0.7.
 - **زخم:** `radar_story_snapshots` + `radar_items.metrics` خلف `RADAR_MOMENTUM_ENABLED`.
 - **صلة:** `saudi_relevance` خلف `RADAR_RELEVANCE_ENABLED` — قواميس `server/services/radar/data/*.json`.

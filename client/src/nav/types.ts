@@ -26,6 +26,11 @@ export interface NavItem {
   icon?: LucideIcon;
   roles: UserRole[];
   excludeRoles?: UserRole[]; // Roles to explicitly exclude (takes precedence over roles)
+  /**
+   * أدوار خام من user.roles / users.role — تُفحص حرفياً دون تحويل system_admin→admin
+   * ودون wildcard الصلاحيات. إن وُجدت تُقدَّم على permissions و roles.
+   */
+  requireRoles?: string[];
   permissions?: string[]; // Required permissions (any of these grants access)
   featureFlags?: string[];
   badge?: NavBadge;

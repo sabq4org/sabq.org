@@ -873,8 +873,19 @@ function Router() {
         {/* World Days Management */}
         <Route path="/dashboard/world-days">{() => <LazyRoute component={WorldDaysManagement} />}</Route>
 
-        {/* Smart Radar — رادار سبق الذكي */}
-        <Route path="/dashboard/radar">{() => <LazyRoute component={SmartRadar} />}</Route>
+        {/* Smart Radar — رادار سبق الذكي (مسؤول النظام فقط) */}
+        <Route path="/dashboard/radar">
+          {() => (
+            <ProtectedRoute
+              requireStaff={true}
+              requireRoles={["system_admin", "system.admin", "superadmin", "super_admin"]}
+            >
+              <Suspense fallback={<PageLoader />}>
+                <SmartRadar />
+              </Suspense>
+            </ProtectedRoute>
+          )}
+        </Route>
         
         <Route path="/dashboard">{() => <LazyRoute component={Dashboard} />}</Route>
         <Route path="/dashboard/analytics">{() => <LazyRoute component={AnalyticsDashboard} />}</Route>

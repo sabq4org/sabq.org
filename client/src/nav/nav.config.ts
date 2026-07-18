@@ -261,8 +261,9 @@ export const navConfig: NavItem[] = [
         labelAr: "رادار سبق الذكي",
         path: "/dashboard/radar",
         icon: Radar,
-        roles: ["admin", "editor", "content_manager"],
-        permissions: ["articles.create"], // أداة تحريرية — نفس صلاحية إنشاء المقالات
+        // ظاهر لمسؤول النظام فقط — requireRoles يتجاهل تحويل system_admin→admin وwildcard الصلاحيات
+        roles: ["system_admin"],
+        requireRoles: ["system_admin", "system.admin", "superadmin", "super_admin"],
       },
       {
         id: "push_notifications",
