@@ -33,7 +33,12 @@ struct ArticleSubmissionView: View {
     @State private var sparkleOpacity: Double = 0
     @State private var sparkleScale: CGFloat = 0.4
 
-    @FocusState private var focusedField: Field?
+    // كان هنا @FocusState — معطّل داخل هذه الـ sheet على iOS الحديث: كتابات
+    // focusedField لا تصل أبداً (أثبتته سجلات EditorFocus)، فتظل SwiftUI ترى
+    // «لا حقل مركّزاً» وتُسقط الكيبورد مع أول إعادة رسم بعد كل حرف.
+    // البديل: UIKit يدير التركيز بنفسه، والإغلاق عبر سلسلة المستجيبين،
+    // وحالة @State عادية لتلوين إطار المحرر فقط.
+    @State private var isBodyEditing = false
 
     // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره قبل أول إرسال،
     // ثم يُستكمل الإرسال تلقائياً بعد التثبيت.
@@ -49,9 +54,6 @@ struct ArticleSubmissionView: View {
         case form, submitting, success
     }
 
-    enum Field: Hashable {
-        case title, body
-    }
 
     // MARK: - Kind-specific copy
 
@@ -110,7 +112,7 @@ struct ArticleSubmissionView: View {
                         // لمسة على الترويسة (خارج حقول الإدخال) تُنزل الكيبورد
                         headerHero
                             .contentShape(Rectangle())
-                            .onTapGesture { focusedField = nil }
+                            .onTapGesture { sabqDismissKeyboard() }
                         if kind == .opinion, writerSchedule?.canChoose == true {
                             dayNoticeBanner
                         }
@@ -158,7 +160,7 @@ struct ArticleSubmissionView: View {
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("تم") { focusedField = nil }
+                    Button("تم") { sabqDismissKeyboard() }
                         .font(SabqFonts.app(size: 15, weight: .semibold))
                         .foregroundStyle(pageTint)
                 }
@@ -292,9 +294,9 @@ struct ArticleSubmissionView: View {
                     .lineLimit(2...3)
                     .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
-                    .focused($focusedField, equals: .title)
                     .submitLabel(.next)
-                    .multilineTextAlignment(.trailing)
+                    // .leading في بيئة RTL = اليمين — يضع المؤشر يمين الحقل الفارغ
+                    .multilineTextAlignment(.leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                     .background(
@@ -303,7 +305,7 @@ struct ArticleSubmissionView: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                            .stroke(focusedField == .title ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: focusedField == .title ? 1 : 0.5)
+                            .stroke(SabqTheme.outline, lineWidth: 0.5)
                     )
 
                 fieldLabel("النص", required: true)
@@ -321,13 +323,10 @@ struct ArticleSubmissionView: View {
                     SabqRichTextEditor(
                         text: $articleContent,
                         minHeight: 180,
-                        isFocused: Binding(
-                            get: { focusedField == .body },
-                            set: { focusedField = $0 ? .body : nil }
-                        ),
                         font: .systemFont(ofSize: 15, weight: .regular),
                         textColor: UIColor(SabqTheme.ink),
-                        tintColor: UIColor(pageTint)
+                        tintColor: UIColor(pageTint),
+                        onEditingChanged: { editing in isBodyEditing = editing }
                     )
                     .padding(8)
 
@@ -346,7 +345,7 @@ struct ArticleSubmissionView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(focusedField == .body ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: focusedField == .body ? 1 : 0.5)
+                        .stroke(isBodyEditing ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: isBodyEditing ? 1 : 0.5)
                 )
 
                 imagesSection
@@ -738,13 +737,13 @@ struct ArticleSubmissionView: View {
     private func submit() async {
         // كاتب رأي بلا يوم أسبوعي محدد: بوابة اختيار اليوم أولاً
         if kind == .opinion, writerSchedule?.canChoose == true {
-            focusedField = nil
+            sabqDismissKeyboard()
             dayGateShouldContinue = true
             showDayGate = true
             return
         }
         errorMessage = nil
-        focusedField = nil
+        sabqDismissKeyboard()
         screenState = .submitting
         do {
             let resp = try await APIClient.shared.submitArticleDraft(
@@ -804,16 +803,27 @@ struct ArticleSubmissionView: View {
 //     its own selection gestures.
 //   • Forces RTL natural alignment so Arabic caret placement +
 //     selection handles land where the reader expects.
-//   • Bridges first-responder state with SwiftUI's `@FocusState` via
-//     the `isFocused` binding so the keyboard toolbar's "تم" still
-//     dismisses correctly.
+//   • Focus is OWNED BY UIKIT: the user's tap grants it, and
+//     sabqDismissKeyboard() (responder-chain resign) takes it away.
+//     There is deliberately NO @FocusState bridge — FocusState writes
+//     never land inside these sheets on modern iOS, which made SwiftUI
+//     revoke focus after every keystroke (EditorFocus logs, 2026-07-18).
+/// يُسقط الكيبورد عبر سلسلة المستجيبين مباشرة — بديل موثوق عن @FocusState
+/// المعطّل داخل الـ sheets على iOS الحديث (زر «تم»، لمسة الترويسة، والإرسال).
+func sabqDismissKeyboard() {
+    UIApplication.shared.sendAction(
+        #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+    )
+}
+
 struct SabqRichTextEditor: UIViewRepresentable {
     @Binding var text: String
     var minHeight: CGFloat = 180
-    @Binding var isFocused: Bool
     var font: UIFont
     var textColor: UIColor
     var tintColor: UIColor
+    /// لتلوين إطار الحقل فقط — لا يُستخدم لإدارة التركيز
+    var onEditingChanged: ((Bool) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -849,7 +859,11 @@ struct SabqRichTextEditor: UIViewRepresentable {
         // Keep the coordinator's copy fresh so its bindings never go stale
         // across SwiftUI re-renders.
         context.coordinator.parent = self
-        if uiView.text != text {
+        // لا نكتب فوق نص UITextView إلا إذا تغيّر من خارج المحرر فعلاً
+        // (مسح النموذج بعد الإرسال مثلاً). أثناء الكتابة الحية قد تصل تمريرة
+        // render بقيمة SwiftUI أقدم من حرفٍ كتبه المستخدم للتو — الكتابة
+        // فوقها كانت تمسح الحرف. المرجع الحي أثناء التحرير هو UITextView.
+        if uiView.text != text, !uiView.isFirstResponder {
             uiView.text = text
         }
         if uiView.minimumHeight != minHeight {
@@ -865,14 +879,9 @@ struct SabqRichTextEditor: UIViewRepresentable {
         if uiView.tintColor != tintColor {
             uiView.tintColor = tintColor
         }
-
-        let shouldBeFirstResponder = isFocused
-        let isCurrentlyFirstResponder = uiView.isFirstResponder
-        if shouldBeFirstResponder, !isCurrentlyFirstResponder {
-            DispatchQueue.main.async { uiView.becomeFirstResponder() }
-        } else if !shouldBeFirstResponder, isCurrentlyFirstResponder {
-            DispatchQueue.main.async { uiView.resignFirstResponder() }
-        }
+        // لا إدارة تركيز هنا إطلاقاً: UIKit يملك التركيز (لمسة المستخدم تمنحه،
+        // وsabqDismissKeyboard() يسحبه). @FocusState معطّل داخل هذه الـ sheets
+        // على iOS الحديث وكان الاعتماد عليه يُسقط الكيبورد بعد كل حرف.
     }
 
     final class Coordinator: NSObject, UITextViewDelegate {
@@ -890,11 +899,16 @@ struct SabqRichTextEditor: UIViewRepresentable {
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
-            if !parent.isFocused { parent.isFocused = true }
+            parent.onEditingChanged?(true)
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
-            if parent.isFocused { parent.isFocused = false }
+            // مزامنة أخيرة عند مغادرة الحقل — تضمن أن SwiftUI ترى آخر نص حتى
+            // لو فاتتها تمريرة أثناء التحرير الحي
+            if parent.text != textView.text {
+                parent.text = textView.text
+            }
+            parent.onEditingChanged?(false)
         }
     }
 

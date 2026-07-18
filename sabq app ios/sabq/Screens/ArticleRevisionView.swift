@@ -42,7 +42,9 @@ struct ArticleRevisionView: View {
     @State private var errorMessage: String?
     @State private var noteCollapsed = false
 
-    @FocusState private var focusedField: Field?
+    // بلا @FocusState — معطّل في هذا السياق على iOS الحديث ويُسقط الكيبورد
+    // بعد كل حرف (انظر تعليق SabqRichTextEditor في ArticleSubmissionView).
+    @State private var isBodyEditing = false
 
     enum Stage {
         case loading
@@ -55,7 +57,6 @@ struct ArticleRevisionView: View {
         case alreadyResubmitted
     }
 
-    enum Field: Hashable { case title, body }
 
     private var isOpinion: Bool { draft?.isOpinion ?? true }
     private var maxImages: Int { isOpinion ? 1 : 10 }
@@ -108,7 +109,7 @@ struct ArticleRevisionView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .scrollDismissesKeyboard(.immediately)
+        .scrollDismissesKeyboard(.interactively)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) {
@@ -118,7 +119,7 @@ struct ArticleRevisionView: View {
             }
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("تم") { focusedField = nil }
+                Button("تم") { sabqDismissKeyboard() }
                     .font(SabqFonts.app(size: 15, weight: .semibold))
                     .foregroundStyle(pageTint)
             }
@@ -249,9 +250,9 @@ struct ArticleRevisionView: View {
                     .lineLimit(2...3)
                     .font(SabqFonts.app(size: 16, weight: .bold))
                     .foregroundStyle(SabqTheme.ink)
-                    .focused($focusedField, equals: .title)
                     .submitLabel(.next)
-                    .multilineTextAlignment(.trailing)
+                    // .leading في بيئة RTL = اليمين — يضع المؤشر يمين الحقل الفارغ
+                    .multilineTextAlignment(.leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 12)
                     .background(
@@ -260,7 +261,7 @@ struct ArticleRevisionView: View {
                     )
                     .overlay(
                         RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                            .stroke(focusedField == .title ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: focusedField == .title ? 1 : 0.5)
+                            .stroke(SabqTheme.outline, lineWidth: 0.5)
                     )
 
                 fieldLabel("النص", required: true)
@@ -268,13 +269,10 @@ struct ArticleRevisionView: View {
                     SabqRichTextEditor(
                         text: $bodyText,
                         minHeight: 220,
-                        isFocused: Binding(
-                            get: { focusedField == .body },
-                            set: { focusedField = $0 ? .body : nil }
-                        ),
                         font: .systemFont(ofSize: 15, weight: .regular),
                         textColor: UIColor(SabqTheme.ink),
-                        tintColor: UIColor(pageTint)
+                        tintColor: UIColor(pageTint),
+                        onEditingChanged: { editing in isBodyEditing = editing }
                     )
                     .padding(8)
                 }
@@ -284,7 +282,7 @@ struct ArticleRevisionView: View {
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: SabqTheme.chipRadius, style: .continuous)
-                        .stroke(focusedField == .body ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: focusedField == .body ? 1 : 0.5)
+                        .stroke(isBodyEditing ? pageTint.opacity(0.4) : SabqTheme.outline, lineWidth: isBodyEditing ? 1 : 0.5)
                 )
 
                 heroImageSection
