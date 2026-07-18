@@ -105,7 +105,12 @@ const statusBadge = (status: string) => {
 export default function PublisherDashboard() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  usePublisherAccess();
+  const { user } = usePublisherAccess();
+
+  // هوية المستخدم المسجل دخولاً (موظفاً كان أو مالكاً) — لا مسؤول الوكالة
+  const memberName = user
+    ? [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email
+    : "";
 
   const { data, isLoading, error } = useQuery<PortalOverview>({
     queryKey: ["/api/publisher/portal/overview"],
@@ -175,8 +180,9 @@ export default function PublisherDashboard() {
                 <h1 className="text-2xl font-bold truncate" data-testid="text-agency-name">
                   {publisher.agencyName}
                 </h1>
-                <p className="text-muted-foreground text-sm truncate">
-                  {publisher.contactPerson} · {publisher.email}
+                <p className="text-muted-foreground text-sm truncate" data-testid="text-member-identity">
+                  {memberName}
+                  {user?.email && ` · ${user.email}`}
                 </p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {publisher.autoPublish && (
