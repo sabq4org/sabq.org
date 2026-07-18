@@ -68,15 +68,26 @@ enum class ArticleSubmissionKind { Opinion, News }
  *
  * Validation matches iOS: title ≥ 3 chars, body ≥ 20 chars.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun ArticleSubmissionScreen(
     kind: ArticleSubmissionKind,
     onBack: () -> Unit,
     viewModel: AccountActionViewModel = hiltViewModel(),
+    scheduleViewModel: WriterScheduleViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(Unit) { viewModel.reset() }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+
+    // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره قبل أول إرسال،
+    // ثم يُستكمل الإرسال تلقائياً — مطابق لتجربة iOS.
+    val scheduleState by scheduleViewModel.state.collectAsStateWithLifecycle()
+    var showDayGate by remember { mutableStateOf(false) }
+    var dayGateShouldContinue by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (kind == ArticleSubmissionKind.Opinion) scheduleViewModel.load()
+    }
 
     var title by remember { mutableStateOf("") }
     var content by remember { mutableStateOf("") }
@@ -119,6 +130,15 @@ fun ArticleSubmissionScreen(
 
     val isValid = title.trim().length >= 3 && content.trim().length >= 20
 
+    val doSubmit: () -> Unit = {
+        viewModel.submitArticle(
+            title = title.trim(),
+            content = content.trim(),
+            kind = if (kind == ArticleSubmissionKind.Opinion) "opinion" else "news",
+            images = images.map { it.bytes to it.mimeType },
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -150,6 +170,14 @@ fun ArticleSubmissionScreen(
                 )
                 SurfaceCard(accent = pageTint) {
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        // إشارة مبكرة من لحظة فتح الشاشة: الكتابة حرة،
+                        // لكن الإرسال يتطلب تحديد اليوم الأسبوعي
+                        if (kind == ArticleSubmissionKind.Opinion && scheduleState.schedule?.canChoose == true) {
+                            DayMissingNotice(onPickNow = {
+                                dayGateShouldContinue = false
+                                showDayGate = true
+                            })
+                        }
                         state.errorMessage?.let { ErrorBanner(message = it) }
 
                         FieldLabel(text = "العنوان", required = true)
@@ -192,18 +220,93 @@ fun ArticleSubmissionScreen(
                             enabled = isValid,
                             isLoading = state.isLoading,
                             onClick = {
-                                viewModel.submitArticle(
-                                    title = title.trim(),
-                                    content = content.trim(),
-                                    kind = if (kind == ArticleSubmissionKind.Opinion) "opinion" else "news",
-                                    images = images.map { it.bytes to it.mimeType },
-                                )
+                                if (kind == ArticleSubmissionKind.Opinion && scheduleState.schedule?.canChoose == true) {
+                                    dayGateShouldContinue = true
+                                    showDayGate = true
+                                } else {
+                                    doSubmit()
+                                }
                             },
                         )
                     }
                 }
             }
         }
+    }
+
+    if (showDayGate) {
+        val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = {
+                showDayGate = false
+                dayGateShouldContinue = false
+            },
+            sheetState = sheetState,
+            containerColor = SabqTheme.colors.background,
+            contentColor = SabqTheme.colors.ink,
+            dragHandle = null,
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text("قبل إرسال مقالتك", fontSize = 17.sp, fontWeight = FontWeight.Black, color = SabqTheme.colors.ink)
+                Text(
+                    "حدد يومك الأسبوعي للنشر أولاً — ستُنشر مقالاتك في هذا اليوم من كل أسبوع. بعد التثبيت يُستكمل إرسال مقالتك تلقائياً.",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = SabqTheme.colors.secondaryInk,
+                    lineHeight = 20.sp,
+                )
+                WriterDayPickerCard(
+                    dayLoads = scheduleState.schedule?.dayLoads ?: emptyList(),
+                    saving = scheduleState.saving,
+                    errorText = scheduleState.error,
+                ) { day ->
+                    scheduleViewModel.pickDay(day) {
+                        showDayGate = false
+                        if (dayGateShouldContinue) {
+                            dayGateShouldContinue = false
+                            doSubmit()
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.size(12.dp))
+            }
+        }
+    }
+}
+
+/** إشارة مبكرة كهرمانية: اليوم الأسبوعي غير محدد — الكتابة حرة والإرسال محمي */
+@Composable
+private fun DayMissingNotice(onPickNow: () -> Unit) {
+    val amber = Color(0xFFF59E0B)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(amber.copy(alpha = 0.08f))
+            .border(1.dp, amber.copy(alpha = 0.3f), RoundedCornerShape(10.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text("لم تحدد يومك الأسبوعي للنشر بعد", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = SabqTheme.colors.ink)
+        Text(
+            "اكتب مقالك بحرية — وسيُطلب تحديد اليوم قبل الإرسال.",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = SabqTheme.colors.secondaryInk,
+        )
+        Text(
+            "تحديد اليوم الآن",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = amber,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable { onPickNow() }
+                .padding(vertical = 4.dp),
+        )
     }
 }
 

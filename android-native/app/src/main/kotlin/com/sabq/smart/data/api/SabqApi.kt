@@ -507,6 +507,14 @@ interface SabqApi {
     @GET("api/v1/contributor/ranking")
     suspend fun getContributorRanking(): ApiContributorRanking
 
+    /** موعد النشر الأسبوعي لكاتب الرأي — بانر بحالاته أو بيانات اختيار اليوم */
+    @GET("api/v1/contributor/schedule")
+    suspend fun getContributorSchedule(): ApiWriterScheduleResponse
+
+    /** تثبيت اليوم الأسبوعي — مرة واحدة فقط (409 لأي تغيير لاحق) */
+    @POST("api/v1/contributor/schedule")
+    suspend fun setContributorSchedule(@Body body: WriterSchedulePickRequest): ApiWriterSchedulePickResponse
+
     // -- مُقترب (Muqtarab analytical angles) -------------------------
     // Public namespace (NOT v1), no auth. Paths mirror iOS
     // `MuqtarabModels.swift` `APIClient` extension 1:1.
