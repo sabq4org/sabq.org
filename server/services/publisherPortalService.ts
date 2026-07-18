@@ -155,6 +155,63 @@ export async function getPortalArticles(
   return { articles: rows, total: Number(count) || 0, page, limit };
 }
 
+/** سجل عمليات الرصيد لبوابة الناشر — كانت الصفحة تستدعي مساراً غير موجود. */
+export async function getPortalCreditLogs(
+  publisher: Publisher,
+  opts: { page?: number; limit?: number } = {},
+) {
+  const page = Math.max(1, opts.page ?? 1);
+  const limit = Math.min(100, Math.max(1, opts.limit ?? 20));
+
+  const [rows, [{ count }]] = await Promise.all([
+    db
+      .select({
+        id: publisherCreditLogs.id,
+        actionType: publisherCreditLogs.actionType,
+        creditsBefore: publisherCreditLogs.creditsBefore,
+        creditsChanged: publisherCreditLogs.creditsChanged,
+        creditsAfter: publisherCreditLogs.creditsAfter,
+        notes: publisherCreditLogs.notes,
+        createdAt: publisherCreditLogs.createdAt,
+        articleId: articles.id,
+        articleTitle: articles.title,
+        packageName: publisherCredits.packageName,
+        packageIsUnlimited: publisherCredits.isUnlimited,
+      })
+      .from(publisherCreditLogs)
+      .innerJoin(publisherCredits, eq(publisherCreditLogs.creditPackageId, publisherCredits.id))
+      .leftJoin(articles, eq(publisherCreditLogs.articleId, articles.id))
+      .where(eq(publisherCreditLogs.publisherId, publisher.id))
+      .orderBy(desc(publisherCreditLogs.createdAt))
+      .limit(limit)
+      .offset((page - 1) * limit),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(publisherCreditLogs)
+      .where(eq(publisherCreditLogs.publisherId, publisher.id)),
+  ]);
+
+  return {
+    logs: rows.map((row) => ({
+      id: row.id,
+      actionType: row.actionType,
+      creditsBefore: row.creditsBefore,
+      creditsChanged: row.creditsChanged,
+      creditsAfter: row.creditsAfter,
+      notes: row.notes,
+      createdAt: row.createdAt,
+      article: row.articleId ? { id: row.articleId, title: row.articleTitle } : null,
+      creditPackage: {
+        packageName: row.packageName,
+        isUnlimited: row.packageIsUnlimited,
+      },
+    })),
+    total: Number(count) || 0,
+    page,
+    limit,
+  };
+}
+
 /** مادة واحدة لمحرر البوابة — ملكية صارمة (كاتبها فقط). */
 export async function getPortalArticle(userId: string, articleId: string) {
   const [article] = await db

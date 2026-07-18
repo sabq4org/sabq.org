@@ -6,6 +6,7 @@ import {
   createPublisherMember,
   getPortalArticle,
   getPortalArticles,
+  getPortalCreditLogs,
   getPortalOverview,
   listPublisherMembers,
   removePublisherMember,
@@ -30,6 +31,13 @@ router.use("/api/publisher/portal", requireAuth, async (req, res, next) => {
     const publisher = await resolvePublisherForUser(requestUserId(req));
     if (!publisher) {
       return res.status(404).json({ message: "لم يتم العثور على حساب ناشر مرتبط بهذا المستخدم" });
+    }
+    // وكالة معلقة = البوابة محجوبة عن كل أعضائها (مالكاً وموظفين)
+    if (!publisher.isActive) {
+      return res.status(403).json({
+        message: "حساب الوكالة معلق حالياً. يرجى التواصل مع إدارة سبق.",
+        code: "SUSPENDED",
+      });
     }
     (req as any).publisher = publisher;
     next();
@@ -66,6 +74,21 @@ router.get("/api/publisher/portal/articles", async (req, res) => {
   } catch (error) {
     console.error("[Publisher Portal] articles failed:", error);
     res.status(500).json({ message: "تعذر جلب مواد الناشر" });
+  }
+});
+
+const creditLogsQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).catch(1),
+  limit: z.coerce.number().int().min(1).max(100).catch(20),
+});
+
+router.get("/api/publisher/portal/credit-logs", async (req, res) => {
+  try {
+    const query = creditLogsQuerySchema.parse(req.query);
+    res.json(await getPortalCreditLogs((req as any).publisher, query));
+  } catch (error) {
+    console.error("[Publisher Portal] credit logs failed:", error);
+    res.status(500).json({ message: "تعذر جلب سجل الرصيد" });
   }
 });
 

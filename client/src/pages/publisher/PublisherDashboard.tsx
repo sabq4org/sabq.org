@@ -115,8 +115,9 @@ export default function PublisherDashboard() {
     if (error) {
       toast({
         variant: "destructive",
-        title: "خطأ",
-        description: "لا يمكن الوصول إلى لوحة الناشر. يرجى التأكد من صلاحياتك.",
+        title: "تعذر الدخول",
+        // عند تعليق الوكالة يعيد الخادم رسالة واضحة — نعرضها كما هي
+        description: (error as Error)?.message || "لا يمكن الوصول إلى لوحة الناشر. يرجى التأكد من صلاحياتك.",
       });
       setLocation("/");
     }
