@@ -13,6 +13,8 @@ import {
   PlusCircle,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { DashboardPageShell } from "@/components/dashboard/DashboardPageShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -126,80 +128,72 @@ export default function OpinionTicketsList() {
     return { total: tickets.length, open, answered, closed };
   }, [tickets]);
 
+  const newTicketDialog = (
+    <Dialog open={openDialog} onOpenChange={setOpenDialog}>
+      <DialogTrigger asChild>
+        <Button className="h-10 gap-2 px-4" data-testid="button-new-ticket">
+          <PlusCircle className="h-4 w-4" />
+          استفسار جديد
+        </Button>
+      </DialogTrigger>
+      <DialogContent dir="rtl" className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>استفسار جديد</DialogTitle>
+          <DialogDescription>
+            أرسل استفسارك إلى إدارة التحرير وسيتم الرد عليك من خلال هذه اللوحة.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <label className="text-sm font-medium mb-1 block">العنوان</label>
+            <Input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="عنوان مختصر للاستفسار"
+              maxLength={255}
+              data-testid="input-ticket-title"
+            />
+          </div>
+          <div>
+            <label className="text-sm font-medium mb-1 block">نص الاستفسار</label>
+            <Textarea
+              rows={6}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="اشرح استفسارك بالتفصيل..."
+              data-testid="textarea-ticket-message"
+            />
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="outline" onClick={() => setOpenDialog(false)}>
+            إلغاء
+          </Button>
+          <Button
+            onClick={() => createMutation.mutate()}
+            disabled={!title.trim() || !message.trim() || createMutation.isPending}
+            data-testid="button-submit-ticket"
+            className="gap-2"
+          >
+            {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            إرسال
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
   return (
     <DashboardLayout>
-      <div className="space-y-6 p-4 md:p-6" dir="rtl">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-warning/10">
-              <MessageSquare className="h-5 w-5 text-warning dark:text-warning" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold" data-testid="text-page-title">
-                استفساراتي
-              </h1>
-              <p className="text-muted-foreground text-sm mt-0.5">
-                تواصل مع إدارة التحرير من خلال نظام الاستفسارات
-              </p>
-            </div>
-          </div>
+      <DashboardPageShell contentClassName="px-4 pb-20 sm:px-6">
+        <DashboardPageHeader
+          icon={MessageSquare}
+          title="استفساراتي"
+          description="تواصل مع إدارة التحرير — نفس الصندوق للمراسلين وكتّاب الرأي"
+          titleTestId="text-page-title"
+          actions={newTicketDialog}
+        />
 
-          <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" data-testid="button-new-ticket">
-                <PlusCircle className="h-4 w-4" />
-                استفسار جديد
-              </Button>
-            </DialogTrigger>
-            <DialogContent dir="rtl" className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>استفسار جديد</DialogTitle>
-                <DialogDescription>
-                  أرسل استفسارك إلى إدارة التحرير وسيتم الرد عليك من خلال هذه اللوحة.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium mb-1 block">العنوان</label>
-                  <Input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="عنوان مختصر للاستفسار"
-                    maxLength={255}
-                    data-testid="input-ticket-title"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium mb-1 block">نص الاستفسار</label>
-                  <Textarea
-                    rows={6}
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="اشرح استفسارك بالتفصيل..."
-                    data-testid="textarea-ticket-message"
-                  />
-                </div>
-              </div>
-              <DialogFooter className="gap-2 sm:gap-2">
-                <Button variant="outline" onClick={() => setOpenDialog(false)}>
-                  إلغاء
-                </Button>
-                <Button
-                  onClick={() => createMutation.mutate()}
-                  disabled={!title.trim() || !message.trim() || createMutation.isPending}
-                  data-testid="button-submit-ticket"
-                  className="gap-2"
-                >
-                  {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  إرسال
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-
-        {/* Stats */}
         {isLoading ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -258,13 +252,17 @@ export default function OpinionTicketsList() {
             <div className="text-center py-12 border rounded-lg bg-muted/20">
               <Inbox className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground mb-4">لا توجد استفسارات بعد</p>
-              <Button onClick={() => setOpenDialog(true)} className="gap-2" data-testid="button-new-ticket-empty">
+              <Button
+                onClick={() => setOpenDialog(true)}
+                className="h-10 gap-2 px-4"
+                data-testid="button-new-ticket-empty"
+              >
                 <PlusCircle className="h-4 w-4" />
                 أرسل أول استفسار
               </Button>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-lg border bg-card">
+            <div className="overflow-hidden rounded-2xl border bg-card">
               {tickets.map((t, idx) => {
                 const meta = STATUS_META[t.status];
                 return (
@@ -307,7 +305,7 @@ export default function OpinionTicketsList() {
             </div>
           )}
         </div>
-      </div>
+      </DashboardPageShell>
     </DashboardLayout>
   );
 }

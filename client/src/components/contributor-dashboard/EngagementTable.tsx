@@ -16,13 +16,21 @@ interface EngagementTableProps {
   articles: TopArticle[];
   loading?: boolean;
   onNavigate?: (id: string) => void;
+  title?: string;
+  emptyLabel?: string;
 }
 
-export function EngagementTable({ articles, loading, onNavigate }: EngagementTableProps) {
+export function EngagementTable({
+  articles,
+  loading,
+  onNavigate,
+  title = "أعلى المقالات تفاعلاً",
+  emptyLabel = "لا توجد مقالات منشورة",
+}: EngagementTableProps) {
   return (
     <Card className="hover-elevate">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">أعلى المقالات تفاعلاً</CardTitle>
+        <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         {loading ? (
@@ -32,7 +40,7 @@ export function EngagementTable({ articles, loading, onNavigate }: EngagementTab
             ))}
           </div>
         ) : articles.length === 0 ? (
-          <p className="p-6 text-sm text-muted-foreground text-center">لا توجد مقالات منشورة</p>
+          <p className="p-6 text-sm text-muted-foreground text-center">{emptyLabel}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

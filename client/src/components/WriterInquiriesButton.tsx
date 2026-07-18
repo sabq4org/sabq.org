@@ -22,10 +22,10 @@ export function WriterInquiriesButton({ className }: WriterInquiriesButtonProps)
   return (
     <Button
       variant="outline"
-      size="sm"
+      size="default"
       onClick={() => navigate("/dashboard/opinion-author/tickets")}
       data-testid="button-my-tickets"
-      className={cn("relative gap-2", className)}
+      className={cn("relative h-10 gap-2 px-4", className)}
     >
       <MessageSquare className="h-4 w-4 text-primary" />
       استفساراتي
