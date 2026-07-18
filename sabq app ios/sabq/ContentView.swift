@@ -132,7 +132,7 @@ struct ContentView: View {
                     SurveyView(token: route.token)
                 }
                 .navigationDestination(for: ContributorDashboardRoute.self) { _ in
-                    ContributorDashboardView()
+                    WriterWorkspaceView()
                 }
                 .navigationDestination(for: AdminDashboardRoute.self) { _ in
                     AdminDashboardView()
