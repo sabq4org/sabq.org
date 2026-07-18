@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRoleProtection } from "@/hooks/useRoleProtection";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { AdminPublisherNav } from "@/components/admin/publishers/AdminPublisherNav";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
@@ -143,6 +144,8 @@ export default function AdminPublisherAnalytics() {
           </Select>
         </div>}
       />
+
+      <AdminPublisherNav />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

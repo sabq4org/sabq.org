@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useRoleProtection } from "@/hooks/useRoleProtection";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { DashboardPageHeader } from "@/components/dashboard/DashboardPageHeader";
+import { AdminPublisherNav } from "@/components/admin/publishers/AdminPublisherNav";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CreatePublisherDialog } from "@/components/admin/publishers/CreatePublisherDialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { formatDateShort, formatNumber, formatRelativeTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   Plus,
   Search,
@@ -24,9 +27,8 @@ import {
   Loader2,
   BellRing,
   CheckCircle,
+  Infinity as InfinityIcon,
 } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
-import { ar } from "date-fns/locale";
 
 interface RichPublisher {
   id: string;
@@ -70,25 +72,24 @@ const REQUEST_LABELS: Record<string, string> = {
 const daysUntil = (date: string | null) =>
   date ? Math.ceil((new Date(date).getTime() - Date.now()) / 86_400_000) : null;
 
-/** لون صحة تاريخ (باقة/نافذة): أحمر منتهٍ/أسبوع، كهرماني شهر، أخضر غير ذلك */
-function expiryBadge(label: string, date: string | null) {
+function expiryChip(label: string, date: string | null) {
   const days = daysUntil(date);
-  if (days === null) return null;
-  const className = days < 0
-    ? "bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-200"
-    : days <= 7
-      ? "bg-red-100 text-red-800 border-red-300 dark:bg-red-900/40 dark:text-red-200"
+  if (days === null || !date) return null;
+  const tone =
+    days < 0 || days <= 7
+      ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-800"
       : days <= 30
-        ? "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-900/40 dark:text-amber-200"
-        : "bg-green-100 text-green-800 border-green-300 dark:bg-green-900/40 dark:text-green-200";
-  const text = days < 0
-    ? `${label}: منتهية`
-    : `${label}: ${format(new Date(date!), "dd/MM/yyyy")} (${days} يوم)`;
+        ? "bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800"
+        : "bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-800";
+  const text =
+    days < 0
+      ? `${label}: منتهية`
+      : `${label}: ${formatDateShort(date)} · ${formatNumber(days)} يوم`;
   return (
-    <Badge variant="outline" className={`gap-1 ${className}`}>
+    <span className={cn("inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium", tone)}>
       <Calendar className="h-3 w-3" />
       {text}
-    </Badge>
+    </span>
   );
 }
 
@@ -138,13 +139,21 @@ export default function AdminPublishers() {
   );
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
+  const pageSummary = useMemo(() => {
+    const active = publishers.filter((p) => p.isActive).length;
+    const suspended = publishers.filter((p) => !p.isActive).length;
+    const noPackage = publishers.filter((p) => !p.activeCredit).length;
+    const withRequests = publishers.filter((p) => p.openRequests > 0).length;
+    return { active, suspended, noPackage, withRequests };
+  }, [publishers]);
+
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-[1600px] space-y-6 pb-10" dir="rtl">
+      <div className="mx-auto max-w-[1600px] space-y-5 pb-10" dir="rtl">
         <DashboardPageHeader
           icon={Building2}
           title="إدارة الناشرين"
-          description="بطاقات الوكالات: صحة الباقات، النشاط، والطلبات المفتوحة."
+          description="صحة الباقات، النشاط، والطلبات المفتوحة من الوكالات."
           titleTestId="text-page-title"
           actions={
             <Button onClick={() => setShowCreateDialog(true)} data-testid="button-add-publisher">
@@ -154,84 +163,109 @@ export default function AdminPublishers() {
           }
         />
 
-        {/* الطلبات المفتوحة من الوكالات */}
+        <AdminPublisherNav />
+
         {openRequests.length > 0 && (
-          <Card className="border-amber-300 dark:border-amber-800" data-testid="card-open-requests">
-            <CardContent className="pt-6 space-y-3">
-              <div className="flex items-center gap-2 font-bold">
-                <BellRing className="h-5 w-5 text-amber-600" />
-                طلبات مفتوحة من الوكالات
-                <Badge variant="secondary">{openRequests.length}</Badge>
-              </div>
+          <section
+            className="rounded-2xl border border-amber-200 bg-gradient-to-l from-amber-50/80 to-card p-4 dark:border-amber-900 dark:from-amber-950/30"
+            data-testid="card-open-requests"
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-200">
+                <BellRing className="h-4 w-4" />
+              </span>
+              <h2 className="font-bold">طلبات مفتوحة من الوكالات</h2>
+              <Badge variant="secondary">{formatNumber(openRequests.length)}</Badge>
+            </div>
+            <div className="space-y-2">
               {openRequests.map((request) => (
                 <div
                   key={request.id}
-                  className="flex items-center gap-3 rounded-lg border bg-amber-50/50 p-3 dark:bg-amber-950/20"
+                  className="flex flex-col gap-3 rounded-xl border border-amber-200/80 bg-background/80 p-3 sm:flex-row sm:items-center dark:border-amber-900/60"
                   data-testid={`request-row-${request.id}`}
                 >
-                  <div className="flex-1 min-w-0 text-sm">
-                    <span className="font-bold">{request.agencyName}</span>
-                    {" — "}
-                    <span>{REQUEST_LABELS[request.type] ?? request.type}</span>
-                    {request.message && <span className="text-muted-foreground"> · {request.message}</span>}
-                    <span className="text-xs text-muted-foreground mr-2">
-                      ({formatDistanceToNow(new Date(request.createdAt), { locale: ar, addSuffix: true })})
-                    </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold">{request.agencyName}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {REQUEST_LABELS[request.type] ?? request.type}
+                      {request.message ? ` · ${request.message}` : ""}
+                      <span className="mr-2 text-xs">({formatRelativeTime(request.createdAt)})</span>
+                    </p>
                   </div>
-                  <Link href={`/dashboard/admin/publishers/${request.publisherId}`}>
-                    <Button variant="outline" size="sm">فتح الوكالة</Button>
-                  </Link>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => closeRequestMutation.mutate(request.id)}
-                    disabled={closeRequestMutation.isPending}
-                    title="إغلاق الطلب"
-                    data-testid={`button-close-request-${request.id}`}
-                  >
-                    {closeRequestMutation.isPending
-                      ? <Loader2 className="h-4 w-4 animate-spin" />
-                      : <CheckCircle className="h-4 w-4 text-green-600" />}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Link href={`/dashboard/admin/publishers/${request.publisherId}`}>
+                      <Button variant="outline" size="sm">فتح الوكالة</Button>
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => closeRequestMutation.mutate(request.id)}
+                      disabled={closeRequestMutation.isPending}
+                      title="إغلاق الطلب"
+                      data-testid={`button-close-request-${request.id}`}
+                    >
+                      {closeRequestMutation.isPending
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <CheckCircle className="h-4 w-4 text-emerald-600" />}
+                    </Button>
+                  </div>
                 </div>
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </section>
         )}
 
-        {/* الفلاتر */}
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="ابحث باسم الوكالة..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pr-10"
-                dir="rtl"
-                data-testid="input-search"
-              />
-            </div>
-          </div>
-          <div className="w-full md:w-48">
-            <Select value={statusFilter} onValueChange={(v: "all" | "active" | "suspended") => { setStatusFilter(v); setPage(1); }}>
-              <SelectTrigger data-testid="select-status-filter">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">الكل</SelectItem>
-                <SelectItem value="active">نشط</SelectItem>
-                <SelectItem value="suspended">معلق</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            { label: "إجمالي الوكالات", value: total, tone: "text-foreground" },
+            { label: "نشطة (الصفحة)", value: pageSummary.active, tone: "text-emerald-700 dark:text-emerald-300" },
+            { label: "معلقة (الصفحة)", value: pageSummary.suspended, tone: "text-red-700 dark:text-red-300" },
+            { label: "طلبات مفتوحة", value: openRequests.length, tone: "text-amber-700 dark:text-amber-300" },
+          ].map((item) => (
+            <Card key={item.label} className="border-border/60 shadow-none">
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">{item.label}</p>
+                <p className={cn("mt-1 text-2xl font-bold tracking-tight", item.tone)}>
+                  {formatNumber(item.value)}
+                </p>
+              </CardContent>
+            </Card>
+          ))}
         </div>
 
-        {/* بطاقات الوكالات */}
+        <div className="flex flex-col gap-3 rounded-2xl border bg-card p-3 sm:flex-row sm:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="ابحث باسم الوكالة..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="border-0 bg-muted/40 pr-10 shadow-none focus-visible:ring-1"
+              dir="rtl"
+              data-testid="input-search"
+            />
+          </div>
+          <Select
+            value={statusFilter}
+            onValueChange={(v: "all" | "active" | "suspended") => {
+              setStatusFilter(v);
+              setPage(1);
+            }}
+          >
+            <SelectTrigger className="w-full sm:w-44" data-testid="select-status-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل الحالات</SelectItem>
+              <SelectItem value="active">نشط</SelectItem>
+              <SelectItem value="suspended">معلق</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         {isLoading ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-52 rounded-xl" />)}
+            {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-48 rounded-2xl" />)}
           </div>
         ) : filtered.length === 0 ? (
           <Card>
@@ -241,81 +275,115 @@ export default function AdminPublishers() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filtered.map((publisher) => {
               const credit = publisher.activeCredit;
-              const creditPercent = credit && !credit.isUnlimited && credit.totalCredits > 0
-                ? Math.round((credit.remainingCredits / credit.totalCredits) * 100)
-                : null;
+              const creditPercent =
+                credit && !credit.isUnlimited && credit.totalCredits > 0
+                  ? Math.round((credit.remainingCredits / credit.totalCredits) * 100)
+                  : null;
+
               return (
                 <Link key={publisher.id} href={`/dashboard/admin/publishers/${publisher.id}`}>
                   <Card
-                    className={`h-full cursor-pointer transition-shadow hover:shadow-md ${!publisher.isActive ? "opacity-70 border-red-300 dark:border-red-800" : ""}`}
+                    className={cn(
+                      "group h-full cursor-pointer overflow-hidden border-border/70 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md",
+                      !publisher.isActive && "border-red-200/80 dark:border-red-900/50",
+                    )}
                     data-testid={`publisher-card-${publisher.id}`}
                   >
-                    <CardContent className="pt-6 space-y-3">
-                      <div className="flex items-center gap-3">
+                    <CardContent className="flex h-full flex-col gap-3 p-4">
+                      <div className="flex items-start gap-3">
                         {publisher.logoUrl ? (
                           <img
                             src={publisher.logoUrl}
                             alt={publisher.agencyName}
-                            className="h-12 w-12 rounded-lg border bg-white object-contain p-0.5"
+                            className="h-12 w-12 shrink-0 rounded-xl border bg-white object-contain p-0.5"
                           />
                         ) : (
-                          <div className="flex h-12 w-12 items-center justify-center rounded-lg border bg-muted">
-                            <Building2 className="h-6 w-6 text-muted-foreground" />
+                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border bg-muted">
+                            <Building2 className="h-5 w-5 text-muted-foreground" />
                           </div>
                         )}
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold truncate">{publisher.agencyName}</p>
-                          <p className="text-xs text-muted-foreground truncate">{publisher.contactPerson}</p>
+                          <p className="truncate font-bold leading-tight">{publisher.agencyName}</p>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {publisher.contactPerson}
+                          </p>
                         </div>
-                        <div className="flex flex-col items-end gap-1">
-                          {!publisher.isActive && <Badge variant="destructive">معلقة</Badge>}
-                          {publisher.autoPublish && (
-                            <Badge className="gap-1 bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200" variant="outline">
-                              <Zap className="h-3 w-3" />
-                              فوري
-                            </Badge>
-                          )}
-                          {publisher.openRequests > 0 && (
-                            <Badge className="gap-1 bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" variant="outline">
-                              <BellRing className="h-3 w-3" />
-                              {publisher.openRequests} طلب
-                            </Badge>
-                          )}
-                        </div>
+                        <Badge
+                          variant={publisher.isActive ? "secondary" : "destructive"}
+                          className="shrink-0"
+                        >
+                          {publisher.isActive ? "نشط" : "معلقة"}
+                        </Badge>
                       </div>
 
-                      {/* صحة الباقة */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {publisher.autoPublish && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200"
+                          >
+                            <Zap className="h-3 w-3" />
+                            نشر فوري
+                          </Badge>
+                        )}
+                        {publisher.openRequests > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                          >
+                            <BellRing className="h-3 w-3" />
+                            {formatNumber(publisher.openRequests)} طلب
+                          </Badge>
+                        )}
+                      </div>
+
                       {credit ? (
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground truncate">{credit.packageName}</span>
-                            <span className="font-bold">
-                              {credit.isUnlimited
-                                ? "مفتوح ∞"
-                                : `${credit.remainingCredits} / ${credit.totalCredits}`}
+                        <div className="rounded-xl bg-muted/40 p-3">
+                          <div className="flex items-center justify-between gap-2 text-sm">
+                            <span className="truncate text-muted-foreground">{credit.packageName}</span>
+                            <span className="inline-flex shrink-0 items-center gap-1 font-bold">
+                              {credit.isUnlimited ? (
+                                <>
+                                  مفتوح
+                                  <InfinityIcon className="h-3.5 w-3.5" />
+                                </>
+                              ) : (
+                                `${formatNumber(credit.remainingCredits)} / ${formatNumber(credit.totalCredits)}`
+                              )}
                             </span>
                           </div>
-                          {creditPercent !== null && <Progress value={creditPercent} className="h-2" />}
+                          {creditPercent !== null && (
+                            <Progress value={creditPercent} className="mt-2 h-1.5" />
+                          )}
                         </div>
                       ) : (
-                        <Badge variant="destructive" className="w-fit">لا توجد باقة نشطة</Badge>
+                        <div
+                          className={cn(
+                            "rounded-xl border px-3 py-2 text-sm",
+                            publisher.isActive
+                              ? "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200"
+                              : "border-border bg-muted/50 text-muted-foreground",
+                          )}
+                        >
+                          لا توجد باقة نشطة
+                        </div>
                       )}
 
-                      {/* إنذارات الانتهاء الملونة */}
                       <div className="flex flex-wrap gap-1.5">
-                        {credit && expiryBadge("الباقة", credit.expiryDate)}
-                        {expiryBadge("النافذة", publisher.publishingEndsAt)}
+                        {credit && expiryChip("الباقة", credit.expiryDate)}
+                        {expiryChip("النافذة", publisher.publishingEndsAt)}
                       </div>
 
-                      {/* النشاط */}
-                      <div className="flex items-center justify-between border-t pt-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1">
+                      <div className="mt-auto flex items-center justify-between border-t pt-2.5 text-xs text-muted-foreground">
+                        <span className="inline-flex items-center gap-1">
                           <FileText className="h-3 w-3" />
-                          {publisher.publishedArticles} منشور من {publisher.totalArticles}
+                          {formatNumber(publisher.publishedArticles)} منشور من{" "}
+                          {formatNumber(publisher.totalArticles)}
                         </span>
                         <span>
-                          آخر نشاط: {publisher.lastActivityAt
-                            ? formatDistanceToNow(new Date(publisher.lastActivityAt), { locale: ar, addSuffix: true })
+                          آخر نشاط:{" "}
+                          {publisher.lastActivityAt
+                            ? formatRelativeTime(publisher.lastActivityAt)
                             : "—"}
                         </span>
                       </div>
@@ -330,13 +398,23 @@ export default function AdminPublishers() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              صفحة {page} من {totalPages} · إجمالي {total} وكالة
+              صفحة {formatNumber(page)} من {formatNumber(totalPages)} · إجمالي {formatNumber(total)} وكالة
             </p>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
                 السابق
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+              >
                 التالي
               </Button>
             </div>
