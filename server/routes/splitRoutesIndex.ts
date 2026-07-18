@@ -26,6 +26,7 @@ import articleEditLocksRouter from "./articleEditLocks";
 import opinionTicketsRouter from "./opinionTickets";
 import opinionAuthorWorkspaceRouter from "./opinionAuthorWorkspace";
 import opinionWritersRouter from "./opinionWriters";
+import replyPolishRouter from "./replyPolish";
 import deployWebhooksRouter from "./deployWebhooks";
 import cspReportRouter from "./cspReport";
 import muqtarabOwnRouter from "./muqtarabOwn";
@@ -112,6 +113,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(opinionTicketsRouter);
   app.use(opinionAuthorWorkspaceRouter);
   app.use(opinionWritersRouter);
+  app.use(replyPolishRouter);
   app.use(correspondentApplicationsRouter);
   app.use(publisherPortalRouter);
   app.use(deployWebhooksRouter);
