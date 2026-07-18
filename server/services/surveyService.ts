@@ -58,8 +58,8 @@ function fullName(user: { firstName: string | null; lastName: string | null; ema
 // ============ CRUD ============
 
 export async function listSurveys() {
-  // مهم: sql`…` بلا `.as()` يُرجع أعمدة بلا اسم (?column?) فتُفقد
-  // invitedCount / completedCount / questionsCount ويظهر 0 في لوحة الاستطلاعات.
+  // لا نعتمد على subselect داخل select: Drizzle كان يُصدر أعمدة بلا alias
+  // (?column?) فتُفقد الأعداد في JSON. نجمع العدّ باستعلامات منفصلة ثم ندمج.
   const rows = await db
     .select({
       id: surveys.id,
@@ -69,19 +69,48 @@ export async function listSurveys() {
       sentAt: surveys.sentAt,
       closesAt: surveys.closesAt,
       createdAt: surveys.createdAt,
-      invitedCount: sql<number>`(select count(*)::int from survey_invitations i where i.survey_id = ${surveys.id})`
-        .mapWith(Number)
-        .as("invitedCount"),
-      completedCount: sql<number>`(select count(*)::int from survey_invitations i where i.survey_id = ${surveys.id} and i.completed_at is not null)`
-        .mapWith(Number)
-        .as("completedCount"),
-      questionsCount: sql<number>`(select count(*)::int from survey_questions q where q.survey_id = ${surveys.id})`
-        .mapWith(Number)
-        .as("questionsCount"),
     })
     .from(surveys)
     .orderBy(desc(surveys.createdAt));
-  return rows;
+
+  if (rows.length === 0) return [];
+
+  const ids = rows.map((row) => row.id);
+
+  const [questionRows, invitationRows] = await Promise.all([
+    db
+      .select({
+        surveyId: surveyQuestions.surveyId,
+        count: sql<number>`count(*)::int`.mapWith(Number),
+      })
+      .from(surveyQuestions)
+      .where(inArray(surveyQuestions.surveyId, ids))
+      .groupBy(surveyQuestions.surveyId),
+    db
+      .select({
+        surveyId: surveyInvitations.surveyId,
+        invited: sql<number>`count(*)::int`.mapWith(Number),
+        completed: sql<number>`count(*) filter (where ${surveyInvitations.completedAt} is not null)::int`.mapWith(Number),
+      })
+      .from(surveyInvitations)
+      .where(inArray(surveyInvitations.surveyId, ids))
+      .groupBy(surveyInvitations.surveyId),
+  ]);
+
+  const questionsBySurvey = new Map(questionRows.map((row) => [row.surveyId, row.count]));
+  const invitationsBySurvey = new Map(
+    invitationRows.map((row) => [row.surveyId, { invited: row.invited, completed: row.completed }]),
+  );
+
+  return rows.map((row) => {
+    const invitation = invitationsBySurvey.get(row.id);
+    return {
+      ...row,
+      questionsCount: questionsBySurvey.get(row.id) ?? 0,
+      invitedCount: invitation?.invited ?? 0,
+      completedCount: invitation?.completed ?? 0,
+    };
+  });
 }
 
 export async function getSurveyWithQuestions(surveyId: string): Promise<{ survey: Survey; questions: SurveyQuestion[] } | null> {
