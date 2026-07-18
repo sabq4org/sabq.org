@@ -34,6 +34,8 @@ interface AutoImageSettings {
   articleTypes: string[];
   skipCategories: string[];
   defaultStyle: string;
+  newsStyle: string;
+  articleStyle: string;
   provider: string;
   autoPublish: boolean;
   generateOnSave: boolean;
@@ -55,6 +57,8 @@ export default function AutoImageSettingsPage() {
     articleTypes: ["news", "analysis"],
     skipCategories: ["opinion", "columns"],
     defaultStyle: "photorealistic",
+    newsStyle: "photorealistic",
+    articleStyle: "photorealistic",
     provider: "nano-banana",
     autoPublish: false,
     generateOnSave: false,
@@ -77,19 +81,30 @@ export default function AutoImageSettingsPage() {
     queryKey: ["/api/auto-image/settings"]
   });
   
-  // Update local settings when data is fetched
+  // Update local settings when data is fetched (backfill newsStyle/articleStyle from legacy defaultStyle)
   useEffect(() => {
     if (data) {
-      setSettings(data);
+      const newsStyle = data.newsStyle || data.defaultStyle || "photorealistic";
+      const articleStyle = data.articleStyle || data.defaultStyle || "photorealistic";
+      setSettings({
+        ...data,
+        newsStyle,
+        articleStyle,
+        defaultStyle: newsStyle,
+      });
     }
   }, [data]);
 
   // Update settings mutation
   const updateSettingsMutation = useMutation({
     mutationFn: async (updatedSettings: AutoImageSettings) => {
+      const payload = {
+        ...updatedSettings,
+        defaultStyle: updatedSettings.newsStyle || updatedSettings.defaultStyle,
+      };
       return await apiRequest<{ success: boolean }>("/api/auto-image/settings", {
         method: "PUT",
-        body: JSON.stringify(updatedSettings)
+        body: JSON.stringify(payload)
       });
     },
     onSuccess: () => {
@@ -368,29 +383,60 @@ export default function AutoImageSettingsPage() {
                 </p>
               </div>
 
-              {/* Default Style */}
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Palette className="h-4 w-4 text-muted-foreground" />
-                  النمط الافتراضي للصور
-                </Label>
-                <Select
-                  value={settings.defaultStyle}
-                  onValueChange={(value) => 
-                    setSettings({ ...settings, defaultStyle: value })
-                  }
-                >
-                  <SelectTrigger data-testid="select-style">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {styleOptions.map(option => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {/* Style by content kind */}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-muted-foreground" />
+                    نمط صور الأخبار
+                  </Label>
+                  <Select
+                    value={settings.newsStyle}
+                    onValueChange={(value) =>
+                      setSettings({ ...settings, newsStyle: value, defaultStyle: value })
+                    }
+                  >
+                    <SelectTrigger data-testid="select-news-style">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {styleOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    للأخبار والتحليلات
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-muted-foreground" />
+                    نمط صور المقالات
+                  </Label>
+                  <Select
+                    value={settings.articleStyle}
+                    onValueChange={(value) =>
+                      setSettings({ ...settings, articleStyle: value })
+                    }
+                  >
+                    <SelectTrigger data-testid="select-article-style">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {styleOptions.map(option => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    لمقالات الرأي والأعمدة
+                  </p>
+                </div>
               </div>
 
               {/* Auto Generation Options */}

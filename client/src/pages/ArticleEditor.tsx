@@ -3343,8 +3343,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             )}
 
 
-            {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO */}
-            {!isNewArticle && (
+            {/* ألبوم الصور + مرفقات كاملة — في الوسائط وليس تحت SEO (مخفي عن كتّاب الرأي) */}
+            {!isNewArticle && !isOpinionAuthor && (
               <Card data-testid="card-media-album">
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between gap-2">

@@ -15,7 +15,12 @@ interface AutoImageSettings {
   enabled: boolean;
   articleTypes: string[];
   skipCategories: string[];
+  /** @deprecated Prefer newsStyle / articleStyle; kept for older consumers */
   defaultStyle: string;
+  /** Style for news + analysis */
+  newsStyle: string;
+  /** Style for opinion + column */
+  articleStyle: string;
   provider: string;
   autoPublish: boolean;
   generateOnSave: boolean;
@@ -30,6 +35,8 @@ const DEFAULT_SETTINGS: AutoImageSettings = {
   articleTypes: ["news", "analysis"],
   skipCategories: [],
   defaultStyle: "photorealistic",
+  newsStyle: "photorealistic",
+  articleStyle: "photorealistic",
   provider: "nano-banana",
   autoPublish: false,
   generateOnSave: false,
@@ -38,6 +45,33 @@ const DEFAULT_SETTINGS: AutoImageSettings = {
   currentMonthGenerations: 0,
   lastResetMonth: new Date().getMonth()
 };
+
+/**
+ * Resolve image style by content kind: articles (opinion/column) vs news (everything else).
+ */
+export function resolveStyleForArticleType(
+  articleType: string | undefined,
+  settings: AutoImageSettings
+): string {
+  if (articleType === "opinion" || articleType === "column") {
+    return settings.articleStyle || settings.defaultStyle || "photorealistic";
+  }
+  return settings.newsStyle || settings.defaultStyle || "photorealistic";
+}
+
+function normalizeSettings(saved: Partial<AutoImageSettings>): AutoImageSettings {
+  const merged = { ...DEFAULT_SETTINGS, ...saved };
+  // Backfill new fields from legacy defaultStyle when missing
+  if (!saved.newsStyle) {
+    merged.newsStyle = saved.defaultStyle || DEFAULT_SETTINGS.newsStyle;
+  }
+  if (!saved.articleStyle) {
+    merged.articleStyle = saved.defaultStyle || DEFAULT_SETTINGS.articleStyle;
+  }
+  // Keep defaultStyle in sync with newsStyle for older readers
+  merged.defaultStyle = merged.newsStyle || merged.defaultStyle;
+  return merged;
+}
 
 const AI_DISCLAIMER = {
   ar: "صورة تم إنشاؤها بواسطة الذكاء الاصطناعي",
@@ -76,16 +110,17 @@ export async function getAutoGenerationSettings(): Promise<AutoImageSettings> {
       .where(eq(systemSettings.key, SETTINGS_KEY));
     
     if (setting?.value) {
-      const savedSettings = setting.value as AutoImageSettings;
+      const savedSettings = setting.value as Partial<AutoImageSettings>;
+      const normalized = normalizeSettings(savedSettings);
       
       const currentMonth = new Date().getMonth();
-      if (savedSettings.lastResetMonth !== currentMonth) {
-        savedSettings.currentMonthGenerations = 0;
-        savedSettings.lastResetMonth = currentMonth;
-        await saveAutoGenerationSettings(savedSettings);
+      if (normalized.lastResetMonth !== currentMonth) {
+        normalized.currentMonthGenerations = 0;
+        normalized.lastResetMonth = currentMonth;
+        await saveAutoGenerationSettings(normalized);
       }
       
-      return { ...DEFAULT_SETTINGS, ...savedSettings };
+      return normalized;
     }
     
     return DEFAULT_SETTINGS;
@@ -136,7 +171,14 @@ async function saveAutoGenerationSettings(settings: AutoImageSettings): Promise<
  */
 export async function updateAutoGenerationSettings(updates: Partial<AutoImageSettings>): Promise<AutoImageSettings> {
   const currentSettings = await getAutoGenerationSettings();
-  const newSettings = { ...currentSettings, ...updates };
+  const newSettings = normalizeSettings({ ...currentSettings, ...updates });
+  // Prefer explicit newsStyle when provided; otherwise keep defaultStyle synced from newsStyle
+  if (updates.newsStyle) {
+    newSettings.defaultStyle = updates.newsStyle;
+  } else if (updates.defaultStyle && !updates.newsStyle) {
+    newSettings.newsStyle = updates.defaultStyle;
+    newSettings.defaultStyle = updates.defaultStyle;
+  }
   await saveAutoGenerationSettings(newSettings);
   return newSettings;
 }
@@ -210,7 +252,7 @@ export async function autoGenerateImage(
       articleSummary: request.excerpt || extractSummary(request.content || ""),
       category: request.category || "عام",
       language: request.language,
-      style: settings.defaultStyle as any,
+      style: resolveStyleForArticleType(request.articleType, settings) as any,
       mood: "neutral"
     });
     
@@ -407,5 +449,6 @@ export default {
   autoGenerateImage,
   shouldAutoGenerateImage,
   getAutoGenerationSettings,
-  updateAutoGenerationSettings
+  updateAutoGenerationSettings,
+  resolveStyleForArticleType
 };

@@ -349,7 +349,10 @@ export async function generateNewsImage(request: NewsImageGenerationRequest): Pr
     
     // Build smart prompt based on article
     const styleGuide: Record<string, string> = {
-      photorealistic: "professional photojournalism style, high quality, realistic",
+      photorealistic:
+        "true photorealistic photography, natural lighting, shallow depth of field, " +
+        "shot on a professional DSLR camera, documentary photojournalism, high dynamic range, " +
+        "real-world textures and skin tones, no CGI, no illustration, no cartoon, no AI-looking artifacts",
       illustration: "modern digital illustration, clean and professional",
       abstract: "abstract artistic representation, contemporary design",
       infographic: "infographic style, data visualization, modern design"

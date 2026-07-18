@@ -120,6 +120,8 @@ router.put("/settings", isAuthenticated, requireRole("admin"), async (req: Reque
       "articleTypes", 
       "skipCategories",
       "defaultStyle",
+      "newsStyle",
+      "articleStyle",
       "provider",
       "autoPublish",
       "generateOnSave",
