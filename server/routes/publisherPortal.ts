@@ -8,6 +8,7 @@ import {
   createPublisherMember,
   createPublisherRequest,
   deleteGuideSection,
+  deletePortalArticle,
   getPortalArticle,
   getPortalArticles,
   getPortalCreditLogs,
@@ -138,6 +139,21 @@ router.post("/api/publisher/portal/articles/:id/submit", async (req, res) => {
   } catch (error) {
     console.error("[Publisher Portal] submit failed:", error);
     res.status(500).json({ message: "تعذر إرسال المادة" });
+  }
+});
+
+router.delete("/api/publisher/portal/articles/:id", async (req, res) => {
+  try {
+    const result = await deletePortalArticle(
+      requestUserId(req),
+      req.params.id,
+      (req as any).publisher,
+    );
+    if (!result.ok) return res.status(result.status).json({ message: result.message });
+    res.json({ message: result.message });
+  } catch (error) {
+    console.error("[Publisher Portal] delete failed:", error);
+    res.status(500).json({ message: "تعذر حذف المادة" });
   }
 });
 

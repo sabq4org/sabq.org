@@ -40,6 +40,7 @@ import { useToast } from "@/hooks/use-toast";
 import { DashboardThemeProvider } from "@/dashboard-themes/DashboardThemeProvider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { formatNumber } from "@/lib/format";
 
 interface PublisherLayoutProps {
   children: ReactNode;
@@ -272,8 +273,8 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
                           <p className="text-muted-foreground">
                             {activeCredit
                               ? activeCredit.isUnlimited
-                                ? `مفتوحة ∞ · نُشر ${Number(activeCredit.usedCredits) || 0}`
-                                : `متبقي ${activeCredit.remainingCredits} من ${activeCredit.totalCredits}`
+                                ? `مفتوحة ∞ · نُشر ${formatNumber(activeCredit.usedCredits)}`
+                                : `متبقي ${formatNumber(activeCredit.remainingCredits)} من ${formatNumber(activeCredit.totalCredits)}`
                               : "تواصل مع الإدارة للتفعيل"}
                           </p>
                         </div>

@@ -416,6 +416,64 @@ export async function getPortalArticle(
   return article ?? null;
 }
 
+/**
+ * حذف/أرشفة مادة من بوابة الناشر.
+ * المسودات والمرفوض: أرشفة مباشرة.
+ * المنشور: للناشر الموثوق (auto_publish) فقط — أرشفة + إبطال كاش.
+ */
+export async function deletePortalArticle(
+  userId: string,
+  articleId: string,
+  publisher: Publisher,
+): Promise<{ ok: false; status: number; message: string } | { ok: true; message: string }> {
+  const article = await getPortalArticle(userId, articleId, publisher);
+  if (!article) return { ok: false, status: 404, message: "المادة غير موجودة" };
+  if (article.status === "archived") {
+    return { ok: false, status: 400, message: "المادة مؤرشفة بالفعل" };
+  }
+  if (article.status === "published" && !publisher.autoPublish) {
+    return {
+      ok: false,
+      status: 403,
+      message: "لا يمكن حذف مادة منشورة — تواصل مع التحرير إن لزم الأمر",
+    };
+  }
+
+  const [updated] = await db
+    .update(articles)
+    .set({
+      status: "archived",
+      updatedAt: new Date(),
+      publisherStatus: article.status === "published" ? "rejected" : article.publisherStatus,
+      publisherReviewNotes:
+        article.status === "published"
+          ? "أُرشفت من بوابة الناشر"
+          : article.publisherReviewNotes,
+    })
+    .where(
+      and(
+        eq(articles.id, articleId),
+        or(eq(articles.authorId, userId), eq(articles.publisherId, publisher.id)),
+      ),
+    )
+    .returning({ id: articles.id, slug: articles.slug, englishSlug: articles.englishSlug });
+
+  if (!updated) return { ok: false, status: 404, message: "تعذر حذف المادة" };
+
+  if (article.status === "published") {
+    invalidatePublishedContent({
+      articleSlug: updated.englishSlug || updated.slug,
+      isBreaking: false,
+      reason: `publisher-portal-delete:${articleId}`,
+    });
+  }
+
+  return {
+    ok: true,
+    message: article.status === "published" ? "أُرشفت المادة وأُزيلت من الموقع" : "تم حذف المسودة",
+  };
+}
+
 export type SubmitResult =
   | { ok: false; status: number; message: string; code?: string }
   | { ok: true; published: boolean; message: string };

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { usePublisherAccess } from "@/hooks/usePublisherAccess";
 import { PublisherLayout } from "@/components/publisher/PublisherLayout";
@@ -23,6 +23,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Plus,
@@ -31,7 +41,11 @@ import {
   Edit,
   FileText,
   User,
+  Trash2,
+  Loader2,
 } from "lucide-react";
+import { formatDateShort, formatNumber, formatTime } from "@/lib/format";
+import { apiRequest } from "@/lib/queryClient";
 
 interface Article {
   id: string;
@@ -57,34 +71,20 @@ function deriveState(article: Article): "published" | "pending" | "needs_changes
   return "draft";
 }
 
-function formatViews(views: number | null | undefined) {
-  const n = Number(views) || 0;
-  return n.toLocaleString("en-US");
-}
-
 function formatDateTime(value: string | null) {
   if (!value) return null;
-  const d = new Date(value);
-  const date = d.toLocaleDateString("en-GB", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    calendar: "gregory",
-  });
-  const time = d.toLocaleTimeString("en-GB", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  return `${date} ${time}`;
+  return `${formatDateShort(value)} ${formatTime(value, { format24: true })}`;
 }
 
 export default function PublisherArticles() {
   usePublisherAccess();
   const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [page, setPage] = useState(1);
+  const [deletingArticle, setDeletingArticle] = useState<Article | null>(null);
   const limit = 10;
 
   const { data: overview } = useQuery<{ publisher: { autoPublish: boolean } }>({
@@ -92,16 +92,39 @@ export default function PublisherArticles() {
   });
   const autoPublish = overview?.publisher?.autoPublish === true;
 
+  const articlesQueryKey = [
+    "/api/publisher/portal/articles",
+    {
+      status: statusFilter !== "all" ? statusFilter : undefined,
+      searchQuery,
+      page,
+      limit,
+    },
+  ] as const;
+
   const { data, isLoading, error } = useQuery<{ articles: Article[]; total: number }>({
-    queryKey: [
-      "/api/publisher/portal/articles",
-      {
-        status: statusFilter !== "all" ? statusFilter : undefined,
-        searchQuery,
-        page,
-        limit,
-      },
-    ],
+    queryKey: articlesQueryKey,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (articleId: string) =>
+      apiRequest(`/api/publisher/portal/articles/${articleId}`, { method: "DELETE" }),
+    onSuccess: async (res: { message?: string }) => {
+      toast({
+        title: "تم الحذف",
+        description: res?.message || "تم حذف المادة بنجاح",
+      });
+      setDeletingArticle(null);
+      await queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/articles"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/overview"] });
+    },
+    onError: (err: Error) => {
+      toast({
+        variant: "destructive",
+        title: "تعذر الحذف",
+        description: err.message || "فشل حذف المادة",
+      });
+    },
   });
 
   if (error) {
@@ -235,8 +258,18 @@ export default function PublisherArticles() {
                     <TableBody>
                       {articles.map((article) => {
                         const state = deriveState(article);
-                        const canPortalEdit = state === "draft" || state === "needs_changes" || state === "pending";
+                        const canPortalEdit =
+                          state === "draft" || state === "needs_changes" || state === "pending";
                         const canMainEdit = state === "published" && autoPublish;
+                        const canEdit = canPortalEdit || canMainEdit;
+                        const canDelete =
+                          state === "draft" ||
+                          state === "needs_changes" ||
+                          state === "pending" ||
+                          (state === "published" && autoPublish);
+                        const editHref = canMainEdit
+                          ? `/dashboard/articles/${article.id}/edit`
+                          : `/dashboard/publisher/article/${article.id}/edit`;
                         const viewHref = article.englishSlug
                           ? `/article/${article.englishSlug}`
                           : `/article/${article.id}`;
@@ -268,46 +301,45 @@ export default function PublisherArticles() {
                                 )}
                             </TableCell>
                             <TableCell className="text-base font-medium tabular-nums">
-                              {state === "published" ? formatViews(article.views) : "—"}
+                              {state === "published" ? formatNumber(article.views) : "—"}
                             </TableCell>
                             <TableCell>{getStatusBadge(state)}</TableCell>
                             <TableCell>
-                              <div className="flex flex-wrap gap-2">
-                                {canPortalEdit ? (
-                                  <Link href={`/dashboard/publisher/article/${article.id}/edit`}>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      data-testid={`button-edit-${article.id}`}
-                                    >
-                                      <Edit className="ml-1 h-4 w-4" />
-                                      تعديل
-                                    </Button>
-                                  </Link>
-                                ) : null}
-                                {canMainEdit ? (
-                                  <Link href={`/dashboard/articles/${article.id}/edit`}>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      data-testid={`button-edit-main-${article.id}`}
-                                    >
-                                      <Edit className="ml-1 h-4 w-4" />
-                                      تعديل
-                                    </Button>
-                                  </Link>
-                                ) : null}
+                              <div className="flex gap-1 justify-end">
                                 {state === "published" ? (
-                                  <a href={viewHref} target="_blank" rel="noreferrer">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      data-testid={`button-view-${article.id}`}
-                                    >
-                                      <Eye className="ml-1 h-4 w-4" />
-                                      عرض
-                                    </Button>
-                                  </a>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    asChild
+                                    data-testid={`button-view-${article.id}`}
+                                    title="عرض"
+                                  >
+                                    <a href={viewHref} target="_blank" rel="noreferrer">
+                                      <Eye className="h-4 w-4" />
+                                    </a>
+                                  </Button>
+                                ) : null}
+                                {canEdit ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    data-testid={`button-edit-${article.id}`}
+                                    title="تعديل"
+                                    onClick={() => navigate(editHref)}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                ) : null}
+                                {canDelete ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    data-testid={`button-delete-${article.id}`}
+                                    title="حذف"
+                                    onClick={() => setDeletingArticle(article)}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
                                 ) : null}
                               </div>
                             </TableCell>
@@ -349,6 +381,55 @@ export default function PublisherArticles() {
             )}
           </CardContent>
         </Card>
+
+        <AlertDialog
+          open={!!deletingArticle}
+          onOpenChange={(open) => {
+            if (!open && !deleteMutation.isPending) setDeletingArticle(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
+              <AlertDialogDescription className="text-right space-y-2">
+                <span className="block">
+                  {deletingArticle?.status === "published"
+                    ? "ستُأرشف المادة وتُزال من الموقع. لا يمكن التراجع بسهولة."
+                    : "سيتم حذف هذه المسودة من قائمة موادكم."}
+                </span>
+                {deletingArticle ? (
+                  <span className="block font-medium text-foreground">
+                    «{deletingArticle.title}»
+                  </span>
+                ) : null}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="gap-2">
+              <AlertDialogCancel disabled={deleteMutation.isPending}>إلغاء</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteMutation.isPending || !deletingArticle}
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (deletingArticle) deleteMutation.mutate(deletingArticle.id);
+                }}
+                data-testid="button-confirm-delete"
+              >
+                {deleteMutation.isPending ? (
+                  <>
+                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    جاري الحذف...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="ml-2 h-4 w-4" />
+                    حذف
+                  </>
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </PublisherLayout>
   );

@@ -33,6 +33,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { cn } from "@/lib/utils";
+import { formatCompactNumber, formatDateShort } from "@/lib/format";
 
 interface PortalOverview {
   publisher: {
@@ -82,15 +83,7 @@ interface PortalOverview {
   attention: Array<{ type: string; severity: "warning" | "critical"; message: string }>;
 }
 
-const formatDate = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString("ar-SA-u-ca-gregory") : "—";
-
-const formatViews = (views: number | null | undefined) => {
-  const n = Number(views) || 0;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-};
+const formatViews = (views: number | null | undefined) => formatCompactNumber(views);
 
 const statusBadge = (status: string) => {
   const map: Record<string, { label: string; className: string }> = {
@@ -229,7 +222,7 @@ export default function PublisherDashboard() {
             <p className="text-sm text-muted-foreground">
               ملخص نشر {publisher.agencyName}
               {publisher.publishingEndsAt && windowDaysLeft !== null && windowDaysLeft >= 0
-                ? ` · متاح حتى ${formatDate(publisher.publishingEndsAt)}`
+                ? ` · متاح حتى ${formatDateShort(publisher.publishingEndsAt)}`
                 : ""}
             </p>
           </div>
@@ -299,7 +292,7 @@ export default function PublisherDashboard() {
             hint={
               activeCredit
                 ? `${activeCredit.packageName}${
-                    activeCredit.expiryDate ? ` · حتى ${formatDate(activeCredit.expiryDate)}` : ""
+                    activeCredit.expiryDate ? ` · حتى ${formatDateShort(activeCredit.expiryDate)}` : ""
                   }`
                 : undefined
             }
@@ -413,7 +406,7 @@ export default function PublisherDashboard() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{article.title}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          {formatDate(article.publishedAt || article.createdAt)}
+                          {formatDateShort(article.publishedAt || article.createdAt)}
                           {article.status === "published" && ` · ${formatViews(article.views)}`}
                         </p>
                       </div>
@@ -474,7 +467,7 @@ export default function PublisherDashboard() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{article.title}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
-                          {formatDate(article.publishedAt)}
+                          {formatDateShort(article.publishedAt)}
                         </p>
                       </div>
                       <Badge variant="secondary" className="shrink-0 rounded-lg font-medium">
@@ -495,7 +488,7 @@ export default function PublisherDashboard() {
             {publisher.publishingEndsAt ? (
               <span className="inline-flex items-center gap-1.5">
                 <Calendar className="h-3.5 w-3.5" />
-                نافذة النشر: حتى {formatDate(publisher.publishingEndsAt)}
+                نافذة النشر: حتى {formatDateShort(publisher.publishingEndsAt)}
               </span>
             ) : null}
             {activeCredit ? (
