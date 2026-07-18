@@ -246,6 +246,8 @@ export function CreatePublisherDialog({
         });
         queryClient.invalidateQueries({ queryKey: [`/api/admin/publishers/${publisher.id}`] });
         queryClient.invalidateQueries({ queryKey: ["/api/admin/publishers"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/publisher/portal/overview"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/publishers"] });
       }
 
       toast({

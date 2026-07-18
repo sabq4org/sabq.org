@@ -60,6 +60,7 @@ interface PortalOverview {
     usedCredits: number;
     remainingCredits: number;
     expiryDate: string | null;
+    isUnlimited?: boolean;
   } | null;
   recentArticles: Array<{
     id: string;
@@ -207,17 +208,14 @@ export default function PublisherDashboard() {
       ? Math.round((activeCredit.remainingCredits / activeCredit.totalCredits) * 100)
       : 0;
 
-  const isOpenEndedCredit =
-    !!activeCredit &&
-    activeCredit.remainingCredits >= 9999 &&
-    activeCredit.totalCredits >= 9999;
+  const isOpenEndedCredit = !!activeCredit?.isUnlimited;
 
   const firstName = user?.firstName?.trim();
   const greeting = firstName ? `أهلاً ${firstName}` : "أهلاً بك";
 
   return (
     <PublisherLayout>
-      <div className="mx-auto max-w-6xl space-y-6" dir="rtl">
+      <div className="w-full space-y-6" dir="rtl">
         {/* ترحيب + إجراء سريع */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-1">
@@ -280,8 +278,8 @@ export default function PublisherDashboard() {
               activeCredit ? (
                 <span data-testid="text-remaining-credits">
                   {isOpenEndedCredit ? (
-                    <span className="inline-flex items-baseline gap-1">
-                      مفتوح
+                    <span className="inline-flex items-baseline gap-1.5">
+                      مفتوحة
                       <span className="text-2xl text-muted-foreground">∞</span>
                     </span>
                   ) : (
@@ -416,7 +414,7 @@ export default function PublisherDashboard() {
                         <p className="truncate font-medium">{article.title}</p>
                         <p className="mt-0.5 text-xs text-muted-foreground">
                           {formatDate(article.publishedAt || article.createdAt)}
-                          {article.status === "published" && ` · ${formatViews(article.views)} مشاهدة`}
+                          {article.status === "published" && ` · ${formatViews(article.views)}`}
                         </p>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">

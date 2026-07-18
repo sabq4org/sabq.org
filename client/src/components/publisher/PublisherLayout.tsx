@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { useState, type ComponentType, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/useAuth";
@@ -11,6 +11,7 @@ import {
   Building2,
   Zap,
   ShieldCheck,
+  Package,
 } from "lucide-react";
 import {
   Sidebar,
@@ -52,13 +53,20 @@ interface PortalPublisherBrief {
     autoPublish: boolean;
     isActive: boolean;
   };
+  activeCredit: {
+    packageName: string;
+    isUnlimited: boolean;
+    remainingCredits: number;
+    totalCredits: number;
+    expiryDate: string | null;
+  } | null;
 }
 
 interface NavItem {
   id: string;
   href: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
   testId: string;
 }
 
@@ -93,6 +101,45 @@ function getInitials(firstName?: string | null, lastName?: string | null, email?
   return "ن";
 }
 
+function resolveAssetUrl(url: string | null | undefined): string | null {
+  if (!url?.trim()) return null;
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith("data:")) return trimmed;
+  if (trimmed.startsWith("//")) return `https:${trimmed}`;
+  if (trimmed.startsWith("/")) return trimmed;
+  return trimmed;
+}
+
+function AgencyLogo({
+  logoUrl,
+  agencyName,
+}: {
+  logoUrl: string | null | undefined;
+  agencyName: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const src = resolveAssetUrl(logoUrl);
+
+  if (!src || failed) {
+    return (
+      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border bg-background shadow-sm">
+        <Building2 className="h-7 w-7 text-primary/70" />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={agencyName}
+      className="h-14 w-14 shrink-0 rounded-2xl border bg-white object-contain p-1.5 shadow-sm"
+      data-testid="img-agency-logo-sidebar"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function PublisherLayout({ children }: PublisherLayoutProps) {
   const [location, navigate] = useLocation();
   const { user, isLoading } = useAuth({ redirectToLogin: true });
@@ -101,7 +148,7 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
   const { data: portalBrief, isLoading: portalLoading } = useQuery<PortalPublisherBrief>({
     queryKey: ["/api/publisher/portal/overview"],
     enabled: Boolean(user),
-    staleTime: 60_000,
+    staleTime: 30_000,
   });
 
   if (isLoading || !user) {
@@ -136,11 +183,18 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
   };
 
   const publisher = portalBrief?.publisher;
+  const activeCredit = portalBrief?.activeCredit ?? null;
   const agencyName = publisher?.agencyName ?? "وكالة النشر";
   const displayName =
     user.firstName && user.lastName
       ? `${user.firstName} ${user.lastName}`
       : user.firstName || user.email || "ناشر";
+
+  const packageLabel = activeCredit
+    ? activeCredit.isUnlimited
+      ? `${activeCredit.packageName} · مفتوحة`
+      : `${activeCredit.packageName}`
+    : "لا توجد باقة نشطة";
 
   return (
     <DashboardThemeProvider>
@@ -172,45 +226,56 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-3" data-testid="sidebar-agency-brand">
-                      {publisher?.logoUrl ? (
-                        <img
-                          src={publisher.logoUrl}
-                          alt={agencyName}
-                          className="h-14 w-14 shrink-0 rounded-2xl border bg-white object-contain p-1.5 shadow-sm"
-                          data-testid="img-agency-logo-sidebar"
-                        />
-                      ) : (
-                        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border bg-background shadow-sm">
-                          <Building2 className="h-7 w-7 text-primary/70" />
+                    <div className="space-y-2.5" data-testid="sidebar-agency-brand">
+                      <div className="flex items-center gap-3">
+                        <AgencyLogo logoUrl={publisher?.logoUrl} agencyName={agencyName} />
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="truncate text-base font-bold leading-snug tracking-tight"
+                            data-testid="text-agency-name-sidebar"
+                            title={agencyName}
+                          >
+                            {agencyName}
+                          </p>
+                          {publisher?.autoPublish ? (
+                            <Badge
+                              className="mt-1.5 gap-1 border-0 bg-sky-500/15 text-sky-700 hover:bg-sky-500/20 dark:bg-sky-400/15 dark:text-sky-300"
+                              data-testid="badge-auto-publish-sidebar"
+                            >
+                              <Zap className="h-3 w-3" />
+                              نشر فوري
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="mt-1.5 gap-1 text-muted-foreground"
+                              data-testid="badge-review-publish-sidebar"
+                            >
+                              <ShieldCheck className="h-3 w-3" />
+                              بمراجعة التحرير
+                            </Badge>
+                          )}
                         </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className="truncate text-base font-bold leading-snug tracking-tight"
-                          data-testid="text-agency-name-sidebar"
-                          title={agencyName}
-                        >
-                          {agencyName}
-                        </p>
-                        {publisher?.autoPublish ? (
-                          <Badge
-                            className="mt-1.5 gap-1 border-0 bg-sky-500/15 text-sky-700 hover:bg-sky-500/20 dark:bg-sky-400/15 dark:text-sky-300"
-                            data-testid="badge-auto-publish-sidebar"
-                          >
-                            <Zap className="h-3 w-3" />
-                            نشر فوري
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="mt-1.5 gap-1 text-muted-foreground"
-                            data-testid="badge-review-publish-sidebar"
-                          >
-                            <ShieldCheck className="h-3 w-3" />
-                            بمراجعة التحرير
-                          </Badge>
-                        )}
+                      </div>
+
+                      <div
+                        className="flex items-start gap-2 rounded-xl border bg-background/70 px-2.5 py-2 text-[11px] leading-snug"
+                        data-testid="sidebar-package-info"
+                        title={packageLabel}
+                      >
+                        <Package className="mt-0.5 h-3.5 w-3.5 shrink-0 text-teal-600 dark:text-teal-300" />
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground/90 truncate">
+                            {activeCredit?.packageName ?? "بدون باقة نشطة"}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {activeCredit
+                              ? activeCredit.isUnlimited
+                                ? "باقة مفتوحة ∞"
+                                : `متبقي ${activeCredit.remainingCredits} من ${activeCredit.totalCredits}`
+                              : "تواصل مع الإدارة للتفعيل"}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -299,7 +364,7 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
             </SidebarFooter>
           </Sidebar>
 
-          <SidebarInset className="flex flex-1 flex-col">
+          <SidebarInset className="flex min-w-0 flex-1 flex-col">
             <header className="flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur md:h-16 md:px-6">
               <SidebarTrigger data-testid="button-sidebar-toggle" />
               <div className="min-w-0 flex-1">
@@ -318,7 +383,7 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
               <ThemeToggle />
             </header>
 
-            <main className="flex-1 overflow-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/[0.04] via-background to-background p-4 md:p-6">
+            <main className="min-w-0 flex-1 overflow-auto bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/[0.04] via-background to-background p-4 md:p-6 lg:p-8">
               {children}
             </main>
           </SidebarInset>
