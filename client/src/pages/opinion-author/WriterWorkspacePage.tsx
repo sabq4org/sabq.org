@@ -37,6 +37,7 @@ import {
   CheckCircle2,
   CheckCheck,
   CircleX,
+  ClipboardList,
   Clock3,
   Edit3,
   Feather,
@@ -148,6 +149,7 @@ type EditorialNotification = {
   body: string;
   articleId: string | null;
   articleTitle: string | null;
+  deepLink: string | null;
   reviewerNote: string | null;
   readAt: string | null;
   createdAt: string;
@@ -273,6 +275,11 @@ export default function WriterWorkspacePage() {
   const unreadNotificationsCount = notificationsQuery.data?.unread ?? unreadNotifications.length;
   const openEditorialNotification = (notification: EditorialNotification) => {
     markNotificationReadMutation.mutate(notification.id);
+    // دعوات الاستطلاع تفتح رابط المدعو الشخصي بدل تبويب المقالات
+    if (notification.type === "survey_invite") {
+      if (notification.deepLink) window.open(notification.deepLink, "_blank", "noopener");
+      return;
+    }
     setActiveTab("articles");
     if (notification.articleId) {
       window.setTimeout(() => {
@@ -705,7 +712,10 @@ function editorialNotificationStyle(type: EditorialNotification["type"]) {
   if (type === "published") return { icon: CheckCircle2, label: "تم النشر", item: "border-border bg-muted/30", iconClass: "text-primary" };
   if (type === "scheduled") return { icon: CalendarClock, label: "تمت الجدولة", item: "border-border bg-primary/5 dark:border-border dark:bg-primary/10", iconClass: "text-primary dark:text-primary" };
   if (type === "needs_revision") return { icon: Edit3, label: "ملاحظات تحريرية", item: "border-warning/40 bg-warning/10 dark:border-border dark:bg-warning/10", iconClass: "text-warning dark:text-warning" };
-  return { icon: CircleX, label: type === "deleted" ? "حُذف نهائيًا" : "غير صالح للنشر", item: "border-destructive/30 bg-destructive/10 dark:border-border dark:bg-destructive/10", iconClass: "text-destructive" };
+  if (type === "survey_invite") return { icon: ClipboardList, label: "دعوة استطلاع", item: "border-primary/40 bg-primary/5 dark:border-border dark:bg-primary/10", iconClass: "text-primary" };
+  if (type === "rejected" || type === "deleted" || type === "archived") return { icon: CircleX, label: type === "deleted" ? "حُذف نهائيًا" : "غير صالح للنشر", item: "border-destructive/30 bg-destructive/10 dark:border-border dark:bg-destructive/10", iconClass: "text-destructive" };
+  // أنواع مستقبلية غير معروفة: عرض محايد بدل الوقوع على النمط الأحمر
+  return { icon: BellRing, label: "تنبيه", item: "border-border bg-muted/30", iconClass: "text-muted-foreground" };
 }
 
 function EditorialAlertsPanel({ notifications, onOpen, onMarkAll, markingAll }: { notifications: EditorialNotification[]; onOpen: (notification: EditorialNotification) => void; onMarkAll: () => void; markingAll: boolean }) {
