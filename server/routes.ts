@@ -73,7 +73,7 @@ import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sen
 import { awardPoints } from "./services/loyalty";
 import { safeErrorPayload } from "./utils/safeError";
 import { deductPublisherCreditSafely } from "./services/publisherCreditService";
-import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles } from "./services/publisherPortalService";
+import { getPublishingGate, submitPortalArticle, notifyPublisherUser, getPortalArticles, trustedPublisherCanPublish } from "./services/publisherPortalService";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
@@ -1392,6 +1392,22 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       
       // Merge both sources
       const permissionsArray = [...new Set([...dbPermissions, ...roleBasedPermissions])];
+
+      // الناشر الموثوق (auto_publish) يستخدم المحرر الأساسي وينشر منه —
+      // نمنحه articles.publish ديناميكياً ما دامت بوابة نشره مفتوحة، حتى
+      // تظهر له أزرار النشر في الواجهة (الفحص الخادمي له مساره الخاص).
+      if (
+        !permissionsArray.includes("articles.publish") &&
+        (allRoles.includes("publisher") || user.linkedPublisherId)
+      ) {
+        try {
+          if (await trustedPublisherCanPublish(user.id)) {
+            permissionsArray.push("articles.publish");
+          }
+        } catch (err) {
+          console.error("[auth/user] trusted publisher check failed:", err);
+        }
+      }
 
       // SECURITY: Never send passwordHash to client
       const { passwordHash, twoFactorSecret, ...safeUser } = user;
@@ -7154,18 +7170,21 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
       // Check publish permission if status is "published"
       if (parsed.data.status === 'published') {
-        const userPermissions = await getUserPermissions(req.user.id);
-        const canPublish = userPermissions.includes("articles.publish");
-        if (!canPublish) {
-          return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
-        }
-
         // Publisher-agency accounts have a publishing window (publishers.
         // publishing_ends_at); once it passes, publishing is blocked even
         // though the role/permission still allows it.
         const gate = await getPublishingGate(req.user.id);
-        if (!gate.allowed) {
+        if (gate.publisher && !gate.allowed) {
           return res.status(403).json({ message: gate.message, code: gate.code });
+        }
+
+        const userPermissions = await getUserPermissions(req.user.id);
+        // الناشر الموثوق (auto_publish) ينشر من المحرر الأساسي دون
+        // articles.publish العامة — بوابته المفتوحة هي التفويض
+        const canPublish = userPermissions.includes("articles.publish")
+          || (gate.allowed && gate.publisher?.autoPublish === true);
+        if (!canPublish) {
+          return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
         }
       }
 
@@ -8114,7 +8133,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
   // News Analytics Endpoint - Smart statistics and insights
 
   // Publish article
-  app.post("/api/admin/articles/:id/publish", requireAuth, requirePermission("articles.publish"), async (req: any, res) => {
+  // الحارس مخصص: articles.publish أو ناشر موثوق (auto_publish) بوابته
+  // مفتوحة — الموثوق ينشر مواده من المحرر الأساسي وتُخصم من رصيده أدناه.
+  const requirePublishCapability = async (req: any, res: any, next: any) => {
+    try {
+      const perms = await getUserPermissions(req.user.id);
+      if (perms.includes("articles.publish")) return next();
+      if (await trustedPublisherCanPublish(req.user.id)) return next();
+      return res.status(403).json({ message: "ليست لديك صلاحية نشر المقالات" });
+    } catch (err) {
+      console.error("[publish capability] check failed:", err);
+      return res.status(500).json({ message: "تعذر التحقق من الصلاحيات" });
+    }
+  };
+  app.post("/api/admin/articles/:id/publish", requireAuth, requirePublishCapability, async (req: any, res) => {
     try {
       const userId = req.user?.id;
       if (!userId) {

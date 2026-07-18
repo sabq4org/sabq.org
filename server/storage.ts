@@ -4350,6 +4350,20 @@ export class DatabaseStorage implements IStorage {
       if (!linkedPublisherId && authorId === 'DI1H7gaTfZ5mr765EhQNW') {
         linkedPublisherId = '948fdde0-97b0-44ac-872d-639337ebcafa'; // أحمد بديوي -> شركة عنوان الإعلام
       }
+      // مالك الوكالة (publishers.userId) قد لا يحمل linkedPublisherId —
+      // نختم مواده أيضاً حتى تُنسب للوكالة من المحرر الأساسي
+      if (!linkedPublisherId) {
+        try {
+          const [owned] = await db
+            .select({ id: publishers.id })
+            .from(publishers)
+            .where(eq(publishers.userId, authorId))
+            .limit(1);
+          linkedPublisherId = owned?.id ?? null;
+        } catch (err) {
+          console.error('[Publisher] owner publisher lookup failed:', err);
+        }
+      }
       if (linkedPublisherId) {
         (articleWithSlug as any).publisherId = linkedPublisherId;
         (articleWithSlug as any).isPublisherNews = true;

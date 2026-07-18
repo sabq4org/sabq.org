@@ -1267,3 +1267,12 @@ export async function listAgencyReviewQueue(opts: { status?: string; page?: numb
 
   return { articles: rows, total: Number(count) || 0, page, limit };
 }
+
+/**
+ * الناشر الموثوق (auto_publish وبوابته مفتوحة) يملك قدرة نشر فعلية من
+ * المحرر الأساسي دون منح دوره صلاحية articles.publish العامة.
+ */
+export async function trustedPublisherCanPublish(userId: string): Promise<boolean> {
+  const gate = await getPublishingGate(userId);
+  return !!(gate.allowed && gate.publisher?.autoPublish);
+}
