@@ -366,6 +366,10 @@ export const ROLE_PERMISSIONS_MAP: Record<string, string[]> = {
     PERMISSION_CODES.ARTICLES_VIEW,
     PERMISSION_CODES.ARTICLES_CREATE,
     PERMISSION_CODES.ARTICLES_EDIT_OWN,
+    // أدوات الذكاء في المحرر الأساسي (توليد شامل، تدقيق لغوي، تحرير وتوليد)
+    // — الناشر الموثوق يستخدم المحرر الكامل ويحتاجها لتجهيز مواده
+    PERMISSION_CODES.ARTICLES_AI_GENERATE,
+    PERMISSION_CODES.ARTICLES_COMPREHENSIVE_EDIT,
     PERMISSION_CODES.MEDIA_VIEW,
     PERMISSION_CODES.MEDIA_UPLOAD,
     PERMISSION_CODES.ANALYTICS_VIEW_OWN,
