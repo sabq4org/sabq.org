@@ -650,6 +650,8 @@ struct WriterWorkspaceView: View {
             .padding(.top, 8)
             .padding(.bottom, 100)
         }
+        // سحب الإصبع نحو الأسفل يُنزل الكيبورد أثناء الكتابة في استوديو الفكرة
+        .scrollDismissesKeyboard(.interactively)
         .task { await vm.loadStyleProfileIfNeeded() }
         .refreshable { await vm.load() }
     }
