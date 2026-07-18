@@ -164,15 +164,13 @@ export default function OpinionWritersPage() {
       ).length,
       dueSoon: writers.filter((w) => w.commitment === "due_soon").length,
       late: writers.filter((w) => w.commitment === "late").length,
-      choseToday: writers.filter(
-        (w) => w.schedule?.active && w.schedule.weekday === todayWeekday,
-      ).length,
+      chosePublishDay: writers.filter((w) => w.schedule?.active).length,
       inactiveTwoMonths: writers.filter(
         (w) =>
           !w.lastArticle || new Date(w.lastArticle.publishedAt).getTime() < twoMonthsAgo,
       ).length,
     };
-  }, [writers, todayWeekday]);
+  }, [writers]);
 
   const byWeekday = useMemo(() => {
     const map: WriterSummary[][] = Array.from({ length: 7 }, () => []);
@@ -242,9 +240,9 @@ export default function OpinionWritersPage() {
           <Card>
             <CardContent className="p-4">
               <div className="text-2xl font-extrabold tabular-nums text-primary">
-                {kpis.choseToday}
+                {kpis.chosePublishDay}
               </div>
-              <div className="text-sm text-muted-foreground">اختاروا اليوم</div>
+              <div className="text-sm text-muted-foreground">اختاروا يوم النشر</div>
             </CardContent>
           </Card>
           <Card>
