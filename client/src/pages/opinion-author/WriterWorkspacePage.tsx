@@ -176,14 +176,99 @@ type ScheduleBannerData = {
   lastPublishedAt: string | null;
 };
 
+/** بطاقة اختيار الكاتب يومه بنفسه — تظهر مرة واحدة لمن لا يوم له، مع ازدحام كل يوم */
+function WriterDayPicker({ dayLoads }: { dayLoads: number[] }) {
+  const { toast } = useToast();
+  const [picked, setPicked] = useState<number | null>(null);
+
+  const chooseMutation = useMutation({
+    mutationFn: async (weekday: number) =>
+      apiRequest("/api/opinion-author/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ weekday }),
+      }),
+    onSuccess: (_data, weekday) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/schedule"] });
+      toast({
+        title: "تم تسجيل يومك",
+        description: `مقالتك ستُنشر أسبوعياً يوم ${WEEKDAYS_AR[weekday]}`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "تعذر حفظ اليوم",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <Card className="border-r-4 border-r-primary shadow-none" dir="rtl">
+      <CardContent className="space-y-3 p-3 sm:p-4">
+        <div className="flex items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+            <CalendarDays className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-sm font-bold sm:text-base">اختر يومك الأسبوعي للنشر</p>
+            <p className="text-xs text-muted-foreground sm:text-sm">
+              مقالتك ستُنشر في هذا اليوم من كل أسبوع. يُحدد مرة واحدة، وتغييره لاحقاً عبر إدارة
+              التحرير — الأرقام تحت كل يوم توضح عدد الكتّاب المسجلين فيه.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
+          {WEEKDAYS_AR.map((day, i) => (
+            <button
+              key={day}
+              type="button"
+              onClick={() => setPicked(i)}
+              className={`rounded-lg border p-2 text-center transition-colors ${
+                picked === i
+                  ? "border-primary bg-primary/10 font-bold text-primary"
+                  : "border-border bg-muted/30 hover:border-primary/40"
+              }`}
+            >
+              <div className="text-xs sm:text-sm">{day}</div>
+              <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
+                {dayLoads[i] ? `${dayLoads[i]} كاتب` : "شاغر"}
+              </div>
+            </button>
+          ))}
+        </div>
+        <Button
+          size="sm"
+          className="gap-1.5"
+          disabled={picked === null || chooseMutation.isPending}
+          onClick={() => picked !== null && chooseMutation.mutate(picked)}
+        >
+          <CheckCircle2 className="h-4 w-4" />
+          {picked === null ? "اختر يوماً أولاً" : `تثبيت يوم ${WEEKDAYS_AR[picked]}`}
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 /** بانر ثابت أعلى لوحة الكاتب: يومه المخصص وموعد مقالته القادمة، بثلاث حالات */
 function WriterScheduleBanner() {
-  const { data } = useQuery<{ banner: ScheduleBannerData | null }>({
+  const { data } = useQuery<{
+    banner: ScheduleBannerData | null;
+    canChoose?: boolean;
+    dayLoads?: number[];
+  }>({
     queryKey: ["/api/opinion-author/schedule"],
     staleTime: 5 * 60 * 1000,
   });
   const banner = data?.banner;
-  if (!banner) return null;
+  if (!banner) {
+    if (data?.canChoose && Array.isArray(data.dayLoads)) {
+      return <WriterDayPicker dayLoads={data.dayLoads} />;
+    }
+    return null;
+  }
 
   const fmt = (iso: string, withTime = true) =>
     format(new Date(iso), withTime ? "EEEE d MMMM — h:mm a" : "EEEE d MMMM", { locale: ar });

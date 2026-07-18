@@ -13,11 +13,14 @@ import {
   logActivity,
 } from "../rbac";
 import {
+  canSelfAssignSchedule,
   getNextSlotForWriter,
   getWriterArticlesWithStats,
+  getWriterDayLoads,
   getWriterScheduleBanner,
   listOpinionWriters,
   scheduleApprovedOpinionArticle,
+  selfAssignWriterSchedule,
   upsertWriterSchedule,
 } from "../services/opinionWritersService";
 
@@ -144,10 +147,42 @@ router.get(
       if (!(await userHasAnyRole(userId, ["opinion_author"]))) {
         return res.status(403).json({ message: "هذه المساحة خاصة بكتّاب الرأي" });
       }
-      res.json({ banner: await getWriterScheduleBanner(userId) });
+      const banner = await getWriterScheduleBanner(userId);
+      if (banner) return res.json({ banner });
+      // لا يوم محدداً: هل يختار بنفسه؟ ومعه ازدحام كل يوم ليتوزع الكتّاب طبيعياً
+      const canChoose = await canSelfAssignSchedule(userId);
+      res.json({
+        banner: null,
+        canChoose,
+        dayLoads: canChoose ? await getWriterDayLoads() : undefined,
+      });
     } catch (error) {
       console.error("[opinion-writers] writer banner failed:", error);
       res.status(500).json({ message: "تعذر جلب موعد النشر" });
+    }
+  },
+);
+
+// الكاتب يختار يومه بنفسه — مرة واحدة فقط، والتغيير بعدها للإدارة
+router.post(
+  "/api/opinion-author/schedule",
+  requireAuth,
+  async (req: Request, res: Response) => {
+    try {
+      const userId = requestUserId(req);
+      if (!(await userHasAnyRole(userId, ["opinion_author"]))) {
+        return res.status(403).json({ message: "هذه المساحة خاصة بكتّاب الرأي" });
+      }
+      const parsed = z.object({ weekday: z.number().int().min(0).max(6) }).safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "اليوم المحدد غير صالح" });
+      }
+      const result = await selfAssignWriterSchedule(userId, parsed.data.weekday);
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+      res.json({ schedule: result.schedule });
+    } catch (error) {
+      console.error("[opinion-writers] self-assign failed:", error);
+      res.status(500).json({ message: "تعذر حفظ اليوم المحدد" });
     }
   },
 );
