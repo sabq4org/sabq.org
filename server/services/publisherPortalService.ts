@@ -1,12 +1,19 @@
 import { and, desc, eq, gte, or, sql } from "drizzle-orm";
+import bcrypt from "bcrypt";
+import { nanoid } from "nanoid";
 import { db } from "../db";
 import {
   articles,
   publisherCredits,
   publishers,
+  roles,
+  userRoles,
   users,
   type Publisher,
 } from "@shared/schema";
+import { storage } from "../storage";
+import { deductPublisherCreditSafely } from "./publisherCreditService";
+import { invalidatePublishedContent } from "./contentInvalidation";
 
 /**
  * بوابة الناشر (وكالات المحتوى الخارجية).
@@ -93,10 +100,29 @@ const articleListSelection = {
   views: articles.views,
   createdAt: articles.createdAt,
   publishedAt: articles.publishedAt,
+  publisherStatus: articles.publisherStatus,
   publisherSubmittedAt: articles.publisherSubmittedAt,
   publisherApprovedAt: articles.publisherApprovedAt,
   publisherReviewNotes: articles.publisherReviewNotes,
 };
+
+/** تنبيه شخصي للناشر في جرس اللوحة — لا يفشل النشر إن تعذر. */
+export async function notifyPublisherUser(
+  userId: string,
+  payload: { title: string; body: string; deeplink?: string },
+) {
+  try {
+    await storage.createNotification({
+      userId,
+      type: "publisher_article",
+      title: payload.title,
+      body: payload.body,
+      deeplink: payload.deeplink ?? "/dashboard/publisher/articles",
+    });
+  } catch (err) {
+    console.error("[Publisher Portal] notification failed:", err);
+  }
+}
 
 export async function getPortalArticles(
   publisher: Publisher,
@@ -126,6 +152,251 @@ export async function getPortalArticles(
   return { articles: rows, total: Number(count) || 0, page, limit };
 }
 
+/** مادة واحدة لمحرر البوابة — ملكية صارمة (كاتبها فقط). */
+export async function getPortalArticle(userId: string, articleId: string) {
+  const [article] = await db
+    .select()
+    .from(articles)
+    .where(and(eq(articles.id, articleId), eq(articles.authorId, userId)))
+    .limit(1);
+  return article ?? null;
+}
+
+export type SubmitResult =
+  | { ok: false; status: number; message: string; code?: string }
+  | { ok: true; published: boolean; message: string };
+
+/**
+ * إرسال مادة للمراجعة — أو نشرها فوراً إذا كان الناشر موثوقاً (auto_publish).
+ * تُستخدم من زر «إرسال للمراجعة» ومن إعادة الإرسال بعد «تحتاج تعديلات».
+ */
+export async function submitPortalArticle(userId: string, articleId: string): Promise<SubmitResult> {
+  const article = await getPortalArticle(userId, articleId);
+  if (!article) return { ok: false, status: 404, message: "المادة غير موجودة" };
+  if (article.status !== "draft") {
+    return { ok: false, status: 400, message: "لا يمكن إرسال مادة منشورة أو مؤرشفة" };
+  }
+
+  const gate = await getPublishingGate(userId);
+  if (!gate.allowed) {
+    return { ok: false, status: 403, message: gate.message ?? "النشر غير متاح", code: gate.code };
+  }
+  const publisher = gate.publisher;
+  if (!publisher) return { ok: false, status: 404, message: "لم يتم العثور على حساب الناشر" };
+
+  const now = new Date();
+
+  if (publisher.autoPublish) {
+    const [published] = await db
+      .update(articles)
+      .set({
+        status: "published",
+        publishedAt: now,
+        updatedAt: now,
+        publisherId: publisher.id,
+        isPublisherNews: true,
+        publisherStatus: "approved",
+        publisherSubmittedAt: article.publisherSubmittedAt ?? now,
+        publisherApprovedAt: now,
+        publisherApprovedBy: userId,
+      })
+      .where(and(eq(articles.id, articleId), eq(articles.status, "draft")))
+      .returning();
+    if (!published) return { ok: false, status: 409, message: "تعذر نشر المادة — حاول مجدداً" };
+
+    await deductPublisherCreditSafely({ authorUserId: userId, articleId, actorId: userId });
+    invalidatePublishedContent({
+      articleSlug: published.slug,
+      isBreaking: false,
+      reason: `publisher-auto-publish:${articleId}`,
+    });
+    await notifyPublisherUser(userId, {
+      title: "نُشر خبرك",
+      body: `«${published.title}» نُشر مباشرة وخُصم من رصيد باقتكم.`,
+    });
+    return { ok: true, published: true, message: "نُشرت المادة مباشرة وخُصم رصيد واحد" };
+  }
+
+  await db
+    .update(articles)
+    .set({
+      publisherStatus: "pending",
+      publisherSubmittedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(articles.id, articleId));
+  return { ok: true, published: false, message: "أُرسلت المادة للمراجعة التحريرية" };
+}
+
+/** إجراء إداري: إعادة المادة للناشر بملاحظات بدل الرفض النهائي. */
+export async function requestArticleChanges(articleId: string, adminId: string, notes: string) {
+  const [article] = await db
+    .select({ id: articles.id, title: articles.title, authorId: articles.authorId, status: articles.status })
+    .from(articles)
+    .where(eq(articles.id, articleId))
+    .limit(1);
+  if (!article) return { ok: false as const, status: 404, message: "المادة غير موجودة" };
+  if (article.status !== "draft") {
+    return { ok: false as const, status: 400, message: "طلب التعديلات متاح للمواد غير المنشورة فقط" };
+  }
+
+  await db
+    .update(articles)
+    .set({
+      publisherStatus: "needs_changes",
+      publisherReviewedBy: adminId,
+      publisherReviewedAt: new Date(),
+      publisherReviewNotes: notes,
+      updatedAt: new Date(),
+    })
+    .where(eq(articles.id, articleId));
+
+  if (article.authorId) {
+    await notifyPublisherUser(article.authorId, {
+      title: "مادتك تحتاج تعديلات",
+      body: `«${article.title}»: ${notes.slice(0, 180)}`,
+    });
+  }
+  return { ok: true as const, message: "أُعيدت المادة للناشر مع الملاحظات" };
+}
+
+// ============================================
+// مستخدمو الوكالة (موظفو الناشر)
+// المالك = publishers.userId؛ الموظفون = users.linkedPublisherId.
+// أي موظف مرتبط: يدخل بوابة الناشر، تُنسب مواده للوكالة تلقائياً
+// (storage.createArticle)، ويُخصم نشره من رصيدها.
+// ============================================
+
+const memberSelection = {
+  id: users.id,
+  email: users.email,
+  firstName: users.firstName,
+  lastName: users.lastName,
+  profileImageUrl: users.profileImageUrl,
+  role: users.role,
+  status: users.status,
+};
+
+export async function listPublisherMembers(publisherId: string) {
+  const [publisher] = await db
+    .select()
+    .from(publishers)
+    .where(eq(publishers.id, publisherId))
+    .limit(1);
+  if (!publisher) return null;
+
+  const [owners, linked] = await Promise.all([
+    publisher.userId
+      ? db.select(memberSelection).from(users).where(eq(users.id, publisher.userId)).limit(1)
+      : Promise.resolve([]),
+    db
+      .select(memberSelection)
+      .from(users)
+      .where(eq(users.linkedPublisherId, publisherId))
+      .orderBy(users.firstName),
+  ]);
+
+  const owner = owners[0] ?? null;
+  return [
+    ...(owner ? [{ ...owner, isOwner: true }] : []),
+    ...linked.filter((m) => m.id !== owner?.id).map((m) => ({ ...m, isOwner: false })),
+  ];
+}
+
+type MemberResult =
+  | { ok: false; status: number; message: string }
+  | { ok: true; message: string };
+
+/** ربط حساب موجود بالوكالة عبر بريده الإلكتروني. */
+export async function addPublisherMemberByEmail(publisherId: string, email: string): Promise<MemberResult> {
+  const normalized = email.trim().toLowerCase();
+  const [user] = await db
+    .select({ id: users.id, linkedPublisherId: users.linkedPublisherId })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${normalized}`)
+    .limit(1);
+  if (!user) return { ok: false, status: 404, message: "لا يوجد مستخدم بهذا البريد الإلكتروني" };
+
+  if (user.linkedPublisherId === publisherId) {
+    return { ok: false, status: 400, message: "هذا المستخدم مرتبط بالوكالة بالفعل" };
+  }
+  if (user.linkedPublisherId) {
+    return { ok: false, status: 409, message: "هذا المستخدم مرتبط بوكالة أخرى — فكّ ربطه أولاً" };
+  }
+  const [ownsOther] = await db
+    .select({ id: publishers.id })
+    .from(publishers)
+    .where(eq(publishers.userId, user.id))
+    .limit(1);
+  if (ownsOther && ownsOther.id !== publisherId) {
+    return { ok: false, status: 409, message: "هذا المستخدم مالك وكالة أخرى ولا يمكن ربطه كموظف" };
+  }
+
+  await db.update(users).set({ linkedPublisherId: publisherId }).where(eq(users.id, user.id));
+  return { ok: true, message: "رُبط المستخدم بالوكالة بنجاح" };
+}
+
+/** إنشاء حساب موظف جديد بدور «ناشر» مربوط بالوكالة. */
+export async function createPublisherMember(
+  publisherId: string,
+  data: { email: string; password: string; firstName: string; lastName: string },
+): Promise<MemberResult> {
+  const normalized = data.email.trim().toLowerCase();
+  const [existing] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${normalized}`)
+    .limit(1);
+  if (existing) {
+    return { ok: false, status: 409, message: "البريد الإلكتروني مستخدم مسبقاً — استخدم «ربط حساب موجود»" };
+  }
+
+  const passwordHash = await bcrypt.hash(data.password, 12);
+  const userId = nanoid();
+  await db.insert(users).values({
+    id: userId,
+    email: data.email.trim(),
+    passwordHash,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    role: "publisher",
+    authProvider: "local",
+    isProfileComplete: true,
+    status: "active",
+    emailVerified: true,
+    linkedPublisherId: publisherId,
+  } as any);
+
+  const [publisherRole] = await db.select().from(roles).where(eq(roles.name, "publisher")).limit(1);
+  if (publisherRole) {
+    await db.insert(userRoles).values({ userId, roleId: publisherRole.id });
+  }
+
+  return { ok: true, message: "أُنشئ حساب الموظف ورُبط بالوكالة" };
+}
+
+/** فك ربط موظف عن الوكالة (لا يمكن فك المالك). */
+export async function removePublisherMember(publisherId: string, memberId: string): Promise<MemberResult> {
+  const [publisher] = await db
+    .select({ userId: publishers.userId })
+    .from(publishers)
+    .where(eq(publishers.id, publisherId))
+    .limit(1);
+  if (!publisher) return { ok: false, status: 404, message: "الوكالة غير موجودة" };
+  if (publisher.userId === memberId) {
+    return { ok: false, status: 400, message: "لا يمكن فك ربط مالك الوكالة" };
+  }
+
+  const [updated] = await db
+    .update(users)
+    .set({ linkedPublisherId: null })
+    .where(and(eq(users.id, memberId), eq(users.linkedPublisherId, publisherId)))
+    .returning({ id: users.id });
+  if (!updated) return { ok: false, status: 404, message: "المستخدم غير مرتبط بهذه الوكالة" };
+
+  return { ok: true, message: "فُك ربط الموظف عن الوكالة" };
+}
+
 export async function getPortalOverview(userId: string) {
   const publisher = await resolvePublisherForUser(userId);
   if (!publisher) return null;
@@ -149,6 +420,8 @@ export async function getPortalOverview(userId: string) {
         draftArticles: sql<number>`count(*) filter (where ${articles.status} = 'draft')`,
         publishedThisMonth: sql<number>`count(*) filter (where ${articles.status} = 'published' and ${articles.publishedAt} >= ${monthStart})`,
         totalViews: sql<number>`coalesce(sum(${articles.views}) filter (where ${articles.status} = 'published'), 0)`,
+        pendingReview: sql<number>`count(*) filter (where ${articles.status} = 'draft' and ${articles.publisherStatus} = 'pending')`,
+        needsChanges: sql<number>`count(*) filter (where ${articles.status} = 'draft' and ${articles.publisherStatus} = 'needs_changes')`,
       })
       .from(articles)
       .where(condition),
@@ -193,6 +466,15 @@ export async function getPortalOverview(userId: string) {
 
   // شارات «يتطلب انتباهك» تُحسب في الخادم لتبقى الواجهة عرضاً فقط
   const attention: Array<{ type: string; severity: "warning" | "critical"; message: string }> = [];
+
+  const needsChangesCount = Number(stats?.needsChanges) || 0;
+  if (needsChangesCount > 0) {
+    attention.push({
+      type: "needs_changes",
+      severity: "warning",
+      message: `لديك ${needsChangesCount} ${needsChangesCount === 1 ? "مادة تحتاج" : "مواد تحتاج"} تعديلات من المحرر — راجع الملاحظات وأعد الإرسال.`,
+    });
+  }
 
   if (publisher.publishingEndsAt) {
     const daysLeft = Math.ceil((publisher.publishingEndsAt.getTime() - now.getTime()) / 86_400_000);
@@ -265,6 +547,8 @@ export async function getPortalOverview(userId: string) {
       draftArticles: Number(stats?.draftArticles) || 0,
       publishedThisMonth: Number(stats?.publishedThisMonth) || 0,
       totalViews: Number(stats?.totalViews) || 0,
+      pendingReview: Number(stats?.pendingReview) || 0,
+      needsChanges: needsChangesCount,
     },
     activeCredit: activeCredit ?? null,
     recentArticles,

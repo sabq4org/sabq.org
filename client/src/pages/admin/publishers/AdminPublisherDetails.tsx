@@ -10,6 +10,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { Separator } from "@/components/ui/separator";
 import { AddCreditPackageDialog } from "@/components/admin/publishers/AddCreditPackageDialog";
 import { CreatePublisherDialog } from "@/components/admin/publishers/CreatePublisherDialog";
+import { PublisherMembersCard } from "@/components/admin/publishers/PublisherMembersCard";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
@@ -342,6 +343,9 @@ export default function AdminPublisherDetails() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Agency Members */}
+      <PublisherMembersCard publisherId={publisherId!} />
 
       {/* Credit Packages */}
       <Card>

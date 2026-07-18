@@ -73,7 +73,7 @@ import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sen
 import { awardPoints } from "./services/loyalty";
 import { safeErrorPayload } from "./utils/safeError";
 import { deductPublisherCreditSafely } from "./services/publisherCreditService";
-import { getPublishingGate } from "./services/publisherPortalService";
+import { getPublishingGate, submitPortalArticle, notifyPublisherUser } from "./services/publisherPortalService";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
@@ -32123,14 +32123,29 @@ Sitemap: https://sabq.org/sitemap-news.xml
           return res.status(403).json({ message: gate.message, code: gate.code });
         }
 
-        // Publishers can only create drafts
+        // Publishers can only create drafts. Review/attribution fields are
+        // server-owned — strip them so a publisher can't forge approval state.
         const articleData = insertArticleSchema.parse({
           ...req.body,
           authorId: req.user.id,
           status: 'draft',
+          publisherStatus: null,
+          publisherReviewedBy: null,
+          publisherReviewedAt: null,
+          publisherReviewNotes: null,
+          publisherApprovedAt: null,
+          publisherApprovedBy: null,
+          publisherCreditDeducted: false,
         });
-        
+
         const article = await storage.createArticle(articleData);
+
+        // حفظ وإرسال للمراجعة بطلب واحد (زر «إرسال للمراجعة» في محرر البوابة).
+        // للناشر الموثوق (auto_publish) يعني ذلك النشر الفوري مع خصم الرصيد.
+        let submitResult: Awaited<ReturnType<typeof submitPortalArticle>> | null = null;
+        if (req.body?.submitForReview === true) {
+          submitResult = await submitPortalArticle(req.user.id, article.id);
+        }
         
         // Invalidate caches when articles are created
         memoryCache.invalidatePattern('^homepage');
@@ -32151,8 +32166,17 @@ Sitemap: https://sabq.org/sitemap-news.xml
           entityId: article.id,
           newValue: articleData as any,
         });
-        
-        res.status(201).json(article);
+
+        res.status(201).json({
+          ...article,
+          submit: submitResult
+            ? {
+                ok: submitResult.ok,
+                published: submitResult.ok ? submitResult.published : false,
+                message: submitResult.message,
+              }
+            : null,
+        });
       } catch (error: any) {
         console.error("Error creating article:", error);
         if (error.name === 'ZodError') {
@@ -32193,6 +32217,12 @@ Sitemap: https://sabq.org/sitemap-news.xml
               "authorId", "submitterId", "reporterId",
               "newsType", "isFeatured", "views",
               "publishedAt", "displayOrder", "hideFromHomepage",
+              // review/attribution state is server-owned — a publisher must
+              // not be able to forge approval or agency linkage
+              "publisherStatus", "publisherReviewedBy", "publisherReviewedAt",
+              "publisherReviewNotes", "publisherSubmittedAt",
+              "publisherApprovedAt", "publisherApprovedBy",
+              "publisherId", "isPublisherNews", "publisherCreditDeducted",
             ],
           }),
           status: 'draft' as const, // Ensure it stays draft
@@ -32361,6 +32391,19 @@ Sitemap: https://sabq.org/sitemap-news.xml
           reason: `publisher-approve:${article.id}`,
         });
 
+        // حالة المراجعة + تنبيه الناشر
+        await storage.updateArticle(article.id, {
+          publisherStatus: 'approved',
+          publisherReviewedBy: req.user.id,
+          publisherReviewedAt: new Date(),
+        } as any);
+        if (article.authorId) {
+          await notifyPublisherUser(article.authorId, {
+            title: "تمت الموافقة على مادتك ونشرها",
+            body: `«${article.title}» أصبح منشوراً الآن على سبق.`,
+          });
+        }
+
         // Log activity (outside transaction - for audit trail only)
         await logActivity({
           userId: req.user.id,
@@ -32422,7 +32465,20 @@ Sitemap: https://sabq.org/sitemap-news.xml
         // Archive the article (reject)
         const rejectedArticle = await storage.updateArticle(req.params.id, {
           status: 'archived',
-        });
+          publisherStatus: 'rejected',
+          publisherReviewedBy: req.user.id,
+          publisherReviewedAt: new Date(),
+          publisherReviewNotes: reason || null,
+        } as any);
+
+        if (article.authorId) {
+          await notifyPublisherUser(article.authorId, {
+            title: "رُفضت مادتك",
+            body: reason
+              ? `«${article.title}»: ${String(reason).slice(0, 180)}`
+              : `«${article.title}» رُفضت من فريق التحرير.`,
+          });
+        }
         
         // Invalidate caches when articles are updated
         memoryCache.invalidatePattern('^homepage');
@@ -32530,6 +32586,19 @@ Sitemap: https://sabq.org/sitemap-news.xml
           reason: `publisher-approve:${article.id}`,
         });
 
+        // حالة المراجعة + تنبيه الناشر
+        await storage.updateArticle(article.id, {
+          publisherStatus: 'approved',
+          publisherReviewedBy: req.user.id,
+          publisherReviewedAt: new Date(),
+        } as any);
+        if (article.authorId) {
+          await notifyPublisherUser(article.authorId, {
+            title: "تمت الموافقة على مادتك ونشرها",
+            body: `«${article.title}» أصبح منشوراً الآن على سبق.`,
+          });
+        }
+
         await logActivity({
           userId: req.user.id,
           action: 'approve_publish',
@@ -32588,7 +32657,20 @@ Sitemap: https://sabq.org/sitemap-news.xml
 
         const rejectedArticle = await storage.updateArticle(req.params.id, {
           status: 'archived',
-        });
+          publisherStatus: 'rejected',
+          publisherReviewedBy: req.user.id,
+          publisherReviewedAt: new Date(),
+          publisherReviewNotes: reason || null,
+        } as any);
+
+        if (article.authorId) {
+          await notifyPublisherUser(article.authorId, {
+            title: "رُفضت مادتك",
+            body: reason
+              ? `«${article.title}»: ${String(reason).slice(0, 180)}`
+              : `«${article.title}» رُفضت من فريق التحرير.`,
+          });
+        }
         
         // Invalidate caches when articles are updated
         memoryCache.invalidatePattern('^homepage');
