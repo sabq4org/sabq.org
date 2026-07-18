@@ -37,6 +37,9 @@ const MAX_ARTICLES = Number(process.env.COVERAGE_GAP_MAX_ARTICLES || 300);
 const EMBED_BATCH = 100;
 const KEYWORD_OVERLAP_THRESHOLD = 0.6;
 const STALE_MS = 2 * 60 * 1000; // دقيقتان — التحديث الكسول من مسار GET
+// دورة الرادار تنبض كل دقيقة — بدون حد أدنى خاص بها كانت المطابقة تعيد
+// تضمين ~360 نصًا كل دقيقة (~12$/يوم embeddings). عشر دقائق تكفي للفجوات.
+const RADAR_TRIGGER_MIN_MS = Number(process.env.COVERAGE_GAP_RADAR_MIN_INTERVAL_MS || 10 * 60 * 1000);
 
 function gapMinRelevance(): number {
   const n = Number(process.env.RADAR_GAP_MIN_RELEVANCE ?? 50);
@@ -99,14 +102,35 @@ interface ArticleCandidate {
 
 // ---------- تضمين المتجهات عبر بوابة الذكاء (مع تسجيل الاستخدام تلقائيًا) ----------
 
+// كاش المتجهات بنص المادة: القصص والمقالات نفسها تتكرر بين التحديثات
+// (نافذة 72 ساعة / 7 أيام)، فلا يُضمَّن إلا الجديد فعلًا.
+const EMBED_CACHE_MAX = 4000;
+const embedCache = new Map<string, number[]>();
+
 async function embedTexts(texts: string[]): Promise<number[][]> {
-  const vectors: number[][] = [];
-  for (let i = 0; i < texts.length; i += EMBED_BATCH) {
-    const slice = texts.slice(i, i + EMBED_BATCH);
-    const res = await aiGateway.embed({ feature: FEATURE_KEY, input: slice, timeoutMs: 60_000 });
-    vectors.push(...res.embeddings);
+  const missing: string[] = [];
+  for (const text of texts) {
+    const hit = embedCache.get(text);
+    if (hit) {
+      // تحديث حداثة المدخل (Map يحفظ ترتيب الإدراج) حتى لا يُزاح وهو ساخن
+      embedCache.delete(text);
+      embedCache.set(text, hit);
+    } else if (!missing.includes(text)) {
+      missing.push(text);
+    }
   }
-  return vectors;
+  for (let i = 0; i < missing.length; i += EMBED_BATCH) {
+    const slice = missing.slice(i, i + EMBED_BATCH);
+    const res = await aiGateway.embed({ feature: FEATURE_KEY, input: slice, timeoutMs: 60_000 });
+    slice.forEach((text, j) => embedCache.set(text, res.embeddings[j]));
+  }
+  const result = texts.map((text) => embedCache.get(text)!);
+  while (embedCache.size > EMBED_CACHE_MAX) {
+    const oldest = embedCache.keys().next().value;
+    if (oldest === undefined) break;
+    embedCache.delete(oldest);
+  }
+  return result;
 }
 
 // ---------- تطابق الكلمات (السقوط عند غياب المتجهات) ----------
@@ -370,6 +394,9 @@ async function refreshCoverageGapsV2(
 
 export async function refreshCoverageGaps(trigger = "manual"): Promise<CoverageGapRefreshSummary | null> {
   if (isRunning) return null;
+  // نبض الرادار الدقيق لا يعني مطابقة فجوات كل دقيقة — حد أدنى خاص به،
+  // بينما يبقى التشغيل اليدوي (زر التحديث/الـ API) فوريًا دائمًا.
+  if (trigger === "radar-cycle" && Date.now() - lastRunAt < RADAR_TRIGGER_MIN_MS) return null;
   isRunning = true;
   try {
     const since = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
