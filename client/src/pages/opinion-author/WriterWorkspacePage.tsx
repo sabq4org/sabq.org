@@ -17,6 +17,14 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
 import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
 import {
+  WEEKDAYS_AR,
+  WriterDayPicker,
+  WriterPriorityRail,
+  editorialNotificationStyle,
+  useIsWriterRail,
+  type ScheduleBannerData,
+} from "./WriterPriorityRail";
+import {
   ContributorStatsRow,
   PerformanceChart,
   BestArticleCard,
@@ -142,18 +150,7 @@ type ReviewResult = {
   strengths?: string[];
 };
 
-type EditorialNotification = {
-  id: string;
-  type: "scheduled" | "published" | "rejected" | "needs_revision" | "archived" | "deleted" | string;
-  title: string;
-  body: string;
-  articleId: string | null;
-  articleTitle: string | null;
-  deepLink: string | null;
-  reviewerNote: string | null;
-  readAt: string | null;
-  createdAt: string;
-};
+type EditorialNotification = import("./WriterPriorityRail").EditorialNotification;
 
 const EMPTY_COMPARISON = { viewsThisMonth: 0, viewsLastMonth: 0, likesThisMonth: 0, likesLastMonth: 0 };
 
@@ -162,94 +159,6 @@ function greeting(): string {
   if (hour < 12) return "صباح الإبداع";
   if (hour < 18) return "مساء الفكرة الجميلة";
   return "مساء الإبداع";
-}
-
-const WEEKDAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-
-type ScheduleBannerData = {
-  weekday: number;
-  publishTime: string;
-  nextPublishAt: string;
-  submitDeadline: string;
-  state: "ok" | "reminder" | "late";
-  hasUpcoming: boolean;
-  lastPublishedAt: string | null;
-};
-
-/** بطاقة اختيار الكاتب يومه بنفسه — تظهر مرة واحدة لمن لا يوم له، مع ازدحام كل يوم */
-function WriterDayPicker({ dayLoads }: { dayLoads: number[] }) {
-  const { toast } = useToast();
-  const [picked, setPicked] = useState<number | null>(null);
-
-  const chooseMutation = useMutation({
-    mutationFn: async (weekday: number) =>
-      apiRequest("/api/opinion-author/schedule", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weekday }),
-      }),
-    onSuccess: (_data, weekday) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/opinion-author/schedule"] });
-      toast({
-        title: "تم تسجيل يومك",
-        description: `مقالتك ستُنشر أسبوعياً يوم ${WEEKDAYS_AR[weekday]}`,
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "تعذر حفظ اليوم",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  return (
-    <Card className="border-r-4 border-r-primary shadow-none" dir="rtl">
-      <CardContent className="space-y-3 p-3 sm:p-4">
-        <div className="flex items-start gap-3">
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-            <CalendarDays className="h-5 w-5" />
-          </span>
-          <div>
-            <p className="text-sm font-bold sm:text-base">اختر يومك الأسبوعي للنشر</p>
-            <p className="text-xs text-muted-foreground sm:text-sm">
-              مقالتك ستُنشر في هذا اليوم من كل أسبوع. يُحدد مرة واحدة، وتغييره لاحقاً عبر إدارة
-              التحرير — الأرقام تحت كل يوم توضح عدد الكتّاب المسجلين فيه.
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-7">
-          {WEEKDAYS_AR.map((day, i) => (
-            <button
-              key={day}
-              type="button"
-              onClick={() => setPicked(i)}
-              className={`rounded-lg border p-2 text-center transition-colors ${
-                picked === i
-                  ? "border-primary bg-primary/10 font-bold text-primary"
-                  : "border-border bg-muted/30 hover:border-primary/40"
-              }`}
-            >
-              <div className="text-xs sm:text-sm">{day}</div>
-              <div className="mt-0.5 text-[10px] text-muted-foreground sm:text-xs">
-                {dayLoads[i] ? `${dayLoads[i]} كاتب` : "شاغر"}
-              </div>
-            </button>
-          ))}
-        </div>
-        <Button
-          size="sm"
-          className="gap-1.5"
-          disabled={picked === null || chooseMutation.isPending}
-          onClick={() => picked !== null && chooseMutation.mutate(picked)}
-        >
-          <CheckCircle2 className="h-4 w-4" />
-          {picked === null ? "اختر يوماً أولاً" : `تثبيت يوم ${WEEKDAYS_AR[picked]}`}
-        </Button>
-      </CardContent>
-    </Card>
-  );
 }
 
 /** بانر ثابت أعلى لوحة الكاتب: يومه المخصص وموعد مقالته القادمة، بثلاث حالات */
@@ -334,6 +243,8 @@ export default function WriterWorkspacePage() {
   const [, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
+  // شريط الأولويات للجوال — تطبيق iOS أولاً (أو ?writerRail=1 للاختبار)
+  const railMode = useIsWriterRail();
   const [activeTab, setActiveTab] = useState("today");
   const [ideaInput, setIdeaInput] = useState("");
   const [coachResult, setCoachResult] = useState<CoachResult | null>(null);
@@ -468,7 +379,45 @@ export default function WriterWorkspacePage() {
     <DashboardLayout>
       <div className="relative min-h-full w-full text-right" dir="rtl" style={{ direction: "rtl" }}>
         <div className="w-full space-y-3 p-1 sm:space-y-5 sm:p-0" dir="rtl">
-          <WriterScheduleBanner />
+          {railMode ? (
+            <WriterPriorityRail
+              notifications={unreadNotifications}
+              onOpenNotification={openEditorialNotification}
+              onMarkAllRead={() => markAllNotificationsReadMutation.mutate()}
+              markingAll={markAllNotificationsReadMutation.isPending}
+            />
+          ) : (
+            <WriterScheduleBanner />
+          )}
+          {railMode ? (
+            <section className="rounded-xl border border-border bg-card p-3" dir="rtl">
+              <div className="flex items-center justify-between gap-2">
+                <h1 className="min-w-0 truncate text-lg font-bold tracking-tight">
+                  {greeting()} يا {firstName}
+                </h1>
+                <Button size="sm" className="shrink-0 gap-1.5" onClick={() => navigate("/dashboard/articles/new")}>
+                  <PenLine className="h-4 w-4" /> ابدأ الكتابة
+                </Button>
+              </div>
+              <div className="-mx-1 mt-2.5 flex gap-2 overflow-x-auto px-1 pb-0.5">
+                <Button variant="outline" size="sm" className="shrink-0 gap-1.5" onClick={() => navigate("/dashboard/opinion-author/guide")}>
+                  <BookOpen className="h-4 w-4 text-primary" /> دليل الكاتب
+                </Button>
+                <WriterInquiriesButton className="shrink-0 justify-center" />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5"
+                  onClick={() => {
+                    setActiveTab("ideas");
+                    requestIdeas();
+                  }}
+                >
+                  <Lightbulb className="h-4 w-4 text-primary" /> ساعدني في اختيار فكرة
+                </Button>
+              </div>
+            </section>
+          ) : (
           <section className="rounded-xl border border-border bg-card p-3 sm:rounded-2xl sm:p-5 md:p-6" dir="rtl">
             <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-end lg:justify-between">
               <div className="space-y-2 sm:space-y-3">
@@ -513,6 +462,7 @@ export default function WriterWorkspacePage() {
               </div>
             </div>
           </section>
+          )}
 
           <Tabs value={activeTab} onValueChange={setActiveTab} dir="rtl">
             <TabsList dir="rtl" className="grid h-auto w-full grid-cols-4 gap-0.5 rounded-lg border border-border bg-muted/50 p-1 md:w-fit md:min-w-[480px]">
@@ -532,7 +482,7 @@ export default function WriterWorkspacePage() {
             </TabsList>
 
             <TabsContent value="today" className="mt-3 space-y-3 sm:mt-5 sm:space-y-5">
-              {unreadNotifications.length > 0 && <EditorialAlertsPanel notifications={unreadNotifications} onOpen={openEditorialNotification} onMarkAll={() => markAllNotificationsReadMutation.mutate()} markingAll={markAllNotificationsReadMutation.isPending} />}
+              {!railMode && unreadNotifications.length > 0 && <EditorialAlertsPanel notifications={unreadNotifications} onOpen={openEditorialNotification} onMarkAll={() => markAllNotificationsReadMutation.mutate()} markingAll={markAllNotificationsReadMutation.isPending} />}
               <div className="grid gap-3 sm:gap-5 lg:grid-cols-3">
                 <Card className="border-border shadow-none lg:col-span-2">
                   <CardHeader className="space-y-1 p-3 sm:p-6">
@@ -875,16 +825,6 @@ function TrackingMetric({ icon: Icon, label, value, tone = "default" }: { icon: 
       <p className="mt-1.5 text-[11px] font-medium text-muted-foreground sm:mt-2 sm:text-xs">{label}</p>
     </div>
   );
-}
-
-function editorialNotificationStyle(type: EditorialNotification["type"]) {
-  if (type === "published") return { icon: CheckCircle2, label: "تم النشر", item: "border-border bg-muted/30", iconClass: "text-primary" };
-  if (type === "scheduled") return { icon: CalendarClock, label: "تمت الجدولة", item: "border-border bg-primary/5 dark:border-border dark:bg-primary/10", iconClass: "text-primary dark:text-primary" };
-  if (type === "needs_revision") return { icon: Edit3, label: "ملاحظات تحريرية", item: "border-warning/40 bg-warning/10 dark:border-border dark:bg-warning/10", iconClass: "text-warning dark:text-warning" };
-  if (type === "survey_invite") return { icon: ClipboardList, label: "دعوة استطلاع", item: "border-primary/40 bg-primary/5 dark:border-border dark:bg-primary/10", iconClass: "text-primary" };
-  if (type === "rejected" || type === "deleted" || type === "archived") return { icon: CircleX, label: type === "deleted" ? "حُذف نهائيًا" : "غير صالح للنشر", item: "border-destructive/30 bg-destructive/10 dark:border-border dark:bg-destructive/10", iconClass: "text-destructive" };
-  // أنواع مستقبلية غير معروفة: عرض محايد بدل الوقوع على النمط الأحمر
-  return { icon: BellRing, label: "تنبيه", item: "border-border bg-muted/30", iconClass: "text-muted-foreground" };
 }
 
 function EditorialAlertsPanel({ notifications, onOpen, onMarkAll, markingAll }: { notifications: EditorialNotification[]; onOpen: (notification: EditorialNotification) => void; onMarkAll: () => void; markingAll: boolean }) {
