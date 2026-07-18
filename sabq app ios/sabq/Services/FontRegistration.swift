@@ -1,6 +1,7 @@
 import Foundation
 import CoreText
 import SwiftUI
+import UIKit
 
 // Registers the bundled IBM Plex Sans Arabic weights at app launch so
 // `.font(.custom("IBMPlexSansArabic-…", size:))` works everywhere. We
@@ -23,6 +24,34 @@ enum SabqFonts {
     /// Slightly lighter weight for sub-headings inside articles.
     nonisolated static func subhead(size: CGFloat) -> Font {
         .custom(semibold, size: size)
+    }
+
+    /// UIKit counterparts for `SabqRTLText` (UILabel) — نفس عائلات IBM Plex.
+    nonisolated static func uiHeadline(size: CGFloat) -> UIFont {
+        UIFont(name: bold, size: size) ?? .boldSystemFont(ofSize: size)
+    }
+
+    nonisolated static func uiSubhead(size: CGFloat) -> UIFont {
+        UIFont(name: semibold, size: size) ?? .systemFont(ofSize: size, weight: .semibold)
+    }
+
+    nonisolated static func uiApp(size: CGFloat, weight: Font.Weight = .regular) -> UIFont {
+        let isCaption = size <= 13
+        let name: String
+        switch weight {
+        case .ultraLight, .thin, .light, .regular, .medium:
+            name = regular
+        case .semibold:
+            name = isCaption ? regular : semibold
+        case .bold:
+            name = isCaption ? regular : semibold
+        case .heavy, .black:
+            name = isCaption ? regular : bold
+        default:
+            name = regular
+        }
+        let fallback: UIFont.Weight = (name == bold) ? .bold : (name == semibold ? .semibold : .regular)
+        return UIFont(name: name, size: size) ?? .systemFont(ofSize: size, weight: fallback)
     }
 
     /// الخط الموحّد للتطبيق كله — يُرجع متغيّر IBM Plex Sans Arabic المناسب
