@@ -24,6 +24,7 @@ import {
   requestArticleChanges,
   resolvePublisherForUser,
   runPublisherDailyAlerts,
+  seedDefaultGuideSections,
   sendPublisherMonthlyReports,
   submitPortalArticle,
   updateGuideSection,
@@ -345,6 +346,17 @@ router.post("/api/admin/publishers/guide", requireAuth, requirePublisherManageme
   } catch (error) {
     console.error("[Publisher Portal] guide create failed:", error);
     res.status(500).json({ message: "تعذر إضافة القسم" });
+  }
+});
+
+/** زراعة المحتوى الاحترافي الافتراضي — يتخطى العناوين الموجودة */
+router.post("/api/admin/publishers/guide/seed-defaults", requireAuth, requirePublisherManagement, async (req, res) => {
+  try {
+    const result = await seedDefaultGuideSections((req.user as { id: string }).id);
+    res.status(201).json(result);
+  } catch (error) {
+    console.error("[Publisher Portal] guide seed failed:", error);
+    res.status(500).json({ message: "تعذر زراعة أقسام الدليل الافتراضية" });
   }
 });
 
