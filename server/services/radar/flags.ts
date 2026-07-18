@@ -1,5 +1,15 @@
 /** أعلام تشغيل رادار المرحلة أ/ب — بلا آثار جانبية */
 
+/**
+ * قفل إيقاف إجباري للرادار — يغلب RADAR_ENABLED وأي تشغيل يدوي/آلي.
+ * غيّره إلى false فقط عند إعادة تفعيل الرصد عن قصد في الكود.
+ */
+export const RADAR_FORCE_DISABLED = true;
+
+export function isRadarForceDisabled(): boolean {
+  return RADAR_FORCE_DISABLED;
+}
+
 export function isClusteringEnabled(): boolean {
   return process.env.RADAR_CLUSTERING_ENABLED === "true";
 }

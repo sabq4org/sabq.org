@@ -27,10 +27,13 @@ import {
   updateSource,
 } from "../services/radar/repo";
 import { fetchSingleSource, runRadarCycle } from "../services/radar/cycle";
+import { isRadarForceDisabled } from "../services/radar/flags";
 import { transformItem } from "../services/radar/transformer";
 import { exportItemToArticle } from "../services/radar/exporter";
 import { isTelegramConfigured } from "../services/radar/alerts";
 import { detectWatchType, xProvidersConfigured } from "../services/radar/xProvider";
+
+const RADAR_DISABLED_MESSAGE = "الرادار متوقف إجبارياً — الجلب معطّل";
 
 const SYSTEM_ADMIN_ONLY = requireRole(
   "system_admin",
@@ -217,6 +220,9 @@ export function registerRadarRoutes(app: Express) {
   });
 
   app.post("/api/radar/sources/:id/fetch", requireAuth, canManage, async (req, res) => {
+    if (isRadarForceDisabled()) {
+      return res.status(503).json({ message: RADAR_DISABLED_MESSAGE, forceDisabled: true });
+    }
     try {
       const inserted = await fetchSingleSource(String(req.params.id));
       res.json({ inserted });
@@ -307,16 +313,17 @@ export function registerRadarRoutes(app: Express) {
         region: region ?? null,
         weight: weight ?? 1,
       });
-      // جلبة أولى فورية — المحرر يرى النتيجة الآن لا بعد دورة الكرون؛
-      // فشلها (مفتاح ناقص/استعلام خاطئ) لا يلغي الرصدة ويظهر في lastError
+      // جلبة أولى فورية — معطّلة أثناء القفل الإجباري
       let inserted: number | null = null;
       let fetchError: string | null = null;
-      try {
-        inserted = await fetchSingleSource(watch.id);
-      } catch (error) {
-        fetchError = error instanceof Error ? error.message : String(error);
+      if (!isRadarForceDisabled()) {
+        try {
+          inserted = await fetchSingleSource(watch.id);
+        } catch (error) {
+          fetchError = error instanceof Error ? error.message : String(error);
+        }
       }
-      res.status(201).json({ watch, inserted, fetchError });
+      res.status(201).json({ watch, inserted, fetchError, forceDisabled: isRadarForceDisabled() });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (/duplicate|unique/i.test(message)) {
@@ -379,6 +386,9 @@ export function registerRadarRoutes(app: Express) {
   // ---------- تشغيل يدوي لدورة كاملة (تشخيص/تجربة) ----------
 
   app.post("/api/radar/run", requireAuth, canManage, async (_req, res) => {
+    if (isRadarForceDisabled()) {
+      return res.status(503).json({ message: RADAR_DISABLED_MESSAGE, forceDisabled: true });
+    }
     try {
       res.json({ summary: await runRadarCycle() });
     } catch (error) {

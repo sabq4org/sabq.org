@@ -251,7 +251,7 @@
       "nameEn": "Smart Radar",
       "status": "active",
       "category": "intelligence",
-      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ يغذّي فجوات التغطية.",
+      "summary": "رصد إخباري كثيف + قصص مجمّعة وزخم وصلة سعودية؛ يغذّي فجوات التغطية. الجلب متوقف إجبارياً عبر RADAR_FORCE_DISABLED.",
       "docPath": "docs/systems/radar/SYSTEM.md",
       "relatedDocs": [
         "docs/RADAR_X_WATCHES.md",
@@ -273,7 +273,7 @@
       "aiFeatureKeys": ["radar", "radar-clustering", "radar-relevance"],
       "dashboardPath": "/dashboard/radar",
       "owners": ["editorial"],
-      "lastReviewed": "2026-07-19"
+      "lastReviewed": "2026-07-18"
     },
     {
       "id": "audio-newsletter",
