@@ -932,20 +932,14 @@ struct ArticleDetailView: View {
     // MARK: - Title
 
     private var articleTitle: some View {
-        Text(displayArticle.title.sabqForcedRTL)
-            // Editorial headline font — IBM Plex Sans Arabic Bold matches
-            // the web brand and reads more "newspaper" than SF Arabic.
-            .font(SabqFonts.headline(size: CGFloat(fontSize + 8)))
-            .foregroundStyle(SabqTheme.ink)
-            .multilineTextAlignment(.leading)
-            // Tightened from 8 → 3 per user direction: the headline reads as a
-            // single editorial block instead of feeling double-spaced.
-            .lineSpacing(3)
-            .lineLimit(nil)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .environment(\.layoutDirection, .rightToLeft)
-            .padding(.horizontal, 4)
+        SabqRTLText(
+            displayArticle.title,
+            uiFont: SabqFonts.uiHeadline(size: CGFloat(fontSize + 8)),
+            color: SabqTheme.ink,
+            lineLimit: 0,
+            lineSpacing: 3
+        )
+        .padding(.horizontal, 4)
     }
 
     // MARK: - Body
@@ -1360,11 +1354,13 @@ struct ArticleDetailView: View {
                 NavigationLink(value: related) {
                     HStack(spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(related.title)
-                                .font(SabqFonts.app(size: 14, weight: .semibold))
-                                .foregroundStyle(SabqTheme.ink)
-                                .lineLimit(2)
-                                .multilineTextAlignment(.leading)
+                            SabqRTLText(
+                                related.title,
+                                uiFont: SabqFonts.uiApp(size: 14, weight: .semibold),
+                                color: SabqTheme.ink,
+                                lineLimit: 2,
+                                lineSpacing: 2
+                            )
 
                             Text(related.relativeDate)
                                 .font(SabqFonts.app(size: 10, weight: .regular))

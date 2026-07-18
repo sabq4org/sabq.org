@@ -627,12 +627,13 @@ struct HomeFeedView: View {
                         .font(SabqFonts.app(size: 12, weight: .medium))
                         .foregroundStyle(SabqTheme.coral)
 
-                    Text(article.title.sabqForcedRTL)
-                        .font(SabqFonts.app(size: 15, weight: .semibold))
-                        .foregroundStyle(SabqTheme.ink)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .environment(\.layoutDirection, .rightToLeft)
+                    SabqRTLText(
+                        article.title,
+                        uiFont: SabqFonts.uiApp(size: 15, weight: .semibold),
+                        color: SabqTheme.ink,
+                        lineLimit: 2,
+                        lineSpacing: 2
+                    )
 
                     Spacer(minLength: 0)
 
@@ -875,13 +876,13 @@ struct HomeFeedView: View {
                                     .foregroundStyle(index < 3 ? .orange : SabqTheme.tertiaryInk)
                                     .frame(width: 28)
 
-                                Text(article.title.sabqForcedRTL)
-                                    .font(SabqFonts.app(size: 14, weight: .semibold))
-                                    .foregroundStyle(SabqTheme.ink)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .environment(\.layoutDirection, .rightToLeft)
+                                SabqRTLText(
+                                    article.title,
+                                    uiFont: SabqFonts.uiApp(size: 14, weight: .semibold),
+                                    color: SabqTheme.ink,
+                                    lineLimit: 2,
+                                    lineSpacing: 2
+                                )
                             }
                             .padding(.vertical, 4)
                         }

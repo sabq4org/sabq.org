@@ -1489,25 +1489,21 @@ struct FeaturedArticleCard: View {
                 // the long Arabic title bled past the card edge, clipping
                 // the start of every line (looked like "أبو" was missing
                 // from "أبوظبي").
-                Text(article.title.sabqForcedRTL)
-                    .font(SabqFonts.app(size: 19, weight: .semibold))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(3)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .environment(\.layoutDirection, .rightToLeft)
-                    .fixedSize(horizontal: false, vertical: true)
+                SabqRTLText(
+                    article.title,
+                    uiFont: SabqFonts.uiApp(size: 19, weight: .semibold),
+                    color: SabqTheme.ink,
+                    lineLimit: 3,
+                    lineSpacing: 4
+                )
 
-                Text(article.excerpt.sabqForcedRTL)
-                    .font(SabqFonts.app(size: 14, weight: .regular))
-                    .foregroundStyle(SabqTheme.secondaryInk)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .environment(\.layoutDirection, .rightToLeft)
-                    .fixedSize(horizontal: false, vertical: true)
+                SabqRTLText(
+                    article.excerpt,
+                    uiFont: SabqFonts.uiApp(size: 14, weight: .regular),
+                    color: SabqTheme.secondaryInk,
+                    lineLimit: 2,
+                    lineSpacing: 3
+                )
 
                 HStack(spacing: 12) {
                     HStack(spacing: 5) {
@@ -1621,17 +1617,13 @@ struct CompactArticleRow: View {
                     if isNew { newPill }
                 }
 
-                Text(article.title.sabqForcedRTL)
-                    // Lighter than Bold — SemiBold reads cleaner in dense
-                    // list rows without the heavy newspaper weight.
-                    .font(SabqFonts.subhead(size: 16))
-                    .foregroundStyle(SabqTheme.ink)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .lineSpacing(4)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .environment(\.layoutDirection, .rightToLeft)
-                    .fixedSize(horizontal: false, vertical: true)
+                SabqRTLText(
+                    article.title,
+                    uiFont: SabqFonts.uiSubhead(size: 16),
+                    color: SabqTheme.ink,
+                    lineLimit: 2,
+                    lineSpacing: 4
+                )
 
                 metadataRow
             }
@@ -1662,15 +1654,13 @@ struct CompactArticleRow: View {
         VStack(alignment: .leading, spacing: 12) {
             heroImage
 
-            Text(article.title.sabqForcedRTL)
-                .font(SabqFonts.subhead(size: 17))
-                .foregroundStyle(SabqTheme.ink)
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
-                .lineSpacing(4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .environment(\.layoutDirection, .rightToLeft)
-                .fixedSize(horizontal: false, vertical: true)
+            SabqRTLText(
+                article.title,
+                uiFont: SabqFonts.uiSubhead(size: 17),
+                color: SabqTheme.ink,
+                lineLimit: 3,
+                lineSpacing: 4
+            )
 
             metadataRow
         }

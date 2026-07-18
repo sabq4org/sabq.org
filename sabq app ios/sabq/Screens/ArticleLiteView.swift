@@ -87,11 +87,13 @@ struct ArticleLiteView: View {
                     .font(SabqFonts.app(size: 11, weight: .medium))
                     .foregroundStyle(SabqTheme.tertiaryInk)
             }
-            Text(displayArticle.title)
-                .font(SabqFonts.app(size: 22, weight: .bold))
-                .foregroundStyle(SabqTheme.ink)
-                .lineSpacing(4)
-                .multilineTextAlignment(.leading)
+            SabqRTLText(
+                displayArticle.title,
+                uiFont: SabqFonts.uiApp(size: 22, weight: .bold),
+                color: SabqTheme.ink,
+                lineLimit: 0,
+                lineSpacing: 4
+            )
         }
     }
 
