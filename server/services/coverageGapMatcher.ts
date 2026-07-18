@@ -6,8 +6,9 @@
  * عبر متجهات بوابة الذكاء (ai-hub) بمفتاح الميزة `coverage-gap-matcher`،
  * مع سقوط تلقائي إلى تطابق كلمات/كيانات مُطبَّعة عند تعذّر المتجهات.
  *
- * التشغيل: بعد كل دورة رادار (cycle.ts) + تحديث كسول من مسار GET عندما
- * تكون البيانات أقدم من دقيقتين. كل الأعطال مُحتواة — لا يُسقط الإقلاع أبدًا.
+ * التشغيل: يدوي فقط افتراضيًا (POST refresh / زر «تحديث الآن») منذ حادثة
+ * استنزاف embeddings في 2026-07-18؛ التلقائي (دورة الرادار + الكسول من GET)
+ * خلف COVERAGE_GAP_AUTO_REFRESH=true. كل الأعطال مُحتواة — لا يُسقط الإقلاع أبدًا.
  */
 import { and, desc, eq, gte, inArray, isNotNull } from "drizzle-orm";
 import { db } from "../db";
@@ -40,6 +41,10 @@ const STALE_MS = 2 * 60 * 1000; // دقيقتان — التحديث الكسو�
 // دورة الرادار تنبض كل دقيقة — بدون حد أدنى خاص بها كانت المطابقة تعيد
 // تضمين ~360 نصًا كل دقيقة (~12$/يوم embeddings). عشر دقائق تكفي للفجوات.
 const RADAR_TRIGGER_MIN_MS = Number(process.env.COVERAGE_GAP_RADAR_MIN_INTERVAL_MS || 10 * 60 * 1000);
+// قرار المالك 2026-07-18 بعد حادثة الاستنزاف: التحديث التلقائي متوقف كليًا
+// (دورة الرادار + الكسول من GET) — المطابقة تعمل فقط بزر «تحديث الآن» أو
+// POST /api/admin/coverage-gaps/refresh. لإعادة التلقائي: COVERAGE_GAP_AUTO_REFRESH=true
+const AUTO_REFRESH_ENABLED = process.env.COVERAGE_GAP_AUTO_REFRESH === "true";
 
 function gapMinRelevance(): number {
   const n = Number(process.env.RADAR_GAP_MIN_RELEVANCE ?? 50);
@@ -394,6 +399,8 @@ async function refreshCoverageGapsV2(
 
 export async function refreshCoverageGaps(trigger = "manual"): Promise<CoverageGapRefreshSummary | null> {
   if (isRunning) return null;
+  // التلقائي متوقف افتراضيًا — لا يمر إلا الاستدعاء اليدوي
+  if (!AUTO_REFRESH_ENABLED && trigger !== "manual") return null;
   // نبض الرادار الدقيق لا يعني مطابقة فجوات كل دقيقة — حد أدنى خاص به،
   // بينما يبقى التشغيل اليدوي (زر التحديث/الـ API) فوريًا دائمًا.
   if (trigger === "radar-cycle" && Date.now() - lastRunAt < RADAR_TRIGGER_MIN_MS) return null;
@@ -576,6 +583,7 @@ async function reconcileLinkedGaps(): Promise<void> {
 
 /** تحديث كسول — يُستدعى من مسار GET؛ لا يحجب الاستجابة */
 export function refreshCoverageGapsIfStale(): void {
+  if (!AUTO_REFRESH_ENABLED) return;
   if (Date.now() - lastRunAt < STALE_MS || isRunning) return;
   void refreshCoverageGaps("lazy-get").catch((error) => {
     console.warn("[CoverageGap] lazy refresh failed:", error instanceof Error ? error.message : error);

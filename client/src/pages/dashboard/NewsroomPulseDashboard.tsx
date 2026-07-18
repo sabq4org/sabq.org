@@ -749,6 +749,33 @@ function CoverageGapsSection() {
     },
   });
 
+  // تحديث يدوي للمطابقة — التلقائي متوقف منذ حادثة استنزاف embeddings (PR #1018)
+  const refreshMutation = useMutation({
+    mutationFn: async () =>
+      apiRequest<{ summary: { gapsCreated: number; gapsUpdated: number } }>(
+        "/api/admin/coverage-gaps/refresh",
+        { method: "POST" },
+      ),
+    onError: (error) => {
+      toast({
+        title: "تعذر تحديث الفجوات",
+        description: error instanceof Error ? error.message : "حاول مجدداً بعد قليل",
+        variant: "destructive",
+      });
+    },
+    onSuccess: (data) => {
+      invalidateGaps();
+      const created = data?.summary?.gapsCreated ?? 0;
+      const updated = data?.summary?.gapsUpdated ?? 0;
+      toast({
+        title: "اكتمل التحديث",
+        description: created || updated
+          ? `فجوات جديدة: ${created} — محدّثة: ${updated}`
+          : "لا فجوات جديدة",
+      });
+    },
+  });
+
   const renderActions = (gap: CoverageGap, compact = false) => (
     <div className={cn("flex flex-wrap items-center gap-1.5", compact && "gap-1")}>
       <Button
@@ -908,9 +935,22 @@ function CoverageGapsSection() {
         title="فجوات التغطية الآن"
         description="مواضيع تتصاعد خارجياً رصدها الرادار ولا تغطية داخلية لها بعد"
         action={
-          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <Radar className="h-3.5 w-3.5 text-primary" /> رادار الفجوات
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Radar className="h-3.5 w-3.5 text-primary" /> رادار الفجوات
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={refreshMutation.isPending}
+              onClick={() => refreshMutation.mutate()}
+              data-testid="button-refresh-coverage-gaps"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", refreshMutation.isPending && "animate-spin")} />
+              تحديث الآن
+            </Button>
+          </div>
         }
       />
       {body}
