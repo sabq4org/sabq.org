@@ -91,6 +91,7 @@ nonisolated enum SpEnglishStrings {
         "ما تفعّله هنا يظهر جدوله في «الكل» وفي بلوك «بطولاتي» بتبويب البطولات — مصدر واحد للمفضّلة.":
             "What you enable here shows up in “All” and in the “My Competitions” block on the Competitions tab — one source for favorites.",
         "بطولات الجدول": "Schedule Competitions",
+        "إلغاء التحديد": "Deselect All",
         "تم": "Done",
         "اذهب إلى تاريخ": "Go to Date",
         "اذهب": "Go",

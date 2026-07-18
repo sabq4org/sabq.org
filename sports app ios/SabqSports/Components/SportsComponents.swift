@@ -1056,14 +1056,15 @@ struct SpMyTeamCard: View {
         return TeamFixtures(upcoming: Array(upcoming), lastResults: Array(results))
     }
 
-    private func load() async {
+    private func load(force: Bool = false) async {
         guard favorites.team != nil else { return }
         // أسبوعان للخلف (آخر النتائج) ← 60 يومًا للأمام (المباراة القادمة ولو بعيدة).
+        // الكاش افتراضيًا — SSE كان يكسر الكاش مع كل نبضة (5 بطولات) فيسرق شبكة روشن.
         let day: TimeInterval = 86_400
         let from = SpFormat.dateKey(Date().addingTimeInterval(-14 * day))
         let to = SpFormat.dateKey(Date().addingTimeInterval(60 * day))
         if let resp = try? await APIClient.shared.fetchUnifiedFixtures(
-            comps: Self.teamComps, from: from, to: to, ignoreCache: true) {
+            comps: Self.teamComps, from: from, to: to, ignoreCache: force) {
             fixtures = resp.fixtures
         }
         loaded = true

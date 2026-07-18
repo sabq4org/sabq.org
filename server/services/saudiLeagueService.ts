@@ -3586,7 +3586,8 @@ function parseFeeValue(raw: string | null | undefined): number | null {
 
 const LEAGUE_TRANSFERS_TTL = 60 * 60 * 1000; // الانتقالات تتحرّك في النوافذ فقط
 
-export async function getLeagueTransfers(sinceMonths = 18, limit = 250): Promise<SplLeagueTransfersResult> {
+/** افتراضي قصير: يغطي ميركاتو الصيف المبكر بلا إغراق القائمة بـ18 شهرًا من الإعارات. */
+export async function getLeagueTransfers(sinceMonths = 4, limit = 120): Promise<SplLeagueTransfersResult> {
   const clubs = await getProLeagueClubs();
   const clubIds = new Set(clubs.map((c) => c.id));
   const cutoff = new Date();

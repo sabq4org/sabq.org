@@ -7,8 +7,8 @@ import SwiftUI
 // PreferenceKey لا scrollPosition — انظر تعليقات MatchesView عن stuttering
 // وفساد إزاحة RTL)، زر «مباريات اليوم» العائم، شريط «مباشر الآن»، وطيّ
 // الترويسة مع التمرير — لكنه معمَّم على SpFixture الموحّد عبر كل البطولات:
-//   • فلتر بطولات أعلى الشاشة («القوية» افتراضيًا: روشن + الخمسة الكبرى
-//     + المونديال ما دام جاريًا) محفوظ في UserDefaults.
+//   • فلتر بطولات أعلى الشاشة (ديفولت: روشن + المونديال + كأس الملك +
+//     السوبر الأوروبي + لا ليغا + البريميرليغ) محفوظ في UserDefaults.
 //   • يتغذى من GET /sports/fixtures?comps=… (جدول موحّد مرتّب بالتاريخ).
 //   • كل صف فيه نجمة متابعة (SpMatchFollows القائم) وشارة بطولة عند الخلط.
 //   • بلوك «مبارياتي» (SpMyMatchesCard القائمة) مثبّت تحت الفلتر.
@@ -73,17 +73,20 @@ extension APIClient {
 
 /// «الكل» في المركز = بطولات SpCompetitionFavorites نفسها (بلوك «بطولاتي» في
 /// تبويب البطولات) — مصدر حقيقة واحد: ما تفضّله هناك يظهر جدوله هنا والعكس.
-/// عند أول تشغيل تُبذَر المفضّلة بالبطولات المهمة (روشن/كأس الملك/السوبر/
-/// أبطال آسيا وأوروبا/الخمسة الكبرى + المونديال والخليجي ما داما جاريين).
+/// عند أول تشغيل تُبذَر المفضّلة بالسلة المعتمدة: روشن + المونديال + كأس الملك
+/// + السوبر الأوروبي + لا ليغا + البريميرليغ.
 nonisolated enum SpCenterFilter {
     static let storageKey = "sabqsports.matchescenter.comp"
     static let seededKey = "sabqsports.matchescenter.seeded.v1"
 
-    /// البطولات المهمة المفعّلة افتراضيًّا (تُبذر مرة واحدة في المفضّلة).
+    /// البطولات المفعّلة افتراضيًّا لمَن يحمّل التطبيق أول مرة (تُبذر مرة واحدة).
     static let defaultSlugs = [
-        "pro-league", "kings-cup", "super-cup",
-        "afc-champions-league", "champions-league", "uefa-super-cup", "europa-league",
-        "premier-league", "la-liga", "serie-a", "bundesliga", "ligue-1",
+        "pro-league",
+        "world-cup",
+        "kings-cup",
+        "uefa-super-cup",
+        "la-liga",
+        "premier-league",
     ]
 
     static func load() -> String {
@@ -1262,6 +1265,14 @@ struct MatchesCenterView: View {
                         .font(SportsFonts.app(size: 12, weight: .semibold))
                         .foregroundStyle(SpTheme.onDarkDim)
                         .listRowBackground(Color.clear)
+                    if !favorites.items.isEmpty {
+                        Button(role: .destructive) {
+                            favorites.removeAll()
+                        } label: {
+                            Label(L("إلغاء التحديد"), systemImage: "xmark.circle")
+                                .font(SportsFonts.app(size: 14, weight: .bold))
+                        }
+                    }
                 }
                 ForEach(registryByCategory, id: \.category) { group in
                     Section(SportsConstants.categoryLabel(group.category)) {
@@ -1364,29 +1375,16 @@ struct MatchesCenterView: View {
         }
     }
 
-    /// بذر «البطولات المهمة» في المفضّلة عند أول تشغيل للمركز (مرة واحدة):
-    /// السلة الافتراضية + المونديال/الخليجي ما داما غير منتهيين. ما أضافه
-    /// المستخدم سابقًا في «بطولاتي» يبقى كما هو — نضيف فوقه ولا نحذف.
+    /// بذر سلة الديفولت عند أول تشغيل للمركز (مرة واحدة). الأجهزة التي بُذرت
+    /// سابقًا تبقى على اختيار المستخدم — لا نُعيد فرض القائمة ولا نُلحق
+    /// بطولات بعد «إلغاء التحديد».
     private func seedFavoritesIfNeeded(_ registry: [SpCompetition]) {
-        guard !UserDefaults.standard.bool(forKey: SpCenterFilter.seededKey) else {
-            // أجهزة سبق بذرها: ألحق فقط السوبر الأوروبي إن غاب (هجرة خفيفة).
-            if let superCup = registry.first(where: { $0.slug == "uefa-super-cup" }),
-               superCup.status != "finished",
-               !favorites.isFavorite("uefa-super-cup") {
-                favorites.add(superCup)
-            }
-            return
-        }
-        var slugs = SpCenterFilter.defaultSlugs
-        for special in ["world-cup", "gulf-cup"] {
-            if let comp = registry.first(where: { $0.slug == special }), comp.status != "finished" {
-                slugs.append(special)
-            }
-        }
-        for slug in slugs {
-            if let comp = registry.first(where: { $0.slug == slug }) {
-                favorites.add(comp)
-            }
+        guard !UserDefaults.standard.bool(forKey: SpCenterFilter.seededKey) else { return }
+        for slug in SpCenterFilter.defaultSlugs {
+            guard let comp = registry.first(where: { $0.slug == slug }) else { continue }
+            // الكؤوس المنتهية لا تُبذَر (المونديال/السوبر بعد النهائي).
+            if comp.type == "cup", comp.status == "finished" { continue }
+            favorites.add(comp)
         }
         UserDefaults.standard.set(true, forKey: SpCenterFilter.seededKey)
     }
@@ -1433,11 +1431,12 @@ struct MatchesCenterView: View {
 
     private func performLoad(force: Bool) async {
         if !force, fixtures.isEmpty { loading = true }
+        defer { loading = false }
         // اختيار يتيم (بطولة أُزيلت من المفضّلة وشريحتها اختفت) → عودة لـ«الكل».
         if selection != "all", !selection.hasPrefix("lens:"), !favorites.items.isEmpty, !favorites.isFavorite(selection) {
             selection = "all"
             SpCenterFilter.save("all")
-            return // task(id: reloadKey) سيعيد التحميل بالاختيار الجديد
+            return // task(id: reloadKey) سيعيد التحميل بالاختيار الجديد — defer يصفّر loading
         }
         let comps = effectiveCompetitionSlugs
         let window = requestWindow()
@@ -1451,7 +1450,7 @@ struct MatchesCenterView: View {
             let unified = try await mergedTask
             let bracket = await bracketTask
             let merged = mergeWorldCupBracketFixtures(from: bracket, into: unified)
-            if Task.isCancelled { return }
+            // حتى عند الإلغاء: طبّق البيانات الواردة (مفيدة) — defer يصفّر loading دائمًا.
             follows.updateFromFixtures(merged)
             if visualSignature(merged) != visualSignature(fixtures) {
                 fixtures = merged
@@ -1461,11 +1460,11 @@ struct MatchesCenterView: View {
             }
             wcBracket = bracket
             loadError = nil
+            if Task.isCancelled { return }
         } catch {
             if fixtures.isEmpty { loadError = (error as? LocalizedError)?.errorDescription ?? L("تعذّر الاتصال بخادم البيانات") }
             if selection != "world-cup" { wcBracket = nil }
         }
-        loading = false
     }
 
     /// حقن موجز SSE في نسخ الجدول المحمَّلة مباشرةً — نفس نمط
