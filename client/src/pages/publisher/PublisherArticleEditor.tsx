@@ -98,6 +98,14 @@ export default function PublisherArticleEditor() {
   });
   const autoPublish = overview?.publisher?.autoPublish === true;
 
+  // الناشر الموثوق يكتب من المحرر الأساسي الكامل (وسائط، جدولة، توليد ذكي)
+  // وينشر منه مباشرة — هذا النموذج المبسط مخصص لمسار المراجعة فقط
+  useEffect(() => {
+    if (!isEditMode && autoPublish) {
+      setLocation("/dashboard/articles/new", { replace: true });
+    }
+  }, [autoPublish, isEditMode, setLocation]);
+
   // Fetch categories
   const { data: categoriesRaw } = useQuery<Category[]>({
     queryKey: ["/api/categories"],

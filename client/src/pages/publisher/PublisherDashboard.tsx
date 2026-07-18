@@ -228,7 +228,8 @@ export default function PublisherDashboard() {
                   {!publisher.isActive && <Badge variant="destructive">الحساب معطل</Badge>}
                 </div>
               </div>
-              <Link href="/dashboard/publisher/article/new">
+              {/* الناشر الموثوق يكتب من المحرر الأساسي الكامل مباشرة */}
+              <Link href={publisher.autoPublish ? "/dashboard/articles/new" : "/dashboard/publisher/article/new"}>
                 <Button size="lg" data-testid="button-new-article" disabled={windowDaysLeft !== null && windowDaysLeft < 0}>
                   <Plus className="ml-2 h-4 w-4" />
                   خبر جديد
