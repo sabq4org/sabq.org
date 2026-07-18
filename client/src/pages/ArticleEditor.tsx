@@ -149,6 +149,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { WriterDayPicker } from "@/pages/opinion-author/WriterPriorityRail";
 import { AIImageGeneratorDialog } from "@/components/AIImageGeneratorDialog";
 import { InfographicGeneratorDialog } from "@/components/InfographicGeneratorDialog";
 import { InfographicAiDialog } from "@/components/InfographicAiDialog";
@@ -608,6 +609,36 @@ export default function ArticleEditor() {
       `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
     );
   }, [canSchedule, articleType, opinionAuthorId, writerSlotData, article, publishType, scheduledAt]);
+
+  // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره من حوار في مكانه
+  // (دون مغادرة المحرر وفقدان المسودة)، ثم يُستكمل الإرسال تلقائياً.
+  const { data: writerOwnSchedule } = useQuery<{ canChoose?: boolean; dayLoads?: number[] }>({
+    queryKey: ["/api/opinion-author/schedule"],
+    enabled: Boolean(isOpinionAuthor),
+    staleTime: 5 * 60 * 1000,
+  });
+  const [showDayGate, setShowDayGate] = useState(false);
+  const dayGateContinueRef = useRef(false);
+
+  const handleSubmitForReviewGated = () => {
+    if (isOpinionAuthor && writerOwnSchedule?.canChoose) {
+      dayGateContinueRef.current = true;
+      setShowDayGate(true);
+      return;
+    }
+    void handleSaveAndSubmitForReview();
+  };
+
+  useEffect(() => {
+    if (!showDayGate) return;
+    // ثبّت الكاتب يومه من داخل الحوار — أغلقه وأكمل الإرسال الذي بدأه
+    if (writerOwnSchedule && writerOwnSchedule.canChoose === false && dayGateContinueRef.current) {
+      dayGateContinueRef.current = false;
+      setShowDayGate(false);
+      void handleSaveAndSubmitForReview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [writerOwnSchedule, showDayGate]);
 
   // Fetch existing social cards for this article
   const { data: existingSocialCardsRaw } = useQuery<Array<{ platform: string; imageUrl: string }>>({
@@ -2536,7 +2567,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => void handleSaveAndSubmitForReview()}
+                  onClick={handleSubmitForReviewGated}
                   disabled={
                     submitReviewMutation.isPending ||
                     isSaving ||
@@ -2557,7 +2588,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                 size="sm"
                 onClick={() => {
                   if (!canPublish) {
-                    void handleSaveAndSubmitForReview();
+                    handleSubmitForReviewGated();
                     return;
                   }
                   void handleSave(true);
@@ -2584,6 +2615,19 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </div>
           </div>
         </div>
+
+        <Dialog open={showDayGate} onOpenChange={(open) => { if (!open) { dayGateContinueRef.current = false; } setShowDayGate(open); }}>
+          <DialogContent className="max-w-lg" data-testid="dialog-day-gate">
+            <DialogHeader>
+              <DialogTitle>قبل إرسال مقالتك — حدد يومك الأسبوعي</DialogTitle>
+              <DialogDescription>
+                لم تحدد بعد اليوم الذي تُنشر فيه مقالاتك أسبوعياً. اختره الآن وسيُستكمل إرسال
+                مقالتك تلقائياً — مسودتك محفوظة ولن تفقد شيئاً.
+              </DialogDescription>
+            </DialogHeader>
+            <WriterDayPicker dayLoads={writerOwnSchedule?.dayLoads ?? []} />
+          </DialogContent>
+        </Dialog>
 
         <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "flex flex-col gap-5 pb-24 lg:grid lg:grid-cols-12 lg:pb-0"}>
           {/* Main Content Area — contents على الموبايل لدمج الترتيب مع الشريط الجانبي */}

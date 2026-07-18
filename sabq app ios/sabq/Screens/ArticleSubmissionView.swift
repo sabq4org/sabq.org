@@ -35,6 +35,13 @@ struct ArticleSubmissionView: View {
 
     @FocusState private var focusedField: Field?
 
+    // بوابة اليوم الأسبوعي: كاتب رأي بلا يوم محدد يختاره قبل أول إرسال،
+    // ثم يُستكمل الإرسال تلقائياً بعد التثبيت.
+    @State private var writerSchedule: WriterScheduleResponse?
+    @State private var showDayGate = false
+    @State private var savingDay = false
+    @State private var dayGateError: String?
+
     enum Stage {
         case form, submitting, success
     }
@@ -146,6 +153,61 @@ struct ArticleSubmissionView: View {
                         .foregroundStyle(pageTint)
                 }
             }
+            .task {
+                guard kind == .opinion else { return }
+                writerSchedule = try? await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
+            }
+            .sheet(isPresented: $showDayGate) {
+                dayGateSheet
+            }
+        }
+    }
+
+    // MARK: - Day gate (تحديد اليوم الأسبوعي قبل أول إرسال)
+
+    private var dayGateSheet: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                        .font(SabqFonts.app(size: 22, weight: .semibold))
+                        .foregroundStyle(pageTint)
+                    Text("قبل إرسال مقالتك")
+                        .font(SabqFonts.app(size: 17, weight: .heavy))
+                        .foregroundStyle(SabqTheme.ink)
+                }
+                Text("حدد يومك الأسبوعي للنشر أولاً — ستُنشر مقالاتك في هذا اليوم من كل أسبوع. بعد التثبيت يُستكمل إرسال مقالتك تلقائياً.")
+                    .font(SabqFonts.app(size: 13, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                WriterDayPickerCard(
+                    dayLoads: writerSchedule?.dayLoads ?? [],
+                    saving: savingDay,
+                    errorText: dayGateError
+                ) { day in
+                    Task { await pickDayAndContinue(day) }
+                }
+            }
+            .padding(20)
+        }
+        .background(SabqTheme.background)
+        .sabqRTL()
+        .presentationDetents([.medium, .large])
+    }
+
+    private func pickDayAndContinue(_ weekday: Int) async {
+        savingDay = true
+        dayGateError = nil
+        struct Body: Encodable { let weekday: Int }
+        do {
+            _ = try await APIClient.shared.post(WriterSchedulePostResponse.self, path: "/contributor/schedule", body: Body(weekday: weekday))
+            writerSchedule = try? await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
+            savingDay = false
+            showDayGate = false
+            await submit()
+        } catch {
+            savingDay = false
+            dayGateError = "تعذر حفظ اليوم — حاول مرة أخرى"
         }
     }
 
@@ -631,6 +693,12 @@ struct ArticleSubmissionView: View {
     // MARK: - Submit action
 
     private func submit() async {
+        // كاتب رأي بلا يوم أسبوعي محدد: بوابة اختيار اليوم أولاً
+        if kind == .opinion, writerSchedule?.canChoose == true {
+            focusedField = nil
+            showDayGate = true
+            return
+        }
         errorMessage = nil
         focusedField = nil
         screenState = .submitting
