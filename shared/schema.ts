@@ -14193,3 +14193,152 @@ export type PredictionSettlement = typeof predictionSettlements.$inferSelect;
 export type PredictionPointsLedgerEntry = typeof predictionPointsLedger.$inferSelect;
 export type PredictionPoolState = typeof predictionPoolState.$inferSelect;
 export type PredictionAwardOutboxRow = typeof predictionAwardOutbox.$inferSelect;
+
+// ============================================
+// SURVEYS PLATFORM - منصة استطلاعات الرأي الداخلية
+// استبيانات موجّهة (كتّاب الرأي أولًا) برابط شخصي لكل مدعو
+// ============================================
+
+export const surveys = pgTable("surveys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(), // عنوان الاستطلاع الداخلي
+  purpose: text("purpose"), // شارة الهدف أعلى صفحة الاستجابة، مثل: تطوير قسم الرأي
+  welcomeTitle: text("welcome_title"), // عنوان الترحيب — {name} تُستبدل باسم المدعو
+  welcomeMessage: text("welcome_message"),
+  thankYouTitle: text("thank_you_title"),
+  thankYouMessage: text("thank_you_message"),
+  status: text("status").default("draft").notNull(), // draft, active, closed
+  // الاستهداف بنفس نمط internalAnnouncements: أدوار و/أو مستخدمون محددون
+  audienceRoles: jsonb("audience_roles").$type<string[]>(),
+  audienceUserIds: jsonb("audience_user_ids").$type<string[]>(),
+  channels: jsonb("channels").default(["email", "dashboard"]).notNull().$type<string[]>(),
+  // عرض إحصاءات أعمال المدعو (مقالاته وقراءاته) في الترحيب
+  showRecipientStats: boolean("show_recipient_stats").default(true).notNull(),
+  closesAt: timestamp("closes_at"),
+  sentAt: timestamp("sent_at"),
+  createdBy: varchar("created_by").references(() => users.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_surveys_status").on(table.status),
+  index("idx_surveys_created_by").on(table.createdBy),
+]);
+
+export const surveyQuestions = pgTable("survey_questions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  surveyId: varchar("survey_id").references(() => surveys.id, { onDelete: "cascade" }).notNull(),
+  type: text("type").notNull(), // single, multi, short_text, long_text, stars, scale
+  text: text("text").notNull(),
+  hint: text("hint"),
+  required: boolean("required").default(true).notNull(),
+  options: jsonb("options").$type<string[]>(), // لأسئلة الاختيار
+  settings: jsonb("settings").$type<{
+    maxChoices?: number;
+    scaleMin?: number;
+    scaleMax?: number;
+    minLabel?: string;
+    maxLabel?: string;
+  }>(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_survey_questions_survey").on(table.surveyId, table.sortOrder),
+]);
+
+// دعوة شخصية لكل مدعو: التوكن هو الرابط العام /survey/{token}
+export const surveyInvitations = pgTable("survey_invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  surveyId: varchar("survey_id").references(() => surveys.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  email: text("email"),
+  emailStatus: text("email_status").default("pending").notNull(), // pending, sent, failed, skipped
+  notifiedAt: timestamp("notified_at"), // إشعار لوحة الكاتب
+  openedAt: timestamp("opened_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("uq_survey_invitations_survey_user").on(table.surveyId, table.userId),
+  index("idx_survey_invitations_survey").on(table.surveyId),
+  index("idx_survey_invitations_token").on(table.token),
+]);
+
+export const surveyResponses = pgTable("survey_responses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  surveyId: varchar("survey_id").references(() => surveys.id, { onDelete: "cascade" }).notNull(),
+  invitationId: varchar("invitation_id").references(() => surveyInvitations.id, { onDelete: "cascade" }).notNull().unique(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  // questionId -> قيمة الإجابة (فهرس، فهارس، رقم، أو نص)
+  answers: jsonb("answers").notNull().$type<Record<string, number | number[] | string>>(),
+  durationSeconds: integer("duration_seconds"),
+  submittedAt: timestamp("submitted_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_survey_responses_survey").on(table.surveyId),
+  index("idx_survey_responses_user").on(table.userId),
+]);
+
+// تحليل الذكاء الاصطناعي للإجابات وتوصياته للمسؤول
+export const surveyAnalyses = pgTable("survey_analyses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  surveyId: varchar("survey_id").references(() => surveys.id, { onDelete: "cascade" }).notNull(),
+  status: text("status").default("completed").notNull(), // completed, failed
+  model: text("model"),
+  responsesCount: integer("responses_count").default(0).notNull(),
+  summary: text("summary"), // ملخص تنفيذي
+  sentiment: jsonb("sentiment").$type<{ positive: number; neutral: number; negative: number; note?: string }>(),
+  themes: jsonb("themes").$type<{ theme: string; evidence: string; mentions?: number }[]>(),
+  recommendations: jsonb("recommendations").$type<{ title: string; detail: string; priority: "high" | "medium" | "low"; basedOn?: string }[]>(),
+  quickWins: jsonb("quick_wins").$type<string[]>(),
+  error: text("error"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_survey_analyses_survey").on(table.surveyId, table.createdAt),
+]);
+
+export const surveysRelations = relations(surveys, ({ one, many }) => ({
+  createdByUser: one(users, { fields: [surveys.createdBy], references: [users.id] }),
+  questions: many(surveyQuestions),
+  invitations: many(surveyInvitations),
+  responses: many(surveyResponses),
+  analyses: many(surveyAnalyses),
+}));
+
+export const surveyQuestionsRelations = relations(surveyQuestions, ({ one }) => ({
+  survey: one(surveys, { fields: [surveyQuestions.surveyId], references: [surveys.id] }),
+}));
+
+export const surveyInvitationsRelations = relations(surveyInvitations, ({ one }) => ({
+  survey: one(surveys, { fields: [surveyInvitations.surveyId], references: [surveys.id] }),
+  user: one(users, { fields: [surveyInvitations.userId], references: [users.id] }),
+}));
+
+export const surveyResponsesRelations = relations(surveyResponses, ({ one }) => ({
+  survey: one(surveys, { fields: [surveyResponses.surveyId], references: [surveys.id] }),
+  invitation: one(surveyInvitations, { fields: [surveyResponses.invitationId], references: [surveyInvitations.id] }),
+  user: one(users, { fields: [surveyResponses.userId], references: [users.id] }),
+}));
+
+export const surveyAnalysesRelations = relations(surveyAnalyses, ({ one }) => ({
+  survey: one(surveys, { fields: [surveyAnalyses.surveyId], references: [surveys.id] }),
+}));
+
+export const insertSurveySchema = createInsertSchema(surveys).omit({
+  id: true,
+  sentAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSurveyQuestionSchema = createInsertSchema(surveyQuestions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type Survey = typeof surveys.$inferSelect;
+export type InsertSurvey = z.infer<typeof insertSurveySchema>;
+export type SurveyQuestion = typeof surveyQuestions.$inferSelect;
+export type InsertSurveyQuestion = z.infer<typeof insertSurveyQuestionSchema>;
+export type SurveyInvitation = typeof surveyInvitations.$inferSelect;
+export type SurveyResponse = typeof surveyResponses.$inferSelect;
+export type SurveyAnalysis = typeof surveyAnalyses.$inferSelect;

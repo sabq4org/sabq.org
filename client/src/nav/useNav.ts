@@ -77,6 +77,7 @@ const STAFF_NAV_SECTION_DEFINITIONS = [
       "push_notifications",
       "contact_messages",
       "opinion_tickets",
+      "surveys",
       "announcements",
       "communications",
       "editor_alerts",

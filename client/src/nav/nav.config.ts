@@ -438,6 +438,16 @@ export const navConfig: NavItem[] = [
     roles: ["admin", "editor", "system_admin"],
   },
 
+  // ===== استطلاعات الرأي / Surveys =====
+  {
+    id: "surveys",
+    labelKey: "nav.surveys",
+    labelAr: "استطلاعات الرأي",
+    path: "/dashboard/surveys",
+    icon: MessageSquare,
+    roles: ["admin", "system_admin"],
+  },
+
   // ===== الإعلانات / Advertising =====
   {
     id: "advertising",
