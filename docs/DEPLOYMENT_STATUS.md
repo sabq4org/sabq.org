@@ -54,27 +54,33 @@
 
 هذا ليس «ميزة اختيارية للتجربة» — **مُفعّل في الإنتاج منذ فترة** كجزء من تحسين الأداء بعد الانتقال إلى Railway.
 
-### في الكود (سلوك fallback)
+### في الكود (سلوك failover — منذ 2026-07-18)
 
-الكود يبقى مرناً: بدون `REDIS_URL` يعود تلقائياً إلى جدول `sessions` في Postgres — مفيد للتطوير المحلي فقط، **ليس الوضع المستهدف للإنتاج**.
+- مع `REDIS_URL`: الجلسات **Redis أساسي + Postgres احتياطي** عبر `SessionFailoverStore`.
+- أوامر Redis لها `commandTimeout=2.5s` و`enableOfflineQueue=false` — لا تعليق بلا نهاية عند انقطاع Upstash أو تغيّر Static IP egress.
+- عند فشل Redis: تحويل تلقائي لجدول `sessions` في Neon لمدة ~30 ثانية (cooldown) ثم إعادة المحاولة.
+- بدون `REDIS_URL`: Postgres فقط.
 
-| الوظيفة | مع Redis (الإنتاج) | بدون Redis (fallback) |
-|---------|-------------------|----------------------|
-| **الجلسات** | `connect-redis` → Upstash | جدول `sessions` في Neon |
-| SSE / إشعارات بين النسخ | pub/sub عبر Redis | ذاكرة العملية الواحدة |
-| Editor presence | متزامن بين pods | نسخة واحدة |
-| الكاش الساخن | `memoryCache.ts` (ذاكرة العملية) | نفس السلوك |
+| الوظيفة | مع Redis (الإنتاج) | عند انقطاع Redis | بدون REDIS_URL |
+|---------|-------------------|------------------|----------------|
+| **الجلسات** | Redis → failover إلى Neon | Neon `sessions` | Neon `sessions` |
+| SSE / إشعارات بين النسخ | pub/sub عبر Redis | ذاكرة العملية الواحدة | ذاكرة العملية |
+| Editor presence | متزامن بين pods | نسخة واحدة | نسخة واحدة |
+| الكاش الساخن | `memoryCache.ts` | نفس السلوك | نفس السلوك |
+
+**تشغيل مُستحسن مع Static IP:** Redis على Railway (شبكة داخلية) بدل Upstash العام، أو allowlist عناوين Static IP في Upstash.
 
 ### أين يُضبط
 
-- **Railway** → Variables → `REDIS_URL` (مثال: `rediss://…upstash.io`)
+- **Railway** → Variables → `REDIS_URL` (مثال: `rediss://…upstash.io` أو `redis://…railway.internal`)
 - **ليس** على Cloudflare Pages — الواجهة لا تتصل بـ Redis
 
 ### كيف تتأكد
 
 1. Railway → Variables → `REDIS_URL` موجود
-2. سجلات الإقلاع: `[Session] Using Redis store (fast, no DB pressure)` ✅  
-   أو `Using PostgreSQL store (add REDIS_URL...)` ⚠️ يعني الجلسات عادت لـ Neon
+2. سجلات الإقلاع: `[Session] Redis primary + PostgreSQL failover` ✅  
+   أو `Using PostgreSQL store` ⚠️ بدون Redis
+3. عند انقطاع: `[Session] Redis unhealthy … using PostgreSQL` ثم الموقع يبقى يستجيب (بدون 502 على csrf)
 
 ### محلي
 

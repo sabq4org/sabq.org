@@ -13,9 +13,9 @@ import { eq, or, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import appleSignin from "apple-signin-auth";
 import { memoryCache, CACHE_TTL } from "./memoryCache";
-import { getRedisClient } from "./redis";
+import { getRedisSessionAdapter } from "./redis";
 import { RedisStore } from "connect-redis";
-import type { RedisSessionClient } from "./redis";
+import { SessionFailoverStore } from "./sessionFailoverStore";
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
@@ -24,24 +24,28 @@ export function getSession() {
     throw new Error("SESSION_SECRET environment variable is required. Set it before starting the server.");
   }
 
-  let store: session.Store;
-  const redis = getRedisClient();
+  const pgStoreFactory = connectPg(session);
+  const pgStore = new pgStoreFactory({
+    pool: pool,
+    createTableIfMissing: false,
+    ttl: sessionTtl,
+    tableName: "sessions",
+  });
+
+  let store: session.Store = pgStore;
+  const redis = getRedisSessionAdapter();
   if (redis) {
-    store = new RedisStore({
+    // Redis أساسي + Postgres احتياطي: عند انقطاع Upstash / Static IP
+    // تفشل أوامر Redis خلال ~2.5s ثم تُخدم الجلسة من Neon بدل 502.
+    const redisStore = new RedisStore({
       client: redis,
       prefix: "sess:",
       ttl: Math.floor(sessionTtl / 1000),
     });
-    console.log("[Session] Using Redis store (fast, no DB pressure)");
+    store = new SessionFailoverStore(redisStore, pgStore);
+    console.log("[Session] Redis primary + PostgreSQL failover (commandTimeout 2.5s)");
   } else {
-    const pgStore = connectPg(session);
-    store = new pgStore({
-      pool: pool,
-      createTableIfMissing: false,
-      ttl: sessionTtl,
-      tableName: "sessions",
-    });
-    console.log("[Session] Using PostgreSQL store (add REDIS_URL for better performance)");
+    console.log("[Session] Using PostgreSQL store (add REDIS_URL for Redis primary + failover)");
   }
 
   // Cross-subdomain cookie config (when frontend on Vercel and backend on
