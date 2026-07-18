@@ -1,5 +1,6 @@
 package com.sabq.smart.feature.settings
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,7 +18,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +39,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -63,17 +71,20 @@ class ContributorDashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = DashboardState(isLoading = true)
             try {
-                val analytics = api.getContributorAnalytics()
-                val ranking = runCatching { api.getContributorRanking() }.getOrNull()
-                val pendingSurveys = runCatching { api.getMySurveys().items }.getOrDefault(emptyList())
-                val schedule = runCatching { api.getContributorSchedule() }.getOrNull()
-                _state.value = DashboardState(
-                    isLoading = false,
-                    analytics = analytics,
-                    ranking = ranking,
-                    pendingSurveys = pendingSurveys,
-                    schedule = schedule,
-                )
+                // رحلات الشبكة الأربع بالتوازي — التسلسل كان يضاعف زمن فتح اللوحة
+                coroutineScope {
+                    val analytics = async { api.getContributorAnalytics() }
+                    val ranking = async { runCatching { api.getContributorRanking() }.getOrNull() }
+                    val pendingSurveys = async { runCatching { api.getMySurveys().items }.getOrDefault(emptyList()) }
+                    val schedule = async { runCatching { api.getContributorSchedule() }.getOrNull() }
+                    _state.value = DashboardState(
+                        isLoading = false,
+                        analytics = analytics.await(),
+                        ranking = ranking.await(),
+                        pendingSurveys = pendingSurveys.await(),
+                        schedule = schedule.await(),
+                    )
+                }
             } catch (e: Exception) {
                 _state.value = DashboardState(isLoading = false, error = "تعذّر تحميل البيانات")
             }
@@ -187,6 +198,7 @@ fun ContributorDashboardScreen(
                     }
                     StatsCards(data)
                     OverviewSection(data)
+                    if (data.dailyStats.isNotEmpty()) ChartSection(data.dailyStats)
                     if (data.topArticles.isNotEmpty()) TopArticlesSection(data.topArticles)
                     data.featuredComment?.let { FeaturedCommentCard(it) }
                     AudienceSection(data, state.ranking)
@@ -378,6 +390,50 @@ private fun FeaturedCommentCard(comment: ApiFeaturedComment) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Icon(Icons.Filled.Person, null, tint = SabqTheme.colors.secondaryInk, modifier = Modifier.size(13.dp))
             Text("${comment.userName} · ${comment.articleTitle}", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = SabqTheme.colors.secondaryInk, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+// ── Chart (أداء المقالات — مطابق لرسم iOS البياني) ─────────────────
+
+@Composable
+private fun ChartSection(dailyStats: List<ApiDailyStat>) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SectionTitle("أداء المقالات")
+        val shape = RoundedCornerShape(SabqTheme.dimens.cardRadius)
+        val maxViews = remember(dailyStats) { dailyStats.maxOf { it.views }.coerceAtLeast(1) }
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .clip(shape)
+                .background(SabqTheme.colors.surface, shape)
+                .border(0.5.dp, SabqTheme.colors.outline.copy(alpha = 0.3f), shape)
+                .padding(14.dp),
+        ) {
+            val w = size.width
+            val h = size.height
+            val stepX = if (dailyStats.size > 1) w / (dailyStats.size - 1) else w
+            val points = dailyStats.mapIndexed { i, stat ->
+                Offset(i * stepX, h - (stat.views.toFloat() / maxViews) * h)
+            }
+            val area = Path().apply {
+                moveTo(0f, h)
+                points.forEach { lineTo(it.x, it.y) }
+                lineTo(w, h)
+                close()
+            }
+            drawPath(
+                area,
+                brush = Brush.verticalGradient(
+                    listOf(AccentBlue.copy(alpha = 0.30f), AccentBlue.copy(alpha = 0.05f)),
+                ),
+            )
+            val line = Path().apply {
+                points.firstOrNull()?.let { moveTo(it.x, it.y) }
+                points.drop(1).forEach { lineTo(it.x, it.y) }
+            }
+            drawPath(line, color = AccentBlue, style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
         }
     }
 }
