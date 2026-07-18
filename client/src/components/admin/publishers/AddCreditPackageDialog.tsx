@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2, Calendar } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
@@ -19,7 +20,8 @@ import { ar } from "date-fns/locale";
 
 const creditPackageSchema = z.object({
   packageName: z.string().min(2, "اسم الباقة مطلوب"),
-  totalCredits: z.number().int().min(1, "يجب أن يكون عدد الأخبار 1 على الأقل"),
+  isUnlimited: z.boolean().default(false),
+  totalCredits: z.number().int().min(0),
   period: z.enum(["monthly", "quarterly", "yearly", "one-time"], {
     required_error: "يرجى اختيار الفترة",
   }),
@@ -30,6 +32,21 @@ const creditPackageSchema = z.object({
   price: z.number().min(0).optional(),
   currency: z.string().default("SAR"),
   notes: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (!data.isUnlimited && data.totalCredits < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["totalCredits"],
+      message: "يجب أن يكون عدد الأخبار 1 على الأقل، أو فعّل «باقة مفتوحة»",
+    });
+  }
+  if (data.isUnlimited && !data.expiryDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["expiryDate"],
+      message: "الباقة المفتوحة تحتاج تاريخ انتهاء",
+    });
+  }
 });
 
 type CreditPackageFormData = z.infer<typeof creditPackageSchema>;
@@ -78,6 +95,7 @@ export function AddCreditPackageDialog({
     resolver: zodResolver(creditPackageSchema),
     defaultValues: {
       packageName: "",
+      isUnlimited: false,
       totalCredits: 10,
       period: "monthly",
       startDate: new Date(),
@@ -90,14 +108,16 @@ export function AddCreditPackageDialog({
 
   const period = form.watch("period");
   const startDate = form.watch("startDate");
+  const isUnlimited = form.watch("isUnlimited");
 
-  // Auto-calculate expiry date based on period and start date
+  // Auto-calculate expiry date based on period and start date.
+  // الباقة المفتوحة: التاريخ يُحدد يدوياً ولا يُعاد حسابه.
   useEffect(() => {
-    if (startDate && period) {
+    if (startDate && period && !isUnlimited) {
       const calculated = calculateExpiryDate(startDate, period);
       form.setValue("expiryDate", calculated);
     }
-  }, [startDate, period, form]);
+  }, [startDate, period, isUnlimited, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: CreditPackageFormData) => {
@@ -105,6 +125,8 @@ export function AddCreditPackageDialog({
         method: "POST",
         body: JSON.stringify({
           ...data,
+          // الباقة المفتوحة لا عدّاد لها — الرصيد يُعرض «مفتوح»
+          totalCredits: data.isUnlimited ? 0 : data.totalCredits,
           startDate: data.startDate.toISOString(),
           expiryDate: data.expiryDate?.toISOString(),
         }),
@@ -171,25 +193,48 @@ export function AddCreditPackageDialog({
             />
 
             <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="totalCredits"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>عدد الأخبار *</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="number" 
-                        min="1"
-                        {...field} 
-                        onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
-                        data-testid="input-total-credits"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="space-y-2">
+                <FormField
+                  control={form.control}
+                  name="totalCredits"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>عدد الأخبار {!isUnlimited && "*"}</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min="1"
+                          {...field}
+                          value={isUnlimited ? "" : field.value}
+                          placeholder={isUnlimited ? "مفتوح ∞" : undefined}
+                          disabled={isUnlimited}
+                          onChange={(e) => field.onChange(parseInt(e.target.value) || 0)}
+                          data-testid="input-total-credits"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="isUnlimited"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center gap-2 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={(checked) => field.onChange(checked === true)}
+                          data-testid="checkbox-unlimited"
+                        />
+                      </FormControl>
+                      <FormLabel className="text-sm font-normal cursor-pointer">
+                        باقة مفتوحة (نشر غير محدود حتى تاريخ الانتهاء)
+                      </FormLabel>
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <FormField
                 control={form.control}
@@ -256,31 +301,63 @@ export function AddCreditPackageDialog({
                 )}
               />
 
-              {period !== "one-time" && (
+              {(period !== "one-time" || isUnlimited) && (
                 <FormField
                   control={form.control}
                   name="expiryDate"
                   render={({ field }) => (
                     <FormItem className="flex flex-col">
-                      <FormLabel>تاريخ الانتهاء</FormLabel>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className="justify-start text-right font-normal"
-                          disabled
-                          data-testid="button-expiry-date"
-                        >
-                          <Calendar className="ml-2 h-4 w-4" />
-                          {field.value ? (
-                            format(field.value, "PPP", { locale: ar })
-                          ) : (
-                            <span>محسوب تلقائياً</span>
-                          )}
-                        </Button>
-                      </FormControl>
+                      <FormLabel>تاريخ الانتهاء {isUnlimited && "*"}</FormLabel>
+                      {isUnlimited ? (
+                        // الباقة المفتوحة: التاريخ يُحدد يدوياً وهو حد الباقة الوحيد
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                className="justify-start text-right font-normal"
+                                data-testid="button-expiry-date"
+                              >
+                                <Calendar className="ml-2 h-4 w-4" />
+                                {field.value ? (
+                                  format(field.value, "PPP", { locale: ar })
+                                ) : (
+                                  <span>اختر تاريخ انتهاء الباقة</span>
+                                )}
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <CalendarComponent
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              locale={ar}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      ) : (
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className="justify-start text-right font-normal"
+                            disabled
+                            data-testid="button-expiry-date"
+                          >
+                            <Calendar className="ml-2 h-4 w-4" />
+                            {field.value ? (
+                              format(field.value, "PPP", { locale: ar })
+                            ) : (
+                              <span>محسوب تلقائياً</span>
+                            )}
+                          </Button>
+                        </FormControl>
+                      )}
                       <p className="text-xs text-muted-foreground">
-                        يتم حسابه تلقائياً بناءً على الفترة
+                        {isUnlimited ? "بعد هذا التاريخ يتوقف النشر المفتوح" : "يتم حسابه تلقائياً بناءً على الفترة"}
                       </p>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />

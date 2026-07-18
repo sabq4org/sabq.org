@@ -9322,6 +9322,9 @@ export const publisherCredits = pgTable("publisher_credits", {
   totalCredits: integer("total_credits").notNull(), // Total number of articles in package
   usedCredits: integer("used_credits").default(0).notNull(), // Number of published articles
   remainingCredits: integer("remaining_credits").notNull(), // Remaining articles
+  // باقة مفتوحة: نشر غير محدود حتى تاريخ الانتهاء — usedCredits يُحصى
+  // للتقارير لكن لا خصم من remainingCredits
+  isUnlimited: boolean("is_unlimited").default(false).notNull(),
   
   // Package period
   period: text("period").notNull(), // monthly, quarterly, yearly, one-time

@@ -441,7 +441,7 @@ export async function getPortalOverview(userId: string) {
           ),
         ),
       )
-      .orderBy(desc(publisherCredits.createdAt))
+      .orderBy(desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt))
       .limit(1),
     db
       .select(articleListSelection)
@@ -500,13 +500,14 @@ export async function getPortalOverview(userId: string) {
     const ratio = activeCredit.totalCredits > 0
       ? activeCredit.remainingCredits / activeCredit.totalCredits
       : 0;
-    if (activeCredit.remainingCredits <= 0) {
+    // الباقة المفتوحة لا تنبيهات رصيد لها — تنبيه الانتهاء فقط
+    if (!activeCredit.isUnlimited && activeCredit.remainingCredits <= 0) {
       attention.push({
         type: "credits_exhausted",
         severity: "critical",
         message: "نفد رصيد باقتكم الحالية. لا يمكن نشر مواد جديدة حتى التجديد.",
       });
-    } else if (ratio <= 0.2) {
+    } else if (!activeCredit.isUnlimited && ratio <= 0.2) {
       attention.push({
         type: "credits_low",
         severity: "warning",
@@ -626,14 +627,14 @@ function collectAlertEvents(
     const ratio = activeCredit.totalCredits > 0
       ? activeCredit.remainingCredits / activeCredit.totalCredits
       : 0;
-    if (activeCredit.remainingCredits <= 0) {
+    if (!activeCredit.isUnlimited && activeCredit.remainingCredits <= 0) {
       events.push({
         alertKey: `credits_exhausted:${activeCredit.id}`,
         title: "نفد رصيد باقتكم",
         body: `استُهلك كامل رصيد باقة «${activeCredit.packageName}». لا يمكن نشر مواد جديدة حتى تجديد الباقة.`,
         cooldownDays: 7,
       });
-    } else if (ratio <= 0.2) {
+    } else if (!activeCredit.isUnlimited && ratio <= 0.2) {
       events.push({
         alertKey: `credits_low:${activeCredit.id}`,
         title: "رصيد باقتكم يوشك على النفاد",
@@ -701,7 +702,7 @@ export async function runPublisherDailyAlerts(): Promise<{ publishersChecked: nu
             or(sql`${publisherCredits.expiryDate} IS NULL`, gte(publisherCredits.expiryDate, now)),
           ),
         )
-        .orderBy(desc(publisherCredits.createdAt))
+        .orderBy(desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt))
         .limit(1);
 
       const events = collectAlertEvents(publisher, activeCredit ?? null, now);
@@ -754,7 +755,7 @@ function monthlyReportHtml(params: {
   published: number;
   totalViews: number;
   creditsUsed: number;
-  remainingCredits: number | null;
+  remainingCredits: number | string | null;
   packageName: string | null;
   topArticles: Array<{ title: string; views: number | null }>;
 }): string {
@@ -851,7 +852,7 @@ export async function sendPublisherMonthlyReports(now = new Date()): Promise<{ r
           .select()
           .from(publisherCredits)
           .where(and(eq(publisherCredits.publisherId, publisher.id), eq(publisherCredits.isActive, true)))
-          .orderBy(desc(publisherCredits.createdAt))
+          .orderBy(desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt))
           .limit(1),
       ]);
 
@@ -866,7 +867,9 @@ export async function sendPublisherMonthlyReports(now = new Date()): Promise<{ r
         published,
         totalViews: Number(monthStats?.totalViews) || 0,
         creditsUsed,
-        remainingCredits: activeCredit ? activeCredit.remainingCredits : null,
+        remainingCredits: activeCredit
+          ? activeCredit.isUnlimited ? "مفتوح" : activeCredit.remainingCredits
+          : null,
         packageName: activeCredit?.packageName ?? null,
         topArticles,
       });

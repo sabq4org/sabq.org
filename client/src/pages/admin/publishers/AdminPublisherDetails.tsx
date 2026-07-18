@@ -85,13 +85,20 @@ export default function AdminPublisherDetails() {
     refetchOnMount: 'always',
   });
 
-  const { data: articlesDataRaw } = useQuery<Article[]>({
-    queryKey: [`/api/admin/publishers/${publisherId}/articles`],
+  // مواد الوكالة كاملة (المالك + الموظفون عبر publisherId) بترقيم فعلي من الخادم
+  const articlesLimit = 10;
+  const { data: articlesDataRaw } = useQuery<{
+    articles: Array<Pick<Article, "id" | "title" | "slug" | "englishSlug" | "status" | "publisherStatus" | "views" | "createdAt" | "publishedAt">>;
+    total: number;
+  }>({
+    queryKey: [`/api/admin/publishers/${publisherId}/articles`, { page: articlesPage, limit: articlesLimit }],
     enabled: !!publisherId,
     staleTime: 0,
     refetchOnMount: 'always',
   });
-  const articlesData = Array.isArray(articlesDataRaw) ? articlesDataRaw : [];
+  const articlesData = Array.isArray(articlesDataRaw?.articles) ? articlesDataRaw!.articles : [];
+  const articlesTotal = Number(articlesDataRaw?.total) || 0;
+  const articlesTotalPages = Math.max(1, Math.ceil(articlesTotal / articlesLimit));
 
   const deactivateCreditMutation = useMutation({
     mutationFn: async (creditId: string) => {
@@ -136,8 +143,11 @@ export default function AdminPublisherDetails() {
 
   const stats = statsData?.stats;
   const activeCredit = statsData?.activeCredit;
+  const hasActiveUnlimited = (credits || []).some(
+    (c) => c.isActive && c.isUnlimited && (!c.expiryDate || new Date(c.expiryDate) >= new Date()),
+  );
   const totalRemainingCredits = credits
-    ?.filter((c) => c.isActive)
+    ?.filter((c) => c.isActive && !c.isUnlimited)
     .reduce((sum, c) => sum + c.remainingCredits, 0) || 0;
 
   return (
@@ -287,7 +297,7 @@ export default function AdminPublisherDetails() {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">الرصيد المتبقي</span>
                 <span className="text-2xl font-bold" data-testid="text-total-credits">
-                  {totalRemainingCredits}
+                  {hasActiveUnlimited ? "مفتوح ∞" : totalRemainingCredits}
                 </span>
               </div>
               <Separator />
@@ -383,20 +393,28 @@ export default function AdminPublisherDetails() {
                 <TableBody>
                   {credits.map((credit) => {
                     const isExpired = credit.expiryDate && new Date(credit.expiryDate) < new Date();
-                    const usedCredits = credit.totalCredits - credit.remainingCredits;
 
                     return (
                       <TableRow key={credit.id} data-testid={`row-credit-${credit.id}`}>
-                        <TableCell className="font-medium">{credit.packageName}</TableCell>
+                        <TableCell className="font-medium">
+                          {credit.packageName}
+                          {credit.isUnlimited && (
+                            <Badge variant="outline" className="mr-2 bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/40 dark:text-blue-200">
+                              مفتوحة
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell>
                           {credit.period === "monthly" && "شهرية"}
                           {credit.period === "quarterly" && "ربع سنوية"}
                           {credit.period === "yearly" && "سنوية"}
                           {credit.period === "one-time" && "مرة واحدة"}
                         </TableCell>
-                        <TableCell>{credit.totalCredits}</TableCell>
-                        <TableCell>{usedCredits}</TableCell>
-                        <TableCell className="font-medium">{credit.remainingCredits}</TableCell>
+                        <TableCell>{credit.isUnlimited ? "مفتوح ∞" : credit.totalCredits}</TableCell>
+                        <TableCell>{credit.usedCredits}</TableCell>
+                        <TableCell className="font-medium">
+                          {credit.isUnlimited ? "مفتوح" : credit.remainingCredits}
+                        </TableCell>
                         <TableCell>
                           {format(new Date(credit.startDate), "dd/MM/yyyy", { locale: ar })}
                         </TableCell>
@@ -410,7 +428,7 @@ export default function AdminPublisherDetails() {
                             <Badge variant="outline">معطل</Badge>
                           ) : isExpired ? (
                             <Badge variant="destructive">منتهي</Badge>
-                          ) : credit.remainingCredits === 0 ? (
+                          ) : !credit.isUnlimited && credit.remainingCredits === 0 ? (
                             <Badge variant="secondary">مكتمل</Badge>
                           ) : (
                             <Badge variant="default">نشط</Badge>
@@ -442,12 +460,13 @@ export default function AdminPublisherDetails() {
         </CardContent>
       </Card>
 
-      {/* Publisher Articles */}
+      {/* Publisher Articles — كل مواد الوكالة (المالك والموظفون) بترقيم */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            مقالات الناشر
+            أخبار الوكالة
+            {articlesTotal > 0 && <Badge variant="secondary">{articlesTotal}</Badge>}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -459,40 +478,78 @@ export default function AdminPublisherDetails() {
                     <TableRow>
                       <TableHead className="text-right">العنوان</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
-                      <TableHead className="text-right">تاريخ الإضافة</TableHead>
+                      <TableHead className="text-right">المشاهدات</TableHead>
+                      <TableHead className="text-right">التاريخ</TableHead>
                       <TableHead className="text-right">الإجراءات</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {articlesData.map((article) => (
                       <TableRow key={article.id}>
-                        <TableCell className="font-medium">{article.title}</TableCell>
+                        <TableCell className="font-medium max-w-md">
+                          <p className="line-clamp-2">{article.title}</p>
+                        </TableCell>
                         <TableCell>
-                          {article.status === "published" && (
-                            <Badge variant="default">منشور</Badge>
-                          )}
-                          {article.status === "draft" && (
+                          {article.status === "published" ? (
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200" variant="outline">منشور</Badge>
+                          ) : article.status === "archived" || article.publisherStatus === "rejected" ? (
+                            <Badge variant="destructive">مرفوض</Badge>
+                          ) : article.publisherStatus === "needs_changes" ? (
+                            <Badge className="bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/40 dark:text-orange-200" variant="outline">أُعيدت للناشر</Badge>
+                          ) : article.publisherStatus === "pending" ? (
+                            <Badge className="bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-200" variant="outline">بانتظار المراجعة</Badge>
+                          ) : (
                             <Badge variant="secondary">مسودة</Badge>
                           )}
-                          {article.status === "archived" && (
-                            <Badge variant="outline">مؤرشف</Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {article.status === "published" ? (Number(article.views) || 0) : "—"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          {format(new Date(article.publishedAt || article.createdAt), "dd/MM/yyyy", { locale: ar })}
+                        </TableCell>
+                        <TableCell>
+                          {article.status === "published" && (
+                            <Link href={`/article/${article.englishSlug || article.slug}`}>
+                              <Button variant="ghost" size="sm">
+                                عرض
+                              </Button>
+                            </Link>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          {format(new Date(article.createdAt), "dd/MM/yyyy", { locale: ar })}
-                        </TableCell>
-                        <TableCell>
-                          <Link href={`/article/${article.englishSlug || article.slug}`}>
-                            <Button variant="ghost" size="sm">
-                              عرض
-                            </Button>
-                          </Link>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </div>
+
+              {articlesTotalPages > 1 && (
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground" data-testid="text-articles-pagination">
+                    صفحة {articlesPage} من {articlesTotalPages} · إجمالي {articlesTotal} مادة
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setArticlesPage((p) => Math.max(1, p - 1))}
+                      disabled={articlesPage === 1}
+                      data-testid="button-articles-prev"
+                    >
+                      السابق
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setArticlesPage((p) => Math.min(articlesTotalPages, p + 1))}
+                      disabled={articlesPage >= articlesTotalPages}
+                      data-testid="button-articles-next"
+                    >
+                      التالي
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-8 text-muted-foreground">
