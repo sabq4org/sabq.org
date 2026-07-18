@@ -2,9 +2,13 @@ import { Router, type Request } from "express";
 import { z } from "zod";
 import { getUserPermissions, requireAuth } from "../rbac";
 import {
+  addPublisherMemberByEmail,
+  createPublisherMember,
   getPortalArticle,
   getPortalArticles,
   getPortalOverview,
+  listPublisherMembers,
+  removePublisherMember,
   requestArticleChanges,
   resolvePublisherForUser,
   submitPortalArticle,
@@ -94,16 +98,26 @@ const requestChangesSchema = z.object({
   notes: z.string().trim().min(5, "الملاحظات مطلوبة (٥ أحرف على الأقل)").max(2000),
 });
 
+/** حارس صلاحيات إدارة الناشرين للمسارات الإدارية في هذه الوحدة */
+async function requirePublisherManagement(req: Request, res: any, next: () => void) {
+  try {
+    const permissions = await getUserPermissions((req.user as { id: string }).id);
+    if (!permissions.includes("publishers.manage") && !permissions.includes("articles.review")) {
+      return res.status(403).json({ message: "ليست لديك صلاحية إدارة الناشرين" });
+    }
+    next();
+  } catch (error) {
+    console.error("[Publisher Portal] permission check failed:", error);
+    res.status(500).json({ message: "تعذر التحقق من الصلاحيات" });
+  }
+}
+
 router.post(
   "/api/admin/publishers/articles/:id/request-changes",
   requireAuth,
+  requirePublisherManagement,
   async (req, res) => {
     try {
-      const permissions = await getUserPermissions((req.user as { id: string }).id);
-      if (!permissions.includes("publishers.manage") && !permissions.includes("articles.review")) {
-        return res.status(403).json({ message: "ليست لديك صلاحية مراجعة مواد الناشرين" });
-      }
-
       const parsed = requestChangesSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
@@ -119,6 +133,79 @@ router.post(
     } catch (error) {
       console.error("[Publisher Portal] request-changes failed:", error);
       res.status(500).json({ message: "تعذر إعادة المادة للناشر" });
+    }
+  },
+);
+
+// ============================================
+// إدارة مستخدمي الوكالة (إداري)
+// ============================================
+
+router.get(
+  "/api/admin/publishers/:id/members",
+  requireAuth,
+  requirePublisherManagement,
+  async (req, res) => {
+    try {
+      const members = await listPublisherMembers(req.params.id);
+      if (!members) return res.status(404).json({ message: "الوكالة غير موجودة" });
+      res.json({ members });
+    } catch (error) {
+      console.error("[Publisher Portal] members list failed:", error);
+      res.status(500).json({ message: "تعذر جلب مستخدمي الوكالة" });
+    }
+  },
+);
+
+const addMemberSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("link"),
+    email: z.string().email("البريد الإلكتروني غير صحيح"),
+  }),
+  z.object({
+    mode: z.literal("create"),
+    email: z.string().email("البريد الإلكتروني غير صحيح"),
+    password: z.string().min(8, "كلمة المرور 8 أحرف على الأقل"),
+    firstName: z.string().trim().min(2, "الاسم الأول مطلوب"),
+    lastName: z.string().trim().min(2, "اسم العائلة مطلوب"),
+  }),
+]);
+
+router.post(
+  "/api/admin/publishers/:id/members",
+  requireAuth,
+  requirePublisherManagement,
+  async (req, res) => {
+    try {
+      const parsed = addMemberSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "بيانات غير صحيحة" });
+      }
+
+      const result = parsed.data.mode === "link"
+        ? await addPublisherMemberByEmail(req.params.id, parsed.data.email)
+        : await createPublisherMember(req.params.id, parsed.data);
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+      res.status(201).json({ message: result.message });
+    } catch (error) {
+      console.error("[Publisher Portal] add member failed:", error);
+      res.status(500).json({ message: "تعذر إضافة المستخدم للوكالة" });
+    }
+  },
+);
+
+router.delete(
+  "/api/admin/publishers/:id/members/:userId",
+  requireAuth,
+  requirePublisherManagement,
+  async (req, res) => {
+    try {
+      const result = await removePublisherMember(req.params.id, req.params.userId);
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+      res.json({ message: result.message });
+    } catch (error) {
+      console.error("[Publisher Portal] remove member failed:", error);
+      res.status(500).json({ message: "تعذر فك ربط المستخدم" });
     }
   },
 );

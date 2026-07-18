@@ -1,9 +1,13 @@
 import { and, desc, eq, gte, or, sql } from "drizzle-orm";
+import bcrypt from "bcrypt";
+import { nanoid } from "nanoid";
 import { db } from "../db";
 import {
   articles,
   publisherCredits,
   publishers,
+  roles,
+  userRoles,
   users,
   type Publisher,
 } from "@shared/schema";
@@ -254,6 +258,143 @@ export async function requestArticleChanges(articleId: string, adminId: string, 
     });
   }
   return { ok: true as const, message: "أُعيدت المادة للناشر مع الملاحظات" };
+}
+
+// ============================================
+// مستخدمو الوكالة (موظفو الناشر)
+// المالك = publishers.userId؛ الموظفون = users.linkedPublisherId.
+// أي موظف مرتبط: يدخل بوابة الناشر، تُنسب مواده للوكالة تلقائياً
+// (storage.createArticle)، ويُخصم نشره من رصيدها.
+// ============================================
+
+const memberSelection = {
+  id: users.id,
+  email: users.email,
+  firstName: users.firstName,
+  lastName: users.lastName,
+  profileImageUrl: users.profileImageUrl,
+  role: users.role,
+  status: users.status,
+};
+
+export async function listPublisherMembers(publisherId: string) {
+  const [publisher] = await db
+    .select()
+    .from(publishers)
+    .where(eq(publishers.id, publisherId))
+    .limit(1);
+  if (!publisher) return null;
+
+  const [owners, linked] = await Promise.all([
+    publisher.userId
+      ? db.select(memberSelection).from(users).where(eq(users.id, publisher.userId)).limit(1)
+      : Promise.resolve([]),
+    db
+      .select(memberSelection)
+      .from(users)
+      .where(eq(users.linkedPublisherId, publisherId))
+      .orderBy(users.firstName),
+  ]);
+
+  const owner = owners[0] ?? null;
+  return [
+    ...(owner ? [{ ...owner, isOwner: true }] : []),
+    ...linked.filter((m) => m.id !== owner?.id).map((m) => ({ ...m, isOwner: false })),
+  ];
+}
+
+type MemberResult =
+  | { ok: false; status: number; message: string }
+  | { ok: true; message: string };
+
+/** ربط حساب موجود بالوكالة عبر بريده الإلكتروني. */
+export async function addPublisherMemberByEmail(publisherId: string, email: string): Promise<MemberResult> {
+  const normalized = email.trim().toLowerCase();
+  const [user] = await db
+    .select({ id: users.id, linkedPublisherId: users.linkedPublisherId })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${normalized}`)
+    .limit(1);
+  if (!user) return { ok: false, status: 404, message: "لا يوجد مستخدم بهذا البريد الإلكتروني" };
+
+  if (user.linkedPublisherId === publisherId) {
+    return { ok: false, status: 400, message: "هذا المستخدم مرتبط بالوكالة بالفعل" };
+  }
+  if (user.linkedPublisherId) {
+    return { ok: false, status: 409, message: "هذا المستخدم مرتبط بوكالة أخرى — فكّ ربطه أولاً" };
+  }
+  const [ownsOther] = await db
+    .select({ id: publishers.id })
+    .from(publishers)
+    .where(eq(publishers.userId, user.id))
+    .limit(1);
+  if (ownsOther && ownsOther.id !== publisherId) {
+    return { ok: false, status: 409, message: "هذا المستخدم مالك وكالة أخرى ولا يمكن ربطه كموظف" };
+  }
+
+  await db.update(users).set({ linkedPublisherId: publisherId }).where(eq(users.id, user.id));
+  return { ok: true, message: "رُبط المستخدم بالوكالة بنجاح" };
+}
+
+/** إنشاء حساب موظف جديد بدور «ناشر» مربوط بالوكالة. */
+export async function createPublisherMember(
+  publisherId: string,
+  data: { email: string; password: string; firstName: string; lastName: string },
+): Promise<MemberResult> {
+  const normalized = data.email.trim().toLowerCase();
+  const [existing] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${normalized}`)
+    .limit(1);
+  if (existing) {
+    return { ok: false, status: 409, message: "البريد الإلكتروني مستخدم مسبقاً — استخدم «ربط حساب موجود»" };
+  }
+
+  const passwordHash = await bcrypt.hash(data.password, 12);
+  const userId = nanoid();
+  await db.insert(users).values({
+    id: userId,
+    email: data.email.trim(),
+    passwordHash,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    role: "publisher",
+    authProvider: "local",
+    isProfileComplete: true,
+    status: "active",
+    emailVerified: true,
+    linkedPublisherId: publisherId,
+  } as any);
+
+  const [publisherRole] = await db.select().from(roles).where(eq(roles.name, "publisher")).limit(1);
+  if (publisherRole) {
+    await db.insert(userRoles).values({ userId, roleId: publisherRole.id });
+  }
+
+  return { ok: true, message: "أُنشئ حساب الموظف ورُبط بالوكالة" };
+}
+
+/** فك ربط موظف عن الوكالة (لا يمكن فك المالك). */
+export async function removePublisherMember(publisherId: string, memberId: string): Promise<MemberResult> {
+  const [publisher] = await db
+    .select({ userId: publishers.userId })
+    .from(publishers)
+    .where(eq(publishers.id, publisherId))
+    .limit(1);
+  if (!publisher) return { ok: false, status: 404, message: "الوكالة غير موجودة" };
+  if (publisher.userId === memberId) {
+    return { ok: false, status: 400, message: "لا يمكن فك ربط مالك الوكالة" };
+  }
+
+  const [updated] = await db
+    .update(users)
+    .set({ linkedPublisherId: null })
+    .where(and(eq(users.id, memberId), eq(users.linkedPublisherId, publisherId)))
+    .returning({ id: users.id });
+  if (!updated) return { ok: false, status: 404, message: "المستخدم غير مرتبط بهذه الوكالة" };
+
+  return { ok: true, message: "فُك ربط الموظف عن الوكالة" };
 }
 
 export async function getPortalOverview(userId: string) {
