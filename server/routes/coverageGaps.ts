@@ -20,6 +20,7 @@ import {
   coverageGapMatcherState,
   getCoverageGap,
   listCoverageGaps,
+  refreshCoverageGaps,
   refreshCoverageGapsIfStale,
   updateCoverageGap,
 } from "../services/coverageGapMatcher";
@@ -68,6 +69,20 @@ export function registerCoverageGapRoutes(app: Express) {
     } catch (error) {
       console.error("[CoverageGap API] list failed:", error);
       res.status(500).json({ message: "تعذر جلب فجوات التغطية" });
+    }
+  });
+
+  // ---------- تحديث يدوي — المسار الوحيد لتشغيل المطابقة منذ إيقاف التلقائي ----------
+  app.post("/api/admin/coverage-gaps/refresh", requireAuth, canWork, async (_req, res) => {
+    try {
+      const summary = await refreshCoverageGaps("manual");
+      if (!summary) {
+        return res.status(409).json({ message: "تحديث آخر قيد التنفيذ — انتظر لحظات ثم أعد المحاولة" });
+      }
+      res.json({ summary, matcher: coverageGapMatcherState() });
+    } catch (error) {
+      console.error("[CoverageGap API] manual refresh failed:", error);
+      res.status(500).json({ message: "تعذر تحديث فجوات التغطية" });
     }
   });
 
