@@ -55,8 +55,14 @@ struct SabqRTLText: View {
             numberOfLines: lineLimit,
             lineSpacing: lineSpacing
         )
+        // الـ UIViewRepresentable يبتلع اللمسة قبل وصولها إلى NavigationLink
+        // فيصبح العنوان «ميتاً» للنقر بينما الصورة تستجيب (بلاغ 2026-07-19).
+        // النص لا يحتاج تفاعلاً — نعطّل لمسه ونسد الفجوة بطبقة شفافة قابلة
+        // للنقر تمرّر اللمسة للرابط الحاوي. مغطى بـ NewsTapNavigationTests.
+        .allowsHitTesting(false)
         .frame(maxWidth: .infinity, alignment: .trailing)
         .fixedSize(horizontal: false, vertical: true)
+        .background(Color.clear.contentShape(Rectangle()))
     }
 }
 
