@@ -7,6 +7,9 @@ import {
   users,
   type Publisher,
 } from "@shared/schema";
+import { storage } from "../storage";
+import { deductPublisherCreditSafely } from "./publisherCreditService";
+import { invalidatePublishedContent } from "./contentInvalidation";
 
 /**
  * بوابة الناشر (وكالات المحتوى الخارجية).
@@ -93,10 +96,29 @@ const articleListSelection = {
   views: articles.views,
   createdAt: articles.createdAt,
   publishedAt: articles.publishedAt,
+  publisherStatus: articles.publisherStatus,
   publisherSubmittedAt: articles.publisherSubmittedAt,
   publisherApprovedAt: articles.publisherApprovedAt,
   publisherReviewNotes: articles.publisherReviewNotes,
 };
+
+/** تنبيه شخصي للناشر في جرس اللوحة — لا يفشل النشر إن تعذر. */
+export async function notifyPublisherUser(
+  userId: string,
+  payload: { title: string; body: string; deeplink?: string },
+) {
+  try {
+    await storage.createNotification({
+      userId,
+      type: "publisher_article",
+      title: payload.title,
+      body: payload.body,
+      deeplink: payload.deeplink ?? "/dashboard/publisher/articles",
+    });
+  } catch (err) {
+    console.error("[Publisher Portal] notification failed:", err);
+  }
+}
 
 export async function getPortalArticles(
   publisher: Publisher,
@@ -126,6 +148,114 @@ export async function getPortalArticles(
   return { articles: rows, total: Number(count) || 0, page, limit };
 }
 
+/** مادة واحدة لمحرر البوابة — ملكية صارمة (كاتبها فقط). */
+export async function getPortalArticle(userId: string, articleId: string) {
+  const [article] = await db
+    .select()
+    .from(articles)
+    .where(and(eq(articles.id, articleId), eq(articles.authorId, userId)))
+    .limit(1);
+  return article ?? null;
+}
+
+export type SubmitResult =
+  | { ok: false; status: number; message: string; code?: string }
+  | { ok: true; published: boolean; message: string };
+
+/**
+ * إرسال مادة للمراجعة — أو نشرها فوراً إذا كان الناشر موثوقاً (auto_publish).
+ * تُستخدم من زر «إرسال للمراجعة» ومن إعادة الإرسال بعد «تحتاج تعديلات».
+ */
+export async function submitPortalArticle(userId: string, articleId: string): Promise<SubmitResult> {
+  const article = await getPortalArticle(userId, articleId);
+  if (!article) return { ok: false, status: 404, message: "المادة غير موجودة" };
+  if (article.status !== "draft") {
+    return { ok: false, status: 400, message: "لا يمكن إرسال مادة منشورة أو مؤرشفة" };
+  }
+
+  const gate = await getPublishingGate(userId);
+  if (!gate.allowed) {
+    return { ok: false, status: 403, message: gate.message ?? "النشر غير متاح", code: gate.code };
+  }
+  const publisher = gate.publisher;
+  if (!publisher) return { ok: false, status: 404, message: "لم يتم العثور على حساب الناشر" };
+
+  const now = new Date();
+
+  if (publisher.autoPublish) {
+    const [published] = await db
+      .update(articles)
+      .set({
+        status: "published",
+        publishedAt: now,
+        updatedAt: now,
+        publisherId: publisher.id,
+        isPublisherNews: true,
+        publisherStatus: "approved",
+        publisherSubmittedAt: article.publisherSubmittedAt ?? now,
+        publisherApprovedAt: now,
+        publisherApprovedBy: userId,
+      })
+      .where(and(eq(articles.id, articleId), eq(articles.status, "draft")))
+      .returning();
+    if (!published) return { ok: false, status: 409, message: "تعذر نشر المادة — حاول مجدداً" };
+
+    await deductPublisherCreditSafely({ authorUserId: userId, articleId, actorId: userId });
+    invalidatePublishedContent({
+      articleSlug: published.slug,
+      isBreaking: false,
+      reason: `publisher-auto-publish:${articleId}`,
+    });
+    await notifyPublisherUser(userId, {
+      title: "نُشر خبرك",
+      body: `«${published.title}» نُشر مباشرة وخُصم من رصيد باقتكم.`,
+    });
+    return { ok: true, published: true, message: "نُشرت المادة مباشرة وخُصم رصيد واحد" };
+  }
+
+  await db
+    .update(articles)
+    .set({
+      publisherStatus: "pending",
+      publisherSubmittedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(articles.id, articleId));
+  return { ok: true, published: false, message: "أُرسلت المادة للمراجعة التحريرية" };
+}
+
+/** إجراء إداري: إعادة المادة للناشر بملاحظات بدل الرفض النهائي. */
+export async function requestArticleChanges(articleId: string, adminId: string, notes: string) {
+  const [article] = await db
+    .select({ id: articles.id, title: articles.title, authorId: articles.authorId, status: articles.status })
+    .from(articles)
+    .where(eq(articles.id, articleId))
+    .limit(1);
+  if (!article) return { ok: false as const, status: 404, message: "المادة غير موجودة" };
+  if (article.status !== "draft") {
+    return { ok: false as const, status: 400, message: "طلب التعديلات متاح للمواد غير المنشورة فقط" };
+  }
+
+  await db
+    .update(articles)
+    .set({
+      publisherStatus: "needs_changes",
+      publisherReviewedBy: adminId,
+      publisherReviewedAt: new Date(),
+      publisherReviewNotes: notes,
+      updatedAt: new Date(),
+    })
+    .where(eq(articles.id, articleId));
+
+  if (article.authorId) {
+    await notifyPublisherUser(article.authorId, {
+      title: "مادتك تحتاج تعديلات",
+      body: `«${article.title}»: ${notes.slice(0, 180)}`,
+    });
+  }
+  return { ok: true as const, message: "أُعيدت المادة للناشر مع الملاحظات" };
+}
+
 export async function getPortalOverview(userId: string) {
   const publisher = await resolvePublisherForUser(userId);
   if (!publisher) return null;
@@ -149,6 +279,8 @@ export async function getPortalOverview(userId: string) {
         draftArticles: sql<number>`count(*) filter (where ${articles.status} = 'draft')`,
         publishedThisMonth: sql<number>`count(*) filter (where ${articles.status} = 'published' and ${articles.publishedAt} >= ${monthStart})`,
         totalViews: sql<number>`coalesce(sum(${articles.views}) filter (where ${articles.status} = 'published'), 0)`,
+        pendingReview: sql<number>`count(*) filter (where ${articles.status} = 'draft' and ${articles.publisherStatus} = 'pending')`,
+        needsChanges: sql<number>`count(*) filter (where ${articles.status} = 'draft' and ${articles.publisherStatus} = 'needs_changes')`,
       })
       .from(articles)
       .where(condition),
@@ -193,6 +325,15 @@ export async function getPortalOverview(userId: string) {
 
   // شارات «يتطلب انتباهك» تُحسب في الخادم لتبقى الواجهة عرضاً فقط
   const attention: Array<{ type: string; severity: "warning" | "critical"; message: string }> = [];
+
+  const needsChangesCount = Number(stats?.needsChanges) || 0;
+  if (needsChangesCount > 0) {
+    attention.push({
+      type: "needs_changes",
+      severity: "warning",
+      message: `لديك ${needsChangesCount} ${needsChangesCount === 1 ? "مادة تحتاج" : "مواد تحتاج"} تعديلات من المحرر — راجع الملاحظات وأعد الإرسال.`,
+    });
+  }
 
   if (publisher.publishingEndsAt) {
     const daysLeft = Math.ceil((publisher.publishingEndsAt.getTime() - now.getTime()) / 86_400_000);
@@ -265,6 +406,8 @@ export async function getPortalOverview(userId: string) {
       draftArticles: Number(stats?.draftArticles) || 0,
       publishedThisMonth: Number(stats?.publishedThisMonth) || 0,
       totalViews: Number(stats?.totalViews) || 0,
+      pendingReview: Number(stats?.pendingReview) || 0,
+      needsChanges: needsChangesCount,
     },
     activeCredit: activeCredit ?? null,
     recentArticles,

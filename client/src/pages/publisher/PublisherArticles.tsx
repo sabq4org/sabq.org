@@ -36,12 +36,23 @@ import {
 interface Article {
   id: string;
   title: string;
-  titleEn: string | null;
   status: string;
+  publisherStatus: string | null;
+  publisherReviewNotes: string | null;
   publisherSubmittedAt: string | null;
   publisherApprovedAt: string | null;
-  rejectedAt: string | null;
+  views: number | null;
   createdAt: string;
+  publishedAt: string | null;
+}
+
+/** الحالة المعروضة تُشتق من status + publisherStatus */
+function deriveState(article: Article): "published" | "pending" | "needs_changes" | "rejected" | "draft" {
+  if (article.status === "published") return "published";
+  if (article.status === "archived" || article.publisherStatus === "rejected") return "rejected";
+  if (article.publisherStatus === "needs_changes") return "needs_changes";
+  if (article.publisherStatus === "pending") return "pending";
+  return "draft";
 }
 
 export default function PublisherArticles() {
@@ -66,20 +77,17 @@ export default function PublisherArticles() {
     });
   }
 
-  const getStatusBadge = (status: string) => {
-    const variants: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; label: string; className?: string }> = {
-      draft: { variant: "secondary", label: "مسودة", className: "bg-gray-100 text-gray-800" },
-      pending_review: { variant: "outline", label: "قيد المراجعة", className: "bg-yellow-100 text-yellow-800 border-yellow-300" },
-      published: { variant: "default", label: "منشور", className: "bg-green-100 text-green-800" },
-      rejected: { variant: "destructive", label: "مرفوض", className: "bg-red-100 text-red-800" },
+  const getStatusBadge = (state: ReturnType<typeof deriveState>) => {
+    const variants: Record<string, { label: string; className: string }> = {
+      draft: { label: "مسودة", className: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200" },
+      pending: { label: "قيد المراجعة", className: "bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/40 dark:text-yellow-200" },
+      needs_changes: { label: "تحتاج تعديلات", className: "bg-orange-100 text-orange-800 border-orange-300 dark:bg-orange-900/40 dark:text-orange-200" },
+      published: { label: "منشور", className: "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200" },
+      rejected: { label: "مرفوض", className: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200" },
     };
-    const config = variants[status] || { variant: "secondary", label: status };
+    const config = variants[state];
     return (
-      <Badge
-        variant={config.variant}
-        className={config.className}
-        data-testid={`badge-status-${status}`}
-      >
+      <Badge variant="outline" className={config.className} data-testid={`badge-status-${state}`}>
         {config.label}
       </Badge>
     );
@@ -126,10 +134,9 @@ export default function PublisherArticles() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">جميع الحالات</SelectItem>
-                <SelectItem value="draft">مسودة</SelectItem>
-                <SelectItem value="pending_review">قيد المراجعة</SelectItem>
+                <SelectItem value="draft">مسودة / قيد المراجعة</SelectItem>
                 <SelectItem value="published">منشور</SelectItem>
-                <SelectItem value="rejected">مرفوض</SelectItem>
+                <SelectItem value="archived">مرفوض</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -170,7 +177,7 @@ export default function PublisherArticles() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-right">العنوان</TableHead>
-                      <TableHead className="text-right">العنوان (إنجليزي)</TableHead>
+                      <TableHead className="text-right">المشاهدات</TableHead>
                       <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right">تاريخ الإرسال</TableHead>
                       <TableHead className="text-right">تاريخ الموافقة/الرفض</TableHead>
@@ -178,13 +185,22 @@ export default function PublisherArticles() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data?.articles?.map((article) => (
+                    {data?.articles?.map((article) => {
+                      const state = deriveState(article);
+                      return (
                       <TableRow key={article.id} data-testid={`row-article-${article.id}`}>
-                        <TableCell className="font-medium">{article.title}</TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {article.titleEn || "-"}
+                        <TableCell className="font-medium">
+                          <p>{article.title}</p>
+                          {(state === "needs_changes" || state === "rejected") && article.publisherReviewNotes && (
+                            <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                              💬 {article.publisherReviewNotes}
+                            </p>
+                          )}
                         </TableCell>
-                        <TableCell>{getStatusBadge(article.status)}</TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {state === "published" ? `${Number(article.views) || 0} مشاهدة` : "—"}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(state)}</TableCell>
                         <TableCell>
                           {article.publisherSubmittedAt ? (
                             <div className="flex items-center gap-1 text-sm">
@@ -200,11 +216,6 @@ export default function PublisherArticles() {
                             <div className="flex items-center gap-1 text-sm text-green-600">
                               <Calendar className="h-3 w-3" />
                               {new Date(article.publisherApprovedAt).toLocaleDateString("ar-SA-u-ca-gregory")}
-                            </div>
-                          ) : article.rejectedAt ? (
-                            <div className="flex items-center gap-1 text-sm text-red-600">
-                              <Calendar className="h-3 w-3" />
-                              {new Date(article.rejectedAt).toLocaleDateString("ar-SA-u-ca-gregory")}
                             </div>
                           ) : (
                             "-"
@@ -238,7 +249,8 @@ export default function PublisherArticles() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
