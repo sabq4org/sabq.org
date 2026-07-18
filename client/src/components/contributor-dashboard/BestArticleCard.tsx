@@ -5,15 +5,23 @@ interface BestArticleCardProps {
   article: { id: string; title: string; views: number } | null;
   loading?: boolean;
   onNavigate?: (id: string) => void;
+  title?: string;
+  emptyLabel?: string;
 }
 
-export function BestArticleCard({ article, loading, onNavigate }: BestArticleCardProps) {
+export function BestArticleCard({
+  article,
+  loading,
+  onNavigate,
+  title = "أفضل مقال هذا الأسبوع",
+  emptyLabel = "لا توجد مقالات منشورة بعد",
+}: BestArticleCardProps) {
   return (
     <Card className="hover-elevate border-border shadow-none">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <Trophy className="h-4 w-4 text-primary" />
-          أفضل مقال هذا الأسبوع
+          {title}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -36,7 +44,7 @@ export function BestArticleCard({ article, loading, onNavigate }: BestArticleCar
             </div>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">لا توجد مقالات منشورة بعد</p>
+          <p className="text-sm text-muted-foreground">{emptyLabel}</p>
         )}
       </CardContent>
     </Card>

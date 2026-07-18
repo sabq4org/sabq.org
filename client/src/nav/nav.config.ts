@@ -84,10 +84,11 @@ export const navConfig: NavItem[] = [
   },
 
   // ===== المراسل / Reporter =====
+  // الأب «لوحة المراسل» يمنع تكرار «أخباري > أخباري» في المسار/المفضلة.
   {
     id: "reporter_section",
-    labelKey: "nav.my_news",
-    labelAr: "أخباري",
+    labelKey: "nav.reporter_workspace",
+    labelAr: "لوحة المراسل",
     icon: Newspaper,
     roles: ["reporter"],
     children: [
@@ -218,8 +219,9 @@ export const navConfig: NavItem[] = [
     labelAr: "مركز المهام",
     path: "/dashboard/tasks",
     icon: ListTodo,
-    roles: ["admin", "editor", "author", "reviewer", "analyst", "reporter"],
-    excludeRoles: ["opinion_author"],
+    roles: ["admin", "editor", "author", "reviewer", "analyst"],
+    // المراسل له لوحة مخصّصة؛ مركز المهام العام يزدحم قائمته بلا فائدة مباشرة.
+    excludeRoles: ["opinion_author", "reporter"],
     permissions: ["tasks.view_all", "tasks.view_own", "tasks.create"],
   },
 
