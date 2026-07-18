@@ -438,6 +438,8 @@ function DistributionTab() {
 
 function ImportTab() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canOpenRadar = hasRole(user, "system_admin", "system.admin", "superadmin", "super_admin");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [categoryId, setCategoryId] = useState<string>("none");
@@ -522,12 +524,17 @@ function ImportTab() {
           هذا التبويب للسحب من مصادر خارجية
         </AlertTitle>
         <AlertDescription>
-          يجلب الأخبار من صحف خارجية ويحفظها كمسودات داخل سبق. لرصد المصادر العالمية بشكل
-          أشمل (تقييم القيمة الإخبارية والترجمة التحريرية) استخدم{" "}
-          <a href="/dashboard/radar" className="font-medium underline">
-            رادار سبق الذكي
-          </a>
-          .
+          يجلب الأخبار من صحف خارجية ويحفظها كمسودات داخل سبق.
+          {canOpenRadar ? (
+            <>
+              {" "}
+              لرصد المصادر العالمية بشكل أشمل استخدم{" "}
+              <a href="/dashboard/radar" className="font-medium underline">
+                رادار سبق الذكي
+              </a>
+              .
+            </>
+          ) : null}
         </AlertDescription>
       </Alert>
 
