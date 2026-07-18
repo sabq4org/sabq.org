@@ -538,7 +538,7 @@ private fun PendingSurveyCard(invite: ApiMySurveyInvite, onOpen: () -> Unit) {
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(
-                "استطلاع بانتظارك: ${'$'}{invite.title}",
+                "استطلاع بانتظارك: ${invite.title}",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = SabqTheme.typography.cardTitle.copy(
@@ -548,8 +548,8 @@ private fun PendingSurveyCard(invite: ApiMySurveyInvite, onOpen: () -> Unit) {
                 ),
             )
             Text(
-                invite.purpose?.let { "رأيك يساعدنا في ${'$'}it — ${'$'}{invite.questionsCount} أسئلة" }
-                    ?: "${'$'}{invite.questionsCount} أسئلة قصيرة، دقائق معدودة",
+                invite.purpose?.let { "رأيك يساعدنا في $it — ${invite.questionsCount} أسئلة" }
+                    ?: "${invite.questionsCount} أسئلة قصيرة، دقائق معدودة",
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = SabqTheme.typography.metaSmall.copy(
