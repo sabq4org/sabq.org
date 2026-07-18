@@ -59,43 +59,32 @@ final class ArticlesStore {
         isLoading = true
         errorMessage = nil
 
-        // كل الطلبات تنطلق بالتوازي عبر async let.
+        // ابدأ الثانوية مع الرئيسية في الإقلاع فقط؛ سحب التحديث يجلب الرئيسية
+        // وحدها ثم يكمل الثانوية في الخلفية حتى لا يعلق مؤشر .refreshable.
         async let homepageTask = NewsService.fetchHomepage(ignoreCache: ignoreCache)
-        async let trendingTask = NewsService.fetchTrendingArticles()
-        async let liveTask = NewsService.fetchLivePreview()
-        async let opinionsTask = NewsService.fetchOpinions()
+        let trendingTask = ignoreCache ? nil : Task { await NewsService.fetchTrendingArticles() }
+        let liveTask = ignoreCache ? nil : Task { await NewsService.fetchLivePreview() }
+        let opinionsTask = ignoreCache ? nil : Task { await NewsService.fetchOpinions() }
 
-        // اعرض الخلاصة الأساسية فور وصول الصفحة الرئيسية بدل انتظار
-        // أبطأ الأقسام الثانوية (الترند/المباشر/الرأي). isContentReady
-        // يصبح true هنا فيختفي الـskeleton مبكّراً — وهذا أهم مكسب
-        // لسرعة الإقلاع لأن الرئيسية هي أول شاشة بعد التشغيل.
         let homepageResult = await homepageTask
-        guard generation == loadGeneration else { return }
+        guard generation == loadGeneration else {
+            trendingTask?.cancel(); liveTask?.cancel(); opinionsTask?.cancel()
+            return
+        }
         guard let result = homepageResult else {
-            // فشل كلا المسارين (شبكة/خادم): أظهر خطأً قابلاً لإعادة المحاولة
-            // بدل skeleton أبدي — دون مسح محتوى معروض من جلبة سابقة ناجحة.
             if allArticles.isEmpty && featuredArticles.isEmpty {
                 errorMessage = "تعذر تحميل الأخبار. تحقق من اتصالك بالإنترنت ثم أعد المحاولة"
             }
             isLoading = false
+            trendingTask?.cancel(); liveTask?.cancel(); opinionsTask?.cancel()
             return
         }
 
-        // سحب التحديث: حدّث الكاروسيل/العاجل/القصص حتى لو لم تتغيّر قائمة
-        // «آخر الأخبار» — كان الفحص الصامت يحدّث latest فقط.
         if ignoreCache {
-            if !result.featured.isEmpty {
-                applyFeaturedCarousel(result.featured)
-            }
-            if !result.breaking.isEmpty {
-                breakingNews = result.breaking
-            }
-            if !result.stories.isEmpty {
-                stories = result.stories
-            }
-            if !result.trending.isEmpty {
-                trendingKeywords = result.trending
-            }
+            if !result.featured.isEmpty { applyFeaturedCarousel(result.featured) }
+            if !result.breaking.isEmpty { breakingNews = result.breaking }
+            if !result.stories.isEmpty { stories = result.stories }
+            if !result.trending.isEmpty { trendingKeywords = result.trending }
         }
 
         if !result.latest.isEmpty {
@@ -109,15 +98,9 @@ final class ArticlesStore {
             displayedCount = min(pageSize, allFetchedArticles.count)
             allArticles = Array(allFetchedArticles.prefix(displayedCount))
             hasMore = displayedCount < allFetchedArticles.count || hasMoreFromAPI
-            // التحديث الكامل يلغي أي أخبار منتظرة (صارت معروضة الآن)
             pendingNewArticles.removeAll()
-            // التحديث الكامل يلغي شارات "جديد" — المحتوى كله أصبح طازجاً
             recentlyAddedIDs.removeAll()
 
-            // سخّن صور أعلى الرئيسية فور توفّر البيانات حتى تظهر الصور
-            // فوراً عند الرسم بدل تحميلها كسولاً عند ظهور كل بطاقة.
-            // الهيرو بميزانية بكسل أعلى (لا تدهور جودة)، وبطاقات الأخبار
-            // بحجم البطاقة. prefetch يتخطّى أي رابط موجود في الكاش.
             let heroURLs = featuredArticles.prefix(3)
                 .compactMap { $0.imageURL.flatMap(URL.init(string:)) }
             let cardURLs = allArticles.prefix(6)
@@ -125,26 +108,27 @@ final class ArticlesStore {
             if !heroURLs.isEmpty { ImageCache.prefetch(urls: heroURLs, maxPixelSize: 2000) }
             if !cardURLs.isEmpty { ImageCache.prefetch(urls: cardURLs, maxPixelSize: 1200) }
         } else if !result.featured.isEmpty {
-            // لا تمسح قائمة «آخر الأخبار» إن عادت الرئيسية بلا latest
-            // (فشل جزئي) — حدّث الهيرو فقط.
+            // لا تمسح قائمة «آخر الأخبار» إن عادت الرئيسية بلا latest.
             applyFeaturedCarousel(result.featured)
             if !result.breaking.isEmpty { breakingNews = result.breaking }
             if !result.stories.isEmpty { stories = result.stories }
             if !result.trending.isEmpty { trendingKeywords = result.trending }
         }
-        guard generation == loadGeneration else { return }
-        // الخلاصة الأساسية ظاهرة الآن — لا تُبقِ زر "تحميل المزيد"
-        // معطّلاً بينما تكمّل الأقسام الثانوية تحميلها أدناه.
+
+        guard generation == loadGeneration else {
+            trendingTask?.cancel(); liveTask?.cancel(); opinionsTask?.cancel()
+            return
+        }
         isLoading = false
 
-        // عند سحب التحديث: أنهِ await فوراً بعد الرئيسية حتى يختفي مؤشر
-        // .refreshable، وكمل الترند/المباشر/الرأي في الخلفية. انتظارها
-        // كان يعلّق السحب إذا بطؤ أحد الطلبات الثانوية أو انتهى بمهلة.
         if ignoreCache {
             Task { @MainActor in
-                let trending = await trendingTask
-                let live = await liveTask
-                let opinionsResult = await opinionsTask
+                async let trendingFetch = NewsService.fetchTrendingArticles()
+                async let liveFetch = NewsService.fetchLivePreview()
+                async let opinionsFetch = NewsService.fetchOpinions()
+                let trending = await trendingFetch
+                let live = await liveFetch
+                let opinionsResult = await opinionsFetch
                 guard generation == loadGeneration else { return }
                 trendingArticles = trending
                 liveData = live
@@ -154,11 +138,11 @@ final class ArticlesStore {
             return
         }
 
-        // الأقسام الثانوية تُملأ عند جهوزيتها. كل إسناد يحدّث خاصيته
-        // الخاصة في @Observable فيُعاد رسم قسمه فقط دون حجب الخلاصة.
-        trendingArticles = await trendingTask
-        liveData = await liveTask
-        opinions = await opinionsTask
+        if let trendingTask, let liveTask, let opinionsTask {
+            trendingArticles = await trendingTask.value
+            liveData = await liveTask.value
+            opinions = await opinionsTask.value
+        }
     }
 
     /// فحص صامت للأخبار الجديدة دون تعطيل القائمة الحالية أو إظهار مؤشر تحميل.
