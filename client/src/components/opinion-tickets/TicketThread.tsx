@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { PolishReplyButton } from "@/components/ai/PolishReplyButton";
 import type { OpinionTicketStatus } from "./statusMeta";
 import { STATUS_META, STATUS_OPTIONS } from "./statusMeta";
 import { authorKindMeta, type TicketAuthorKind } from "./authorKindMeta";
@@ -348,13 +349,32 @@ export function TicketThread({ ticketId, viewerRole }: Props) {
             )}
             <Textarea
               rows={4}
-              placeholder="اكتب ردك هنا..."
+              placeholder={
+                viewerRole === "admin"
+                  ? "اكتب مضمون ردك باختصار… ثم اضغط «توليد الرد» لصياغة مهنية"
+                  : "اكتب ردك هنا..."
+              }
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               className="bg-background"
               data-testid="textarea-reply"
             />
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {viewerRole === "admin" && (
+                <PolishReplyButton
+                  draft={draft}
+                  channel="contributor_ticket"
+                  recipientName={data?.ticket.writerName || data?.ticket.writerEmail}
+                  subject={data?.ticket.title}
+                  originalMessage={
+                    replyTo?.message ||
+                    [...(data?.messages ?? [])].reverse().find((m) => m.senderRole === "writer")
+                      ?.message
+                  }
+                  onPolished={setDraft}
+                  disabled={replyMutation.isPending}
+                />
+              )}
               <Button
                 onClick={() =>
                   replyMutation.mutate({
@@ -364,7 +384,7 @@ export function TicketThread({ ticketId, viewerRole }: Props) {
                 }
                 disabled={!draft.trim() || replyMutation.isPending}
                 data-testid="button-send-reply"
-                className="gap-2 bg-amber-700 hover:bg-amber-800 text-white"
+                className="h-10 gap-2 bg-amber-700 hover:bg-amber-800 text-white"
               >
                 {replyMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

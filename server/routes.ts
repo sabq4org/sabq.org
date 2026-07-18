@@ -34512,13 +34512,27 @@ Sitemap: https://sabq.org/sitemap-news.xml
         countQuery = countQuery.where(whereClause) as typeof countQuery;
       }
 
-      const [messages, countResult] = await Promise.all([
+      const [messages, countResult, statusCountRows] = await Promise.all([
         query.orderBy(desc(contactMessages.createdAt)).limit(limit).offset(offset),
         countQuery,
+        db
+          .select({
+            status: contactMessages.status,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(contactMessages)
+          .groupBy(contactMessages.status),
       ]);
 
       const total = Number(countResult[0]?.count || 0);
       const totalPages = Math.ceil(total / limit);
+      const statusCounts = { pending: 0, read: 0, replied: 0, total: 0 };
+      for (const row of statusCountRows) {
+        const key = row.status as keyof typeof statusCounts;
+        const n = Number(row.count) || 0;
+        if (key in statusCounts && key !== "total") statusCounts[key] = n;
+        statusCounts.total += n;
+      }
 
       res.json({
         messages,
@@ -34526,6 +34540,7 @@ Sitemap: https://sabq.org/sitemap-news.xml
         page,
         limit,
         totalPages,
+        statusCounts,
       });
     } catch (error: any) {
       console.error("Error fetching contact messages:", error);

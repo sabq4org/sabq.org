@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUrl, queryClient } from "@/lib/queryClient";
+import { PolishReplyButton } from "@/components/ai/PolishReplyButton";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import { motion } from "framer-motion";
@@ -810,25 +811,36 @@ export default function ContactMessageDetail() {
               <div className="mt-2 pt-4 border-t border-border/70" data-testid="new-reply-form">
                 <h4 className="font-semibold text-foreground mb-3">إضافة رد جديد</h4>
                 <Textarea
-                  placeholder="اكتب ردك هنا..."
+                  placeholder="اكتب مضمون ردك باختصار… ثم اضغط «توليد الرد» لصياغة مهنية"
                   value={newReplyText}
                   onChange={(e) => setNewReplyText(e.target.value)}
                   className="min-h-[120px] mb-3 bg-background"
                   data-testid="textarea-new-reply"
                 />
-                <Button
-                  onClick={handleSendReply}
-                  disabled={sendReplyMutation.isPending || !newReplyText.trim()}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white"
-                  data-testid="button-send-reply"
-                >
-                  {sendReplyMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin ml-2" />
-                  ) : (
-                    <Send className="h-4 w-4 ml-2" />
-                  )}
-                  إرسال الرد
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <PolishReplyButton
+                    draft={newReplyText}
+                    channel="contact_message"
+                    recipientName={message?.name}
+                    subject={message?.subject}
+                    originalMessage={message?.message}
+                    onPolished={setNewReplyText}
+                    disabled={sendReplyMutation.isPending}
+                  />
+                  <Button
+                    onClick={handleSendReply}
+                    disabled={sendReplyMutation.isPending || !newReplyText.trim()}
+                    className="h-10 bg-emerald-700 hover:bg-emerald-800 text-white"
+                    data-testid="button-send-reply"
+                  >
+                    {sendReplyMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin ml-2" />
+                    ) : (
+                      <Send className="h-4 w-4 ml-2" />
+                    )}
+                    إرسال الرد
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
