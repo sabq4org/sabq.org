@@ -631,11 +631,12 @@ export default function ArticleEditor() {
 
   useEffect(() => {
     if (!showDayGate) return;
-    // ثبّت الكاتب يومه من داخل الحوار — أغلقه وأكمل الإرسال الذي بدأه
-    if (writerOwnSchedule && writerOwnSchedule.canChoose === false && dayGateContinueRef.current) {
+    // ثبّت الكاتب يومه من داخل الحوار — أغلقه، وأكمل الإرسال إن كان قد بدأه
+    if (writerOwnSchedule && writerOwnSchedule.canChoose === false) {
+      const shouldSubmit = dayGateContinueRef.current;
       dayGateContinueRef.current = false;
       setShowDayGate(false);
-      void handleSaveAndSubmitForReview();
+      if (shouldSubmit) void handleSaveAndSubmitForReview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [writerOwnSchedule, showDayGate]);
@@ -2615,6 +2616,29 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
             </div>
           </div>
         </div>
+
+        {isOpinionAuthor && writerOwnSchedule?.canChoose && (
+          <div className="mb-4 flex flex-col gap-2 rounded-xl border border-amber-300/60 bg-amber-50 p-3 dark:border-amber-700/50 dark:bg-amber-900/20 sm:flex-row sm:items-center sm:justify-between" data-testid="banner-day-missing">
+            <div className="flex items-start gap-2.5">
+              <Calendar className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="text-sm font-bold">لم تحدد يومك الأسبوعي للنشر بعد</p>
+                <p className="text-xs text-muted-foreground">
+                  اكتب مقالك واحفظه بحرية — لكن لن يمكن إرساله للمراجعة قبل تحديد يوم نشرك الأسبوعي.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-amber-400 text-amber-700 hover:bg-amber-100 dark:border-amber-600 dark:text-amber-300 dark:hover:bg-amber-900/40"
+              onClick={() => setShowDayGate(true)}
+              data-testid="button-pick-day-now"
+            >
+              تحديد اليوم الآن
+            </Button>
+          </div>
+        )}
 
         <Dialog open={showDayGate} onOpenChange={(open) => { if (!open) { dayGateContinueRef.current = false; } setShowDayGate(open); }}>
           <DialogContent className="max-w-lg" data-testid="dialog-day-gate">

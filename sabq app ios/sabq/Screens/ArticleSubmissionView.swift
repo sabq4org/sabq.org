@@ -41,6 +41,9 @@ struct ArticleSubmissionView: View {
     @State private var showDayGate = false
     @State private var savingDay = false
     @State private var dayGateError: String?
+    /// true فقط عندما تُفتح البوابة من زر الإرسال — عندها يُستكمل الإرسال
+    /// تلقائياً بعد التثبيت. الفتح من التنبيه المبكر لا يُرسل شيئاً.
+    @State private var dayGateShouldContinue = false
 
     enum Stage {
         case form, submitting, success
@@ -105,6 +108,9 @@ struct ArticleSubmissionView: View {
                     switch screenState {
                     case .form, .submitting:
                         headerHero
+                        if kind == .opinion, writerSchedule?.canChoose == true {
+                            dayNoticeBanner
+                        }
                         formCard
                     case .success:
                         successHero
@@ -157,13 +163,43 @@ struct ArticleSubmissionView: View {
                 guard kind == .opinion else { return }
                 writerSchedule = try? await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
             }
-            .sheet(isPresented: $showDayGate) {
+            .sheet(isPresented: $showDayGate, onDismiss: { dayGateShouldContinue = false }) {
                 dayGateSheet
             }
         }
     }
 
     // MARK: - Day gate (تحديد اليوم الأسبوعي قبل أول إرسال)
+
+    /// إشارة مبكرة من لحظة فتح الشاشة: الكتابة حرة، لكن الإرسال يتطلب تحديد اليوم
+    private var dayNoticeBanner: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(SabqFonts.app(size: 16, weight: .semibold))
+                .foregroundStyle(Color.orange)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("لم تحدد يومك الأسبوعي للنشر بعد")
+                    .font(SabqFonts.app(size: 13, weight: .bold))
+                    .foregroundStyle(SabqTheme.ink)
+                Text("اكتب مقالك بحرية — وسيُطلب تحديد اليوم قبل الإرسال.")
+                    .font(SabqFonts.app(size: 11, weight: .medium))
+                    .foregroundStyle(SabqTheme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { showDayGate = true } label: {
+                    Text("تحديد اليوم الآن")
+                        .font(SabqFonts.app(size: 12, weight: .bold))
+                        .foregroundStyle(Color.orange)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 2)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.orange.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.orange.opacity(0.3), lineWidth: 0.5))
+    }
 
     private var dayGateSheet: some View {
         ScrollView(showsIndicators: false) {
@@ -204,7 +240,10 @@ struct ArticleSubmissionView: View {
             writerSchedule = try? await APIClient.shared.get(WriterScheduleResponse.self, path: "/contributor/schedule", ignoreCache: true)
             savingDay = false
             showDayGate = false
-            await submit()
+            if dayGateShouldContinue {
+                dayGateShouldContinue = false
+                await submit()
+            }
         } catch {
             savingDay = false
             dayGateError = "تعذر حفظ اليوم — حاول مرة أخرى"
@@ -696,6 +735,7 @@ struct ArticleSubmissionView: View {
         // كاتب رأي بلا يوم أسبوعي محدد: بوابة اختيار اليوم أولاً
         if kind == .opinion, writerSchedule?.canChoose == true {
             focusedField = nil
+            dayGateShouldContinue = true
             showDayGate = true
             return
         }
