@@ -592,6 +592,27 @@ export class ObjectStorageService {
     return { url, path: key };
   }
 
+  // Short-lived signed GET URL for a PRIVATE file previously stored via
+  // uploadFile(..., 'private'). `key` is the stored `path` return value:
+  // `.private/<path>` on s3/r2, or a full `/bucket/...` path on legacy GCS.
+  // Used by admin-only routes (e.g. correspondent license/CV downloads) —
+  // never embed these keys in public payloads.
+  async getPrivateFileDownloadURL(key: string, ttlSec: number = 300): Promise<string> {
+    if (STORAGE_PROVIDER === 's3') {
+      const client = getS3Client();
+      const bucket = getS3Bucket();
+      return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: ttlSec });
+    }
+    if (STORAGE_PROVIDER === 'r2') {
+      const client = getR2Client();
+      const bucket = getR2Bucket();
+      return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: key }), { expiresIn: ttlSec });
+    }
+    const fullPath = key.startsWith('/') ? key : `${this.getPrivateObjectDir()}/${key}`;
+    const { bucketName, objectName } = parseObjectPath(fullPath);
+    return signObjectURL({ bucketName, objectName, method: "GET", ttlSec });
+  }
+
   async uploadFile(
     path: string,
     buffer: Buffer,

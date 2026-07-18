@@ -11574,10 +11574,26 @@ export const correspondentApplications = pgTable("correspondent_applications", {
   email: text("email").notNull(), // البريد الإلكتروني
   phone: text("phone").notNull(), // رقم الهاتف
   jobTitle: text("job_title").default("مراسل صحفي").notNull(), // المسمى الوظيفي
-  bio: text("bio"), // السيرة الذاتية (اختياري)
+  bio: text("bio"), // نبذة (اختياري)
   city: text("city").notNull(), // المدينة
   profilePhotoUrl: text("profile_photo_url").notNull(), // رابط الصورة الشخصية
-  
+
+  // — نموذج التقديم الموسّع (2026-07-18). الأعمدة nullable لأن الطلبات القديمة
+  // لا تحملها؛ الإلزام يفرضه مسار التقديم على الطلبات الجديدة فقط. —
+  nationalId: text("national_id"), // رقم الهوية/الإقامة (10 أرقام تبدأ بـ1 أو 2)
+  region: text("region"), // المنطقة الإدارية
+  licenseNumber: text("license_number"), // رقم الترخيص المهني (وزارة الإعلام)
+  licenseExpiresAt: timestamp("license_expires_at"), // تاريخ انتهاء الترخيص (اختياري)
+  // مفاتيح ملفات في التخزين الخاص (R2/S3) — ليست روابط عامة؛ تُفتح فقط عبر
+  // مسار الأدمن المحمي /api/admin/correspondent-applications/:id/file/:kind
+  licenseFileKey: text("license_file_key"), // صورة الترخيص المهني
+  cvFileKey: text("cv_file_key"), // السيرة الذاتية (PDF)
+  specializations: text("specializations"), // مجالات التغطية (مفصولة بفواصل)
+  portfolioLinks: text("portfolio_links"), // روابط أعمال منشورة (سطر لكل رابط)
+  yearsOfExperience: integer("years_of_experience"), // سنوات الخبرة (اختياري)
+  currentEmployer: text("current_employer"), // جهة العمل الحالية/الأخيرة (اختياري)
+  consentAt: timestamp("consent_at"), // وقت الإقرار بصحة البيانات والموافقة على معالجتها
+
   // حالة الطلب
   status: text("status").default("pending").notNull(), // pending, approved, rejected
   
