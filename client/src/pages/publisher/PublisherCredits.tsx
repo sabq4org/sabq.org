@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useRoleProtection } from "@/hooks/useRoleProtection";
+import { usePublisherAccess } from "@/hooks/usePublisherAccess";
 import { PublisherLayout } from "@/components/publisher/PublisherLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,13 +41,17 @@ interface CreditLog {
 }
 
 export default function PublisherCredits() {
-  useRoleProtection('publisher');
+  usePublisherAccess();
   const [page, setPage] = useState(1);
   const limit = 20;
 
-  const { data, isLoading } = useQuery<{ logs: CreditLog[]; total: number }>({
-    queryKey: ["/api/publisher/credits", { page, limit }],
+  // كانت الصفحة تستدعي /api/publisher/credits (قائمة باقات) وتتوقع {logs}
+  // فتنهار — البوابة توفر الآن مسار سجل فعلي مع بيانات المقال والباقة
+  const { data: dataRaw, isLoading } = useQuery<{ logs: CreditLog[]; total: number }>({
+    queryKey: ["/api/publisher/portal/credit-logs", { page, limit }],
   });
+  const logs = Array.isArray(dataRaw?.logs) ? dataRaw!.logs : [];
+  const total = Number(dataRaw?.total) || 0;
 
   const getActionBadge = (actionType: string) => {
     const configs: Record<
@@ -92,7 +96,7 @@ export default function PublisherCredits() {
     );
   };
 
-  const totalPages = data ? Math.ceil(data.total / limit) : 0;
+  const totalPages = Math.ceil(total / limit);
 
   return (
     <PublisherLayout>
@@ -118,7 +122,7 @@ export default function PublisherCredits() {
                 <Skeleton key={i} className="h-16" />
               ))}
             </div>
-          ) : !data || data.logs.length === 0 ? (
+          ) : logs.length === 0 ? (
             <div className="text-center py-12" data-testid="text-no-logs">
               <CreditCard className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-lg font-medium">لا يوجد سجل</p>
@@ -141,7 +145,7 @@ export default function PublisherCredits() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {data?.logs?.map((log) => (
+                    {logs.map((log) => (
                       <TableRow key={log.id} data-testid={`row-log-${log.id}`}>
                         <TableCell>
                           <div className="flex items-center gap-1 text-sm">
@@ -164,12 +168,15 @@ export default function PublisherCredits() {
                         <TableCell>
                           <span
                             className={`font-bold ${
-                              log.creditsChanged > 0 ? "text-green-600" : "text-red-600"
+                              log.creditsChanged > 0
+                                ? "text-green-600"
+                                : log.creditsChanged < 0
+                                  ? "text-red-600"
+                                  : "text-muted-foreground"
                             }`}
                             data-testid={`text-change-${log.id}`}
                           >
-                            {log.creditsChanged > 0 ? "+" : ""}
-                            {log.creditsChanged}
+                            {log.creditsChanged > 0 ? `+${log.creditsChanged}` : log.creditsChanged < 0 ? log.creditsChanged : "مفتوح"}
                           </span>
                         </TableCell>
                         <TableCell>

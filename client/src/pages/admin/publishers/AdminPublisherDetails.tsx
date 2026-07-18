@@ -8,6 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { AddCreditPackageDialog } from "@/components/admin/publishers/AddCreditPackageDialog";
 import { CreatePublisherDialog } from "@/components/admin/publishers/CreatePublisherDialog";
 import { PublisherMembersCard } from "@/components/admin/publishers/PublisherMembersCard";
@@ -58,6 +68,7 @@ export default function AdminPublisherDetails() {
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showAddPackageDialog, setShowAddPackageDialog] = useState(false);
   const [articlesPage, setArticlesPage] = useState(1);
+  const [showSuspendConfirm, setShowSuspendConfirm] = useState(false);
 
   const { data: publisher, isLoading: isLoadingPublisher } = useQuery<Publisher>({
     queryKey: [`/api/admin/publishers/${publisherId}`],
@@ -99,6 +110,37 @@ export default function AdminPublisherDetails() {
   const articlesData = Array.isArray(articlesDataRaw?.articles) ? articlesDataRaw!.articles : [];
   const articlesTotal = Number(articlesDataRaw?.total) || 0;
   const articlesTotalPages = Math.max(1, Math.ceil(articlesTotal / articlesLimit));
+
+  // تعليق/تفعيل الوكالة: المعلقة تُحجب بوابتها عن كل أعضائها فوراً
+  // ولا تصلها تنبيهات الرصيد ولا التقارير الشهرية
+  const toggleActiveMutation = useMutation({
+    mutationFn: async (isActive: boolean) => {
+      return apiRequest(`/api/admin/publishers/${publisherId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isActive }),
+        headers: { "Content-Type": "application/json" },
+      });
+    },
+    onSuccess: (_result, isActive) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/publishers/${publisherId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/publishers"] });
+      toast({
+        title: isActive ? "تم التفعيل" : "تم التعليق",
+        description: isActive
+          ? "عادت الوكالة نشطة ويمكن لأعضائها الدخول والنشر"
+          : "عُلقت الوكالة — لن يدخل أعضاؤها البوابة ولن تصلها تنبيهات",
+      });
+      setShowSuspendConfirm(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل في تحديث حالة الوكالة",
+        variant: "destructive",
+      });
+      setShowSuspendConfirm(false);
+    },
+  });
 
   const deactivateCreditMutation = useMutation({
     mutationFn: async (creditId: string) => {
@@ -170,11 +212,38 @@ export default function AdminPublisherDetails() {
             )}
           </div>
         </div>
-        <Button onClick={() => setShowEditDialog(true)} data-testid="button-edit">
-          <Edit className="ml-2 h-4 w-4" />
-          تعديل البيانات
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={publisher.isActive ? "destructive" : "default"}
+            onClick={() => setShowSuspendConfirm(true)}
+            disabled={toggleActiveMutation.isPending}
+            data-testid="button-toggle-active"
+          >
+            {publisher.isActive ? (
+              <>
+                <XCircle className="ml-2 h-4 w-4" />
+                تعليق الوكالة
+              </>
+            ) : (
+              <>
+                <CheckCircle className="ml-2 h-4 w-4" />
+                تفعيل الوكالة
+              </>
+            )}
+          </Button>
+          <Button onClick={() => setShowEditDialog(true)} data-testid="button-edit">
+            <Edit className="ml-2 h-4 w-4" />
+            تعديل البيانات
+          </Button>
+        </div>
       </div>
+
+      {!publisher.isActive && (
+        <div className="flex items-center gap-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200" data-testid="banner-suspended">
+          <XCircle className="h-4 w-4 shrink-0" />
+          <span>الوكالة معلقة: بوابتها محجوبة عن كل أعضائها، ولا تصلها تنبيهات الرصيد ولا التقارير الشهرية، والنشر متوقف.</span>
+        </div>
+      )}
 
       {/* Publisher Info */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -576,6 +645,31 @@ export default function AdminPublisherDetails() {
           publisherId={publisherId}
         />
       )}
+
+      <AlertDialog open={showSuspendConfirm} onOpenChange={setShowSuspendConfirm}>
+        <AlertDialogContent data-testid="dialog-toggle-active">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {publisher.isActive ? "تعليق الوكالة" : "تفعيل الوكالة"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {publisher.isActive
+                ? `سيُحجب دخول كل أعضاء «${publisher.agencyName}» إلى بوابة الناشر فوراً، ويتوقف النشر، ولن تصلهم أي تنبيهات أو تقارير حتى إعادة التفعيل.`
+                : `ستعود «${publisher.agencyName}» نشطة: يدخل أعضاؤها البوابة وينشرون حسب باقتهم، وتصلهم التنبيهات والتقارير.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={toggleActiveMutation.isPending}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => toggleActiveMutation.mutate(!publisher.isActive)}
+              disabled={toggleActiveMutation.isPending}
+              className={publisher.isActive ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : undefined}
+            >
+              {publisher.isActive ? "تأكيد التعليق" : "تأكيد التفعيل"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
     </DashboardLayout>
   );
