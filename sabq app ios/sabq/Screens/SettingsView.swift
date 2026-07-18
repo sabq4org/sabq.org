@@ -735,9 +735,9 @@ struct SettingsView: View {
             if let user = authStore.currentUser, user.isWriter || user.isReporter || user.isAdminLike {
                 NavigationLink(value: ContributorDashboardRoute()) {
                     accountShortcutTile(
-                        title: "مركز الأداء",
-                        subtitle: "إحصائيات مقالاتك وتفاعل جمهورك",
-                        icon: "chart.bar.xaxis.ascending",
+                        title: "لوحة الكاتب",
+                        subtitle: "مساحتك من الفكرة إلى النشر — أفكار، مقالات، أداء",
+                        icon: "square.and.pencil",
                         tint: Color(red: 0.30, green: 0.69, blue: 0.31)
                     )
                 }

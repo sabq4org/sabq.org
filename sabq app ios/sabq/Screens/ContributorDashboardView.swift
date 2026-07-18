@@ -305,6 +305,10 @@ final class ContributorDashboardViewModel: ObservableObject {
 // MARK: - View
 
 struct ContributorDashboardView: View {
+    /// true عندما تُعرض كتبويب «أدائي» داخل WriterWorkspaceView — تُخفى
+    /// بطاقات الجدولة والاستطلاعات (انتقلت لتبويب «اليوم») ويتغير العنوان.
+    var embedded = false
+
     @StateObject private var vm = ContributorDashboardViewModel()
     /// دعوات الاستطلاع المفتوحة — بطاقة «استطلاع بانتظارك» أعلى اللوحة
     /// حتى لو فات الكاتبَ إشعارُ الدفع. فشل الجلب يمرّ بصمت (القائمة تبقى فارغة).
@@ -341,7 +345,7 @@ struct ContributorDashboardView: View {
             } else if let data = vm.analytics {
                 VStack(alignment: .leading, spacing: 24) {
                     headerSection(data)
-                    if data.role == "writer", let sched = vm.schedule {
+                    if !embedded, data.role == "writer", let sched = vm.schedule {
                         if let banner = sched.banner {
                             WriterScheduleBannerCard(banner: banner)
                         } else if sched.canChoose {
@@ -372,7 +376,7 @@ struct ContributorDashboardView: View {
         }
         .background(SabqTheme.background)
         .sabqRTL()
-        .navigationTitle("لوحة الأداء")
+        .navigationTitle(embedded ? "لوحة الكاتب" : "لوحة الأداء")
         .navigationBarTitleDisplayMode(.large)
         .task {
             await vm.load()

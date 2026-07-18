@@ -19,6 +19,13 @@ import {
   getWriterScheduleBanner,
   selfAssignWriterSchedule,
 } from "../services/opinionWritersService";
+import {
+  coachWriterIdea,
+  generateWriterIdeas,
+  getOpinionAuthorWorkspace,
+  getWriterStyleProfile,
+  reviewWriterArticle,
+} from "../services/opinionAuthorWorkspaceService";
 import { db, pool } from "../db";
 import { log } from "../utils/logger";
 import {
@@ -4640,6 +4647,22 @@ router.post("/articles/submit", async (req: Request, res: Response) => {
       kind = data.kind || "news";
     }
 
+    // بوابة يوم النشر: كاتب الرأي لا يرسل مقالاً قبل اختيار يومه الأسبوعي.
+    // الواجهة تعرض منتقي اليوم قبل الإرسال، لكن الخادم هو الحكم النهائي —
+    // عميل معدَّل لا يستطيع تجاوزها. تخص دور opinion_author حصراً لأن نظام
+    // الجدولة الأسبوعية مربوط به.
+    if (
+      kind === "opinion" &&
+      roleNames.has("opinion_author") &&
+      (await canSelfAssignSchedule(session.userId))
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: "SCHEDULE_DAY_REQUIRED",
+        message: "اختر يومك الأسبوعي للنشر أولاً، ثم أرسل مقالك.",
+      });
+    }
+
     // Image-count rules per the user request:
     //   Opinion: one hero image at most.
     //   News: multiple (first = hero, rest = album).
@@ -8967,6 +8990,104 @@ router.get("/contributor/ranking", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] GET /contributor/ranking error:", error);
     res.status(500).json({ success: false, message: "فشل في جلب الترتيب" });
+  }
+});
+
+// ==========================================
+// مساحة الكاتب في التطبيق — نظيرة /api/opinion-author/* بمصادقة جلسة العضو
+// (verifyMemberSession) بدل Passport. تستهلك نفس opinionAuthorWorkspaceService
+// فتبقى لوحة الويب والتطبيق متطابقتين. خاصة بدور opinion_author.
+// ==========================================
+
+async function requireOpinionAuthorSession(req: Request): Promise<{ userId: string } | null> {
+  const session = await verifyMemberSession(req);
+  if (!session) return null;
+  if (!(await userHasAnyRole(session.userId, ["opinion_author"]))) return null;
+  return session;
+}
+
+// حد لطلبات الذكاء الاصطناعي — تكلفتها حقيقية، بنفس سقف نسخة الويب (30/ربع ساعة)
+const mobileWriterAiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: cfKeyGenerator,
+  validate: cfValidate,
+  message: { success: false, message: "أخذ المساعد استراحة قصيرة؛ حاول بعد دقائق" },
+});
+
+// GET /api/v1/contributor/workspace — المكتب، التتبع، نبض القراء، المتابعة، التقويم، موجز الشهر
+router.get("/contributor/workspace", async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const workspace = await getOpinionAuthorWorkspace(session.userId);
+    res.json({ success: true, ...workspace });
+  } catch (error) {
+    console.error("[Mobile API] GET /contributor/workspace error:", error);
+    res.status(500).json({ success: false, message: "تعذر تجهيز مساحة الكاتب" });
+  }
+});
+
+// GET /api/v1/contributor/ideas — ثلاث أفكار مقترحة (AI، عند الطلب فقط)
+router.get("/contributor/ideas", mobileWriterAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const result = await generateWriterIdeas(session.userId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Mobile API] GET /contributor/ideas error:", error);
+    res.status(502).json({ success: false, message: "تعذر توليد الأفكار الآن" });
+  }
+});
+
+// POST /api/v1/contributor/idea-coach — «تحدث مع فكرتك»
+router.post("/contributor/idea-coach", mobileWriterAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const idea = String(req.body?.idea || "").trim();
+    if (idea.length < 12 || idea.length > 3000) {
+      return res.status(400).json({ success: false, message: "اكتب فكرتك بتفصيل بسيط أولًا" });
+    }
+    const result = await coachWriterIdea(session.userId, idea);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Mobile API] POST /contributor/idea-coach error:", error);
+    res.status(502).json({ success: false, message: "تعذر تطوير الفكرة الآن" });
+  }
+});
+
+// POST /api/v1/contributor/article-review — «قارئ سبق الأول» لمقال يملكه الكاتب
+router.post("/contributor/article-review", mobileWriterAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const articleId = String(req.body?.articleId || "").trim();
+    if (!articleId) return res.status(400).json({ success: false, message: "بيانات المقال غير صالحة" });
+    const result = await reviewWriterArticle(session.userId, articleId, {});
+    res.json({ success: true, ...result });
+  } catch (error) {
+    if (error instanceof Error && error.message === "ARTICLE_NOT_FOUND") {
+      return res.status(404).json({ success: false, message: "المقال غير موجود أو لا تملكه" });
+    }
+    console.error("[Mobile API] POST /contributor/article-review error:", error);
+    res.status(502).json({ success: false, message: "تعذرت مراجعة المقال الآن" });
+  }
+});
+
+// GET /api/v1/contributor/style-profile — بصمة الكاتب الأسلوبية
+router.get("/contributor/style-profile", mobileWriterAiLimiter, async (req: Request, res: Response) => {
+  try {
+    const session = await requireOpinionAuthorSession(req);
+    if (!session) return res.status(403).json({ success: false, message: "هذه المساحة خاصة بكتّاب الرأي" });
+    const result = await getWriterStyleProfile(session.userId);
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("[Mobile API] GET /contributor/style-profile error:", error);
+    res.status(502).json({ success: false, message: "تعذر بناء ملف الأسلوب الآن" });
   }
 });
 
