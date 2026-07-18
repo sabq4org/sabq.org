@@ -12,6 +12,13 @@
 
 import { Router, Request, Response, NextFunction } from "express";
 import rateLimit from "express-rate-limit";
+import { userHasAnyRole } from "../rbac";
+import {
+  canSelfAssignSchedule,
+  getWriterDayLoads,
+  getWriterScheduleBanner,
+  selfAssignWriterSchedule,
+} from "../services/opinionWritersService";
 import { db, pool } from "../db";
 import { log } from "../utils/logger";
 import {
@@ -8660,10 +8667,22 @@ router.get("/contributor/analytics", async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, message: "هذه اللوحة خاصة بالكتّاب والمراسلين" });
     }
 
-    // Fetch articles based on role
+    // Fetch articles based on role.
+    // أعمدة محددة فقط — select() الكامل كان يجلب نصوص المقالات وحقول SEO
+    // لكل أرشيف الكاتب، وهو سبب بطء فتح لوحة الأداء في التطبيق.
     const isOpinionAuthor = roleNames.includes("opinion_author");
     const myArticles = await db
-      .select()
+      .select({
+        id: articles.id,
+        title: articles.title,
+        status: articles.status,
+        reviewStatus: articles.reviewStatus,
+        reviewNotes: articles.reviewNotes,
+        views: articles.views,
+        publishedAt: articles.publishedAt,
+        createdAt: articles.createdAt,
+        updatedAt: articles.updatedAt,
+      })
       .from(articles)
       .where(
         isOpinionAuthor
@@ -8853,6 +8872,66 @@ router.get("/contributor/analytics", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("[Mobile API] GET /contributor/analytics error:", error);
     res.status(500).json({ success: false, message: "فشل في جلب الإحصائيات" });
+  }
+});
+
+// ==========================================
+// GET /api/v1/contributor/schedule
+// موعد كاتب الرأي الأسبوعي: البانر بحالاته، أو بيانات اختيار اليوم لمن لا يوم له
+// ==========================================
+router.get("/contributor/schedule", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const userId = session.userId;
+    if (!(await userHasAnyRole(userId, ["opinion_author"]))) {
+      return res.json({ success: true, banner: null, canChoose: false });
+    }
+    const banner = await getWriterScheduleBanner(userId);
+    if (banner) {
+      return res.json({ success: true, banner, canChoose: false });
+    }
+    const canChoose = await canSelfAssignSchedule(userId);
+    res.json({
+      success: true,
+      banner: null,
+      canChoose,
+      dayLoads: canChoose ? await getWriterDayLoads() : [],
+    });
+  } catch (error) {
+    console.error("[Mobile API] GET /contributor/schedule error:", error);
+    res.status(500).json({ success: false, message: "تعذر جلب موعد النشر" });
+  }
+});
+
+// ==========================================
+// POST /api/v1/contributor/schedule
+// الكاتب يختار يومه بنفسه — مرة واحدة فقط، والتغيير بعدها للإدارة
+// ==========================================
+router.post("/contributor/schedule", async (req: Request, res: Response) => {
+  try {
+    const session = await verifyMemberSession(req);
+    if (!session) {
+      return res.status(401).json({ success: false, message: "غير مسجل" });
+    }
+    const userId = session.userId;
+    if (!(await userHasAnyRole(userId, ["opinion_author"]))) {
+      return res.status(403).json({ success: false, message: "هذه الخاصية لكتّاب الرأي" });
+    }
+    const weekday = Number(req.body?.weekday);
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6) {
+      return res.status(400).json({ success: false, message: "اليوم المحدد غير صالح" });
+    }
+    const result = await selfAssignWriterSchedule(userId, weekday);
+    if (!result.ok) {
+      return res.status(result.status).json({ success: false, message: result.message });
+    }
+    res.json({ success: true, schedule: result.schedule });
+  } catch (error) {
+    console.error("[Mobile API] POST /contributor/schedule error:", error);
+    res.status(500).json({ success: false, message: "تعذر حفظ اليوم المحدد" });
   }
 });
 
