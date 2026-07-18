@@ -40,6 +40,16 @@
                ReferencedContainer = "container:sabq.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "3AFE5FF02F60C123006270F8"
+               BuildableName = "sabqUITests.xctest"
+               BlueprintName = "sabqUITests"
+               ReferencedContainer = "container:sabq.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
