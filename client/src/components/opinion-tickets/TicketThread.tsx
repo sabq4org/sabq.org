@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import type { OpinionTicketStatus } from "./statusMeta";
 import { STATUS_META, STATUS_OPTIONS } from "./statusMeta";
+import { authorKindMeta, type TicketAuthorKind } from "./authorKindMeta";
 
 interface ThreadMessage {
   id: string;
@@ -31,6 +32,7 @@ interface ThreadTicket {
   writerId: string;
   writerName: string | null;
   writerEmail: string | null;
+  authorKind?: TicketAuthorKind;
   title: string;
   status: OpinionTicketStatus;
   lastMessageAt: string;
@@ -152,6 +154,8 @@ export function TicketThread({ ticketId, viewerRole }: Props) {
   const { ticket } = data;
   const statusMeta = STATUS_META[ticket.status] ?? STATUS_META.open;
   const isClosed = ticket.status === "closed";
+  const kind = authorKindMeta(ticket.authorKind);
+  const KindIcon = kind.icon;
 
   return (
     <div className="space-y-5" dir="rtl">
@@ -160,12 +164,26 @@ export function TicketThread({ ticketId, viewerRole }: Props) {
         <CardContent className="p-5">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
             <div className="space-y-2 min-w-0">
-              <h1 className="text-xl font-bold text-foreground leading-snug" data-testid="text-ticket-title">
-                {ticket.title}
-              </h1>
+              <div className="flex items-start gap-2.5">
+                <div
+                  className={cn(
+                    "mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
+                    kind.className,
+                  )}
+                  title={kind.label}
+                  aria-label={kind.label}
+                >
+                  <KindIcon className="h-4 w-4" />
+                </div>
+                <h1 className="text-xl font-bold text-foreground leading-snug" data-testid="text-ticket-title">
+                  {ticket.title}
+                </h1>
+              </div>
               <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                 <span className="inline-flex items-center gap-1.5 font-medium text-foreground/80">
                   <UserIcon className="h-3.5 w-3.5" />
+                  {kind.label}
+                  <span className="text-border">·</span>
                   {ticket.writerName || ticket.writerEmail || ticket.writerId}
                 </span>
                 <span className="text-border">·</span>

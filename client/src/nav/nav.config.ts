@@ -107,6 +107,14 @@ export const navConfig: NavItem[] = [
         icon: PlusCircle,
         roles: ["reporter"],
       },
+      {
+        id: "reporter_inquiries",
+        labelKey: "nav.writer_inquiries",
+        labelAr: "استفساراتي",
+        path: "/dashboard/opinion-author/tickets",
+        icon: MessageSquare,
+        roles: ["reporter"],
+      },
     ],
   },
 
@@ -221,12 +229,10 @@ export const navConfig: NavItem[] = [
     labelKey: "nav.content",
     labelAr: "المحتوى",
     icon: Newspaper,
-    roles: ["admin", "editor", "author", "reviewer", "comments_moderator", "reporter"],
-    // كاتب الرأي وكاتب الزاوية والناشر يكتبون من عناصرهم المخصّصة؛ نخفي قسم
-    // المحتوى عنهم كاملاً (excludeRoles على الحاوية يُفحص قبل الصلاحيات ويلغي
-    // كل الأبناء — بما فيها "مكتبة الوسائط" التي تظهر بـ media.view، والأخبار
-    // التي تظهر بـ articles.view الممنوحة لدور الناشر). رفع الصور لا يحتاج ظهورها.
-    excludeRoles: ["opinion_author", "angle_writer", "publisher"],
+    roles: ["admin", "editor", "author", "reviewer", "comments_moderator"],
+    // كاتب الرأي / الزاوية / الناشر / المراسل لهم مداخل مخصّصة («أخباري» للمراسل).
+    // نخفي قسم المحتوى كاملاً عنهم (excludeRoles على الحاوية يلغي كل الأبناء).
+    excludeRoles: ["opinion_author", "angle_writer", "publisher", "reporter"],
     // No parent permissions - each child validates independently and parent shows if any child is accessible
     children: [
       {
@@ -235,7 +241,7 @@ export const navConfig: NavItem[] = [
         labelAr: "الأخبار والمقالات",
         path: "/dashboard/articles",
         icon: FileText,
-        roles: ["admin", "editor", "author", "reviewer", "reporter"],
+        roles: ["admin", "editor", "author", "reviewer"],
         permissions: ["articles.view"], // Users with articles.view permission can access
       },
       {
@@ -244,7 +250,7 @@ export const navConfig: NavItem[] = [
         labelAr: "مقال جديد",
         path: "/dashboard/articles/new",
         icon: PlusCircle,
-        roles: ["admin", "editor", "author", "reporter"],
+        roles: ["admin", "editor", "author"],
         permissions: ["articles.create"], // Users with articles.create permission can access
       },
       {
@@ -449,11 +455,11 @@ export const navConfig: NavItem[] = [
     permissions: ["opinion.review"],
   },
 
-  // ===== استفسارات كتّاب الرأي / Opinion Tickets =====
+  // ===== استفسارات المراسلين والكتّاب (صندوق واحد / نفس النموذج) =====
   {
     id: "opinion_tickets",
     labelKey: "nav.opinion_tickets",
-    labelAr: "استفسارات الكتّاب",
+    labelAr: "استفسارات المراسلين والكتّاب",
     path: "/dashboard/opinion-tickets",
     icon: MessageSquare,
     roles: ["admin", "editor", "system_admin"],

@@ -13782,13 +13782,12 @@ export const imageMigrations = pgTable("image_migrations", {
 ]);
 
 // ============================================
-// OPINION WRITER ↔ EDITORIAL TICKETS
+// CONTRIBUTOR ↔ EDITORIAL TICKETS (مراسلون + كتّاب رأي/زوايا)
 // ============================================
-// Internal ticket/messaging system between opinion-column writers
-// (role: opinion_author) and editorial admins. Each ticket is a thread of
-// messages; messages can optionally reply to another message in the same
-// ticket (parentMessageId) for nested replies. lastReadByWriterAt /
-// lastReadByAdminAt drive the "new reply" badge.
+// صندوق تذاكر واحد (`opinion_tickets`) بين المساهمين (opinion_author /
+// angle_writer / reporter) وإدارة التحرير. لا جدول منفصل للمراسل —
+// التمييز في الواجهة عبر دور المستخدم (authorKind). كل تذكرة سلسلة
+// رسائل؛ parentMessageId للردود المتداخلة. lastReadBy* لشارة الجديد.
 
 export const opinionTicketStatuses = ["open", "answered", "closed"] as const;
 export type OpinionTicketStatus = (typeof opinionTicketStatuses)[number];

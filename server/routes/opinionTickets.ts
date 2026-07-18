@@ -1,25 +1,21 @@
 /**
- * Opinion writer ↔ editorial ticket endpoints.
+ * Contributor ↔ editorial ticket endpoints (كتّاب الرأي / الزوايا / المراسلون).
+ * جدول واحد `opinion_tickets` — لا نموذج منفصل للمراسل.
  *
- *   GET    /api/opinion-tickets                       list tickets (writer: own; admin: all)
- *   POST   /api/opinion-tickets                       writer creates new ticket (title + first message)
- *   GET    /api/opinion-tickets/unread-count          unread count for current viewer (for badges)
- *   GET    /api/opinion-tickets/:id                   thread (messages + ticket); marks read
- *   POST   /api/opinion-tickets/:id/messages          append message (any participant)
- *   PATCH  /api/opinion-tickets/:id/status            admin only: change ticket status
+ *   GET    /api/opinion-tickets                       list tickets (contributor: own; admin: all)
+ *   POST   /api/opinion-tickets                       contributor creates new ticket
+ *   GET    /api/opinion-tickets/unread-count
+ *   GET    /api/opinion-tickets/:id
+ *   POST   /api/opinion-tickets/:id/messages
+ *   PATCH  /api/opinion-tickets/:id/status            admin only
  *
- * Access model:
- *   - Writers (roles: opinion_author, angle_writer) can only see and act on their own tickets.
- *   - Admins (SUPERUSER_ROLE_NAMES, or editor) can see and act on every ticket.
- *
- * The same writer-side / admin-side branching used elsewhere
- * (server/routes.ts opinion-author/*) is repeated here — role is read off
- * the users.role text column to stay compatible with admin accounts that
- * have no user_roles entry.
+ * Access:
+ *   - Contributors (opinion_author, angle_writer, reporter): own tickets only.
+ *   - Admins (SUPERUSER_ROLE_NAMES, or editor): all tickets.
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../db";
 import {
   opinionTickets,
@@ -41,6 +37,11 @@ const ADMIN_ROLE_NAMES = new Set<string>([
   "editor",
 ]);
 
+/** من يستطيع فتح استفسار والرد عليه (نفس الصندوق). */
+const CONTRIBUTOR_ROLE_NAMES = new Set(["opinion_author", "angle_writer", "reporter"]);
+
+export type TicketAuthorKind = "reporter" | "opinion_author" | "angle_writer" | "other";
+
 function requireAuth(req: any, res: Response, next: NextFunction) {
   if (!req.isAuthenticated?.() || !req.user?.id) {
     return res.status(401).json({ message: "Unauthorized" });
@@ -50,19 +51,11 @@ function requireAuth(req: any, res: Response, next: NextFunction) {
 
 /**
  * Returns the union of the user's roles: the legacy `users.role` text column
- * AND any rows in `user_roles` joined through `roles`. This matches the
- * pattern in server/rbac.ts requireRole — a user can be admin via the text
- * column with no user_roles entry, or have opinion_author granted only via
- * user_roles while users.role is still "admin"/"reader".
+ * AND any rows in `user_roles` joined through `roles`.
  */
-const WRITER_ROLE_NAMES = new Set(["opinion_author", "angle_writer"]);
-
-async function getViewerRoles(req: any): Promise<{ isAdmin: boolean; isWriter: boolean }> {
-  const userId = req.user?.id;
-  if (!userId) return { isAdmin: false, isWriter: false };
-
+async function collectUserRoleNames(userId: string, legacyRole?: string | null): Promise<Set<string>> {
   const all = new Set<string>();
-  if (req.user?.role) all.add(req.user.role);
+  if (legacyRole) all.add(legacyRole);
 
   const rbacRows = await db
     .select({ roleName: roles.name })
@@ -70,12 +63,60 @@ async function getViewerRoles(req: any): Promise<{ isAdmin: boolean; isWriter: b
     .innerJoin(roles, eq(userRoles.roleId, roles.id))
     .where(eq(userRoles.userId, userId));
   for (const r of rbacRows) all.add(r.roleName);
+  return all;
+}
+
+function resolveAuthorKind(roleNames: Set<string>): TicketAuthorKind {
+  if (roleNames.has("reporter")) return "reporter";
+  if (roleNames.has("angle_writer")) return "angle_writer";
+  if (roleNames.has("opinion_author")) return "opinion_author";
+  return "other";
+}
+
+async function getViewerRoles(req: any): Promise<{ isAdmin: boolean; isContributor: boolean }> {
+  const userId = req.user?.id;
+  if (!userId) return { isAdmin: false, isContributor: false };
+
+  const all = await collectUserRoleNames(userId, req.user?.role);
 
   let isAdmin = false;
   for (const r of all) if (ADMIN_ROLE_NAMES.has(r)) { isAdmin = true; break; }
-  let isWriter = false;
-  for (const r of all) if (WRITER_ROLE_NAMES.has(r)) { isWriter = true; break; }
-  return { isAdmin, isWriter };
+  let isContributor = false;
+  for (const r of all) if (CONTRIBUTOR_ROLE_NAMES.has(r)) { isContributor = true; break; }
+  return { isAdmin, isContributor };
+}
+
+async function authorKindsForUserIds(userIds: string[]): Promise<Map<string, TicketAuthorKind>> {
+  const map = new Map<string, TicketAuthorKind>();
+  const unique = [...new Set(userIds.filter(Boolean))];
+  if (unique.length === 0) return map;
+
+  const userRows = await db
+    .select({ id: users.id, role: users.role })
+    .from(users)
+    .where(inArray(users.id, unique));
+
+  const rbacRows = await db
+    .select({ userId: userRoles.userId, roleName: roles.name })
+    .from(userRoles)
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .where(inArray(userRoles.userId, unique));
+
+  const byUser = new Map<string, Set<string>>();
+  for (const u of userRows) {
+    const set = byUser.get(u.id) ?? new Set<string>();
+    if (u.role) set.add(u.role);
+    byUser.set(u.id, set);
+  }
+  for (const r of rbacRows) {
+    const set = byUser.get(r.userId) ?? new Set<string>();
+    set.add(r.roleName);
+    byUser.set(r.userId, set);
+  }
+  for (const id of unique) {
+    map.set(id, resolveAuthorKind(byUser.get(id) ?? new Set()));
+  }
+  return map;
 }
 
 function fullName(first?: string | null, last?: string | null): string | null {
@@ -90,13 +131,14 @@ function fullName(first?: string | null, last?: string | null): string | null {
  */
 router.get("/api/opinion-tickets", requireAuth, async (req: any, res: Response) => {
   try {
-    const { isAdmin: admin, isWriter: writer } = await getViewerRoles(req);
-    if (!admin && !writer) {
+    const { isAdmin: admin, isContributor } = await getViewerRoles(req);
+    if (!admin && !isContributor) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
     const writerFilter = admin && typeof req.query.writerId === "string" ? req.query.writerId : undefined;
+    const kindFilter = admin && typeof req.query.authorKind === "string" ? req.query.authorKind : undefined;
 
     const conditions = [] as any[];
     if (!admin) {
@@ -128,22 +170,28 @@ router.get("/api/opinion-tickets", requireAuth, async (req: any, res: Response) 
       .where(conditions.length ? and(...conditions) : undefined)
       .orderBy(desc(opinionTickets.lastMessageAt));
 
-    const tickets = rows.map((row) => {
-      const lastRead = admin ? row.lastReadByAdminAt : row.lastReadByWriterAt;
-      const hasUnread = !lastRead || (row.lastMessageAt && row.lastMessageAt > lastRead);
-      return {
-        id: row.id,
-        writerId: row.writerId,
-        writerName: fullName(row.writerFirstName, row.writerLastName),
-        writerEmail: row.writerEmail,
-        title: row.title,
-        status: row.status,
-        lastMessageAt: row.lastMessageAt,
-        createdAt: row.createdAt,
-        updatedAt: row.updatedAt,
-        hasUnread: !!hasUnread,
-      };
-    });
+    const kinds = await authorKindsForUserIds(rows.map((r) => r.writerId));
+
+    const tickets = rows
+      .map((row) => {
+        const lastRead = admin ? row.lastReadByAdminAt : row.lastReadByWriterAt;
+        const hasUnread = !lastRead || (row.lastMessageAt && row.lastMessageAt > lastRead);
+        const authorKind = kinds.get(row.writerId) ?? "other";
+        return {
+          id: row.id,
+          writerId: row.writerId,
+          writerName: fullName(row.writerFirstName, row.writerLastName),
+          writerEmail: row.writerEmail,
+          authorKind,
+          title: row.title,
+          status: row.status,
+          lastMessageAt: row.lastMessageAt,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          hasUnread: !!hasUnread,
+        };
+      })
+      .filter((t) => !kindFilter || kindFilter === "all" || t.authorKind === kindFilter);
 
     return res.json({ tickets });
   } catch (err) {
@@ -159,8 +207,8 @@ router.get("/api/opinion-tickets", requireAuth, async (req: any, res: Response) 
  */
 router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, res: Response) => {
   try {
-    const { isAdmin: admin, isWriter: writer } = await getViewerRoles(req);
-    if (!admin && !writer) {
+    const { isAdmin: admin, isContributor } = await getViewerRoles(req);
+    if (!admin && !isContributor) {
       return res.json({ unreadCount: 0 });
     }
 
@@ -195,9 +243,9 @@ router.get("/api/opinion-tickets/unread-count", requireAuth, async (req: any, re
  */
 router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response) => {
   try {
-    const { isWriter } = await getViewerRoles(req);
-    if (!isWriter) {
-      return res.status(403).json({ message: "هذه الميزة متاحة لكتّاب الرأي وكتّاب الزوايا فقط" });
+    const { isContributor } = await getViewerRoles(req);
+    if (!isContributor) {
+      return res.status(403).json({ message: "هذه الميزة متاحة للمراسلين وكتّاب الرأي والزوايا فقط" });
     }
     const parsed = insertOpinionTicketSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -232,14 +280,52 @@ router.post("/api/opinion-tickets", requireAuth, async (req: any, res: Response)
 });
 
 /**
+ * GET /api/opinion-tickets/writers/list
+ * Admin only — قبل :id حتى لا يُلتقط المسار كمعرّف تذكرة.
+ */
+router.get("/api/opinion-tickets/writers/list", requireAuth, async (req: any, res: Response) => {
+  try {
+    const { isAdmin: admin } = await getViewerRoles(req);
+    if (!admin) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const rows = await db
+      .selectDistinct({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        email: users.email,
+      })
+      .from(opinionTickets)
+      .leftJoin(users, eq(users.id, opinionTickets.writerId));
+
+    const ids = rows.map((r) => r.id).filter((id): id is string => !!id);
+    const kinds = await authorKindsForUserIds(ids);
+
+    const writers = rows
+      .filter((r) => r.id != null)
+      .map((r) => ({
+        id: r.id as string,
+        name: fullName(r.firstName, r.lastName),
+        email: r.email,
+        authorKind: kinds.get(r.id as string) ?? "other",
+      }));
+    return res.json({ writers });
+  } catch (err) {
+    console.error("[opinion-tickets] writers error", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+/**
  * GET /api/opinion-tickets/:id
  * Returns the ticket + all its messages and marks the thread as read for
  * the current viewer.
  */
 router.get("/api/opinion-tickets/:id", requireAuth, async (req: any, res: Response) => {
   try {
-    const { isAdmin: admin, isWriter: writer } = await getViewerRoles(req);
-    if (!admin && !writer) {
+    const { isAdmin: admin, isContributor } = await getViewerRoles(req);
+    if (!admin && !isContributor) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
@@ -267,6 +353,9 @@ router.get("/api/opinion-tickets/:id", requireAuth, async (req: any, res: Respon
     if (!admin && ticket.writerId !== req.user.id) {
       return res.status(403).json({ message: "Forbidden" });
     }
+
+    const kinds = await authorKindsForUserIds([ticket.writerId]);
+    const authorKind = kinds.get(ticket.writerId) ?? "other";
 
     const messageRows = await db
       .select({
@@ -320,6 +409,7 @@ router.get("/api/opinion-tickets/:id", requireAuth, async (req: any, res: Respon
       updatedAt: ticket.updatedAt,
       writerName: fullName(ticket.writerFirstName, ticket.writerLastName),
       writerEmail: ticket.writerEmail,
+      authorKind,
     };
 
     return res.json({ ticket: ticketResp, messages });
@@ -338,8 +428,8 @@ router.get("/api/opinion-tickets/:id", requireAuth, async (req: any, res: Respon
  */
 router.post("/api/opinion-tickets/:id/messages", requireAuth, async (req: any, res: Response) => {
   try {
-    const { isAdmin: admin, isWriter: writer } = await getViewerRoles(req);
-    if (!admin && !writer) {
+    const { isAdmin: admin, isContributor } = await getViewerRoles(req);
+    if (!admin && !isContributor) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
@@ -435,40 +525,6 @@ router.patch("/api/opinion-tickets/:id/status", requireAuth, async (req: any, re
     return res.json({ ticket: updated });
   } catch (err) {
     console.error("[opinion-tickets] status error", err);
-    return res.status(500).json({ message: "Internal server error" });
-  }
-});
-
-/**
- * GET /api/opinion-tickets/writers/list
- * Admin only — list of opinion writers (for the filter dropdown).
- */
-router.get("/api/opinion-tickets/writers/list", requireAuth, async (req: any, res: Response) => {
-  try {
-    const { isAdmin: admin } = await getViewerRoles(req);
-    if (!admin) {
-      return res.status(403).json({ message: "Forbidden" });
-    }
-    // Only writers who have at least one ticket
-    const rows = await db
-      .selectDistinct({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        email: users.email,
-      })
-      .from(opinionTickets)
-      .leftJoin(users, eq(users.id, opinionTickets.writerId));
-    const writers = rows
-      .filter((r) => r.id != null)
-      .map((r) => ({
-        id: r.id as string,
-        name: fullName(r.firstName, r.lastName),
-        email: r.email,
-      }));
-    return res.json({ writers });
-  } catch (err) {
-    console.error("[opinion-tickets] writers error", err);
     return res.status(500).json({ message: "Internal server error" });
   }
 });

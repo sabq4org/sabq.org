@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { STATUS_META, STATUS_OPTIONS, type OpinionTicketStatus } from "@/components/opinion-tickets/statusMeta";
+import { authorKindMeta, type TicketAuthorKind } from "@/components/opinion-tickets/authorKindMeta";
 import { apiUrl } from "@/lib/queryClient";
 
 interface AdminTicketRow {
@@ -32,6 +33,7 @@ interface AdminTicketRow {
   writerId: string;
   writerName: string | null;
   writerEmail: string | null;
+  authorKind?: TicketAuthorKind;
   title: string;
   status: OpinionTicketStatus;
   lastMessageAt: string;
@@ -44,7 +46,12 @@ interface ListResponse {
 }
 
 interface WritersResponse {
-  writers: Array<{ id: string; name: string | null; email: string | null }>;
+  writers: Array<{
+    id: string;
+    name: string | null;
+    email: string | null;
+    authorKind?: TicketAuthorKind;
+  }>;
 }
 
 function formatDate(date: string) {
@@ -149,8 +156,8 @@ export default function OpinionTicketsAdmin() {
       >
         <DashboardPageHeader
           icon={MessageSquare}
-          title="استفسارات كتّاب الرأي"
-          description="إدارة استفسارات الكتّاب والرد عليها"
+          title="استفسارات المراسلين والكتّاب"
+          description="صندوق واحد لاستفسارات المراسلين وكتّاب الرأي والزوايا"
           titleTestId="text-page-title"
         />
 
@@ -210,7 +217,7 @@ export default function OpinionTicketsAdmin() {
               <div className="relative">
                 <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="بحث في العنوان أو اسم الكاتب..."
+                  placeholder="بحث في العنوان أو اسم المراسل/الكاتب..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pr-10"
@@ -232,15 +239,18 @@ export default function OpinionTicketsAdmin() {
               </Select>
               <Select value={writerFilter} onValueChange={setWriterFilter}>
                 <SelectTrigger data-testid="select-filter-writer">
-                  <SelectValue placeholder="جميع الكتّاب" />
+                  <SelectValue placeholder="الجميع" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">جميع الكتّاب</SelectItem>
-                  {writers.map((w) => (
-                    <SelectItem key={w.id} value={w.id}>
-                      {w.name || w.email || w.id}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="all">جميع المراسلين والكتّاب</SelectItem>
+                  {writers.map((w) => {
+                    const kind = authorKindMeta(w.authorKind);
+                    return (
+                      <SelectItem key={w.id} value={w.id}>
+                        {kind.shortLabel}: {w.name || w.email || w.id}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -272,6 +282,8 @@ export default function OpinionTicketsAdmin() {
               <div className="overflow-hidden rounded-xl border border-sky-100/80 bg-card shadow-sm dark:border-sky-900/30">
                 {filtered.map((t, idx) => {
                   const meta = STATUS_META[t.status] ?? STATUS_META.open;
+                  const kind = authorKindMeta(t.authorKind);
+                  const KindIcon = kind.icon;
                   return (
                     <div
                       key={t.id}
@@ -289,8 +301,15 @@ export default function OpinionTicketsAdmin() {
                       )}
                       data-testid={`row-admin-ticket-${t.id}`}
                     >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 dark:bg-amber-500/20">
-                        <MessageSquare className="h-4 w-4 text-amber-800 dark:text-amber-200" />
+                      <div
+                        className={cn(
+                          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                          kind.className,
+                        )}
+                        title={kind.label}
+                        aria-label={kind.label}
+                      >
+                        <KindIcon className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
@@ -303,6 +322,8 @@ export default function OpinionTicketsAdmin() {
                           )}
                         </div>
                         <p className="mt-0.5 line-clamp-1 text-xs tabular-nums text-muted-foreground">
+                          <span className="font-medium text-foreground/70">{kind.label}</span>
+                          <span className="mx-1">·</span>
                           {t.writerName || t.writerEmail || t.writerId}
                           <span className="mx-1">·</span>
                           {formatDate(t.lastMessageAt)}
