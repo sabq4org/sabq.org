@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiUrl } from "@/lib/queryClient";
 import { Camera, Loader2, CheckCircle, UserPlus } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -51,7 +51,7 @@ export default function CorrespondentRegister() {
         toast({
           variant: "destructive",
           title: "حجم الملف كبير",
-          description: "يجب أن يكون حجم الصورة أقل من 10 ميجابايت",
+          description: "يجب أن يكون حجم الصورة أقل من 5 ميجابايت",
         });
         return;
       }
@@ -89,7 +89,7 @@ export default function CorrespondentRegister() {
       }
       formData.append("city", data.city);
 
-      const response = await fetch("/api/correspondent-applications", {
+      const response = await fetch(apiUrl("/api/correspondent-applications"), {
         method: "POST",
         body: formData,
       });
@@ -181,7 +181,7 @@ export default function CorrespondentRegister() {
                   onChange={handlePhotoChange}
                   data-testid="input-photo"
                 />
-                <p className="text-xs text-muted-foreground mt-2">الصورة الشخصية (مطلوبة - أقصى حجم 10 ميجابايت)</p>
+                <p className="text-xs text-muted-foreground mt-2">الصورة الشخصية (مطلوبة - أقصى حجم 5 ميجابايت)</p>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -296,6 +296,7 @@ export default function CorrespondentRegister() {
               <Alert>
                 <AlertDescription className="text-sm text-muted-foreground">
                   بتقديم هذا الطلب، أنت توافق على شروط الخدمة وسياسة الخصوصية. سيتم مراجعة طلبك خلال 48 ساعة عمل.
+                  إذا كان لديك حساب قارئ مسجّل بنفس البريد الإلكتروني فستتم ترقيته تلقائياً إلى حساب مراسل عند قبول الطلب — لن تفقد بياناتك.
                 </AlertDescription>
               </Alert>
 

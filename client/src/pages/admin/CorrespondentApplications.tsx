@@ -23,7 +23,10 @@ import {
   RefreshCw,
   Copy,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Link2,
+  ExternalLink,
+  BookOpenCheck
 } from "lucide-react";
 import {
   Table,
@@ -57,7 +60,16 @@ type ApplicationStatus = "all" | "pending" | "approved" | "rejected";
 interface ApplicationsResponse {
   applications: CorrespondentApplicationWithDetails[];
   total: number;
+  counts?: {
+    pending: number;
+    approved: number;
+    rejected: number;
+    total: number;
+  };
 }
+
+const isReaderRole = (role?: string | null) =>
+  !!role && ["reader", "user", "subscriber"].includes(role.toLowerCase());
 
 export default function CorrespondentApplications() {
   const { toast } = useToast();
@@ -70,6 +82,7 @@ export default function CorrespondentApplications() {
   const [approvalResult, setApprovalResult] = useState<{
     temporaryPassword: string;
     email: string;
+    existingAccountUpgraded?: boolean;
   } | null>(null);
   const [showApprovalResultDialog, setShowApprovalResultDialog] = useState(false);
 
@@ -91,11 +104,12 @@ export default function CorrespondentApplications() {
     onSuccess: (data) => {
       toast({
         title: "تمت الموافقة",
-        description: "تم قبول الطلب وإنشاء حساب المراسل",
+        description: data.message || "تم قبول الطلب وإنشاء حساب المراسل",
       });
       setApprovalResult({
         temporaryPassword: data.temporaryPassword,
         email: data.user.email,
+        existingAccountUpgraded: data.existingAccountUpgraded,
       });
       setShowApprovalResultDialog(true);
       setShowDetailsDialog(false);
@@ -149,15 +163,27 @@ export default function CorrespondentApplications() {
     }
   };
 
-  const pendingCount = data?.applications?.filter(a => a.status === "pending").length || 0;
-  const approvedCount = data?.applications?.filter(a => a.status === "approved").length || 0;
-  const rejectedCount = data?.applications?.filter(a => a.status === "rejected").length || 0;
+  // Global counts from the API (fallback to page-local counting for safety)
+  const totalCount = data?.counts?.total ?? data?.total ?? 0;
+  const pendingCount = data?.counts?.pending ?? (data?.applications?.filter(a => a.status === "pending").length || 0);
+  const approvedCount = data?.counts?.approved ?? (data?.applications?.filter(a => a.status === "approved").length || 0);
+  const rejectedCount = data?.counts?.rejected ?? (data?.applications?.filter(a => a.status === "rejected").length || 0);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({
       title: "تم النسخ",
       description: "تم نسخ النص للحافظة",
+    });
+  };
+
+  const registerUrl = `${window.location.origin}/correspondent/register`;
+
+  const copyRegisterLink = () => {
+    navigator.clipboard.writeText(registerUrl);
+    toast({
+      title: "تم نسخ رابط التقديم",
+      description: "أرسل الرابط لمن يرغب بالتقدم كمراسل — يفتح نموذج التقديم مباشرة",
     });
   };
 
@@ -173,10 +199,25 @@ export default function CorrespondentApplications() {
         description={<span data-testid="text-page-description">إدارة طلبات التسجيل كمراسل صحفي</span>}
         titleTestId="text-page-title"
         actions={
-          <Button variant="outline" className="w-full gap-2 sm:w-auto" onClick={() => refetch()} data-testid="button-refresh">
-            <RefreshCw className="w-4 h-4 ml-2" />
-            تحديث
-          </Button>
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+            <Button className="w-full gap-2 sm:w-auto" onClick={copyRegisterLink} data-testid="button-copy-register-link">
+              <Link2 className="w-4 h-4 ml-2" />
+              نسخ رابط التقديم
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full gap-2 sm:w-auto"
+              onClick={() => window.open(registerUrl, "_blank", "noopener")}
+              data-testid="button-open-register-link"
+            >
+              <ExternalLink className="w-4 h-4 ml-2" />
+              فتح النموذج
+            </Button>
+            <Button variant="outline" className="w-full gap-2 sm:w-auto" onClick={() => refetch()} data-testid="button-refresh">
+              <RefreshCw className="w-4 h-4 ml-2" />
+              تحديث
+            </Button>
+          </div>
         }
       />
 
@@ -189,7 +230,7 @@ export default function CorrespondentApplications() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">إجمالي الطلبات</p>
-                <p className="text-2xl font-bold tabular-nums" data-testid="text-total-count">{(data?.total || 0).toLocaleString("en-US")}</p>
+                <p className="text-2xl font-bold tabular-nums" data-testid="text-total-count">{totalCount.toLocaleString("en-US")}</p>
               </div>
             </div>
           </CardContent>
@@ -286,6 +327,12 @@ export default function CorrespondentApplications() {
                         <div>
                           <p className="font-medium" data-testid={`text-name-${app.id}`}>{app.arabicName}</p>
                           <p className="text-sm text-muted-foreground">{app.englishName}</p>
+                          {app.status === "pending" && isReaderRole(app.existingUserRole) && (
+                            <Badge variant="outline" className="mt-1 gap-1 border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300" data-testid={`badge-reader-${app.id}`}>
+                              <BookOpenCheck className="w-3 h-3" />
+                              لديه عضوية قارئ
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </TableCell>
@@ -428,6 +475,16 @@ export default function CorrespondentApplications() {
                 </div>
               )}
 
+              {selectedApplication.status === "pending" && isReaderRole(selectedApplication.existingUserRole) && (
+                <Alert>
+                  <BookOpenCheck className="h-4 w-4" />
+                  <AlertTitle>لديه عضوية قارئ بنفس البريد</AlertTitle>
+                  <AlertDescription>
+                    عند قبول الطلب ستتم ترقية حسابه الحالي تلقائياً إلى حساب مراسل (لن يُنشأ حساب مكرر)، مع تعيين كلمة مرور مؤقتة جديدة يجب تغييرها عند أول دخول.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               {selectedApplication.reviewNotes && (
                 <div>
                   <p className="text-sm text-muted-foreground">ملاحظات المراجعة</p>
@@ -559,8 +616,16 @@ export default function CorrespondentApplications() {
               </div>
             </AlertDescription>
           </Alert>
+          {approvalResult?.existingAccountUpgraded && (
+            <Alert>
+              <BookOpenCheck className="h-4 w-4" />
+              <AlertDescription>
+                كان لدى المتقدم عضوية قارئ بنفس البريد — تمت ترقية حسابه الحالي إلى حساب مراسل وتعيين كلمة المرور المؤقتة أعلاه.
+              </AlertDescription>
+            </Alert>
+          )}
           <p className="text-sm text-muted-foreground">
-            يرجى إرسال بيانات الدخول للمراسل عبر البريد الإلكتروني. يجب على المراسل تغيير كلمة المرور عند أول تسجيل دخول.
+            تم إرسال بيانات الدخول للمراسل تلقائياً عبر البريد الإلكتروني، ويمكنك أيضاً إرسالها يدوياً من هنا. يجب على المراسل تغيير كلمة المرور عند أول تسجيل دخول.
           </p>
           <DialogFooter>
             <Button onClick={() => setShowApprovalResultDialog(false)} data-testid="button-close-result">

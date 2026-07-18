@@ -385,11 +385,6 @@ import {
   type InsertCommentEditHistory,
   type CommentDeletionLog,
   type InsertCommentDeletionLog,
-  // Correspondent Applications
-  correspondentApplications,
-  type CorrespondentApplication,
-  type InsertCorrespondentApplication,
-  type CorrespondentApplicationWithDetails,
   // Opinion Author Applications
   opinionAuthorApplications,
   type OpinionAuthorApplication,
@@ -2459,13 +2454,6 @@ export interface IStorage {
   
   calculateArticleEngagementScore(articleId: string): Promise<void>;
   calculateAllEngagementScores(): Promise<void>;
-  
-  // Correspondent Applications
-  createCorrespondentApplication(data: InsertCorrespondentApplication): Promise<CorrespondentApplication>;
-  getCorrespondentApplications(status?: string, page?: number, limit?: number): Promise<{applications: CorrespondentApplicationWithDetails[], total: number}>;
-  getCorrespondentApplicationById(id: string): Promise<CorrespondentApplicationWithDetails | undefined>;
-  approveCorrespondentApplication(id: string, reviewerId: string, notes?: string): Promise<{application: CorrespondentApplication, user: User, temporaryPassword: string}>;
-  rejectCorrespondentApplication(id: string, reviewerId: string, reason: string): Promise<CorrespondentApplication>;
   
   // Opinion Author Applications - طلبات كتّاب الرأي
   createOpinionAuthorApplication(data: InsertOpinionAuthorApplication): Promise<OpinionAuthorApplication>;
@@ -20474,182 +20462,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ============================================
-  // CORRESPONDENT APPLICATIONS - طلبات المراسلين
-  // ============================================
-  
-  async createCorrespondentApplication(data: InsertCorrespondentApplication): Promise<CorrespondentApplication> {
-    // Normalize email so the approval-time lookup (which matches against the
-    // lowercased users.email) always finds an existing reader account. Without
-    // this, a capitalization/whitespace difference creates a duplicate user row.
-    const normalized = { ...data, email: data.email?.toLowerCase().trim() };
-    const [application] = await db.insert(correspondentApplications).values(normalized).returning();
-    return application;
-  }
-
-  async getCorrespondentApplications(status?: string, page: number = 1, limit: number = 10): Promise<{applications: CorrespondentApplicationWithDetails[], total: number}> {
-    const offset = (page - 1) * limit;
-    const conditions = [];
-    if (status && status !== 'all') {
-      conditions.push(eq(correspondentApplications.status, status));
-    }
-    
-    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-    
-    const [countResult] = await db.select({ count: count() }).from(correspondentApplications).where(whereClause);
-    const total = countResult?.count || 0;
-    
-    const applications = await db.select({
-      id: correspondentApplications.id,
-      arabicName: correspondentApplications.arabicName,
-      englishName: correspondentApplications.englishName,
-      email: correspondentApplications.email,
-      phone: correspondentApplications.phone,
-      jobTitle: correspondentApplications.jobTitle,
-      bio: correspondentApplications.bio,
-      city: correspondentApplications.city,
-      profilePhotoUrl: correspondentApplications.profilePhotoUrl,
-      status: correspondentApplications.status,
-      reviewedBy: correspondentApplications.reviewedBy,
-      reviewedAt: correspondentApplications.reviewedAt,
-      reviewNotes: correspondentApplications.reviewNotes,
-      createdUserId: correspondentApplications.createdUserId,
-      createdAt: correspondentApplications.createdAt,
-    })
-    .from(correspondentApplications)
-    .where(whereClause)
-    .orderBy(desc(correspondentApplications.createdAt))
-    .limit(limit)
-    .offset(offset);
-    
-    return { applications, total };
-  }
-
-  async getCorrespondentApplicationById(id: string): Promise<CorrespondentApplicationWithDetails | undefined> {
-    const [application] = await db.select().from(correspondentApplications).where(eq(correspondentApplications.id, id));
-    if (!application) return undefined;
-    
-    let reviewer = null;
-    if (application.reviewedBy) {
-      const [reviewerData] = await db.select({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        email: users.email,
-      }).from(users).where(eq(users.id, application.reviewedBy));
-      reviewer = reviewerData || null;
-    }
-    
-    return { ...application, reviewer };
-  }
-
-  async approveCorrespondentApplication(id: string, reviewerId: string, notes?: string): Promise<{application: CorrespondentApplication, user: User, temporaryPassword: string}> {
-    const [application] = await db.select().from(correspondentApplications).where(eq(correspondentApplications.id, id));
-    if (!application) throw new Error("Application not found");
-    if (application.status !== 'pending') throw new Error("Application already processed");
-
-    // Check if user with this email already exists.
-    // Match case-insensitively: registration/login lowercase the email, so a
-    // case/whitespace difference here would otherwise miss the existing reader
-    // and create a duplicate user row with the same email.
-    const applicantEmail = application.email.toLowerCase().trim();
-    const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
-    
-    let finalUser: User;
-    let temporaryPassword = '';
-    
-    if (existingUser) {
-      // User already exists - update their role to reporter and link to application
-      const [updatedUser] = await db.update(users)
-        .set({
-          role: 'reporter',
-          jobTitle: application.jobTitle || existingUser.jobTitle,
-          bio: application.bio || existingUser.bio,
-          city: application.city || existingUser.city,
-          profileImageUrl: application.profilePhotoUrl || existingUser.profileImageUrl,
-          isProfileComplete: true,
-        })
-        .where(eq(users.id, existingUser.id))
-        .returning();
-      finalUser = updatedUser;
-      
-      // Assign reporter role via RBAC
-      const [reporterRole] = await db.select().from(roles).where(eq(roles.name, 'reporter'));
-      if (reporterRole) {
-        await db.insert(userRoles).values({
-          userId: existingUser.id,
-          roleId: reporterRole.id,
-          assignedBy: reviewerId,
-        }).onConflictDoNothing();
-      }
-    } else {
-      // Create new user
-      temporaryPassword = nanoid(12);
-      const hashedPassword = await bcrypt.hash(temporaryPassword, 12);
-      
-      const [newUser] = await db.insert(users).values({
-        id: nanoid(),
-        email: applicantEmail,
-        firstName: application.arabicName.split(' ')[0] || application.arabicName,
-        lastName: application.arabicName.split(' ').slice(1).join(' ') || '',
-        profileImageUrl: application.profilePhotoUrl,
-        status: 'active',
-        passwordHash: hashedPassword,
-        emailVerified: true,
-        role: 'reporter',
-        jobTitle: application.jobTitle,
-        bio: application.bio,
-        isProfileComplete: true,
-        mustChangePassword: true, // Require password change on first login
-      }).returning();
-      finalUser = newUser;
-      
-      // Assign reporter role via RBAC
-      const [reporterRole] = await db.select().from(roles).where(eq(roles.name, 'reporter'));
-      if (reporterRole) {
-        await db.insert(userRoles).values({
-          userId: newUser.id,
-          roleId: reporterRole.id,
-          assignedBy: reviewerId,
-        }).onConflictDoNothing();
-      }
-    }
-    
-    // Update application
-    const [updatedApplication] = await db.update(correspondentApplications)
-      .set({
-        status: 'approved',
-        reviewedBy: reviewerId,
-        reviewedAt: new Date(),
-        reviewNotes: notes,
-        createdUserId: finalUser.id,
-      })
-      .where(eq(correspondentApplications.id, id))
-      .returning();
-    
-    return { application: updatedApplication, user: finalUser, temporaryPassword };
-  }
-
-  async rejectCorrespondentApplication(id: string, reviewerId: string, reason: string): Promise<CorrespondentApplication> {
-    const [application] = await db.update(correspondentApplications)
-      .set({
-        status: 'rejected',
-        reviewedBy: reviewerId,
-        reviewedAt: new Date(),
-        reviewNotes: reason,
-      })
-      .where(eq(correspondentApplications.id, id))
-      .returning();
-    
-    if (!application) throw new Error("Application not found");
-    return application;
-  }
-
-  // ============================================
   // OPINION AUTHOR APPLICATIONS - طلبات كتّاب الرأي
   // ============================================
   
   async createOpinionAuthorApplication(data: InsertOpinionAuthorApplication): Promise<OpinionAuthorApplication> {
-    // Normalize email (see createCorrespondentApplication) so approval matches
+    // Normalize email (see correspondentApplicationService) so approval matches
     // the existing reader account instead of minting a second user row.
     const [application] = await db.insert(opinionAuthorApplications).values({
       ...data,
@@ -20723,7 +20540,7 @@ export class DatabaseStorage implements IStorage {
     if (application.status !== 'pending') throw new Error("Application already processed");
 
     // Check if user with this email already exists (case-insensitive — see
-    // approveCorrespondentApplication for why this matters).
+    // correspondentApplicationService.approveCorrespondentApplication for why this matters).
     const applicantEmail = application.email.toLowerCase().trim();
     const [existingUser] = await db.select().from(users).where(sql`lower(${users.email}) = ${applicantEmail}`);
     
