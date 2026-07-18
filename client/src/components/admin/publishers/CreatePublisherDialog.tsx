@@ -236,9 +236,21 @@ export function CreatePublisherDialog({
       });
       form.setValue('logoUrl', data.url);
 
+      // في وضع التعديل نحفظ الشعار فوراً — كان يضيع إن أُغلق الحوار
+      // قبل ضغط «حفظ التعديلات» فيبقى حقل الوكالة فارغاً
+      if (mode === "edit" && publisher?.id) {
+        await apiRequest(`/api/admin/publishers/${publisher.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ logoUrl: data.url }),
+          headers: { "Content-Type": "application/json" },
+        });
+        queryClient.invalidateQueries({ queryKey: [`/api/admin/publishers/${publisher.id}`] });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/publishers"] });
+      }
+
       toast({
         title: "تم رفع اللوقو",
-        description: "تم رفع شعار الناشر بنجاح",
+        description: mode === "edit" ? "رُفع شعار الوكالة وحُفظ مباشرة" : "تم رفع شعار الناشر بنجاح",
       });
     } catch (error: any) {
       toast({

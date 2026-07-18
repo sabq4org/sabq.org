@@ -9451,10 +9451,26 @@ export const insertPublisherCreditSchema = createInsertSchema(publisherCredits).
   createdAt: true,
   updatedAt: true,
 }).extend({
-  totalCredits: z.number().int().min(1, "يجب أن يكون عدد الأخبار 1 على الأقل"),
+  totalCredits: z.number().int().min(0),
   period: z.enum(["monthly", "quarterly", "yearly", "one-time"]),
   startDate: z.coerce.date({ message: "تاريخ البداية مطلوب" }),
   expiryDate: z.coerce.date({ message: "تاريخ النهاية غير صحيح" }).optional().nullable(),
+}).superRefine((data, ctx) => {
+  // الباقة المفتوحة بلا عدّاد (totalCredits=0) وحدها الوحيد تاريخ الانتهاء
+  if (!data.isUnlimited && data.totalCredits < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["totalCredits"],
+      message: "يجب أن يكون عدد الأخبار 1 على الأقل",
+    });
+  }
+  if (data.isUnlimited && !data.expiryDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["expiryDate"],
+      message: "الباقة المفتوحة تحتاج تاريخ انتهاء",
+    });
+  }
 });
 
 export const insertPublisherCreditLogSchema = createInsertSchema(publisherCreditLogs).omit({
