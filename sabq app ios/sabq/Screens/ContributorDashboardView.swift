@@ -243,6 +243,9 @@ final class ContributorDashboardViewModel: ObservableObject {
 
 struct ContributorDashboardView: View {
     @StateObject private var vm = ContributorDashboardViewModel()
+    /// دعوات الاستطلاع المفتوحة — بطاقة «استطلاع بانتظارك» أعلى اللوحة
+    /// حتى لو فات الكاتبَ إشعارُ الدفع. فشل الجلب يمرّ بصمت (القائمة تبقى فارغة).
+    @State private var pendingSurveys: [APIMySurveyInvite] = []
 
     private let accentGreen = Color(red: 0.18, green: 0.80, blue: 0.44)
     private let accentBlue  = Color(red: 0.25, green: 0.56, blue: 0.97)
@@ -275,6 +278,9 @@ struct ContributorDashboardView: View {
             } else if let data = vm.analytics {
                 VStack(alignment: .leading, spacing: 24) {
                     headerSection(data)
+                    if !pendingSurveys.isEmpty {
+                        PendingSurveysCard(invites: pendingSurveys)
+                    }
                     statsCardsSection(data)
                     overviewRow(data)
                     chartSection(data)
@@ -292,8 +298,14 @@ struct ContributorDashboardView: View {
         .sabqRTL()
         .navigationTitle("لوحة الأداء")
         .navigationBarTitleDisplayMode(.large)
-        .task { await vm.load() }
-        .refreshable { await vm.load() }
+        .task {
+            await vm.load()
+            pendingSurveys = (try? await APIClient.shared.fetchMySurveys()) ?? []
+        }
+        .refreshable {
+            await vm.load()
+            pendingSurveys = (try? await APIClient.shared.fetchMySurveys()) ?? []
+        }
     }
 
     // MARK: - Header

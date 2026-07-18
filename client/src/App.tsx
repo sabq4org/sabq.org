@@ -112,6 +112,34 @@ function NameCompletionGuard() {
   return null;
 }
 
+/** روابط sabq:// العميقة داخل غلاف كابسيتور (أندرويد): intent-filter يسلّم
+ *  الرابط لحدث appUrlOpen، ونحوّله هنا لمسار SPA. لا يعمل خارج التطبيق. */
+function CapacitorDeepLinks() {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    const capacitor = (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    if (!capacitor?.isNativePlatform?.()) return;
+    let removed = false;
+    let removeListener: (() => void) | undefined;
+    import("@capacitor/app").then(({ App: CapacitorApp }) => {
+      CapacitorApp.addListener("appUrlOpen", ({ url }) => {
+        const surveyMatch = url.match(/^sabq:\/\/survey\/([\w-]+)/);
+        if (surveyMatch) setLocation(`/survey/${surveyMatch[1]}`);
+      }).then((handle) => {
+        if (removed) handle.remove();
+        else removeListener = () => handle.remove();
+      });
+    }).catch(() => { /* الغلاف بدون الإضافة — تجاهل */ });
+    return () => {
+      removed = true;
+      removeListener?.();
+    };
+  }, [setLocation]);
+
+  return null;
+}
+
 // Lazy load non-critical components
 const VoiceCommandsHelp = lazy(() => retryImport(() => import("@/components/VoiceCommandsHelp").then(m => ({ default: m.VoiceCommandsHelp }))));
 
@@ -1229,6 +1257,7 @@ function App() {
                   <FocusSessionSync />
                   <PostAuthResumeGuard />
                   <NameCompletionGuard />
+                  <CapacitorDeepLinks />
                   <WebMCPProvider />
                   <ErrorBoundary>
                     <div id="main-content" tabIndex={-1}>

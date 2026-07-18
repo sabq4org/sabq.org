@@ -1,9 +1,10 @@
 import crypto from "crypto";
-import { and, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
   articles,
   editorialNotifications,
+  pushDevices,
   roles,
   surveyInvitations,
   surveyQuestions,
@@ -15,6 +16,8 @@ import {
   type SurveyQuestion,
 } from "@shared/schema";
 import { sendEmailNotification } from "./email";
+import { createCustomNotificationPayload, isApnsConfigured, sendPushNotification } from "./apnsService";
+import { isFcmConfigured, sendToMultipleDevices } from "./fcmService";
 
 export const SURVEY_QUESTION_TYPES = ["single", "multi", "short_text", "long_text", "stars", "scale"] as const;
 export type SurveyQuestionType = (typeof SURVEY_QUESTION_TYPES)[number];
@@ -330,22 +333,124 @@ export async function sendSurvey(surveyId: string): Promise<{ invited: number; e
     }
 
     if (survey.channels.includes("dashboard")) {
-      await db.insert(editorialNotifications).values({
+      const title = `استطلاع جديد: ${survey.title}`;
+      const body = survey.purpose
+        ? `نأمل منك تعبئة الاستطلاع لمساعدتنا في ${survey.purpose}. رابطك الخاص جاهز.`
+        : "نأمل منك تعبئة الاستطلاع؛ رأيك يساعدنا على التطوير. رابطك الخاص جاهز.";
+      // عرف المنصة للروابط العميقة (iOS/أندرويد)؛ واجهة الويب تحوّله إلى /survey/<token>
+      const deepLink = `sabq://survey/${invitation.token}`;
+      const [notificationRow] = await db.insert(editorialNotifications).values({
         userId: invitation.userId,
         type: "survey_invite",
-        title: `استطلاع جديد: ${survey.title}`,
-        body: survey.purpose
-          ? `نأمل منك تعبئة الاستطلاع لمساعدتنا في ${survey.purpose}. رابطك الخاص جاهز.`
-          : "نأمل منك تعبئة الاستطلاع؛ رأيك يساعدنا على التطوير. رابطك الخاص جاهز.",
-        deepLink: `/survey/${invitation.token}`,
-        deliveryStatus: "no_device",
-      });
+        title,
+        body,
+        deepLink,
+        deliveryStatus: "pending",
+      }).returning({ id: editorialNotifications.id });
+      await pushSurveyInvite(invitation.userId, notificationRow.id, title, body, deepLink);
       await db.update(surveyInvitations).set({ notifiedAt: new Date() }).where(eq(surveyInvitations.token, invitation.token));
       notified += 1;
     }
   }
 
   return { invited: invitations.length, emailsSent, emailsFailed, notified };
+}
+
+/** إرسال دفع فعلي للدعوة: APNs لأجهزة iOS وFCM لأندرويد، مع تحديث حالة التسليم على صف الإشعار. */
+async function pushSurveyInvite(userId: string, notificationId: string, title: string, body: string, deepLink: string): Promise<void> {
+  try {
+    const devices = await db
+      .select({ token: pushDevices.deviceToken, provider: pushDevices.tokenProvider, platform: pushDevices.platform })
+      .from(pushDevices)
+      .where(and(eq(pushDevices.userId, userId), eq(pushDevices.isActive, true)));
+
+    const apnsTokens = devices.filter((device) => device.platform === "ios" && device.provider === "apns").map((device) => device.token);
+    const fcmTokens = devices.filter((device) => device.platform === "android" && device.provider === "fcm").map((device) => device.token);
+
+    if (apnsTokens.length === 0 && fcmTokens.length === 0) {
+      await db.update(editorialNotifications).set({ deliveryStatus: "no_device" }).where(eq(editorialNotifications.id, notificationId));
+      return;
+    }
+
+    let sent = 0;
+    const errors: string[] = [];
+
+    if (apnsTokens.length > 0) {
+      if (isApnsConfigured()) {
+        const results = await Promise.all(apnsTokens.map((token) =>
+          sendPushNotification(
+            token,
+            createCustomNotificationPayload(title, body, {
+              deeplink: deepLink,
+              type: "survey_invite",
+              category: "SURVEY_INVITE",
+              priority: "active",
+            }),
+            { priority: "10", pushType: "alert" },
+          ),
+        ));
+        sent += results.filter((result) => result.success).length;
+        errors.push(...results.filter((result) => !result.success).map((result) => result.reason || "apns_unknown"));
+      } else {
+        errors.push("APNS_NOT_CONFIGURED");
+      }
+    }
+
+    if (fcmTokens.length > 0) {
+      if (isFcmConfigured()) {
+        const batch = await sendToMultipleDevices(fcmTokens, {
+          title,
+          body,
+          data: { deeplink: deepLink, type: "survey_invite" },
+        });
+        sent += batch.successCount;
+        if (batch.failureCount > 0) errors.push(`fcm_failed:${batch.failureCount}`);
+      } else {
+        errors.push("FCM_NOT_CONFIGURED");
+      }
+    }
+
+    await db.update(editorialNotifications)
+      .set({ deliveryStatus: sent > 0 ? "sent" : "failed", deliveryError: sent > 0 ? null : errors.join("; ") })
+      .where(eq(editorialNotifications.id, notificationId));
+  } catch (error) {
+    // الدفع أفضل-جهد — الدعوة نفسها (إيميل + سجل الإشعار) لا تتأثر بفشله
+    console.warn("[Surveys] push invite failed:", error);
+  }
+}
+
+/** دعوات المستخدم المفتوحة — لبطاقة «لديك استطلاع بانتظارك» في التطبيقات. */
+export async function getOpenInvitationsForUser(userId: string) {
+  const rows = await db
+    .select({
+      token: surveyInvitations.token,
+      invitedAt: surveyInvitations.createdAt,
+      openedAt: surveyInvitations.openedAt,
+      surveyTitle: surveys.title,
+      purpose: surveys.purpose,
+      closesAt: surveys.closesAt,
+      questionsCount: sql<number>`(select count(*)::int from survey_questions q where q.survey_id = ${surveys.id})`,
+    })
+    .from(surveyInvitations)
+    .innerJoin(surveys, eq(surveys.id, surveyInvitations.surveyId))
+    .where(and(
+      eq(surveyInvitations.userId, userId),
+      isNull(surveyInvitations.completedAt),
+      eq(surveys.status, "active"),
+    ))
+    .orderBy(desc(surveyInvitations.createdAt));
+  const now = new Date();
+  return rows
+    .filter((row) => !row.closesAt || row.closesAt > now)
+    .map((row) => ({
+      token: row.token,
+      title: row.surveyTitle,
+      purpose: row.purpose,
+      questionsCount: row.questionsCount,
+      invitedAt: row.invitedAt,
+      opened: row.openedAt != null,
+      url: `${getFrontendUrl()}/survey/${row.token}`,
+    }));
 }
 
 // ============ الصفحة العامة ============
