@@ -8179,19 +8179,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
       }
 
-      // Check if user is linked to a publisher (for automatic credit deduction)
-      const [currentUser] = await db
-        .select({ linkedPublisherId: users.linkedPublisherId })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
+      // مالك الوكالة أو موظف مرتبط (linkedPublisherId) — إحصاء/خصم الرصيد
+      const agencyPublisher = await storage.getPublisherByUserId(userId);
 
       let publisherId: string | null = null;
       let updatedArticle: typeof article | null = null;
 
-      if (currentUser?.linkedPublisherId) {
-        // User is linked to a publisher - use transaction for atomic credit deduction
-        publisherId = currentUser.linkedPublisherId;
+      if (agencyPublisher?.isActive) {
+        publisherId = agencyPublisher.id;
 
         // Enforce the agency publishing window before spending a credit
         const gate = await getPublishingGate(userId);
@@ -8201,46 +8196,47 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
         try {
           const result = await db.transaction(async (tx) => {
-            // باقة مفتوحة نشطة؟ نُحصي الاستخدام دون إنقاص الرصيد
-            const [unlimitedPackage] = await tx
-              .update(publisherCredits)
-              .set({
-                usedCredits: sql`${publisherCredits.usedCredits} + 1`,
-                updatedAt: new Date(),
-              })
+            const now = new Date();
+            // باقة واحدة فقط: مفتوحة أولاً ثم الأقرب لانتهاء
+            const [selectedPackage] = await tx
+              .select()
+              .from(publisherCredits)
               .where(
                 and(
-                  eq(publisherCredits.publisherId, currentUser.linkedPublisherId!),
+                  eq(publisherCredits.publisherId, agencyPublisher.id),
                   eq(publisherCredits.isActive, true),
-                  eq(publisherCredits.isUnlimited, true),
+                  or(
+                    eq(publisherCredits.isUnlimited, true),
+                    gt(publisherCredits.remainingCredits, 0),
+                  ),
                   or(
                     isNull(publisherCredits.expiryDate),
-                    gte(publisherCredits.expiryDate, new Date())
-                  )
-                )
+                    gte(publisherCredits.expiryDate, now),
+                  ),
+                ),
               )
-              .returning();
+              .orderBy(desc(publisherCredits.isUnlimited), asc(publisherCredits.expiryDate))
+              .limit(1);
 
-            // Atomically find and decrement credits in one query
-            const [decrementedPackage] = unlimitedPackage
-              ? [unlimitedPackage]
-              : await tx
+            if (!selectedPackage) {
+              throw new Error("NO_CREDITS");
+            }
+
+            const wasUnlimited = selectedPackage.isUnlimited;
+            const [decrementedPackage] = await tx
               .update(publisherCredits)
               .set({
                 usedCredits: sql`${publisherCredits.usedCredits} + 1`,
-                remainingCredits: sql`${publisherCredits.remainingCredits} - 1`,
-                updatedAt: new Date(),
+                ...(wasUnlimited
+                  ? {}
+                  : { remainingCredits: sql`${publisherCredits.remainingCredits} - 1` }),
+                updatedAt: now,
               })
               .where(
                 and(
-                  eq(publisherCredits.publisherId, currentUser.linkedPublisherId!),
-                  eq(publisherCredits.isActive, true),
-                  gt(publisherCredits.remainingCredits, 0),
-                  or(
-                    isNull(publisherCredits.expiryDate),
-                    gte(publisherCredits.expiryDate, new Date())
-                  )
-                )
+                  eq(publisherCredits.id, selectedPackage.id),
+                  wasUnlimited ? sql`true` : gt(publisherCredits.remainingCredits, 0),
+                ),
               )
               .returning();
 
@@ -8248,22 +8244,20 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
               throw new Error("NO_CREDITS");
             }
 
-            // Publish the article with publisher ID
             const [published] = await tx
               .update(articles)
               .set({
                 status: "published",
-                publishedAt: new Date(),
-                updatedAt: new Date(),
-                publisherId: currentUser.linkedPublisherId,
+                publishedAt: now,
+                updatedAt: now,
+                publisherId: agencyPublisher.id,
+                isPublisherNews: true,
               })
               .where(eq(articles.id, articleId))
               .returning();
 
-            // Log the credit usage (باقة مفتوحة = بلا خصم)
-            const wasUnlimited = !!unlimitedPackage;
             await tx.insert(publisherCreditLogs).values({
-              publisherId: currentUser.linkedPublisherId!,
+              publisherId: agencyPublisher.id,
               creditPackageId: decrementedPackage.id,
               articleId,
               actionType: "credit_used",
@@ -8278,7 +8272,9 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
                 : `نشر مقال: ${article.title}`,
             });
 
-            console.log(`📰 [PUBLISHER] Credit deducted for publisher ${currentUser.linkedPublisherId}. Remaining: ${decrementedPackage.remainingCredits}`);
+            console.log(
+              `📰 [PUBLISHER] Credit tracked for publisher ${agencyPublisher.id}. Remaining: ${decrementedPackage.remainingCredits}`,
+            );
 
             return published;
           });
@@ -8294,7 +8290,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
           throw txError;
         }
       } else {
-        // No publisher link - regular publish without credit deduction
+        // لا ارتباط بوكالة — نشر عادي بلا رصيد ناشر
         const [published] = await db
           .update(articles)
           .set({

@@ -58,6 +58,7 @@ interface PortalPublisherBrief {
     isUnlimited: boolean;
     remainingCredits: number;
     totalCredits: number;
+    usedCredits?: number;
     expiryDate: string | null;
   } | null;
 }
@@ -271,7 +272,7 @@ export function PublisherLayout({ children }: PublisherLayoutProps) {
                           <p className="text-muted-foreground">
                             {activeCredit
                               ? activeCredit.isUnlimited
-                                ? "باقة مفتوحة ∞"
+                                ? `مفتوحة ∞ · نُشر ${Number(activeCredit.usedCredits) || 0}`
                                 : `متبقي ${activeCredit.remainingCredits} من ${activeCredit.totalCredits}`
                               : "تواصل مع الإدارة للتفعيل"}
                           </p>
