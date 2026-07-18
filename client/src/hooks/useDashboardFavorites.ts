@@ -1,5 +1,5 @@
 /**
- * مفضلة قائمة لوحة التحكم — مشتركة بين الشريط الجانبي والصفحة الرئيسية.
+ * مفضلة لوحة التحكم — تُضاف من نجمة بجانب عنوان الصفحة، وتظهر اختصاراتها في الشريط الجانبي.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/hooks/use-toast";
