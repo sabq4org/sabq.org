@@ -300,6 +300,58 @@ export async function upsertWriterSchedule(
   };
 }
 
+/** عدد الكتّاب النشطين على كل يوم — لإظهار الازدحام قبل اختيار الكاتب يومه */
+export async function getWriterDayLoads(): Promise<number[]> {
+  const rows = await db
+    .select({
+      weekday: opinionWriterSchedules.weekday,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(opinionWriterSchedules)
+    .where(eq(opinionWriterSchedules.active, true))
+    .groupBy(opinionWriterSchedules.weekday);
+  const loads = Array(7).fill(0) as number[];
+  for (const r of rows) loads[r.weekday] = r.count;
+  return loads;
+}
+
+/**
+ * اختيار الكاتب يومه بنفسه — مرة واحدة فقط: أي صف موجود (حتى المعطَّل،
+ * لأنه قرار إداري) يمنع الاختيار الذاتي ويُحال الكاتب للإدارة.
+ */
+export async function selfAssignWriterSchedule(
+  writerId: string,
+  weekday: number,
+): Promise<
+  | { ok: true; schedule: WriterScheduleInfo }
+  | { ok: false; status: number; message: string }
+> {
+  const [existing] = await db
+    .select({ id: opinionWriterSchedules.id })
+    .from(opinionWriterSchedules)
+    .where(eq(opinionWriterSchedules.writerId, writerId))
+    .limit(1);
+  if (existing) {
+    return {
+      ok: false,
+      status: 409,
+      message: "يومك محدد مسبقاً — لتغييره تواصل مع إدارة التحرير",
+    };
+  }
+  const schedule = await upsertWriterSchedule(writerId, { weekday }, writerId);
+  return { ok: true, schedule };
+}
+
+/** هل يستطيع الكاتب اختيار يومه بنفسه؟ (لا يوجد أي صف جدولة له) */
+export async function canSelfAssignSchedule(writerId: string): Promise<boolean> {
+  const [existing] = await db
+    .select({ id: opinionWriterSchedules.id })
+    .from(opinionWriterSchedules)
+    .where(eq(opinionWriterSchedules.writerId, writerId))
+    .limit(1);
+  return !existing;
+}
+
 /** الموعد المقترح القادم لكاتب — يُستخدم لتعبئة الجدولة تلقائياً عند المراجعة */
 export async function getNextSlotForWriter(writerId: string): Promise<{
   weekday: number;
