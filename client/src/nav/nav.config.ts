@@ -214,10 +214,11 @@ export const navConfig: NavItem[] = [
     labelAr: "المحتوى",
     icon: Newspaper,
     roles: ["admin", "editor", "author", "reviewer", "comments_moderator", "reporter"],
-    // كاتب الرأي وكاتب الزاوية يكتبان من عنصرهما المخصّص أعلاه؛ نخفي قسم المحتوى
-    // عنهما كاملاً (excludeRoles على الحاوية يُفحص قبل الصلاحيات ويلغي كل الأبناء —
-    // بما فيها "مكتبة الوسائط" التي تظهر بـ media.view). رفع الصور لا يحتاج ظهورها.
-    excludeRoles: ["opinion_author", "angle_writer"],
+    // كاتب الرأي وكاتب الزاوية والناشر يكتبون من عناصرهم المخصّصة؛ نخفي قسم
+    // المحتوى عنهم كاملاً (excludeRoles على الحاوية يُفحص قبل الصلاحيات ويلغي
+    // كل الأبناء — بما فيها "مكتبة الوسائط" التي تظهر بـ media.view، والأخبار
+    // التي تظهر بـ articles.view الممنوحة لدور الناشر). رفع الصور لا يحتاج ظهورها.
+    excludeRoles: ["opinion_author", "angle_writer", "publisher"],
     // No parent permissions - each child validates independently and parent shows if any child is accessible
     children: [
       {
