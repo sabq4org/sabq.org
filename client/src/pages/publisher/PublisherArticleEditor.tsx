@@ -57,8 +57,13 @@ interface Category {
 
 interface Tag {
   id: string;
-  name: string;
+  // /api/tags يعيد nameAr/nameEn؛ name احتياط لأي شكل قديم
+  name?: string | null;
+  nameAr?: string | null;
+  nameEn?: string | null;
 }
+
+const tagLabel = (tag: Tag) => tag.nameAr || tag.name || tag.nameEn || "";
 
 interface Article {
   id: string;
@@ -99,10 +104,16 @@ export default function PublisherArticleEditor() {
   });
   const categories = Array.isArray(categoriesRaw) ? categoriesRaw : [];
 
-  // Fetch tags
-  const { data: tagsData } = useQuery<{ tags: Tag[] }>({
+  // Fetch tags — /api/tags يعيد مصفوفة مباشرة؛ نتحوط لأي شكل
+  // (اتفاقية null-guard في المشروع — كانت الصفحة تنهار على tags.filter)
+  const { data: tagsRaw } = useQuery<Tag[] | { tags: Tag[] }>({
     queryKey: ["/api/tags"],
   });
+  const allTags: Tag[] = Array.isArray(tagsRaw)
+    ? tagsRaw
+    : Array.isArray((tagsRaw as { tags?: Tag[] } | undefined)?.tags)
+      ? (tagsRaw as { tags: Tag[] }).tags
+      : [];
 
   // Fetch article if editing — كان المسار /api/publisher/articles/:id غير
   // موجود أصلاً في الخادم؛ البوابة الجديدة توفره بفحص ملكية
@@ -269,9 +280,9 @@ export default function PublisherArticleEditor() {
     );
   };
 
-  const filteredTags = tagsData?.tags.filter((tag) =>
-    tag.name.toLowerCase().includes(tagSearch.toLowerCase())
-  ) || [];
+  const filteredTags = allTags.filter((tag) =>
+    tagLabel(tag).toLowerCase().includes(tagSearch.toLowerCase())
+  );
 
   if (isEditMode && articleLoading) {
     return (
@@ -573,7 +584,7 @@ export default function PublisherArticleEditor() {
                 />
                 <div className="flex flex-wrap gap-2">
                   {selectedTags.map((tagId) => {
-                    const tag = tagsData?.tags.find((t) => t.id === tagId);
+                    const tag = allTags.find((t) => t.id === tagId);
                     return tag ? (
                       <Badge
                         key={tagId}
@@ -582,7 +593,7 @@ export default function PublisherArticleEditor() {
                         onClick={() => handleTagToggle(tagId)}
                         data-testid={`badge-tag-${tagId}`}
                       >
-                        {tag.name}
+                        {tagLabel(tag)}
                         <X className="mr-1 h-3 w-3" />
                       </Badge>
                     ) : null;
@@ -598,7 +609,7 @@ export default function PublisherArticleEditor() {
                       onClick={() => handleTagToggle(tag.id)}
                       data-testid={`tag-option-${tag.id}`}
                     >
-                      {tag.name}
+                      {tagLabel(tag)}
                     </div>
                   ))}
                 </div>

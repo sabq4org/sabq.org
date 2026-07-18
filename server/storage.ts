@@ -17224,10 +17224,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updatePublisher(id: string, publisherData: UpdatePublisher): Promise<Publisher> {
+    // updatePublisherSchema يمرر التواريخ نصوصاً ("YYYY-MM-DD") بينما drizzle
+    // يستدعي toISOString() على قيم timestamp — نطبّع هنا لكلا مساري التحديث.
+    const normalized: any = { ...publisherData };
+    for (const key of ["publishingEndsAt", "suspendedUntil"] as const) {
+      const value = normalized[key];
+      if (typeof value === "string") {
+        const parsed = value.trim() ? new Date(value) : null;
+        normalized[key] = parsed && !isNaN(parsed.getTime()) ? parsed : null;
+      }
+    }
+
     const [publisher] = await db
       .update(publishers)
       .set({
-        ...publisherData,
+        ...normalized,
         updatedAt: new Date(),
       } as any)
       .where(eq(publishers.id, id))

@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, apiUrl } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { Loader2, Upload, X } from "lucide-react";
 import type { Publisher } from "@shared/schema";
 
@@ -221,25 +221,21 @@ export function CreatePublisherDialog({
     };
     reader.readAsDataURL(file);
 
-    // Upload logo immediately
+    // Upload logo immediately — عبر مسار مكتبة الوسائط المضمون
+    // (المسار القديم /api/admin/publishers/upload-logo يعتمد objectStorage
+    // بتكوين bucket معطوب في الإنتاج فيفشل الرفع دائماً)
     setIsUploadingLogo(true);
     try {
       const formData = new FormData();
-      formData.append('logo', file);
+      formData.append('file', file);
 
-      const response = await fetch(apiUrl('/api/admin/publishers/upload-logo'), {
+      const data = await apiRequest<{ url: string }>('/api/media/upload', {
         method: 'POST',
         body: formData,
-        credentials: 'include',
+        isFormData: true,
       });
-
-      if (!response.ok) {
-        throw new Error('فشل في رفع اللوقو');
-      }
-
-      const data = await response.json();
       form.setValue('logoUrl', data.url);
-      
+
       toast({
         title: "تم رفع اللوقو",
         description: "تم رفع شعار الناشر بنجاح",
