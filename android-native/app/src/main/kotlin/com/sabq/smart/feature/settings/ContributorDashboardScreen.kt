@@ -121,33 +121,42 @@ private val AccentRed = Color(0xFFEF4444)
 fun ContributorDashboardScreen(
     onBack: () -> Unit,
     onOpenSurvey: (token: String) -> Unit = {},
+    /** true عند التضمين كتبويب «أدائي» داخل لوحة الكاتب — يخفي الشريط العلوي
+     *  وبطاقات الموعد (انتقلت لتبويب «اليوم»)، مطابقةً لسلوك iOS embedded. */
+    embedded: Boolean = false,
     viewModel: ContributorDashboardViewModel = androidx.hilt.navigation.compose.hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(SabqTheme.colors.background)
-            .statusBarsPadding()
+        modifier = if (embedded) {
+            Modifier.fillMaxSize().background(SabqTheme.colors.background)
+        } else {
+            Modifier
+                .fillMaxSize()
+                .background(SabqTheme.colors.background)
+                .statusBarsPadding()
+        }
     ) {
-        // Top bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Spacer(Modifier.weight(1f))
-            Text(
-                "لوحة الأداء",
-                style = SabqTheme.typography.compactCardTitle.copy(
-                    fontSize = 18.sp, fontWeight = FontWeight.Black, color = SabqTheme.colors.ink
-                ),
-            )
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = SabqTheme.colors.ink, modifier = Modifier.size(20.dp))
+        if (!embedded) {
+            // Top bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Spacer(Modifier.weight(1f))
+                Text(
+                    "لوحة الأداء",
+                    style = SabqTheme.typography.compactCardTitle.copy(
+                        fontSize = 18.sp, fontWeight = FontWeight.Black, color = SabqTheme.colors.ink
+                    ),
+                )
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onBack, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = SabqTheme.colors.ink, modifier = Modifier.size(20.dp))
+                }
             }
         }
 
@@ -179,8 +188,9 @@ fun ContributorDashboardScreen(
                 ) {
                     HeaderSection(data)
                     // موعد النشر الأسبوعي — لكتّاب الرأي فقط: بانر لمن له يوم،
-                    // أو بطاقة الاختيار (مرة واحدة) لمن لا يوم له
-                    if (data.role == "writer") {
+                    // أو بطاقة الاختيار (مرة واحدة) لمن لا يوم له.
+                    // في وضع التضمين تظهر هذه البطاقات في تبويب «اليوم» بدلاً من هنا.
+                    if (!embedded && data.role == "writer") {
                         state.schedule?.let { sched ->
                             sched.banner?.let { WriterScheduleBannerCard(it) }
                                 ?: if (sched.canChoose) {
