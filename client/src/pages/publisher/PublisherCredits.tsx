@@ -26,6 +26,7 @@ import {
   Clock3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDateShort, formatNumber, formatTime } from "@/lib/format";
 
 interface CreditLog {
   id: string;
@@ -69,16 +70,6 @@ const periodLabel: Record<string, string> = {
   yearly: "سنوية",
   "one-time": "مرة واحدة",
 };
-
-const formatDate = (value: string | null | undefined) =>
-  value
-    ? new Date(value).toLocaleDateString("en-GB", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        calendar: "gregory",
-      })
-    : "—";
 
 function statusMeta(status: CreditPackage["status"]) {
   if (status === "active") {
@@ -185,12 +176,12 @@ export default function PublisherCredits() {
                   <p className="text-sm text-muted-foreground">
                     {periodLabel[activePackage.period] || activePackage.period}
                     {" · "}
-                    من {formatDate(activePackage.startDate)}
-                    {activePackage.expiryDate ? ` حتى ${formatDate(activePackage.expiryDate)}` : ""}
+                    من {formatDateShort(activePackage.startDate)}
+                    {activePackage.expiryDate ? ` حتى ${formatDateShort(activePackage.expiryDate)}` : ""}
                   </p>
                   {activePackage.isUnlimited && activeCountingFrom ? (
                     <p className="text-xs text-muted-foreground">
-                      يُحتسب المنشور منذ {formatDate(activeCountingFrom)}
+                      يُحتسب المنشور منذ {formatDateShort(activeCountingFrom)}
                       {activeCountingFrom !== activePackage.startDate
                         ? " (بداية فترة النشر المفتوح للوكالة)"
                         : ""}
@@ -207,7 +198,7 @@ export default function PublisherCredits() {
                         className="mt-2 text-base font-semibold text-foreground"
                         data-testid="text-open-published-count"
                       >
-                        نُشر منها {activeUsed.toLocaleString("en-US")} مادة
+                        نُشر منها {formatNumber(activeUsed)} مادة
                       </p>
                     </>
                   ) : (
@@ -281,13 +272,13 @@ export default function PublisherCredits() {
                       <p className="mt-2 text-sm text-muted-foreground">
                         {pkg.isUnlimited ? (
                           <span className="font-medium text-foreground">
-                            مفتوحة ∞ · نُشر {pkg.usedCredits.toLocaleString("en-US")}
+                            مفتوحة ∞ · نُشر {formatNumber(pkg.usedCredits)}
                           </span>
                         ) : (
                           <span className="tabular-nums">
-                            متبقي {pkg.remainingCredits} / {pkg.totalCredits}
+                            متبقي {formatNumber(pkg.remainingCredits)} / {formatNumber(pkg.totalCredits)}
                             <span className="mx-1">·</span>
-                            مستخدم {pkg.usedCredits}
+                            مستخدم {formatNumber(pkg.usedCredits)}
                           </span>
                         )}
                       </p>
@@ -299,8 +290,8 @@ export default function PublisherCredits() {
                       <p className="mt-1 text-xs text-muted-foreground">
                         {periodLabel[pkg.period] || pkg.period}
                         {" · من "}
-                        {formatDate(pkg.countingFrom || pkg.startDate)}
-                        {pkg.expiryDate ? ` حتى ${formatDate(pkg.expiryDate)}` : ""}
+                        {formatDateShort(pkg.countingFrom || pkg.startDate)}
+                        {pkg.expiryDate ? ` حتى ${formatDateShort(pkg.expiryDate)}` : ""}
                       </p>
                     </div>
                   );
@@ -352,13 +343,9 @@ export default function PublisherCredits() {
                         return (
                           <TableRow key={log.id} data-testid={`row-log-${log.id}`}>
                             <TableCell className="align-top text-xs whitespace-nowrap">
-                              <div>{formatDate(log.createdAt)}</div>
+                              <div>{formatDateShort(log.createdAt)}</div>
                               <div className="text-muted-foreground">
-                                {new Date(log.createdAt).toLocaleTimeString("en-GB", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  hour12: false,
-                                })}
+                                {formatTime(log.createdAt, { format24: true })}
                               </div>
                             </TableCell>
                             <TableCell className="align-top">{getActionBadge(log.actionType)}</TableCell>
