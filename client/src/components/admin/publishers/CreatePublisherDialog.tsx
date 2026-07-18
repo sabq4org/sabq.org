@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, apiUrl } from "@/lib/queryClient";
 import { Loader2, Upload, X } from "lucide-react";
 import type { Publisher } from "@shared/schema";
 
@@ -32,6 +32,8 @@ const createPublisherSchema = z.object({
   taxNumber: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().default(true),
+  publishingEndsAt: z.string().nullable().optional(),
+  autoPublish: z.boolean().default(false),
   notes: z.string().optional(),
 });
 
@@ -49,6 +51,8 @@ const editPublisherSchema = z.object({
   taxNumber: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().default(true),
+  publishingEndsAt: z.string().nullable().optional(),
+  autoPublish: z.boolean().default(false),
   notes: z.string().optional(),
 });
 
@@ -96,6 +100,10 @@ export function CreatePublisherDialog({
           taxNumber: publisher.taxNumber || "",
           address: publisher.address || "",
           isActive: publisher.isActive,
+          publishingEndsAt: publisher.publishingEndsAt
+            ? String(publisher.publishingEndsAt).slice(0, 10)
+            : "",
+          autoPublish: publisher.autoPublish ?? false,
           notes: publisher.notes || "",
         }
       : {
@@ -115,6 +123,8 @@ export function CreatePublisherDialog({
           taxNumber: "",
           address: "",
           isActive: true,
+          publishingEndsAt: "",
+          autoPublish: false,
           notes: "",
         },
   });
@@ -140,6 +150,10 @@ export function CreatePublisherDialog({
         taxNumber: publisher.taxNumber || "",
         address: publisher.address || "",
         isActive: publisher.isActive,
+        publishingEndsAt: publisher.publishingEndsAt
+          ? String(publisher.publishingEndsAt).slice(0, 10)
+          : "",
+        autoPublish: publisher.autoPublish ?? false,
         notes: publisher.notes || "",
       });
       setLogoPreview(publisher.logoUrl || null);
@@ -163,6 +177,8 @@ export function CreatePublisherDialog({
         taxNumber: "",
         address: "",
         isActive: true,
+        publishingEndsAt: "",
+        autoPublish: false,
         notes: "",
       });
       setLogoPreview(null);
@@ -211,7 +227,7 @@ export function CreatePublisherDialog({
       const formData = new FormData();
       formData.append('logo', file);
 
-      const response = await fetch('/api/admin/publishers/upload-logo', {
+      const response = await fetch(apiUrl('/api/admin/publishers/upload-logo'), {
         method: 'POST',
         body: formData,
         credentials: 'include',
@@ -283,7 +299,12 @@ export function CreatePublisherDialog({
   const onSubmit = async (data: PublisherFormData) => {
     setIsSubmitting(true);
     try {
-      await createMutation.mutateAsync(data);
+      // تاريخ فارغ = نافذة نشر مفتوحة (null في قاعدة البيانات)
+      const payload = {
+        ...data,
+        publishingEndsAt: data.publishingEndsAt ? data.publishingEndsAt : null,
+      };
+      await createMutation.mutateAsync(payload);
     } finally {
       setIsSubmitting(false);
     }
@@ -572,7 +593,56 @@ export function CreatePublisherDialog({
               )}
             />
 
-            {/* 9. حالة الحساب */}
+            {/* 9. إعدادات النشر */}
+            <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
+              <h3 className="text-sm font-medium">إعدادات النشر</h3>
+
+              <FormField
+                control={form.control}
+                name="publishingEndsAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>النشر متاح حتى تاريخ</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        value={field.value ?? ""}
+                        data-testid="input-publishing-ends-at"
+                      />
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      بعد هذا التاريخ يُمنع الناشر من إضافة أو نشر مواد جديدة. اتركه فارغاً لنشر مفتوح بلا تاريخ انتهاء.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="autoPublish"
+                render={({ field }) => (
+                  <FormItem className="flex items-center justify-between rounded-md border p-3">
+                    <div>
+                      <FormLabel>نشر فوري بدون مراجعة</FormLabel>
+                      <div className="text-sm text-muted-foreground">
+                        مواد هذا الناشر تُنشر مباشرة دون المرور بمراجعة التحرير (للناشرين الموثوقين)
+                      </div>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="switch-auto-publish"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* 10. حالة الحساب */}
             <FormField
               control={form.control}
               name="isActive"

@@ -73,6 +73,7 @@ import { sendEditorPublishAlert, getPublisherName, sendReporterPublishEmail, sen
 import { awardPoints } from "./services/loyalty";
 import { safeErrorPayload } from "./utils/safeError";
 import { deductPublisherCreditSafely } from "./services/publisherCreditService";
+import { getPublishingGate } from "./services/publisherPortalService";
 import { LOYALTY_ACTIONS } from "@shared/loyalty";
 import { notifyArticleStakeholders } from "./services/editorialNotifications";
 import { vectorizeArticle } from "./embeddingsService";
@@ -7158,6 +7159,14 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         if (!canPublish) {
           return res.status(403).json({ message: "You don't have permission to publish articles. Please save as draft." });
         }
+
+        // Publisher-agency accounts have a publishing window (publishers.
+        // publishing_ends_at); once it passes, publishing is blocked even
+        // though the role/permission still allows it.
+        const gate = await getPublishingGate(req.user.id);
+        if (!gate.allowed) {
+          return res.status(403).json({ message: gate.message, code: gate.code });
+        }
       }
 
 
@@ -8151,6 +8160,12 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       if (currentUser?.linkedPublisherId) {
         // User is linked to a publisher - use transaction for atomic credit deduction
         publisherId = currentUser.linkedPublisherId;
+
+        // Enforce the agency publishing window before spending a credit
+        const gate = await getPublishingGate(userId);
+        if (!gate.allowed) {
+          return res.status(403).json({ message: gate.message, code: gate.code });
+        }
 
         try {
           const result = await db.transaction(async (tx) => {
@@ -32101,7 +32116,13 @@ Sitemap: https://sabq.org/sitemap-news.xml
         if (!publisher.isActive) {
           return res.status(403).json({ message: "حساب الناشر معطل" });
         }
-        
+
+        // نافذة النشر: بعد publishing_ends_at لا يمكن إضافة مواد جديدة
+        const gate = await getPublishingGate(req.user.id);
+        if (!gate.allowed) {
+          return res.status(403).json({ message: gate.message, code: gate.code });
+        }
+
         // Publishers can only create drafts
         const articleData = insertArticleSchema.parse({
           ...req.body,

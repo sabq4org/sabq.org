@@ -4329,15 +4329,31 @@ export class DatabaseStorage implements IStorage {
       englishSlug: article.englishSlug || generateEnglishSlug(),
     };
 
-    // Auto-link articles by specific content managers to their publishers
-    // أحمد بديوي (DI1H7gaTfZ5mr765EhQNW) -> شركة عنوان الإعلام (948fdde0-97b0-44ac-872d-639337ebcafa)
-    const contentManagerPublisherMap: Record<string, string> = {
-      'DI1H7gaTfZ5mr765EhQNW': '948fdde0-97b0-44ac-872d-639337ebcafa', // أحمد بديوي -> شركة عنوان الإعلام
-    };
-
-    if ((article as any).authorId && contentManagerPublisherMap[(article as any).authorId]) {
-      (articleWithSlug as any).publisherId = contentManagerPublisherMap[(article as any).authorId];
-      (articleWithSlug as any).isPublisherNews = true;
+    // Auto-link publisher-agency articles: any author with
+    // users.linkedPublisherId gets their articles stamped with the agency.
+    // (Replaces the old hardcoded contentManagerPublisherMap that only knew
+    // أحمد بديوي; the legacy pair is kept as a fallback until the manual
+    // linked_publisher_id backfill runs in production.)
+    const authorId = (article as any).authorId as string | undefined;
+    if (authorId && !(articleWithSlug as any).publisherId) {
+      let linkedPublisherId: string | null = null;
+      try {
+        const [author] = await db
+          .select({ linkedPublisherId: users.linkedPublisherId })
+          .from(users)
+          .where(eq(users.id, authorId))
+          .limit(1);
+        linkedPublisherId = author?.linkedPublisherId ?? null;
+      } catch (err) {
+        console.error('[Publisher] linkedPublisherId lookup failed:', err);
+      }
+      if (!linkedPublisherId && authorId === 'DI1H7gaTfZ5mr765EhQNW') {
+        linkedPublisherId = '948fdde0-97b0-44ac-872d-639337ebcafa'; // أحمد بديوي -> شركة عنوان الإعلام
+      }
+      if (linkedPublisherId) {
+        (articleWithSlug as any).publisherId = linkedPublisherId;
+        (articleWithSlug as any).isPublisherNews = true;
+      }
     }
 
     // Pre-fill ai_image flag from media_files if the chosen image URL

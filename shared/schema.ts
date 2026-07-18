@@ -9294,10 +9294,18 @@ export const publishers = pgTable("publishers", {
   isActive: boolean("is_active").default(true).notNull(),
   suspendedUntil: timestamp("suspended_until"),
   suspensionReason: text("suspension_reason"),
-  
+
+  // Publishing window: after this date the publisher can no longer
+  // create/submit/publish articles (null = open-ended contract).
+  publishingEndsAt: timestamp("publishing_ends_at"),
+  // Trusted publishers skip editorial review — their articles publish
+  // directly (the old hardcoded contentManagerPublisherMap behavior,
+  // now a per-publisher flag).
+  autoPublish: boolean("auto_publish").default(false).notNull(),
+
   // Metadata
   notes: text("notes"), // Internal admin notes
-  
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -9408,6 +9416,9 @@ export const insertPublisherSchema = createInsertSchema(publishers).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  // يصل التاريخ من نموذج الإدارة كنص "YYYY-MM-DD"
+  publishingEndsAt: z.coerce.date().nullable().optional(),
 });
 
 export const updatePublisherSchema = z.object({
@@ -9424,6 +9435,8 @@ export const updatePublisherSchema = z.object({
   isActive: z.boolean().optional(),
   suspendedUntil: z.string().nullable().optional(),
   suspensionReason: z.string().optional(),
+  publishingEndsAt: z.string().nullable().optional(),
+  autoPublish: z.boolean().optional(),
   notes: z.string().optional(),
 });
 
