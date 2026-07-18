@@ -183,12 +183,13 @@ struct DailyBriefView: View {
             Text(article.category.title)
                 .font(SabqFonts.app(size: 10, weight: .regular))
                 .foregroundStyle(SabqTheme.secondaryInk)
-            Text(article.title)
+            Text(article.title.sabqForcedRTL)
                 .font(SabqFonts.app(size: 13.5, weight: .bold))
                 .foregroundStyle(SabqTheme.ink)
                 .multilineTextAlignment(.leading)
                 .lineLimit(3)
                 .frame(width: 220, alignment: .leading)
+                .environment(\.layoutDirection, .rightToLeft)
         }
         .frame(width: 220, alignment: .leading)
     }

@@ -16,16 +16,15 @@ extension View {
 }
 
 extension String {
-    /// يفرض اتجاه فقرة RTL حتى لو بدأ النص بحروف لاتينية (مثل «NHC والهلال…»).
-    /// بدون ذلك يختار Unicode اتجاه LTR من أول حرف قوي فتنحاز العناوين لليسار.
-    var sabqForcedRTL: AttributedString {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.baseWritingDirection = .rightToLeft
-        paragraph.alignment = .natural
-        let ns = NSAttributedString(
-            string: self,
-            attributes: [.paragraphStyle: paragraph]
-        )
-        return AttributedString(ns)
+    /// يفرض عزل RTL مثل `dir="rtl"` في الويب.
+    /// عناوين تبدأ بلاتيني (مثل «NHC والهلال…») تظهر البداية يميناً.
+    ///
+    /// ملاحظة: `NSParagraphStyle.baseWritingDirection` لا يكفي مع `Text` في
+    /// SwiftUI — يُعاد ترتيب الكلمات بشكل خاطئ (NHC في الوسط). عزل Unicode
+    /// (RLI…PDI) يطابق سلوك المتصفح.
+    var sabqForcedRTL: String {
+        // U+2067 RIGHT-TO-LEFT ISOLATE … U+2069 POP DIRECTIONAL ISOLATE
+        if hasPrefix("\u{2067}") { return self }
+        return "\u{2067}\(self)\u{2069}"
     }
 }
