@@ -976,6 +976,8 @@ export default function NewsroomPulseDashboard() {
   const isContentManager = hasRole(user, "content_manager");
   const hasElevatedDashboardRole = hasRole(user, "admin", "system_admin", "editor", "content_manager", "analyst", "reviewer", "author", "comments_moderator");
   const isReporterOnly = hasRole(user, "reporter") && !hasElevatedDashboardRole;
+  // موظف وكالة (دور ناشر): لوحته هي بوابة الناشر، لا نبض غرفة الأخبار
+  const isPublisherOnly = hasRole(user, "publisher") && !hasElevatedDashboardRole;
   const canViewStats = !isReporterOnly && (hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_STATS) || hasRole(user, "admin", "system_admin", "editor", "content_manager"));
   const canReviewMuqtarab = hasPermission(user, "muqtarab.manage");
   const canViewMessages = hasPermission(user, PERMISSION_CODES.DASHBOARD_VIEW_MESSAGES);
@@ -1004,7 +1006,8 @@ export default function NewsroomPulseDashboard() {
     if (user?.role === "opinion_author") navigate("/dashboard/opinion-author", { replace: true });
     if (user && isAngleWriter) navigate("/dashboard/my-angle", { replace: true });
     if (user && isReporterOnly) navigate("/dashboard/reporter/articles", { replace: true });
-  }, [user, isAngleWriter, isReporterOnly, navigate]);
+    if (user && isPublisherOnly) navigate("/dashboard/publisher", { replace: true });
+  }, [user, isAngleWriter, isReporterOnly, isPublisherOnly, navigate]);
 
   const statsQuery = useQuery<DashboardStats>({
     queryKey: ["/api/admin/dashboard/stats"],
@@ -1065,7 +1068,7 @@ export default function NewsroomPulseDashboard() {
     ? new Intl.DateTimeFormat("ar-SA-u-nu-latn", { hour: "numeric", minute: "2-digit" }).format(new Date(stats.generatedAt))
     : "—";
 
-  if (userLoading || !user || isAngleWriter || isReporterOnly || user.role === "opinion_author") {
+  if (userLoading || !user || isAngleWriter || isReporterOnly || isPublisherOnly || user.role === "opinion_author") {
     return <DashboardLayout><div className="space-y-4"><Skeleton className="h-20 w-full" /><div className="grid grid-cols-2 gap-4 lg:grid-cols-4">{[1,2,3,4].map((i) => <Skeleton key={i} className="h-32" />)}</div></div></DashboardLayout>;
   }
 
@@ -1131,7 +1134,7 @@ export default function NewsroomPulseDashboard() {
         </header>
 
         <section className="space-y-2" data-testid="dashboard-favorites">
-          <SectionTitle title="المفضلة" description="اختصاراتك السريعة من قائمة لوحة التحكم" />
+          <SectionTitle title="المفضلة" description="اختصاراتك السريعة — تُضاف من ★ بجانب اسم الصفحة" />
           {favoriteItems.length > 0 ? (
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2 lg:grid-cols-5">
               {favoriteItems.map((item) => {
@@ -1167,7 +1170,7 @@ export default function NewsroomPulseDashboard() {
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-3 py-3 text-[13px] text-muted-foreground">
-              لا توجد مفضّلات بعد. افتح القائمة الجانبية واضغط ★ بجانب أي صفحة لتظهر هنا وفي القائمة.
+              لا توجد مفضّلات بعد. ادخل أي قسم واضغط ★ بجانب اسم الصفحة لتظهر هنا وفي الشريط الجانبي.
             </div>
           )}
         </section>

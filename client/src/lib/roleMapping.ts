@@ -8,7 +8,9 @@ export const roleMapping: Record<string, UserRole> = {
   'content_manager': 'content_manager',
   'chief_editor': 'editor',
   'senior_editor': 'editor',
-  'publisher': 'editor',
+  // كان 'publisher' يُحوَّل إلى 'editor' تاريخياً فيرى موظف الوكالة قوائم
+  // المحرر ونبض غرفة الأخبار — للناشر الآن مساحته الخاصة في nav.config
+  'publisher': 'publisher',
   'editor': 'editor',
   'writer': 'author',
   'content_creator': 'author',
