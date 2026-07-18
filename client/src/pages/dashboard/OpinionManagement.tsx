@@ -339,15 +339,17 @@ export default function OpinionManagement() {
 
   const publishMutation = useMutation({
     mutationFn: async ({ articleId, scheduledAt }: { articleId: string; scheduledAt?: string }) => {
-      await apiRequest(`/api/dashboard/opinion/${articleId}/publish`, {
-        method: "POST",
-        ...(scheduledAt
-          ? {
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ scheduledAt }),
-            }
-          : {}),
-      });
+      if (scheduledAt) {
+        await apiRequest(`/api/admin/opinion-writers/schedule-article/${articleId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ scheduledAt }),
+        });
+      } else {
+        await apiRequest(`/api/dashboard/opinion/${articleId}/publish`, {
+          method: "POST",
+        });
+      }
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/opinion"] });

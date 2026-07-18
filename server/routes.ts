@@ -25972,53 +25972,15 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
         return res.status(400).json({ message: "Article must be approved before publishing" });
       }
 
-      // جدولة اختيارية: body.scheduledAt بتاريخ مستقبلي يجدول بدل النشر الفوري
-      // (يلتقطه ناشر المجدولات في notificationWorker كل دقيقتين)
-      let scheduleFor: Date | null = null;
-      if (req.body?.scheduledAt) {
-        scheduleFor = new Date(req.body.scheduledAt);
-        if (isNaN(scheduleFor.getTime())) {
-          return res.status(400).json({ message: "تاريخ الجدولة غير صالح" });
-        }
-        if (scheduleFor.getTime() <= Date.now()) {
-          scheduleFor = null; // موعد في الماضي = نشر فوري
-        }
-      }
-
       const [updatedArticle] = await db
         .update(articles)
-        .set(
-          scheduleFor
-            ? {
-                status: "scheduled",
-                publishType: "scheduled",
-                scheduledAt: scheduleFor,
-                updatedAt: new Date(),
-              }
-            : {
-                status: "published",
-                publishedAt: new Date(),
-                updatedAt: new Date(),
-              },
-        )
+        .set({
+          status: "published",
+          publishedAt: new Date(),
+          updatedAt: new Date(),
+        })
         .where(eq(articles.id, articleId))
         .returning();
-
-      if (scheduleFor) {
-        await logActivity({
-          userId,
-          action: "scheduled_opinion",
-          entityType: "article",
-          entityId: articleId,
-          oldValue: existingArticle,
-          newValue: updatedArticle,
-          metadata: {
-            ip: req.ip,
-            userAgent: req.get("user-agent"),
-          },
-        });
-        return res.json(updatedArticle);
-      }
 
       await logActivity({
         userId,

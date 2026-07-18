@@ -10,12 +10,14 @@ import {
   requirePermission,
   requireAnyPermission,
   userHasAnyRole,
+  logActivity,
 } from "../rbac";
 import {
   getNextSlotForWriter,
   getWriterArticlesWithStats,
   getWriterScheduleBanner,
   listOpinionWriters,
+  scheduleApprovedOpinionArticle,
   upsertWriterSchedule,
 } from "../services/opinionWritersService";
 
@@ -78,6 +80,40 @@ router.get(
     } catch (error) {
       console.error("[opinion-writers] writer articles failed:", error);
       res.status(500).json({ message: "تعذر جلب مقالات الكاتب" });
+    }
+  },
+);
+
+// جدولة مقال رأي معتمد لموعد محدد (بديل النشر الفوري في إدارة الرأي)
+router.post(
+  "/api/admin/opinion-writers/schedule-article/:articleId",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.ARTICLES_PUBLISH),
+  async (req: Request, res: Response) => {
+    try {
+      const parsed = z
+        .object({ scheduledAt: z.string().datetime() })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "تاريخ الجدولة غير صالح" });
+      }
+      const result = await scheduleApprovedOpinionArticle(
+        req.params.articleId,
+        new Date(parsed.data.scheduledAt),
+      );
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+      await logActivity({
+        userId: requestUserId(req),
+        action: "scheduled_opinion",
+        entityType: "article",
+        entityId: req.params.articleId,
+        newValue: { scheduledAt: parsed.data.scheduledAt },
+        metadata: { ip: req.ip, userAgent: req.get("user-agent") },
+      });
+      res.json(result.article);
+    } catch (error) {
+      console.error("[opinion-writers] schedule article failed:", error);
+      res.status(500).json({ message: "تعذر جدولة المقال" });
     }
   },
 );

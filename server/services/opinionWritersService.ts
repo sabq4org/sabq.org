@@ -420,6 +420,51 @@ export async function getWriterArticlesWithStats(
   };
 }
 
+/**
+ * جدولة مقال رأي معتمد لموعد مستقبلي (بديل النشر الفوري).
+ * يلتقطه ناشر المجدولات في notificationWorker كل دقيقتين.
+ */
+export async function scheduleApprovedOpinionArticle(
+  articleId: string,
+  scheduledAt: Date,
+): Promise<
+  | { ok: true; article: { id: string; status: string; scheduledAt: Date | null } }
+  | { ok: false; status: number; message: string }
+> {
+  const [existing] = await db
+    .select({
+      id: articles.id,
+      status: articles.status,
+      reviewStatus: articles.reviewStatus,
+    })
+    .from(articles)
+    .where(and(eq(articles.id, articleId), eq(articles.articleType, "opinion")))
+    .limit(1);
+  if (!existing) return { ok: false, status: 404, message: "مقال الرأي غير موجود" };
+  if (existing.reviewStatus !== "approved")
+    return { ok: false, status: 400, message: "يجب اعتماد المقال قبل جدولته" };
+  if (existing.status === "published")
+    return { ok: false, status: 400, message: "المقال منشور بالفعل" };
+  if (scheduledAt.getTime() <= Date.now())
+    return { ok: false, status: 400, message: "موعد الجدولة يجب أن يكون في المستقبل" };
+
+  const [updated] = await db
+    .update(articles)
+    .set({
+      status: "scheduled",
+      publishType: "scheduled",
+      scheduledAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(articles.id, articleId))
+    .returning({
+      id: articles.id,
+      status: articles.status,
+      scheduledAt: articles.scheduledAt,
+    });
+  return { ok: true, article: updated };
+}
+
 export type WriterScheduleBanner = {
   weekday: number;
   publishTime: string;
