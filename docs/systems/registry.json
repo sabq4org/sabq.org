@@ -115,6 +115,7 @@
         "client/src/pages/dashboard/SmartJournalist.tsx",
         "client/src/pages/dashboard/SmartLinksManagement.tsx",
         "client/src/pages/dashboard/CommunicationsManagement.tsx",
+        "client/src/pages/dashboard/OpinionWritersPage.tsx",
         "client/src/pages/DataStoryGenerator.tsx",
         "docs/editorial/**"
       ],
