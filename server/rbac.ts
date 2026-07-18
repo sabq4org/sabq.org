@@ -179,8 +179,9 @@ export async function getUserPermissionOverrides(userId: string): Promise<Array<
 // Invalidate cached permission data for a user
 // Call this when roles/permissions change
 export function invalidateUserPermissionCache(userId: string): void {
-  const cacheKey = `rbac:${userId}`;
-  memoryCache.delete(cacheKey);
+  memoryCache.delete(`rbac:${userId}`);
+  // The composed GET /api/auth/user payload embeds permissions — keep in sync.
+  memoryCache.delete(`auth-user:${userId}`);
 }
 
 // Middleware: Require authentication

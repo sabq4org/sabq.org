@@ -1329,17 +1329,31 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       const userId = req.user.id;
-      const user = await storage.getUser(userId);
+
+      // Fires on every page load (web + dashboard) and costs ~6 DB queries,
+      // so the composed payload is cached for 60s. Role/permission changes
+      // bust it via invalidateUserPermissionCache; profile edits bust it in
+      // PATCH /api/auth/user and PUT /api/profile/image below.
+      const authUserCacheKey = `auth-user:${userId}`;
+      const cachedPayload = memoryCache.get(authUserCacheKey);
+      if (cachedPayload) {
+        return res.json(cachedPayload);
+      }
+
+      const [user, userRolesResult, dbPermissions] = await Promise.all([
+        storage.getUser(userId),
+        // All user's roles from RBAC system, fallback to user.role from users table
+        db
+          .select({ roleName: roles.name, roleNameAr: roles.nameAr })
+          .from(userRoles)
+          .innerJoin(roles, eq(userRoles.roleId, roles.id))
+          .where(eq(userRoles.userId, userId)),
+        // User permissions from RBAC system (includes permission overrides)
+        getUserPermissions(userId),
+      ]);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-
-      // Get all user's roles from RBAC system, fallback to user.role from users table
-      const userRolesResult = await db
-        .select({ roleName: roles.name, roleNameAr: roles.nameAr })
-        .from(userRoles)
-        .innerJoin(roles, eq(userRoles.roleId, roles.id))
-        .where(eq(userRoles.userId, userId));
 
       // Get all roles as array
       const rolesArray = userRolesResult.map(r => r.roleName);
@@ -1371,10 +1385,6 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         || user.jobTitle
         || "قارئ";
 
-      // Get user permissions from RBAC system (includes permission overrides)
-      // استخدام الدالة الموحدة التي تشمل الاستثناءات الشخصية
-      const dbPermissions = await getUserPermissions(userId);
-      
       // Also derive permissions from role-based mapping (for permissions defined in code but not yet in DB)
       const { getPermissionsForRoles } = await import("@shared/rbac-constants");
       const roleBasedPermissions = getPermissionsForRoles(allRoles);
@@ -1384,13 +1394,15 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // SECURITY: Never send passwordHash to client
       const { passwordHash, twoFactorSecret, ...safeUser } = user;
-      res.json({
+      const payload = {
         ...safeUser,
         role,
         roles: allRoles,
         roleLabel,
         permissions: permissionsArray,
-      });
+      };
+      memoryCache.set(authUserCacheKey, payload, 60 * 1000);
+      res.json(payload);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -1428,6 +1440,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       }
 
       const user = await storage.updateUser(userId, data);
+      memoryCache.delete(`auth-user:${userId}`);
       res.json(user);
     } catch (error) {
       console.error("Error updating user:", error);
@@ -1486,6 +1499,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const user = await storage.updateUser(userId, {
         profileImageUrl: objectPath
       });
+      memoryCache.delete(`auth-user:${userId}`);
 
       console.log("[Profile Image] User updated with new image:", user.profileImageUrl);
 
