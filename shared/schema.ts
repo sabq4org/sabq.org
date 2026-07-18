@@ -11633,6 +11633,10 @@ export type CorrespondentApplicationWithDetails = CorrespondentApplication & {
     lastName: string | null;
     email: string;
   } | null;
+  // Role of an existing users row with the same email (null = no account).
+  // 'reader' means the applicant already has a reader membership that will be
+  // upgraded in place upon approval.
+  existingUserRole?: string | null;
 };
 
 // ============================================

@@ -71,6 +71,7 @@ import dashboardPulseRouter from "./dashboardPulse";
 import adminToolsRouter from "./adminToolsRoutes";
 import { systemsCatalogRouter } from "./systemsCatalog";
 import surveysRouter from "./surveys";
+import correspondentApplicationsRouter from "./correspondentApplications";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -110,6 +111,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(opinionTicketsRouter);
   app.use(opinionAuthorWorkspaceRouter);
   app.use(opinionWritersRouter);
+  app.use(correspondentApplicationsRouter);
   app.use(deployWebhooksRouter);
   app.use(cspReportRouter);
   app.use(muqtarabOwnRouter);
