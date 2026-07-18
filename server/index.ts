@@ -50,10 +50,26 @@ if ((globalThis as any).__sabqAttachExpress) {
 
 app.get("/health", async (_req, res) => {
   let dbReady = false;
+  // بوابة النشر: Railway لا يحوّل الترافيك للحاوية الجديدة إلا بعد نجاح
+  // healthcheck (مهلة 60s في railway.json). قبل هذه البوابة كانت الحاوية
+  // تبلّغ 200 فورًا بينما pool فارغ وNeon بارد وRedis لم يتصل بعد، فتستقبل
+  // موجة الترافيك كاملة وتغرق في «timeout exceeded when trying to connect»
+  // لدقائق (نوبتا نشر 2026-07-18). المزلاج يثبت بعد أول تحقق ناجح فلا
+  // يُفشل الفحصَ عطلٌ عابر لاحق أثناء التشغيل.
+  let bootReady = true;
   try {
-    const { isDatabaseAvailable } = await import("./db");
+    const { isDatabaseAvailable, isDatabaseReadyOnce } = await import("./db");
     dbReady = isDatabaseAvailable();
+    bootReady = isDatabaseReadyOnce();
   } catch {}
+  if (!bootReady) {
+    res.status(503).json({
+      status: "starting",
+      timestamp: new Date().toISOString(),
+      database: "warming-up",
+    });
+    return;
+  }
   // حالة مزوّد TheSports للتشخيص (configured/inCooldown/lastError) — تُكشف هل
   // تأخّر النتائج اللحظية سببه IP Railway غير مُدرج («URL/IP not authorized»)
   // أم لا. بلا كشف أسرار (user/secret). أفضل جهد: لا تفشل /health لو تعذّر القراءة.

@@ -1,6 +1,7 @@
 // Reference: javascript_object_storage blueprint
 import type { Express, NextFunction, Request, Response } from "express";
 import { createServer, type Server } from "http";
+import * as Sentry from "@sentry/node";
 import { notifySearchEngines, INDEXNOW_KEY } from "./indexNow";
 import { storage } from "./storage";
 import { sanitizeArticleHtml } from "./utils/sanitizeArticleHtml";
@@ -31714,6 +31715,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         if (error.name === 'ZodError') {
           return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
         }
+        // الـcatch كان يبتلع السبب الجذري (console فقط): حدث 2026-07-18
+        // وصل Sentry من الواجهة كـ«فشل في تحديث الناشر» بلا أي أثر خادمي
+        // يشرح السبب. ZodError لا يُلتقط — خطأ إدخال متوقع يكفيه الـ400.
+        Sentry.captureException(error);
         res.status(500).json({ message: "فشل في تحديث الناشر" });
       }
     }
@@ -31988,6 +31993,10 @@ Sitemap: https://sabq.org/sitemap-news.xml
         if (error.name === 'ZodError') {
           return res.status(400).json({ message: "بيانات غير صحيحة", errors: error.errors });
         }
+        // الـcatch كان يبتلع السبب الجذري (console فقط): حدث 2026-07-18
+        // وصل Sentry من الواجهة كـ«فشل في تحديث الناشر» بلا أي أثر خادمي
+        // يشرح السبب. ZodError لا يُلتقط — خطأ إدخال متوقع يكفيه الـ400.
+        Sentry.captureException(error);
         res.status(500).json({ message: "فشل في تحديث الناشر" });
       }
     }
