@@ -1,7 +1,7 @@
 import { ReactNode, useState, useEffect, useMemo, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth, getHighestRole } from "@/hooks/useAuth";
-import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine } from "lucide-react";
+import { LogOut, ChevronDown, Globe, User, Search, Star, Plus, PenLine, Mic } from "lucide-react";
 import { useDashboardFavorites } from "@/hooks/useDashboardFavorites";
 import {
   Sidebar,
@@ -151,7 +151,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, [flat]);
 
   const quickCreateItem = navigableItems.find((item) =>
-    item.id === "new_article" || item.id === "opinion_author_new_article"
+    item.id === "new_article"
+    || item.id === "opinion_author_new_article"
+    || item.id === "reporter_new_article"
   );
   const { favoriteItems } = useDashboardFavorites(navigableItems);
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase("ar");
@@ -205,13 +207,16 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return 'س';
   };
 
-  // بطاقة هوية أعلى الشريط — لكتّاب الرأي/الزاوية فقط (مثل بطاقة الوكالة في بوابة الناشر)
-  const isWriterWorkspace = role === "opinion_author" || role === "angle_writer";
-  const writerDisplayName =
+  // بطاقة هوية أعلى الشريط — كتّاب الرأي/الزاوية والمراسل (مثل بطاقة الوكالة في بوابة الناشر)
+  const isIdentitySidebar =
+    role === "opinion_author" || role === "angle_writer" || role === "reporter";
+  const identityDisplayName =
     user.firstName && user.lastName
       ? `${user.firstName} ${user.lastName}`
-      : user.firstName || user.name || user.email || "كاتب";
-  const writerRoleLabel = role === "angle_writer" ? "كاتب زاوية" : "كاتب رأي";
+      : user.firstName || user.name || user.email || (role === "reporter" ? "مراسل" : "كاتب");
+  const identityRoleLabel =
+    role === "reporter" ? "مراسل" : role === "angle_writer" ? "كاتب زاوية" : "كاتب رأي";
+  const IdentityRoleIcon = role === "reporter" ? Mic : PenLine;
 
   const renderNavItem = (item: NavItem) => {
     const Icon = item.icon;
@@ -341,8 +346,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   </div>
                 </div>
               </SidebarGroupLabel>
-              {isWriterWorkspace && (
-                <div className="mb-3 px-2" data-testid="sidebar-writer-card">
+              {isIdentitySidebar && (
+                <div className="mb-3 px-2" data-testid="sidebar-identity-card">
                   <div className="relative overflow-hidden rounded-2xl border border-sidebar-border bg-sidebar-accent/30">
                     <div
                       aria-hidden
@@ -352,7 +357,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <div className="flex items-center gap-3">
                         <Avatar className="h-12 w-12 border shadow-sm">
                           {user.profileImageUrl ? (
-                            <AvatarImage src={user.profileImageUrl} alt={writerDisplayName} />
+                            <AvatarImage src={user.profileImageUrl} alt={identityDisplayName} />
                           ) : null}
                           <AvatarFallback className="bg-primary text-sm text-primary-foreground">
                             {getInitials(user.firstName, user.lastName, user.email)}
@@ -361,15 +366,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         <div className="min-w-0 flex-1">
                           <p
                             className="truncate text-sm font-bold leading-snug tracking-tight"
-                            data-testid="sidebar-writer-name"
-                            title={writerDisplayName}
+                            data-testid="sidebar-identity-name"
+                            title={identityDisplayName}
                           >
-                            {writerDisplayName}
+                            {identityDisplayName}
                           </p>
                           {user.email && (
                             <p
                               className="mt-0.5 truncate text-[11px] text-muted-foreground"
-                              data-testid="sidebar-writer-email"
+                              data-testid="sidebar-identity-email"
                               title={user.email}
                               dir="ltr"
                             >
@@ -382,10 +387,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                         className={cn(
                           "gap-1 border-0 bg-primary/12 text-primary hover:bg-primary/15",
                         )}
-                        data-testid="sidebar-writer-role-badge"
+                        data-testid="sidebar-identity-role-badge"
                       >
-                        <PenLine className="h-3 w-3" />
-                        {writerRoleLabel}
+                        <IdentityRoleIcon className="h-3 w-3" />
+                        {identityRoleLabel}
                       </Badge>
                     </div>
                   </div>

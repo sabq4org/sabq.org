@@ -9,7 +9,7 @@ type WriterInquiriesButtonProps = {
   className?: string;
 };
 
-/** زر استفساراتي المشترك لكتّاب الرأي وكتّاب الزوايا — يفتح نفس صفحة التذاكر */
+/** زر استفساراتي — كتّاب الرأي/الزوايا والمراسلون؛ نفس صندوق التذاكر */
 export function WriterInquiriesButton({ className }: WriterInquiriesButtonProps) {
   const [, navigate] = useLocation();
 

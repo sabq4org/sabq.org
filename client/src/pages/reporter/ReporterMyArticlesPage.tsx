@@ -8,93 +8,33 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { SubmitRevisionButton } from "@/components/SubmitRevisionButton";
+import { WriterInquiriesButton } from "@/components/WriterInquiriesButton";
 import { contributorArticleStatusLabel } from "@/lib/contributorArticleStatus";
 import {
   markArticleSubmittedInAnalyticsCache,
   invalidateContributorAnalytics,
 } from "@/lib/contributorAnalyticsCache";
 import {
-  ContributorStatsRow,
-  PerformanceChart,
-  BestArticleCard,
-  EngagementTable,
-  FollowerCard,
-  FeaturedCommentCard,
-  PublishingActivityCard,
-  ContributorRankCard,
-  MonthComparisonCard,
-  ArticleStatusBreakdown,
-} from "@/components/contributor-dashboard";
-import {
   FileText,
   Edit,
   PlusCircle,
   AlertCircle,
-  Eye,
-  ThumbsUp,
-  MessageCircle,
-  Bookmark,
 } from "lucide-react";
 
+interface ReporterArticle {
+  id: string;
+  title: string;
+  status: string;
+  reviewStatus?: string | null;
+  reviewNotes?: string | null;
+  reviewedAt?: string | null;
+  updatedAt?: string | null;
+  publishedAt: string | null;
+  createdAt: string;
+}
+
 interface ReporterAnalytics {
-  totalArticles: number;
-  publishedArticles: number;
-  draftArticles: number;
-  pendingArticles: number;
-  needsChangesArticles?: number;
-  rejectedArticles: number;
-  totalViews: number;
-  totalLikes: number;
-  totalComments: number;
-  totalBookmarks: number;
-  dailyStats: Array<{ date: string; views: number; likes: number; comments: number }>;
-  bestArticleThisWeek: { id: string; title: string; views: number } | null;
-  comparison: {
-    viewsThisMonth: number;
-    viewsLastMonth: number;
-    likesThisMonth: number;
-    likesLastMonth: number;
-  };
-  followers: {
-    count: number;
-    dailyGrowth: Array<{ date: string; count: number }>;
-  };
-  topArticles: Array<{
-    id: string;
-    title: string;
-    views: number;
-    likes: number;
-    comments: number;
-    bookmarks: number;
-    publishedAt: string | null;
-  }>;
-  featuredComment: {
-    content: string;
-    userName: string;
-    articleTitle: string;
-    articleId: string;
-  } | null;
-  publishingActivity: {
-    lastPublishedAt: string | null;
-    daysSinceLastPublished: number | null;
-    thisWeekCount: number;
-    thisMonthCount: number;
-  };
-  articles: Array<{
-    id: string;
-    title: string;
-    status: string;
-    reviewStatus?: string | null;
-    reviewNotes?: string | null;
-    reviewedAt?: string | null;
-    updatedAt?: string | null;
-    views: number;
-    likes: number;
-    comments: number;
-    bookmarks: number;
-    publishedAt: string | null;
-    createdAt: string;
-  }>;
+  articles: ReporterArticle[];
 }
 
 export default function ReporterMyArticlesPage() {
@@ -112,8 +52,8 @@ export default function ReporterMyArticlesPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const needsChangesList =
-    analytics?.articles?.filter((a) => a.reviewStatus === "needs_changes") ?? [];
+  const articles = Array.isArray(analytics?.articles) ? analytics.articles : [];
+  const needsChangesList = articles.filter((a) => a.reviewStatus === "needs_changes");
 
   const handleEditArticle = (articleId: string) => {
     navigate(`/dashboard/articles/${articleId}/edit`);
@@ -152,7 +92,6 @@ export default function ReporterMyArticlesPage() {
   return (
     <DashboardLayout>
       <div className="space-y-4 p-3 pb-20 md:space-y-6 md:p-6" dir="rtl">
-        {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
           <div>
             <h1 className="text-xl font-bold sm:text-2xl">أخباري</h1>
@@ -160,10 +99,13 @@ export default function ReporterMyArticlesPage() {
               تتبّع أخبارك وملاحظات فريق التحرير
             </p>
           </div>
-          <Button onClick={handleNewArticle} size="sm" className="gap-2 sm:h-10 sm:px-4 sm:text-sm">
-            <PlusCircle className="h-4 w-4" />
-            خبر جديد
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <WriterInquiriesButton />
+            <Button onClick={handleNewArticle} size="sm" className="gap-2 sm:h-10 sm:px-4 sm:text-sm">
+              <PlusCircle className="h-4 w-4" />
+              خبر جديد
+            </Button>
+          </div>
         </div>
 
         {isError ? (
@@ -175,7 +117,6 @@ export default function ReporterMyArticlesPage() {
           </div>
         ) : (
           <>
-            {/* Needs Changes Alert */}
             {needsChangesList.length > 0 && (
               <div className="rounded-xl border-2 border-warning/50 bg-warning/10 dark:bg-card dark:border-border p-4 md:p-5 space-y-3">
                 <div className="flex items-center gap-2 text-warning dark:text-warning font-semibold">
@@ -217,93 +158,10 @@ export default function ReporterMyArticlesPage() {
               </div>
             )}
 
-            {/* Section: Overview */}
-            <section className="space-y-4">
-              <h2 className="text-lg font-semibold">نظرة عامة</h2>
-
-              <ContributorStatsRow
-                totalViews={analytics?.totalViews ?? 0}
-                totalLikes={analytics?.totalLikes ?? 0}
-                totalComments={analytics?.totalComments ?? 0}
-                totalBookmarks={analytics?.totalBookmarks ?? 0}
-                comparison={analytics?.comparison}
-                loading={isLoading}
-              />
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <ArticleStatusBreakdown
-                  published={analytics?.publishedArticles ?? 0}
-                  draft={analytics?.draftArticles ?? 0}
-                  pending={analytics?.pendingArticles ?? 0}
-                  needsChanges={analytics?.needsChangesArticles ?? 0}
-                  rejected={analytics?.rejectedArticles ?? 0}
-                  loading={isLoading}
-                />
-                <MonthComparisonCard
-                  comparison={analytics?.comparison ?? { viewsThisMonth: 0, viewsLastMonth: 0, likesThisMonth: 0, likesLastMonth: 0 }}
-                  loading={isLoading}
-                />
-                <BestArticleCard
-                  article={analytics?.bestArticleThisWeek ?? null}
-                  loading={isLoading}
-                  onNavigate={(id) => navigate(`/article/${id}`)}
-                />
-              </div>
-            </section>
-
-            {/* Section: Performance Chart */}
-            <section>
-              <h2 className="text-lg font-semibold mb-4">أداء الأخبار</h2>
-              <PerformanceChart
-                dailyStats={analytics?.dailyStats ?? []}
-                loading={isLoading}
-              />
-            </section>
-
-            {/* Section: Engagement */}
-            <section>
-              <h2 className="text-lg font-semibold mb-4">التفاعل</h2>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-2">
-                  <EngagementTable
-                    articles={analytics?.topArticles ?? []}
-                    loading={isLoading}
-                    onNavigate={(id) => navigate(`/article/${id}`)}
-                  />
-                </div>
-                <FeaturedCommentCard
-                  comment={analytics?.featuredComment ?? null}
-                  loading={isLoading}
-                  onNavigate={(id) => navigate(`/article/${id}`)}
-                />
-              </div>
-            </section>
-
-            {/* Section: Audience */}
-            <section>
-              <h2 className="text-lg font-semibold mb-4">الجمهور</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <FollowerCard
-                  count={analytics?.followers?.count ?? 0}
-                  dailyGrowth={analytics?.followers?.dailyGrowth ?? []}
-                  loading={isLoading}
-                />
-                <ContributorRankCard roleType="reporter" loading={isLoading} />
-                <PublishingActivityCard
-                  lastPublishedAt={analytics?.publishingActivity?.lastPublishedAt ?? null}
-                  daysSinceLastPublished={analytics?.publishingActivity?.daysSinceLastPublished ?? null}
-                  thisWeekCount={analytics?.publishingActivity?.thisWeekCount ?? 0}
-                  thisMonthCount={analytics?.publishingActivity?.thisMonthCount ?? 0}
-                  loading={isLoading}
-                />
-              </div>
-            </section>
-
-            {/* Section: Articles Table */}
             <section>
               <h2 className="text-lg font-semibold mb-4">أخباري</h2>
 
-              {analytics?.articles && analytics.articles.length > 0 ? (
+              {articles.length > 0 ? (
                 <div className="overflow-x-auto rounded-lg border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
@@ -311,24 +169,12 @@ export default function ReporterMyArticlesPage() {
                         <th className="text-right py-3 px-4 font-medium">العنوان</th>
                         <th className="text-right py-3 px-4 font-medium">الحالة</th>
                         <th className="text-right py-3 px-4 font-medium min-w-[200px]">ملاحظات التحرير</th>
-                        <th className="text-center py-3 px-4 font-medium">
-                          <Eye className="h-3.5 w-3.5 inline" />
-                        </th>
-                        <th className="text-center py-3 px-4 font-medium">
-                          <ThumbsUp className="h-3.5 w-3.5 inline" />
-                        </th>
-                        <th className="text-center py-3 px-4 font-medium">
-                          <MessageCircle className="h-3.5 w-3.5 inline" />
-                        </th>
-                        <th className="text-center py-3 px-4 font-medium">
-                          <Bookmark className="h-3.5 w-3.5 inline" />
-                        </th>
                         <th className="text-right py-3 px-4 font-medium">تاريخ الإنشاء</th>
                         <th className="text-center py-3 px-4 font-medium">إجراءات</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {analytics?.articles?.map((article) => (
+                      {articles.map((article) => (
                         <tr
                           key={article.id}
                           className="border-t hover:bg-muted/30 transition-colors"
@@ -360,18 +206,6 @@ export default function ReporterMyArticlesPage() {
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
-                          </td>
-                          <td className="py-3 px-4 text-center tabular-nums">
-                            {(article.views || 0).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-4 text-center tabular-nums">
-                            {(article.likes || 0).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-4 text-center tabular-nums">
-                            {(article.comments || 0).toLocaleString()}
-                          </td>
-                          <td className="py-3 px-4 text-center tabular-nums">
-                            {(article.bookmarks || 0).toLocaleString()}
                           </td>
                           <td className="py-3 px-4 text-muted-foreground whitespace-nowrap">
                             {article.createdAt
