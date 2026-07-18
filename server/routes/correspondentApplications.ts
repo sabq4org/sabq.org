@@ -132,7 +132,7 @@ router.post(
       if (!isPrivateObjectStorageConfigured()) {
         console.error(
           "[Correspondent] Private object storage not configured " +
-            "(need STORAGE_PROVIDER=s3|r2 with credentials)",
+            "(need R2 via R2_* or NEWS_IMAGES_R2_*, or S3 credentials)",
         );
         return res.status(502).json({
           message: "خدمة رفع المستندات غير متاحة حالياً. حاول لاحقاً.",

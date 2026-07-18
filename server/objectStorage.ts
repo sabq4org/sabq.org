@@ -25,12 +25,25 @@ function hasS3Credentials(): boolean {
   );
 }
 
-function hasR2Credentials(): boolean {
-  return !!(
-    process.env.R2_ACCOUNT_ID &&
-    process.env.R2_ACCESS_KEY_ID &&
-    process.env.R2_SECRET_ACCESS_KEY
+/** Generic R2_* first; fall back to NEWS_IMAGES_R2_* (what production actually has). */
+function r2AccountId(): string | undefined {
+  return process.env.R2_ACCOUNT_ID || process.env.NEWS_IMAGES_R2_ACCOUNT_ID || undefined;
+}
+
+function r2AccessKeyId(): string | undefined {
+  return process.env.R2_ACCESS_KEY_ID || process.env.NEWS_IMAGES_R2_ACCESS_KEY_ID || undefined;
+}
+
+function r2SecretAccessKey(): string | undefined {
+  return (
+    process.env.R2_SECRET_ACCESS_KEY ||
+    process.env.NEWS_IMAGES_R2_SECRET_ACCESS_KEY ||
+    undefined
   );
+}
+
+function hasR2Credentials(): boolean {
+  return !!(r2AccountId() && r2AccessKeyId() && r2SecretAccessKey());
 }
 
 function isReplitRuntime(): boolean {
@@ -44,11 +57,11 @@ function isReplitRuntime(): boolean {
 /**
  * Resolve the active object-storage backend.
  *
- * On Railway, STORAGE_PROVIDER is often left unset/"local" while S3 (Tigris)
- * credentials ARE present. The legacy fallback talks to the Replit sidecar at
- * 127.0.0.1:1106 — which returns ECONNREFUSED outside Replit and breaks
- * private uploads (e.g. correspondent license/CV). Prefer S3/R2 whenever
- * their credentials exist, and only use the Replit GCS path on Replit.
+ * Production (sabq.org) typically has Cloudflare R2 via NEWS_IMAGES_R2_* and
+ * no Tigris/S3. The legacy fallback talks to the Replit sidecar at
+ * 127.0.0.1:1106 — ECONNREFUSED outside Replit — and breaks private uploads
+ * (correspondent license/CV). Prefer R2 (including NEWS_IMAGES_R2_* keys),
+ * then S3, and only use the Replit GCS path on Replit.
  */
 function resolveStorageProvider(): ResolvedStorageProvider {
   const explicit = (process.env.STORAGE_PROVIDER || "").toLowerCase().trim();
@@ -56,18 +69,25 @@ function resolveStorageProvider(): ResolvedStorageProvider {
   if (explicit === "r2") return "r2";
   if (explicit === "gcs") return "gcs";
 
-  // unset / "local" / unknown → auto-detect
-  if (hasS3Credentials()) return "s3";
+  // unset / "local" / unknown → auto-detect (R2 first — matches sabq production)
   if (hasR2Credentials()) return "r2";
+  if (hasS3Credentials()) return "s3";
   if (isReplitRuntime()) return "gcs";
   return "local";
 }
 
 const STORAGE_PROVIDER: ResolvedStorageProvider = resolveStorageProvider();
+const R2_CRED_SOURCE = process.env.R2_ACCOUNT_ID
+  ? "R2_*"
+  : process.env.NEWS_IMAGES_R2_ACCOUNT_ID
+    ? "NEWS_IMAGES_R2_*"
+    : "none";
 
 console.log(
   `[ObjectStorage] provider=${STORAGE_PROVIDER}` +
-    ` (env STORAGE_PROVIDER=${process.env.STORAGE_PROVIDER || "(unset)"})`,
+    ` (env STORAGE_PROVIDER=${process.env.STORAGE_PROVIDER || "(unset)"}` +
+    (STORAGE_PROVIDER === "r2" ? `, r2Creds=${R2_CRED_SOURCE}` : "") +
+    `)`,
 );
 
 /** True when private file upload/download (license/CV, PDFs, etc.) can work. */
@@ -83,12 +103,15 @@ let s3Client: S3Client | null = null;
 
 function getR2Client(): S3Client {
   if (!r2Client) {
-    const accountId = process.env.R2_ACCOUNT_ID;
-    const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-    const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+    const accountId = r2AccountId();
+    const accessKeyId = r2AccessKeyId();
+    const secretAccessKey = r2SecretAccessKey();
 
     if (!accountId || !accessKeyId || !secretAccessKey) {
-      throw new Error('[R2] Missing R2 credentials. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY');
+      throw new Error(
+        "[R2] Missing R2 credentials. Set R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/" +
+          "R2_SECRET_ACCESS_KEY (or NEWS_IMAGES_R2_* equivalents).",
+      );
     }
 
     r2Client = new S3Client({
@@ -104,7 +127,13 @@ function getR2Client(): S3Client {
 }
 
 function getR2Bucket(): string {
-  return process.env.R2_BUCKET_NAME || 'sabq-media';
+  // Prefer dedicated private-docs bucket when set; else news-images bucket
+  // (private keys still live under `.private/` and are served via signed URLs).
+  return (
+    process.env.R2_BUCKET_NAME ||
+    process.env.NEWS_IMAGES_R2_BUCKET_NAME ||
+    "sabq-media"
+  );
 }
 
 // Generic S3-compatible client (Tigris on Railway, MinIO, Backblaze B2,
