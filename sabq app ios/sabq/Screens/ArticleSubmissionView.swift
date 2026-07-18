@@ -107,7 +107,10 @@ struct ArticleSubmissionView: View {
                 VStack(spacing: 20) {
                     switch screenState {
                     case .form, .submitting:
+                        // لمسة على الترويسة (خارج حقول الإدخال) تُنزل الكيبورد
                         headerHero
+                            .contentShape(Rectangle())
+                            .onTapGesture { focusedField = nil }
                         if kind == .opinion, writerSchedule?.canChoose == true {
                             dayNoticeBanner
                         }
@@ -131,12 +134,13 @@ struct ArticleSubmissionView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 60)
             }
-            // `.interactively` adds a pan-to-dismiss gesture that races
-            // with UITextView's long-press-to-select. Users reported
-            // the magnifier never appearing and copy/paste menu being
-            // unreliable. `.immediately` removes the pan gesture so
-            // selection / edit menu work like the OS Notes app.
-            .scrollDismissesKeyboard(.immediately)
+            // كانت `.immediately` وتسببت في خروج المؤشر مع كل حرف: أي
+            // كتابة/حذف يحرّك iOS الصفحة تلقائياً ليُبقي المؤشر ظاهراً فوق
+            // الكيبورد، و`.immediately` تعامل هذا التمرير البرمجي كطلب
+            // إسقاط للكيبورد. `.interactively` تُسقطه فقط بسحب الإصبع نحو
+            // الأسفل (إيماءة فعلية لا تمريراً برمجياً) — وهو السلوك الذي
+            // يتوقعه الكاتب.
+            .scrollDismissesKeyboard(.interactively)
             .background(SabqTheme.background)
             .sabqRTL()
             .toolbar {
@@ -842,6 +846,9 @@ struct SabqRichTextEditor: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: SelfSizingTextView, context: Context) {
+        // Keep the coordinator's copy fresh so its bindings never go stale
+        // across SwiftUI re-renders.
+        context.coordinator.parent = self
         if uiView.text != text {
             uiView.text = text
         }
@@ -905,12 +912,20 @@ struct SabqRichTextEditor: UIViewRepresentable {
             return CGSize(width: UIView.noIntrinsicMetric, height: max(minimumHeight, ceil(size.height)))
         }
 
+        private var lastLayoutWidth: CGFloat = 0
+
         override func layoutSubviews() {
             super.layoutSubviews()
             // When the width changes (rotation / split-view), the
             // intrinsic height must be recomputed against the new
-            // wrap point.
-            invalidateIntrinsicContentSize()
+            // wrap point. Only then — invalidating on EVERY layout pass
+            // created a relayout loop that nudged the outer ScrollView
+            // on each keystroke (and with scroll-based keyboard
+            // dismissal, kicked the caret out of the editor).
+            if abs(bounds.width - lastLayoutWidth) > 0.5 {
+                lastLayoutWidth = bounds.width
+                invalidateIntrinsicContentSize()
+            }
         }
     }
 }
