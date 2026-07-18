@@ -11,6 +11,7 @@ import {
   getPortalArticle,
   getPortalArticles,
   getPortalCreditLogs,
+  getPortalCreditPackages,
   getPortalOverview,
   getPublishedGuideSections,
   listAgencyReviewQueue,
@@ -102,9 +103,22 @@ router.get("/api/publisher/portal/credit-logs", async (req, res) => {
   }
 });
 
+router.get("/api/publisher/portal/credit-packages", async (req, res) => {
+  try {
+    res.json(await getPortalCreditPackages((req as any).publisher));
+  } catch (error) {
+    console.error("[Publisher Portal] credit packages failed:", error);
+    res.status(500).json({ message: "تعذر جلب باقات الرصيد" });
+  }
+});
+
 router.get("/api/publisher/portal/articles/:id", async (req, res) => {
   try {
-    const article = await getPortalArticle(requestUserId(req), req.params.id);
+    const article = await getPortalArticle(
+      requestUserId(req),
+      req.params.id,
+      (req as any).publisher,
+    );
     if (!article) return res.status(404).json({ message: "المادة غير موجودة" });
     res.json(article);
   } catch (error) {

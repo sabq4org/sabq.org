@@ -5,6 +5,7 @@ import { db } from "../db";
 import { sendEmailNotification } from "./email";
 import {
   articles,
+  categories,
   notificationsInbox,
   publisherCreditLogs,
   publisherCredits,
@@ -109,7 +110,14 @@ const articleListSelection = {
   publisherSubmittedAt: articles.publisherSubmittedAt,
   publisherApprovedAt: articles.publisherApprovedAt,
   publisherReviewNotes: articles.publisherReviewNotes,
+  authorId: articles.authorId,
+  categoryId: articles.categoryId,
 };
+
+function formatAuthorName(firstName: string | null, lastName: string | null) {
+  const name = [firstName, lastName].filter(Boolean).join(" ").trim();
+  return name || null;
+}
 
 /** تنبيه شخصي للناشر في جرس اللوحة — لا يفشل النشر إن تعذر. */
 export async function notifyPublisherUser(
@@ -145,8 +153,15 @@ export async function getPortalArticles(
   const where = and(...conditions);
   const [rows, [{ count }]] = await Promise.all([
     db
-      .select(articleListSelection)
+      .select({
+        ...articleListSelection,
+        categoryName: categories.nameAr,
+        authorFirstName: users.firstName,
+        authorLastName: users.lastName,
+      })
       .from(articles)
+      .leftJoin(categories, eq(articles.categoryId, categories.id))
+      .leftJoin(users, eq(articles.authorId, users.id))
       .where(where)
       .orderBy(desc(articles.createdAt))
       .limit(limit)
@@ -154,7 +169,64 @@ export async function getPortalArticles(
     db.select({ count: sql<number>`count(*)` }).from(articles).where(where),
   ]);
 
-  return { articles: rows, total: Number(count) || 0, page, limit };
+  return {
+    articles: rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      slug: row.slug,
+      englishSlug: row.englishSlug,
+      status: row.status,
+      imageUrl: row.imageUrl,
+      views: row.views,
+      createdAt: row.createdAt,
+      publishedAt: row.publishedAt,
+      publisherStatus: row.publisherStatus,
+      publisherSubmittedAt: row.publisherSubmittedAt,
+      publisherApprovedAt: row.publisherApprovedAt,
+      publisherReviewNotes: row.publisherReviewNotes,
+      authorId: row.authorId,
+      categoryId: row.categoryId,
+      categoryName: row.categoryName ?? null,
+      authorName: formatAuthorName(row.authorFirstName, row.authorLastName),
+    })),
+    total: Number(count) || 0,
+    page,
+    limit,
+  };
+}
+
+/** كل باقات الوكالة (نشطة ومعطّلة) كما تظهر في لوحة الإدارة. */
+export async function getPortalCreditPackages(publisher: Publisher) {
+  const now = new Date();
+  const rows = await db
+    .select()
+    .from(publisherCredits)
+    .where(eq(publisherCredits.publisherId, publisher.id))
+    .orderBy(desc(publisherCredits.isActive), desc(publisherCredits.isUnlimited), desc(publisherCredits.createdAt));
+
+  return {
+    packages: rows.map((pkg) => {
+      const expired = !!(pkg.expiryDate && pkg.expiryDate.getTime() < now.getTime());
+      let status: "active" | "inactive" | "expired" = "inactive";
+      if (pkg.isActive && !expired) status = "active";
+      else if (expired) status = "expired";
+      return {
+        id: pkg.id,
+        packageName: pkg.packageName,
+        totalCredits: pkg.totalCredits,
+        usedCredits: pkg.usedCredits,
+        remainingCredits: pkg.remainingCredits,
+        isUnlimited: pkg.isUnlimited,
+        period: pkg.period,
+        startDate: pkg.startDate,
+        expiryDate: pkg.expiryDate,
+        isActive: pkg.isActive,
+        status,
+        notes: pkg.notes,
+        createdAt: pkg.createdAt,
+      };
+    }),
+  };
 }
 
 /** سجل عمليات الرصيد لبوابة الناشر — كانت الصفحة تستدعي مساراً غير موجود. */
@@ -214,12 +286,20 @@ export async function getPortalCreditLogs(
   };
 }
 
-/** مادة واحدة لمحرر البوابة — ملكية صارمة (كاتبها فقط). */
-export async function getPortalArticle(userId: string, articleId: string) {
+/** مادة واحدة لمحرر البوابة — كاتبها أو أي مادة منسوبة لنفس الوكالة. */
+export async function getPortalArticle(
+  userId: string,
+  articleId: string,
+  publisher?: Publisher | null,
+) {
+  const ownership = publisher
+    ? or(eq(articles.authorId, userId), eq(articles.publisherId, publisher.id))
+    : eq(articles.authorId, userId);
+
   const [article] = await db
     .select()
     .from(articles)
-    .where(and(eq(articles.id, articleId), eq(articles.authorId, userId)))
+    .where(and(eq(articles.id, articleId), ownership))
     .limit(1);
   return article ?? null;
 }
@@ -233,18 +313,18 @@ export type SubmitResult =
  * تُستخدم من زر «إرسال للمراجعة» ومن إعادة الإرسال بعد «تحتاج تعديلات».
  */
 export async function submitPortalArticle(userId: string, articleId: string): Promise<SubmitResult> {
-  const article = await getPortalArticle(userId, articleId);
-  if (!article) return { ok: false, status: 404, message: "المادة غير موجودة" };
-  if (article.status !== "draft") {
-    return { ok: false, status: 400, message: "لا يمكن إرسال مادة منشورة أو مؤرشفة" };
-  }
-
   const gate = await getPublishingGate(userId);
   if (!gate.allowed) {
     return { ok: false, status: 403, message: gate.message ?? "النشر غير متاح", code: gate.code };
   }
   const publisher = gate.publisher;
   if (!publisher) return { ok: false, status: 404, message: "لم يتم العثور على حساب الناشر" };
+
+  const article = await getPortalArticle(userId, articleId, publisher);
+  if (!article) return { ok: false, status: 404, message: "المادة غير موجودة" };
+  if (article.status !== "draft") {
+    return { ok: false, status: 400, message: "لا يمكن إرسال مادة منشورة أو مؤرشفة" };
+  }
 
   const now = new Date();
 
