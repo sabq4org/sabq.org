@@ -11582,7 +11582,7 @@ export const correspondentApplications = pgTable("correspondent_applications", {
   // لا تحملها؛ الإلزام يفرضه مسار التقديم على الطلبات الجديدة فقط. —
   nationalId: text("national_id"), // رقم الهوية/الإقامة (10 أرقام تبدأ بـ1 أو 2)
   region: text("region"), // المنطقة الإدارية
-  licenseNumber: text("license_number"), // رقم الترخيص المهني (وزارة الإعلام)
+  licenseNumber: text("license_number"), // رقم الترخيص المهني (هيئة تنظيم الإعلام)
   licenseExpiresAt: timestamp("license_expires_at"), // تاريخ انتهاء الترخيص (اختياري)
   // مفاتيح ملفات في التخزين الخاص (R2/S3) — ليست روابط عامة؛ تُفتح فقط عبر
   // مسار الأدمن المحمي /api/admin/correspondent-applications/:id/file/:kind

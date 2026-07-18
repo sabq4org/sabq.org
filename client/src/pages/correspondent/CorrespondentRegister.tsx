@@ -419,7 +419,7 @@ export default function CorrespondentRegister() {
               <div className="rounded-xl border bg-muted/20 p-4 space-y-4">
                 <div className="flex items-center gap-2 font-medium">
                   <BadgeCheck className="w-4 h-4 text-primary" />
-                  الترخيص المهني (وزارة الإعلام)
+                  الترخيص المهني (هيئة تنظيم الإعلام)
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <FormField
