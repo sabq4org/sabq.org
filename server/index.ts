@@ -1443,6 +1443,9 @@ if (!(globalThis as any).__sabqServer) {
       }
 
       const enableBackgroundWorkers = process.env.ENABLE_BACKGROUND_WORKERS === "true";
+      // النشرة الثقيلة لها process مستقل. لا تعِد تشغيلها داخل API إلا كخيار
+      // legacy صريح أثناء rollback؛ القيمة الافتراضية الآمنة false.
+      const runNewsletterSchedulerInWeb = process.env.RUN_NEWSLETTER_SCHEDULER_IN_WEB === "true";
       
       const { tryBecomeLeader, isLeader, getPodId, startLeaderElectionLoop, onBecomeLeader } = await import("./leaderElection");
       await tryBecomeLeader();
@@ -1471,7 +1474,10 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting audio newsletter jobs after failover:", error);
           }
           try {
-            if (process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false') {
+            if (
+              process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false'
+              && runNewsletterSchedulerInWeb
+            ) {
               const { newsletterScheduler } = await import("./services/newsletterScheduler");
               newsletterScheduler.start();
               console.log("[Server] Newsletter scheduler started after failover");
@@ -1748,7 +1754,7 @@ if (!(globalThis as any).__sabqServer) {
 
       const enableNewsletterScheduler = process.env.ENABLE_NEWSLETTER_SCHEDULER !== 'false';
       
-      if (shouldRunBackgroundJobs && enableNewsletterScheduler) {
+      if (shouldRunBackgroundJobs && enableNewsletterScheduler && runNewsletterSchedulerInWeb) {
         setTimeout(async () => {
           try {
             const { newsletterScheduler } = await import("./services/newsletterScheduler");
@@ -1758,6 +1764,8 @@ if (!(globalThis as any).__sabqServer) {
             console.error("[Server] Error starting newsletter scheduler:", error);
           }
         }, BACKGROUND_JOB_DELAY + 25000);
+      } else if (enableNewsletterScheduler && !runNewsletterSchedulerInWeb) {
+        console.log('[Server] Newsletter scheduler delegated to newsletter-worker');
       }
       
       const enableAITasksScheduler = process.env.ENABLE_AI_TASKS_SCHEDULER !== 'false';

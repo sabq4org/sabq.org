@@ -77,18 +77,20 @@ ELEVENLABS_API_KEY=your_api_key         # API key for TTS
 ELEVENLABS_DEFAULT_VOICE_ID=voice_id    # Default voice for generation
 ```
 
-### Starting the Scheduler
+### Starting the Scheduler and Delivery Worker
 
-The scheduler automatically starts when:
-1. `ENABLE_BACKGROUND_WORKERS=true`
-2. `ENABLE_NEWSLETTER_SCHEDULER=true`
-3. Server starts successfully
+Since 2026-07-19, the API process never starts newsletter delivery. A dedicated
+Railway service runs `npm run start:newsletter-worker`. Scheduling and delivery
+have separate explicit flags:
 
-Check server logs for confirmation:
+```env
+RUN_NEWSLETTER_SCHEDULER_IN_WEB=false
+ENABLE_NEWSLETTER_SCHEDULER=false
+ENABLE_NEWSLETTER_DELIVERY_WORKER=false
 ```
-[Server] ✅ Newsletter scheduler started
-[Server] Scheduled newsletters: [morning_briefing at 0 6 * * *, evening_digest at 0 20 * * *, ...]
-```
+
+Keep both feature flags false while the newsletter is paused. See
+`docs/systems/audio-newsletter/OPERATIONS.md` for the safe rollout and resume order.
 
 ## Usage
 

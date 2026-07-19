@@ -802,11 +802,12 @@ ${dailyQuestion ? `❓ سؤال اليوم: ${dailyQuestion.question}${dailyQues
       html: htmlContent,
       text: textContent,
     });
-    console.log(`✅ Newsletter email sent to ${to}`);
+    // لا نسجل البريد (PII) ولا سطرًا لكل مستلم؛ الـ worker يسجل ملخص كل دفعة.
     
     return { success: true };
   } catch (error) {
-    console.error(`❌ Failed to send newsletter email to ${options.to}:`, error);
+    // Provider messages may echo the recipient address; keep operational logs PII-free.
+    console.error("❌ Newsletter email delivery failed");
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to send email' 
