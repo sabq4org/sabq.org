@@ -1117,7 +1117,8 @@ export default function SportsDashboard() {
   // نبض المباشر: نداء مخصّص أسرع (7ث) لكل المباريات الجارية عبر بطولاتنا —
   // هنا تظهر النتيجة/الدقيقة اللحظية من TheSports فور توفّرها في الإنتاج.
   const { data: liveData, isFetched: liveFetched } = useQuery<{ live: SpLiveItem[] }>({
-    queryKey: ["/api/sports/live"], refetchInterval: 7_000, refetchIntervalInBackground: false, refetchOnWindowFocus: true,
+    // 12ث يكفي للنتيجة؛ 7ث كانت تضغط مسار TheSports/الودّيات بلا مبرّر.
+    queryKey: ["/api/sports/live"], refetchInterval: 12_000, refetchIntervalInBackground: false, refetchOnWindowFocus: true,
   });
   const liveMatches = (Array.isArray(liveData?.live) ? liveData!.live : []).filter((f) => f.status.live);
 
