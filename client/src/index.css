@@ -1152,13 +1152,11 @@ html[data-dashboard-theme],
   font-family: var(--dashboard-font-sans, "IBM Plex Sans Arabic", "Tajawal", Inter, system-ui, sans-serif);
 }
 
-/* إطارات مسطّحة لكل السمات: خط فقط بلا ظل (حتى مع shadow-sm في المكوّنات) */
+/* بطاقات Card فقط (.shadcn-card) — لا تُطبَّق على أيقونات/شارات/أزرار/صفوف قائمة */
 html[data-dashboard-theme] .shadcn-card,
-.dashboard-theme .shadcn-card,
-html[data-dashboard-theme] [class*="rounded-"].border,
-.dashboard-theme [class*="rounded-"].border {
+.dashboard-theme .shadcn-card {
   background-color: hsl(var(--card));
-  border-color: hsl(var(--card-border, var(--border))) !important;
+  border-color: hsl(var(--card-border, var(--border)));
   border-width: 1px;
   border-style: solid;
   box-shadow: none !important;
