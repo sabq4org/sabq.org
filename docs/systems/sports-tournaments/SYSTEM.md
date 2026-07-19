@@ -1,12 +1,17 @@
 # البوابة الرياضية والبطولات (`sports-tournaments`)
 
-> آخر مراجعة: 2026-07-18 | المالك: sports
+> آخر مراجعة: 2026-07-19 | المالك: sports
 
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
 
 ## مفاتيح AI (حصرية)
-`world-cup-news`, `sportmonks-news`, `sports-names`, `sports-snaps`, `sports-intel-trends`, `sports-intel-prediction`, `sports-intel-scene`, `sports-intel-digest`, `sports-intel-copilot`
+`world-cup-news`, `sportmonks-news`, `kings-cup-news`, `saudi-league-story`, `saudi-league-preview`, `sports-names`, `sports-snaps`, `sports-intel-trends`, `sports-intel-prediction`, `sports-intel-scene`, `sports-intel-digest`, `sports-intel-copilot`, `sports-intel-match-pre`, `sports-intel-match-live`, `sports-intel-match-post`
+
+## تكلفة النماذج (2026-07-19)
+- تقارير/معاينات الدوري السعودي ولقطات VARA ومشهد/توجّهات الاستخبارات: **GPT-4o mini**.
+- أخبار البطولات (مونديال / SportMonks / كأس الملك) و digest/copilot وبطاقات live/post: تبقى سلسلة تحريرية أقوى (Sonnet → GPT-5.1).
+- يمكن تغيير النموذج من `/dashboard/ai-hub` لكل feature بعد seed الصفوف الجديدة.
 
 ## الحدود
 - توقعات البطولات الجديدة عبر `predictions-core` — لا محركات جديدة.

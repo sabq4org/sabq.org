@@ -17294,9 +17294,9 @@ ${currentTitle ? `العنوان الحالي: ${currentTitle}\n\n` : ''}
 
       // Generate titles from 3 different AI models in parallel
       const results = await aiManager.generateMultiple(prompt, [
-        { ...AI_MODELS.GPT5, maxTokens: 512 },
-        { ...AI_MODELS.CLAUDE_SONNET, maxTokens: 512, temperature: 0.8 },
-        { ...AI_MODELS.GEMINI_FLASH, maxTokens: 512, temperature: 0.8 },
+        { ...AI_MODELS.GPT5, maxTokens: 512, feature: "content-tools" },
+        { ...AI_MODELS.CLAUDE_SONNET, maxTokens: 512, temperature: 0.8, feature: "content-tools" },
+        { ...AI_MODELS.GEMINI_FLASH, maxTokens: 512, temperature: 0.8, feature: "content-tools" },
       ]);
 
       // Clean up titles (remove quotes, extra whitespace)

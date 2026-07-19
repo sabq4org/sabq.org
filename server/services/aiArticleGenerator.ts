@@ -109,8 +109,8 @@ Additional rules:
 
     // محرر سبق الأساسي: Claude Sonnet — وعند أي فشل نسقط تلقائياً إلى GPT-5.1
     const modelChain: AIModelConfig[] = [
-      { provider: 'anthropic', model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4 },
-      { provider: 'openai', model: SABQ_FALLBACK_EDITOR_MODEL },
+      { provider: 'anthropic', model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4, feature: 'ai-article-generator' },
+      { provider: 'openai', model: SABQ_FALLBACK_EDITOR_MODEL, feature: 'ai-article-generator' },
     ];
 
     let response: AIResponse | null = null;

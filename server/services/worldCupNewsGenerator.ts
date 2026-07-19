@@ -506,8 +506,8 @@ function parseGenerated(raw: string): GeneratedWcArticle {
 // مادتين لكل مباراة طوال البطولة كان ذلك أثقل بنود استهلاك OpenAI؛ تفضيل
 // Anthropic يخفضه بشدة مع إبقاء البديل جاهزًا عند تعثّره.
 const WC_MODEL_CHAIN: AIModelConfig[] = [
-  { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4 },
-  { provider: "openai", model: SABQ_FALLBACK_EDITOR_MODEL },
+  { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4, feature: "world-cup-news" },
+  { provider: "openai", model: SABQ_FALLBACK_EDITOR_MODEL, feature: "world-cup-news" },
 ];
 
 async function generateWcArticleText(prompt: string): Promise<AIResponse> {

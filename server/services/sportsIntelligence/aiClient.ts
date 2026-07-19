@@ -9,14 +9,10 @@ import { aiManager, AI_MODELS, type AIModelConfig } from "../../ai-manager";
 export type ModelTier = "cheap" | "strong" | "mini";
 
 function pickModel(tier: ModelTier): AIModelConfig {
-  // «mini» = gpt-4o-mini للصياغات القصيرة عالية التكرار المحمية بمدقّق وسقوط
-  // حتمي (لقطات VARA): مثبت في الإنتاج للعربية (sports-names، فلترة التعليقات)
-  // وأرخص من gpt-5.1 بفارق كبير على حجم الاستدعاءات هذا.
-  if (tier === "mini") return { ...AI_MODELS.GPT_4O_MINI };
-  // «cheap»/«strong»: gpt-5.1. الطبقة «الرخيصة» كانت تختار Gemini Flash عند
-  // توفّر مفتاح Gemini، لكن نموذج البوابة GEMINI_FLASH (gemini-2.5-flash)
-  // متوقّف/في cooldown على الإنتاج فيفشل التوليد بـ«no available model» (بطاقات فارغة)،
-  // بينما لا يظهر محلياً لغياب مفتاح Gemini. gpt-5.1 مثبت أنه يعمل.
+  // «mini» و«cheap»: gpt-4o-mini — صياغات قصيرة/متكررة (لقطات، مشهد، توجّهات،
+  // معاينات). أرخص بعشرات المرات من gpt-5.1؛ الجودة كافية مع مدقّق/قوالب سقوط.
+  // «strong»: gpt-5.1 للسرد الأثقل (digest / copilot / بطاقة مباراة حية).
+  if (tier === "mini" || tier === "cheap") return { ...AI_MODELS.GPT_4O_MINI };
   return { ...AI_MODELS.GPT_5_1 };
 }
 

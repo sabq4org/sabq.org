@@ -72,6 +72,7 @@ ${params.content}
         provider: "openai",
         model: "gpt-4o-mini",
         maxTokens: 2000,
+        feature: "ifox-quality",
       });
 
       if (response.error) {

@@ -383,8 +383,8 @@ function parseGenerated(raw: string): GeneratedArticle {
 
 // نفس سلسلة محرّر سبق: Anthropic Sonnet أولًا ثم gpt-5.1 عند أي فشل/بتر
 const MODEL_CHAIN: AIModelConfig[] = [
-  { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4 },
-  { provider: "openai", model: SABQ_FALLBACK_EDITOR_MODEL },
+  { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4, feature: "sportmonks-news" },
+  { provider: "openai", model: SABQ_FALLBACK_EDITOR_MODEL, feature: "sportmonks-news" },
 ];
 
 async function generateText(prompt: string): Promise<AIResponse> {

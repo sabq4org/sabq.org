@@ -17,8 +17,8 @@ import { approvedCategories, getSource, updateItem } from "./repo";
 import { parseDraftPayload } from "./parsing";
 
 const TRANSFORMER_MODEL_CHAIN: AIModelConfig[] = [
-  { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4 },
-  { provider: "openai", model: SABQ_FALLBACK_EDITOR_MODEL, maxTokens: 8000, jsonMode: true },
+  { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4, feature: "radar" },
+  { provider: "openai", model: SABQ_FALLBACK_EDITOR_MODEL, maxTokens: 8000, jsonMode: true, feature: "radar" },
 ];
 
 function buildTransformPrompt(
