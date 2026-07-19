@@ -128,10 +128,10 @@ export type WcNumbersReport = {
   cache: WcNumbersReportCacheMeta;
 };
 
-/** كاش تقرير الأرقام — طويل لأن التقرير تلخيصي وليس لحظياً. */
+/** كاش تقرير الأرقام — البطولة انتهت؛ TTL طويل لتقليل ضغط DB. */
 const REPORT_CACHE_KEY = "blocks:wc:numbers-report:v5";
-const REPORT_TTL_MS = CACHE_TTL.LONG; // 15 دقيقة طازج
-const REPORT_SWR_MS = CACHE_TTL.LONG * 2; // +15 دقيقة stale-while-revalidate
+const REPORT_TTL_MS = CACHE_TTL.VERY_LONG; // ساعة طازج
+const REPORT_SWR_MS = CACHE_TTL.VERY_LONG * 2; // +ساعة stale-while-revalidate
 
 function matchDeskSlugPredicate() {
   return or(
@@ -576,7 +576,7 @@ async function buildReportPayload(): Promise<ReportPayload> {
     generatedAt: new Date().toISOString(),
     headline,
     subtitle:
-      "أرقام تغطية سبق مع نبض البطولة وتوقعات الجمهور: المواد، المشاهدات، الأهداف، والنقاط المصروفة.",
+      "حصاد نهائي: تغطية سبق، نبض البطولة، توقعات الجمهور، والنقاط المصروفة للفائزين.",
     sabq,
     predictions,
     tournament,
