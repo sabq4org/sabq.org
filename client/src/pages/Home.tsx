@@ -447,9 +447,7 @@ export default function Home() {
           {homepage.hero && homepage.hero.length > 0 && <HeroCarousel articles={homepage.hero} />}
         </div>
 
-        {/* World Cup 2026 section (match-of-the-day strip + auto-generated news)
-            on a full-width light-green band — the section hides itself entirely
-            (band included) when /api/world-cup has no match and no news */}
+        {/* كأس العالم 2026 — تقرير بالأرقام مكان الشريط/الأخبار بعد انتهاء البطولة */}
         <ErrorBoundary fallback={null}>
           <Suspense fallback={null}>
             <WorldCupHomeSection />
