@@ -5648,6 +5648,10 @@ export const insertInternalAnnouncementSchema = createInsertSchema(internalAnnou
   priority: z.enum(["low", "normal", "high"]).default("normal"),
   status: z.enum(["draft", "scheduled", "published", "expired", "archived"]).default("draft"),
   channels: z.array(z.enum(["dashboardBanner", "inbox", "toast"])).min(1, "يجب اختيار قناة واحدة على الأقل"),
+  audienceRoles: z.array(z.string().min(1)).nullable().optional(),
+  audienceUserIds: z.array(z.string().min(1)).nullable().optional(),
+  startAt: z.coerce.date().nullable().optional(),
+  endAt: z.coerce.date().nullable().optional(),
 });
 
 export const updateInternalAnnouncementSchema = insertInternalAnnouncementSchema.partial();

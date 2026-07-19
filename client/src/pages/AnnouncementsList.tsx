@@ -33,8 +33,8 @@ interface Announcement {
   priority: string;
   status: string;
   channels: string[];
-  targetRoles: string[] | null;
-  targetUserIds: string[] | null;
+  audienceRoles: string[] | null;
+  audienceUserIds: string[] | null;
   startAt: string | null;
   endAt: string | null;
   publishedAt: string | null;
@@ -58,7 +58,6 @@ export default function AnnouncementsList() {
     const params = new URLSearchParams();
     if (statusFilter && statusFilter !== 'all') params.append('status', statusFilter);
     if (priorityFilter && priorityFilter !== 'all') params.append('priority', priorityFilter);
-    if (channelFilters.length > 0) params.append('channels', channelFilters.join(','));
     if (search) params.append('search', search);
     return params.toString() ? `?${params.toString()}` : '';
   };
@@ -104,17 +103,15 @@ export default function AnnouncementsList() {
 
   const getPriorityBadge = (priority: string) => {
     const variants: Record<string, { variant: any; className: string }> = {
-      critical: { variant: "destructive" as const, className: "bg-red-500" },
       high: { variant: "default" as const, className: "bg-orange-500" },
-      medium: { variant: "secondary" as const, className: "bg-blue-500 text-white" },
+      normal: { variant: "secondary" as const, className: "bg-blue-500 text-white" },
       low: { variant: "outline" as const, className: "bg-gray-500" },
     };
     const config = variants[priority] || variants.low;
     
     const labels: Record<string, string> = {
-      critical: "حرج",
       high: "عالي",
-      medium: "متوسط",
+      normal: "عادي",
       low: "منخفض",
     };
     
@@ -139,13 +136,14 @@ export default function AnnouncementsList() {
   };
 
   const getTargetAudience = (announcement: Announcement) => {
-    if (announcement.targetUserIds && announcement.targetUserIds.length > 0) {
-      return `${announcement.targetUserIds.length} مستخدم`;
+    const audience: string[] = [];
+    if (announcement.audienceRoles && announcement.audienceRoles.length > 0) {
+      audience.push(announcement.audienceRoles.join(", "));
     }
-    if (announcement.targetRoles && announcement.targetRoles.length > 0) {
-      return announcement.targetRoles.join(", ");
+    if (announcement.audienceUserIds && announcement.audienceUserIds.length > 0) {
+      audience.push(`${announcement.audienceUserIds.length} مستخدم محدد`);
     }
-    return "الكل";
+    return audience.length > 0 ? audience.join(" + ") : "الكل";
   };
 
   const filteredAnnouncements = announcements?.filter(ann => {
@@ -224,9 +222,8 @@ export default function AnnouncementsList() {
                 <SelectContent>
                   <SelectItem value="all">الكل</SelectItem>
                   <SelectItem value="low">منخفض</SelectItem>
-                  <SelectItem value="medium">متوسط</SelectItem>
+                  <SelectItem value="normal">عادي</SelectItem>
                   <SelectItem value="high">عالي</SelectItem>
-                  <SelectItem value="critical">حرج</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -235,7 +232,7 @@ export default function AnnouncementsList() {
           <div>
             <label className="text-xs md:text-sm font-medium mb-1.5 md:mb-2 block">القنوات</label>
             <div className="flex flex-wrap gap-3 md:gap-4">
-              {['dashboard', 'email', 'mobile', 'web'].map(channel => (
+              {['dashboardBanner', 'inbox', 'toast'].map(channel => (
                 <div key={channel} className="flex items-center gap-1.5 md:gap-2">
                   <Checkbox
                     id={`channel-${channel}`}
@@ -245,10 +242,9 @@ export default function AnnouncementsList() {
                     className="h-3.5 w-3.5 md:h-4 md:w-4"
                   />
                   <label htmlFor={`channel-${channel}`} className="text-xs md:text-sm cursor-pointer whitespace-nowrap">
-                    {channel === 'dashboard' && 'لوحة التحكم'}
-                    {channel === 'email' && 'البريد الإلكتروني'}
-                    {channel === 'mobile' && 'تطبيق الجوال'}
-                    {channel === 'web' && 'الموقع'}
+                    {channel === 'dashboardBanner' && 'بانر لوحة التحكم'}
+                    {channel === 'inbox' && 'صندوق الوارد'}
+                    {channel === 'toast' && 'إشعار منبثق'}
                   </label>
                 </div>
               ))}
@@ -295,10 +291,9 @@ export default function AnnouncementsList() {
                           <div className="flex gap-1 flex-wrap">
                             {announcement.channels.map(ch => (
                               <Badge key={ch} variant="outline" className="text-xs">
-                                {ch === 'dashboard' && 'لوحة'}
-                                {ch === 'email' && 'بريد'}
-                                {ch === 'mobile' && 'جوال'}
-                                {ch === 'web' && 'ويب'}
+                                {ch === 'dashboardBanner' && 'بانر لوحة التحكم'}
+                                {ch === 'inbox' && 'صندوق الوارد'}
+                                {ch === 'toast' && 'إشعار منبثق'}
                               </Badge>
                             ))}
                           </div>
@@ -393,10 +388,9 @@ export default function AnnouncementsList() {
                     <div className="flex flex-wrap gap-1.5">
                       {announcement.channels.map(ch => (
                         <Badge key={ch} variant="outline" className="text-xs">
-                          {ch === 'dashboard' && 'لوحة'}
-                          {ch === 'email' && 'بريد'}
-                          {ch === 'mobile' && 'جوال'}
-                          {ch === 'web' && 'ويب'}
+                          {ch === 'dashboardBanner' && 'بانر لوحة التحكم'}
+                          {ch === 'inbox' && 'صندوق الوارد'}
+                          {ch === 'toast' && 'إشعار منبثق'}
                         </Badge>
                       ))}
                     </div>

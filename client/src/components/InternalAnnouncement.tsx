@@ -7,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown } from "lucide-react";
 import { getLucideIcon } from "@/lib/lucideIconMap";
 import { cn } from "@/lib/utils";
+import DOMPurify from "isomorphic-dompurify";
 
 interface Announcement {
   id: string;
@@ -21,14 +22,20 @@ interface Announcement {
 
 const VIEWED_PREFIX = "announcement_viewed_";
 
+function getAnnouncementChannel(location: string): "dashboardBanner" | "toast" {
+  return location.startsWith('/dashboard') ? 'dashboardBanner' : 'toast';
+}
+
 export function InternalAnnouncement() {
   const [location, navigate] = useLocation();
   const [trackedImpressions, setTrackedImpressions] = useState<Set<string>>(new Set());
   const [trackedUniqueViews, setTrackedUniqueViews] = useState<Set<string>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const currentChannel = getAnnouncementChannel(location);
+  const activeAnnouncementsPath = `/api/announcements/active?channel=${currentChannel}`;
 
   const { data: announcementsRaw } = useQuery<Announcement[]>({
-    queryKey: ['/api/announcements/active'],
+    queryKey: [activeAnnouncementsPath],
   });
   const announcements = Array.isArray(announcementsRaw) ? announcementsRaw : [];
 
@@ -51,7 +58,7 @@ export function InternalAnnouncement() {
         trackMetricMutation.mutate({
           announcementId: ann.id,
           event: 'impression',
-          channel: getCurrentChannel(),
+          channel: currentChannel,
         });
         setTrackedImpressions(prev => new Set(Array.from(prev).concat(ann.id)));
       }
@@ -64,7 +71,7 @@ export function InternalAnnouncement() {
           trackMetricMutation.mutate({
             announcementId: ann.id,
             event: 'unique_view',
-            channel: getCurrentChannel(),
+            channel: currentChannel,
           });
           sessionStorage.setItem(uniqueViewKey, 'true');
           setTrackedUniqueViews(prev => new Set(Array.from(prev).concat(ann.id)));
@@ -74,21 +81,14 @@ export function InternalAnnouncement() {
     });
 
     return () => timers.forEach(t => clearTimeout(t));
-  }, [announcements, trackedImpressions, trackedUniqueViews]);
-
-  const getCurrentChannel = () => {
-    // Map routes to announcement channels
-    // Show all channels in dashboard for now
-    if (location.startsWith('/dashboard')) return 'dashboardBanner';
-    return 'toast'; // Default for web pages
-  };
+  }, [announcements, currentChannel, trackedImpressions, trackedUniqueViews]);
 
   const handleActionClick = (announcement: Announcement) => {
     if (announcement.actionButtonUrl) {
       trackMetricMutation.mutate({ 
         announcementId: announcement.id, 
         event: 'click',
-        channel: getCurrentChannel(),
+        channel: currentChannel,
       });
 
       if (announcement.actionButtonUrl.startsWith('http')) {
@@ -146,19 +146,8 @@ export function InternalAnnouncement() {
     return getLucideIcon(iconName);
   };
 
-  const currentChannel = getCurrentChannel();
-  
   const visibleAnnouncements = announcements.filter(ann => {
-    // In dashboard, show all announcements regardless of channel
-    if (location.startsWith('/dashboard')) {
-      return true;
-    }
-    
-    // Outside dashboard, filter by channel
-    if (!ann.channels.includes('all') && !ann.channels.includes(currentChannel)) {
-      return false;
-    }
-    return true;
+    return ann.channels.includes(currentChannel);
   });
 
   if (visibleAnnouncements.length === 0) {
@@ -203,33 +192,27 @@ export function InternalAnnouncement() {
                   <CollapsibleTrigger asChild>
                     <Button
                       size="sm"
-                      variant="ghost"
+                      variant="outline"
                       className="flex-shrink-0"
                       data-testid={`button-toggle-${announcement.id}`}
                     >
+                      {isExpanded ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}
                       <ChevronDown 
                         className={cn(
-                          "h-4 w-4 transition-transform duration-200",
+                          "mr-2 h-4 w-4 transition-transform duration-200",
                           isExpanded && "rotate-180"
                         )}
                       />
                     </Button>
                   </CollapsibleTrigger>
-                  
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => navigate(`/dashboard/announcements/${announcement.id}`)}
-                    className="flex-shrink-0"
-                    data-testid={`button-view-details-${announcement.id}`}
-                  >
-                    عرض التفاصيل
-                  </Button>
                 </div>
 
                 <CollapsibleContent className="mt-3">
                   <div className={cn("pr-8 text-sm", config.text)}>
-                    <p className="whitespace-pre-wrap">{announcement.message}</p>
+                    <div
+                      className="prose prose-sm max-w-none whitespace-pre-wrap dark:prose-invert"
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(announcement.message) }}
+                    />
                     
                     {announcement.actionButtonUrl && announcement.actionButtonLabel && (
                       <Button
