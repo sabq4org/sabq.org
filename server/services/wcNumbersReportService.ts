@@ -17,8 +17,27 @@ import {
   isWorldCupConfigured,
   type WcChampion,
   type WcFixture,
+  type WcTeam,
 } from "./worldCupService";
-import { isArabTeam } from "./worldCupNames";
+import { isArabTeam, WC_TEAM_AR } from "./worldCupNames";
+import { runWithSportsLang } from "./sportsLang";
+
+/** التقرير موجّه للقارئ العربي دائماً — لا يعتمد على كاش fixtures ملوّث بـ lang=en. */
+function arTeamName(team: Pick<WcTeam, "id" | "name"> | null | undefined): string {
+  if (!team) return "";
+  return WC_TEAM_AR[team.id] ?? team.name ?? "";
+}
+
+function localizeChampion(champ: WcChampion | null): WcChampion | null {
+  if (!champ) return null;
+  return {
+    ...champ,
+    team: { ...champ.team, name: arTeamName(champ.team) },
+    runnerUp: champ.runnerUp
+      ? { ...champ.runnerUp, name: arTeamName(champ.runnerUp) }
+      : null,
+  };
+}
 
 const SLUG_PREFIX = "wc26";
 /** بداية نافذة تغطية مونديال 2026 (يستبعد أرشيف 2018/2022 وبطولات أخرى). */
@@ -129,7 +148,7 @@ export type WcNumbersReport = {
 };
 
 /** كاش تقرير الأرقام — البطولة انتهت؛ TTL طويل لتقليل ضغط DB. */
-const REPORT_CACHE_KEY = "blocks:wc:numbers-report:v5";
+const REPORT_CACHE_KEY = "blocks:wc:numbers-report:v6";
 const REPORT_TTL_MS = CACHE_TTL.VERY_LONG; // ساعة طازج
 const REPORT_SWR_MS = CACHE_TTL.VERY_LONG * 2; // +ساعة stale-while-revalidate
 
@@ -432,16 +451,16 @@ async function buildTournamentStats(): Promise<TournamentStats> {
     avgGoalsPerMatch:
       finished.length > 0 ? Math.round((totalGoals / finished.length) * 100) / 100 : 0,
     penaltyShootouts,
-    champion: detectChampion(fixtures),
+    champion: localizeChampion(detectChampion(fixtures)),
     topScorers: scorers.slice(0, 5).map((s) => ({
       name: s.name,
-      team: s.team?.name ?? "",
+      team: arTeamName(s.team),
       goals: s.goals,
       assists: s.assists ?? 0,
     })),
     topAssists: assists.slice(0, 5).map((s) => ({
       name: s.name,
-      team: s.team?.name ?? "",
+      team: arTeamName(s.team),
       assists: s.assists ?? 0,
     })),
     cards: {
@@ -449,7 +468,7 @@ async function buildTournamentStats(): Promise<TournamentStats> {
       redOnBoard,
       leaders: cards.slice(0, 5).map((c) => ({
         name: c.name,
-        team: c.team?.name ?? "",
+        team: arTeamName(c.team),
         yellow: c.yellow ?? 0,
         red: c.red ?? 0,
       })),
@@ -570,29 +589,32 @@ async function buildPredictionsEngagement(): Promise<WcPredictionsEngagement> {
 }
 
 async function buildReportPayload(): Promise<ReportPayload> {
-  const [sabq, tournament, predictions] = await Promise.all([
-    buildSabqCoverage(),
-    buildTournamentStats(),
-    buildPredictionsEngagement(),
-  ]);
+  // فرض العربية حتى لو وُجد طلب إنجليزي في نفس العملية يلوّث AsyncLocalStorage
+  return runWithSportsLang("ar", async () => {
+    const [sabq, tournament, predictions] = await Promise.all([
+      buildSabqCoverage(),
+      buildTournamentStats(),
+      buildPredictionsEngagement(),
+    ]);
 
-  const champName = tournament.champion?.team?.name;
-  const headline = champName
-    ? `كأس العالم 2026 بالأرقام — وتهنئة ${champName}`
-    : "كأس العالم 2026 بالأرقام — تغطية سبق والبطولة";
+    const champName = tournament.champion?.team?.name;
+    const headline = champName
+      ? `كأس العالم 2026 بالأرقام — وتهنئة ${champName}`
+      : "كأس العالم 2026 بالأرقام — تغطية سبق والبطولة";
 
-  return {
-    status: "draft" as const,
-    generatedAt: new Date().toISOString(),
-    headline,
-    subtitle:
-      "حصاد نهائي: تغطية سبق، نبض البطولة، توقعات الجمهور، والنقاط المصروفة للفائزين.",
-    sabq,
-    predictions,
-    tournament,
-    platform: platformHighlights(),
-    storyBeats: buildStoryBeats(sabq, tournament),
-  };
+    return {
+      status: "draft" as const,
+      generatedAt: new Date().toISOString(),
+      headline,
+      subtitle:
+        "حصاد نهائي: تغطية سبق، نبض البطولة، توقعات الجمهور، والنقاط المصروفة للفائزين.",
+      sabq,
+      predictions,
+      tournament,
+      platform: platformHighlights(),
+      storyBeats: buildStoryBeats(sabq, tournament),
+    };
+  });
 }
 
 /**
