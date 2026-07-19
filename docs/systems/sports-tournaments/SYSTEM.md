@@ -5,17 +5,15 @@
 ## الغرض
 تغطية البطولات، المجالس، الفانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية.
 
-## تقرير كأس العالم 2026 بالأرقام (مراجعة داخلية)
-- **لوحة:** `/dashboard/wc-2026-numbers-report` — للمراجعة قبل أي نشر عام (ليست صفحة زائر).
-- **API:** `GET /api/admin/wc-2026-numbers-report` — `requireAuth` + `system.manage_settings` · `Cache-Control: private, no-store`.
-- **كاش:** SWR في ذاكرة العملية `blocks:wc:numbers-report:v4` — طازج 15د + SWR 15د. الطلب الأول يحسب؛ اللاحق من الذاكرة. `?fresh=1` يعيد الحساب. الحقل `cache.source` = `cache` | `computed`.
-- **عدّاد المواد (مضيّق على 2026):**
-  1. `wc26-*` (غرفة المباريات) — دائماً.
-  2. تحريري: قسم `sports` + عنوان فيه (مونديال|كأس العالم) + `publishedAt >= 2026-01-01`، مع استبعاد أندية وسنوات 2010/2014/2018/2022 بلا ذكر 2026.
-  3. عند فشل مسار التحريري: سقوط آمن إلى `wc26-*` فقط + تنبيه في `methodology`.
-  4. الاستجابة تعرض `breakdown.matchDesk` / `breakdown.editorialWindow` + `methodology`.
-- **البطولة:** من `worldCupService` (بطل، أهداف، هدّافون، بطاقات، عرب).
-- **الحالة:** `status: "draft"` حتى يُقرَّر مسار نشر عام لاحقاً.
+## تقرير كأس العالم 2026 بالأرقام (منشور على الرئيسية)
+- **الرئيسية:** تحت الهيرو مباشرة — `WorldCupHomeSection` → `Wc2026NumbersReportPanel` (بدل شريط المباراة + أخبار المونديال).
+- **لوحة:** `/dashboard/wc-2026-numbers-report` — نفس اللوحة (`variant=admin`).
+- **API عام:** `GET /api/world-cup/numbers-report` — بدون auth · كاش CDN قصير.
+- **API أدمن:** `GET /api/admin/wc-2026-numbers-report` — `requireAuth` + `system.manage_settings` · `private, no-store`.
+- **كاش خدمة:** SWR `blocks:wc:numbers-report:v5` — ساعة طازج + ساعة SWR.
+- **عدّاد المواد (مضيّق على 2026):** `wc26-*` + تحريري رياضة منذ 2026-01-01 مع استبعاد أندية/مونديالات قديمة.
+- **التوقعات:** `wc_predictions` → `totalPredictions` + `pointsAwarded` (ولاء بعد التسوية).
+- **الهيدر:** لوقو المونديال أُزيل من `Header.tsx` بعد انتهاء البطولة.
 
 ## مفاتيح AI (حصرية)
 `world-cup-news`, `sportmonks-news`, `kings-cup-news`, `saudi-league-story`, `saudi-league-preview`, `sports-names`, `sports-snaps`, `sports-intel-trends`, `sports-intel-prediction`, `sports-intel-scene`, `sports-intel-digest`, `sports-intel-copilot`, `sports-intel-match-pre`, `sports-intel-match-live`, `sports-intel-match-post`

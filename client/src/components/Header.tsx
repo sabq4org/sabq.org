@@ -27,7 +27,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/ThemeProvider";
 import logoImage from "@assets/sabq-logo.png";
-import worldCupEmblem from "@assets/world-cup-2026-emblem.png";
 import kingsCupEmblem from "@assets/kings-cup-logo.png";
 import type { Category } from "@shared/schema";
 import { SearchDialog } from "./SearchDialog";
@@ -123,25 +122,6 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                 />
               </span>
             </Link>
-            <Link href="/world-cup">
-              <span
-                className="flex items-center hover-elevate active-elevate-2 rounded-md px-2 py-1.5 cursor-pointer border-s border-border/60 ps-3"
-                data-testid="link-world-cup-header"
-                aria-label="تغطية كأس العالم 2026"
-              >
-                <span className="rounded-md p-0.5 dark:bg-white">
-                  <img
-                    src={worldCupEmblem}
-                    alt="كأس العالم 2026"
-                    className="h-9 w-auto object-contain"
-                    width={233}
-                    height={360}
-                    loading="eager"
-                    decoding="async"
-                  />
-                </span>
-              </span>
-            </Link>
             {showKingsCupLink && (
               <Link href="/kings-cup">
                 <span
@@ -181,25 +161,6 @@ export function Header({ user, onMenuClick, sticky = true }: HeaderProps) {
                   loading="eager"
                   decoding="async"
                 />
-              </span>
-            </Link>
-            <Link href="/world-cup">
-              <span
-                className="flex items-center hover-elevate active-elevate-2 rounded-md px-1.5 py-1 cursor-pointer border-s border-border/60 ps-2.5"
-                data-testid="link-world-cup-header-mobile"
-                aria-label="تغطية كأس العالم 2026"
-              >
-                <span className="rounded-md p-0.5 dark:bg-white">
-                  <img
-                    src={worldCupEmblem}
-                    alt="كأس العالم 2026"
-                    className="h-8 w-auto object-contain"
-                    width={233}
-                    height={360}
-                    loading="eager"
-                    decoding="async"
-                  />
-                </span>
               </span>
             </Link>
             {showKingsCupLink && (
