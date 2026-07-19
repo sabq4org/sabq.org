@@ -2679,7 +2679,13 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
               const sourceMetadata = (article as any)?.sourceMetadata;
               const reporter = (article as any)?.reporter;
               const enteredBy = (article as any)?.enteredBy;
+              const opinionAuthor = (article as any)?.opinionAuthor;
               const isOpinionArticle = articleType === "opinion";
+              const writerEnteredOwnArticle = Boolean(
+                isOpinionArticle &&
+                enteredBy?.id &&
+                opinionAuthor?.id === enteredBy.id,
+              );
 
               // Priority: 1. sourceMetadata.senderName (email/WhatsApp)
               //           2. for news: reporter (byline field) — skip for opinion
@@ -2720,7 +2726,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   .join(" ");
                 if (editorName && !isGenericName(editorName)) {
                   enteredByName = editorName;
-                  sourceType = "المحرر";
+                  sourceType = writerEnteredOwnArticle ? "كاتب المقال" : "المحرر";
                 }
               }
 
@@ -2742,8 +2748,9 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                   </div>
                   {isOpinionArticle && (
                     <p className="text-xs text-blue-600/80 dark:text-blue-400/80 pr-6">
-                      هذا المحرّر الذي أدخل المادة — كاتب الرأي الظاهر للقارئ يُختار من
-                      «كاتب المقال» في الشريط الجانبي.
+                      {writerEnteredOwnArticle
+                        ? "كاتب المقال هو من أدخل المادة بنفسه."
+                        : "هذا المحرّر هو من أدخل المادة — كاتب الرأي الظاهر للقارئ يُختار من «كاتب المقال» في الشريط الجانبي."}
                     </p>
                   )}
                 </div>
