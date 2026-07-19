@@ -109,16 +109,16 @@ export function WriterMediaLicenseCard() {
   if (data.submitted) {
     return (
       <section
-        className="overflow-hidden rounded-2xl border border-emerald-200/70 bg-gradient-to-l from-emerald-50/90 via-card to-card shadow-sm dark:border-emerald-900/40 dark:from-emerald-950/30"
+        className="rounded-xl border border-border bg-card"
         dir="rtl"
         data-testid="writer-media-license-thanks"
       >
         <div className="flex items-start gap-3 p-4 sm:p-5">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <CheckCircle2 className="h-5 w-5" />
           </div>
           <div className="min-w-0 space-y-1">
-            <p className="text-base font-bold text-emerald-900 dark:text-emerald-100">
+            <p className="text-base font-bold tracking-tight">
               شكراً لك — وصلنا ترخيصك المهني
             </p>
             <p className="text-sm leading-relaxed text-muted-foreground">
@@ -141,17 +141,17 @@ export function WriterMediaLicenseCard() {
 
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-sky-200/70 bg-gradient-to-l from-sky-50/90 via-card to-card shadow-sm dark:border-sky-900/40 dark:from-sky-950/25"
+      className="rounded-xl border border-border bg-card"
       dir="rtl"
       data-testid="writer-media-license-card"
     >
-      <div className="border-b border-sky-100/80 px-4 py-4 sm:px-5 dark:border-sky-900/40">
+      <div className="border-b border-border px-4 py-4 sm:px-5">
         <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <BadgeCheck className="h-5 w-5" />
           </div>
           <div className="min-w-0 space-y-1.5">
-            <p className="text-base font-bold text-sky-950 dark:text-sky-50">
+            <p className="text-base font-bold tracking-tight">
               الترخيص المهني يعزّز حضورك ومصداقيتك
             </p>
             <p className="text-sm leading-relaxed text-muted-foreground">
@@ -162,7 +162,7 @@ export function WriterMediaLicenseCard() {
               href={data.gmediaRegisterUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-sky-700 hover:underline dark:text-sky-300"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
             >
               ليس لديك ترخيص بعد؟ سجّل عبر منصة الهيئة
               <ExternalLink className="h-3.5 w-3.5" />
