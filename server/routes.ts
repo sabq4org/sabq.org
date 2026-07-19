@@ -102,7 +102,7 @@ import { sendCorrespondentApprovalEmail, sendCorrespondentRejectionEmail, sendOp
 import { staffCommunicationsService } from "./services/staffCommunications";
 import { cloudflareImagesService } from './services/cloudflareImagesService';
 import { isNewsImagePurpose, newsImageStorageService } from './services/newsImageStorageService';
-import { getArticleEventsWithActor, logArticleEvent } from './services/articleEventsService';
+import { getArticleEventsWithActor, getOriginalArticleSubmitterId, logArticleEvent } from './services/articleEventsService';
 import { extractGeoLocations } from "./services/geoExtractionService";
 import { analyzeSentiment, detectLanguage } from './sentiment-analyzer';
 import { classifyArticle } from './ai-classifier';
@@ -7047,10 +7047,32 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       // لمقالات الرأي: authorId = كاتب الرأي الظاهر للقارئ، وsubmitterId = من أدخل المادة.
       // لا نُرجع author كـ enteredBy حتى لا يُعرض الكاتب على أنه «المحرر».
       const isOpinion = result.article.articleType === "opinion";
+      let legacySubmitter = null;
+      if (isOpinion && !result.submitter?.id) {
+        const originalSubmitterId = await getOriginalArticleSubmitterId(articleId);
+        if (originalSubmitterId === result.author?.id) {
+          legacySubmitter = result.author;
+        } else if (originalSubmitterId) {
+          const [creator] = await db
+            .select({
+              id: users.id,
+              firstName: users.firstName,
+              lastName: users.lastName,
+              firstNameEn: users.firstNameEn,
+              lastNameEn: users.lastNameEn,
+              email: users.email,
+            })
+            .from(users)
+            .where(eq(users.id, originalSubmitterId))
+            .limit(1);
+          legacySubmitter = creator || null;
+        }
+      }
+
       const enteredBy = result.submitter?.id
         ? result.submitter
         : isOpinion
-          ? null
+          ? legacySubmitter
           : result.author;
 
       res.json({
@@ -7215,16 +7237,11 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
       const articleData: any = {
         ...parsed.data,
         authorId,
+        // Provenance is server-owned and immutable after creation. For an
+        // opinion author this equals authorId; for an editor creating on a
+        // writer's behalf it remains the editor's user ID.
+        submitterId: req.user.id,
       };
-
-      // Opinion: authorId may be the writer; track the entering editor separately.
-      if (
-        parsed.data.articleType === "opinion" &&
-        authorId !== req.user.id &&
-        !articleData.submitterId
-      ) {
-        articleData.submitterId = req.user.id;
-      }
 
       // Contributor creation can save and submit in one request. Without
       // this, the client navigates away believing the new article is pending
@@ -7287,7 +7304,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Log activity
       await logActivity({
-        userId: authorId,
+        userId: req.user.id,
         action: "created",
         entityType: "article",
         entityId: newArticle.id,
@@ -7675,6 +7692,16 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
 
       // Convert all timestamp fields from strings to Date objects if provided
       const updateData: any = { ...parsed.data };
+
+      // Legacy rows may predate submitterId. Recover the authenticated actor
+      // from the immutable creation event; never assign the current editor,
+      // because editing/scheduling does not make them the original submitter.
+      if (!existingArticle.submitterId) {
+        const originalSubmitterId = await getOriginalArticleSubmitterId(articleId);
+        if (originalSubmitterId) {
+          updateData.submitterId = originalSubmitterId;
+        }
+      }
       
       // Convert timestamp fields (if they exist and are strings)
       const timestampFields = ['publishedAt', 'scheduledAt', 'credibilityLastUpdated'];
@@ -7780,18 +7807,8 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
         }
 
         // Update authorId for opinion articles (public byline = writer).
-        // If no submitter yet, keep the entering editor (current user or previous authorId).
+        // submitterId is immutable provenance and is handled above.
         updateData.authorId = opinionAuthorId;
-        if (!existingArticle.submitterId) {
-          if (req.user.id !== opinionAuthorId) {
-            updateData.submitterId = req.user.id;
-          } else if (
-            existingArticle.authorId &&
-            existingArticle.authorId !== opinionAuthorId
-          ) {
-            updateData.submitterId = existingArticle.authorId;
-          }
-        }
         console.log('[UPDATE ARTICLE] Updated authorId for opinion article:', opinionAuthorId);
       }
 

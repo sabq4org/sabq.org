@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { articleEvents, users } from '@shared/schema';
-import { eq, desc } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 
 interface LogArticleEventParams {
   articleId: string;
@@ -44,4 +44,26 @@ export async function getArticleEventsWithActor(articleId: string) {
     .leftJoin(users, eq(articleEvents.actorId, users.id))
     .where(eq(articleEvents.articleId, articleId))
     .orderBy(desc(articleEvents.createdAt));
+}
+
+/**
+ * Returns the authenticated user who actually created the article row.
+ *
+ * This is the safe provenance fallback for legacy articles created before
+ * `articles.submitter_id` was populated. It deliberately does not guess from
+ * `author_id`: for opinion pieces that field is the public byline and may have
+ * been selected by an editor who created the material on the writer's behalf.
+ */
+export async function getOriginalArticleSubmitterId(articleId: string): Promise<string | null> {
+  const [creationEvent] = await db
+    .select({ actorId: articleEvents.actorId })
+    .from(articleEvents)
+    .where(and(
+      eq(articleEvents.articleId, articleId),
+      eq(articleEvents.eventType, 'created'),
+    ))
+    .orderBy(asc(articleEvents.createdAt))
+    .limit(1);
+
+  return creationEvent?.actorId ?? null;
 }
