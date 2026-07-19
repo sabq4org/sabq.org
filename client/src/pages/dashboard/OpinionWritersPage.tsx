@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, apiUrl } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, CalendarClock, Eye, MessageSquare, ThumbsUp, X } from "lucide-react";
+import { Loader2, CalendarClock, Eye, MessageSquare, ThumbsUp, X, BadgeCheck, Search, FileText } from "lucide-react";
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
@@ -36,7 +36,15 @@ type WriterSummary = {
   nextScheduled: { id: string; title: string; scheduledAt: string } | null;
   nextSlot: string | null;
   commitment: "ok" | "due_soon" | "late" | "awaiting_first" | "unassigned";
+  mediaLicense: {
+    hasLicense: boolean;
+    number: string | null;
+    submittedAt: string | null;
+    hasFile: boolean;
+  };
 };
+
+type LicenseFilter = "all" | "licensed" | "missing";
 
 type WriterArticlesResponse = {
   writer: { id: string; name: string; profileImageUrl: string | null } | null;
@@ -114,6 +122,8 @@ function ArticleStatusBadge({ status, reviewStatus }: { status: string; reviewSt
 export default function OpinionWritersPage() {
   const { toast } = useToast();
   const [selectedWriterId, setSelectedWriterId] = useState<string | null>(null);
+  const [licenseFilter, setLicenseFilter] = useState<LicenseFilter>("all");
+  const [search, setSearch] = useState("");
 
   const { data: writersData, isLoading } = useQuery<{ writers: WriterSummary[] }>({
     queryKey: ["/api/admin/opinion-writers"],
@@ -157,6 +167,7 @@ export default function OpinionWritersPage() {
     const now = Date.now();
     const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
     const twoMonthsAgo = now - 60 * 24 * 60 * 60 * 1000;
+    const licensed = writers.filter((w) => w.mediaLicense?.hasLicense).length;
     return {
       total: writers.length,
       publishedThisWeek: writers.filter(
@@ -169,8 +180,24 @@ export default function OpinionWritersPage() {
         (w) =>
           !w.lastArticle || new Date(w.lastArticle.publishedAt).getTime() < twoMonthsAgo,
       ).length,
+      licensed,
+      missingLicense: writers.length - licensed,
     };
   }, [writers]);
+
+  const filteredWriters = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return writers.filter((w) => {
+      if (licenseFilter === "licensed" && !w.mediaLicense?.hasLicense) return false;
+      if (licenseFilter === "missing" && w.mediaLicense?.hasLicense) return false;
+      if (!q) return true;
+      return (
+        w.name.toLowerCase().includes(q) ||
+        (w.email?.toLowerCase().includes(q) ?? false) ||
+        (w.mediaLicense?.number?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [writers, licenseFilter, search]);
 
   const byWeekday = useMemo(() => {
     const map: WriterSummary[][] = Array.from({ length: 7 }, () => []);
@@ -219,16 +246,41 @@ export default function OpinionWritersPage() {
             كتّاب الرأي
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            يوم النشر المخصص لكل كاتب، حالة الالتزام، والإحصائيات الكاملة
+            الترخيص المهني، يوم النشر، الالتزام، والإحصائيات — من مكان واحد
           </p>
         </div>
 
         {/* KPI cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Card>
             <CardContent className="p-4">
               <div className="text-2xl font-extrabold tabular-nums">{kpis.total}</div>
               <div className="text-sm text-muted-foreground">كاتباً نشطاً</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer transition-shadow hover:shadow-md border-emerald-200/60 dark:border-emerald-900/40"
+            onClick={() => setLicenseFilter("licensed")}
+          >
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2">
+                <BadgeCheck className="h-5 w-5 text-emerald-600" />
+                <div className="text-2xl font-extrabold tabular-nums text-emerald-700 dark:text-emerald-300">
+                  {kpis.licensed}
+                </div>
+              </div>
+              <div className="text-sm text-muted-foreground">أرسلوا الترخيص</div>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer transition-shadow hover:shadow-md border-amber-200/60 dark:border-amber-900/40"
+            onClick={() => setLicenseFilter("missing")}
+          >
+            <CardContent className="p-4">
+              <div className="text-2xl font-extrabold tabular-nums text-amber-600 dark:text-amber-400">
+                {kpis.missingLicense}
+              </div>
+              <div className="text-sm text-muted-foreground">بدون ترخيص بعد</div>
             </CardContent>
           </Card>
           <Card>
@@ -311,24 +363,61 @@ export default function OpinionWritersPage() {
 
         {/* Writers table */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">جدول الكتّاب</CardTitle>
+          <CardHeader className="space-y-3 pb-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle className="text-base">
+                جدول الكتّاب
+                <span className="ms-2 text-sm font-normal text-muted-foreground tabular-nums">
+                  ({filteredWriters.length.toLocaleString("en-US")})
+                </span>
+              </CardTitle>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="بحث بالاسم أو البريد أو رقم الترخيص"
+                  className="pr-9"
+                  data-testid="input-writers-search"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  { id: "all" as const, label: "الكل" },
+                  { id: "licensed" as const, label: `لديهم ترخيص (${kpis.licensed})` },
+                  { id: "missing" as const, label: `بدون ترخيص (${kpis.missingLicense})` },
+                ] as const
+              ).map((tab) => (
+                <Button
+                  key={tab.id}
+                  size="sm"
+                  variant={licenseFilter === tab.id ? "default" : "outline"}
+                  onClick={() => setLicenseFilter(tab.id)}
+                  data-testid={`filter-license-${tab.id}`}
+                >
+                  {tab.label}
+                </Button>
+              ))}
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
-            ) : writers.length === 0 ? (
+            ) : filteredWriters.length === 0 ? (
               <div className="py-12 text-center text-muted-foreground text-sm">
-                لا يوجد كتّاب رأي بعد
+                {writers.length === 0 ? "لا يوجد كتّاب رأي بعد" : "لا نتائج مطابقة للفلتر أو البحث"}
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[860px]">
+                <table className="w-full text-sm min-w-[1040px]">
                   <thead>
                     <tr className="border-b bg-muted/50 text-xs text-muted-foreground">
                       <th className="text-right font-bold px-4 py-3">الكاتب</th>
+                      <th className="text-right font-bold px-4 py-3">الترخيص المهني</th>
                       <th className="text-right font-bold px-4 py-3">اليوم المخصص</th>
                       <th className="text-right font-bold px-4 py-3">وقت النشر</th>
                       <th className="text-right font-bold px-4 py-3">المقالات المنشورة</th>
@@ -338,10 +427,11 @@ export default function OpinionWritersPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {writers.map((writer) => {
+                    {filteredWriters.map((writer) => {
                       const badge = COMMITMENT_BADGE[writer.commitment];
                       const badgeLabel =
                         writer.gender === "female" && badge.labelF ? badge.labelF : badge.label;
+                      const license = writer.mediaLicense;
                       return (
                         <tr
                           key={writer.id}
@@ -358,11 +448,54 @@ export default function OpinionWritersPage() {
                               <div className="min-w-0">
                                 <div className="font-bold whitespace-nowrap">{writer.name}</div>
                                 <div className="text-xs text-muted-foreground">
-                                  {writer.jobTitle ||
+                                  {writer.email ||
+                                    writer.jobTitle ||
                                     (writer.gender === "female" ? "كاتبة رأي" : "كاتب رأي")}
                                 </div>
                               </div>
                             </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            {license?.hasLicense ? (
+                              <div className="space-y-1.5">
+                                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 gap-1">
+                                  <BadgeCheck className="h-3 w-3" />
+                                  مرخّص
+                                </Badge>
+                                {license.number && (
+                                  <div className="text-xs font-medium tabular-nums" dir="ltr">
+                                    {license.number}
+                                  </div>
+                                )}
+                                {license.submittedAt && (
+                                  <div className="text-[11px] text-muted-foreground">
+                                    {formatDate(license.submittedAt, false)}
+                                  </div>
+                                )}
+                                {license.hasFile && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-7 gap-1 px-2 text-xs"
+                                    onClick={() =>
+                                      window.open(
+                                        apiUrl(`/api/admin/opinion-writers/${writer.id}/media-license-file`),
+                                        "_blank",
+                                        "noopener",
+                                      )
+                                    }
+                                    data-testid={`button-view-license-${writer.id}`}
+                                  >
+                                    <FileText className="h-3 w-3" />
+                                    عرض الملف
+                                  </Button>
+                                )}
+                              </div>
+                            ) : (
+                              <Badge variant="outline" className="text-amber-700 border-amber-300 dark:text-amber-300">
+                                لم يُرسل
+                              </Badge>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <Select
