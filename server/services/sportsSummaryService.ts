@@ -6,9 +6,10 @@
  *   - قادمة  → عدّاد بدء الموسم + حامل اللقب (النسخة السابقة) + الافتتاحية.
  *   - منتهية → بطل + هدّاف الموسم المنتهي نفسه (لا الموسم الذي قبله).
  *
- * أداء (2026-07-19): عدّاد اليوم/المباشر من لوحات getGlobalToday/Live مرّة واحدة
- * بدل getFixtures لكل بطولة (كان يزاحم حدّ API-Football ويُبطّئ today/live).
- * ملتزم بـ ADR-001 (لا db).
+ * لا يفتح أي نداء جديد للمزوّد: يعيد استخدام دوال saudiLeagueService المخزّنة
+ * (getFixtures / getStandings / getTopScorers / getCompetitionHistory) كلها خلف
+ * كاش SWR، ويلفّ التجميع كاملًا في withSWR إضافي فيُحسب مرّة واحدة ويخدم الجميع.
+ * ملتزم بـ ADR-001 (لا db) — كل الوصول عبر الخدمة.
  */
 import pLimit from "p-limit";
 import { withSWR } from "../memoryCache";
@@ -16,17 +17,13 @@ import {
   SAUDI_COMPETITIONS,
   getCompetitionHistory,
   getFixtures,
-  getGlobalLiveFixtures,
-  getGlobalTodayFixtures,
   getStandings,
   getTopScorers,
-  isSaudiLeagueConfigured,
   listCompetitionsWithMeta,
   type CompetitionCategory,
   type CompetitionStatus,
   type SaudiCompetition,
   type SplFixture,
-  type SplLiveBoardItem,
 } from "./saudiLeagueService";
 
 const RIYADH_TZ = "Asia/Riyadh";
@@ -80,7 +77,7 @@ export interface SpCompetitionSummary {
 }
 
 const teamOf = (t: SplFixture["home"]): SummaryTeam => ({ name: t.name, logo: t.logo });
-const toNextMatch = (f: Pick<SplFixture, "id" | "timestamp" | "round" | "home" | "away">): SummaryNextMatch => ({
+const toNextMatch = (f: SplFixture): SummaryNextMatch => ({
   id: f.id,
   timestamp: f.timestamp,
   round: f.round || null,
@@ -88,28 +85,10 @@ const toNextMatch = (f: Pick<SplFixture, "id" | "timestamp" | "round" | "home" |
   away: teamOf(f.away),
 });
 
-type BoardIndex = {
-  liveBySlug: Map<string, SplLiveBoardItem[]>;
-  todayBySlug: Map<string, SplLiveBoardItem[]>;
-};
-
-function indexBoard(items: SplLiveBoardItem[]): Map<string, SplLiveBoardItem[]> {
-  const map = new Map<string, SplLiveBoardItem[]>();
-  for (const item of items) {
-    const slug = item.competitionSlug;
-    if (!slug) continue;
-    const list = map.get(slug);
-    if (list) list.push(item);
-    else map.set(slug, [item]);
-  }
-  return map;
-}
-
 /** يبني لقطة بطولة واحدة حسب حالتها، بأقل عدد نداءات (كلها مخزّنة + أفضل جهد). */
 async function summarizeCompetition(
   comp: SaudiCompetition,
   meta: { logo: string | null; season: number | null; status: CompetitionStatus },
-  boards: BoardIndex,
 ): Promise<SpCompetitionSummary> {
   const now = Date.now();
   const base: SpCompetitionSummary = {
@@ -133,6 +112,11 @@ async function summarizeCompetition(
   };
 
   // منتهية: البطل والهدّاف من **الموسم المنتهي نفسه** (meta.season) لا الموسم الذي قبله.
+  // نجلب البطل والهدّاف عبر نداءين مستقلّين مخزّنين بمفتاح موسمي منفصل، فلا يُفسد
+  // فشلٌ مؤقّت (حدّ المزوّد) في أحدهما نتيجة الآخر ولا يُكاش «ناقصًا» طويلًا:
+  //   - الدوريات: البطل = متصدّر جدول الموسم المنتهي (getStandings بموسم صريح).
+  //   - الكؤوس (لا جدول): البطل = فائز نهائي الموسم المنتهي (getCompetitionHistory بموسم صريح).
+  //   - الهدّاف: أول قائمة هدّافي الموسم المنتهي (getTopScorers بموسم صريح).
   if (meta.status === "finished") {
     const [standings, scorers] = await Promise.all([
       comp.hasStandings ? getStandings(comp, meta.season ?? undefined).catch(() => []) : Promise.resolve([]),
@@ -150,55 +134,34 @@ async function summarizeCompetition(
     return base;
   }
 
-  // عدّاد اليوم/المباشر من اللوحات الموحّدة (نداء AF واحد مشترك) — لا جدول موسم كامل.
-  const boardLive = boards.liveBySlug.get(comp.slug) ?? [];
-  const boardToday = boards.todayBySlug.get(comp.slug) ?? [];
-  base.liveCount = boardLive.length;
-  base.todayCount = boardToday.length;
+  // جارية/قادمة/غير معروفة: نحتاج الجدول لاستخراج المباشر/اليوم/القادم.
+  const fixtures = await getFixtures(comp).catch(() => [] as SplFixture[]);
+  const todayKey = riyadhDayKey(Math.floor(now / 1000));
+  const live = fixtures.filter((f) => f.status.live);
+  const today = fixtures.filter((f) => !f.status.live && riyadhDayKey(f.timestamp) === todayKey);
+  const upcoming = fixtures
+    .filter((f) => !f.status.finished && !f.status.live && f.timestamp * 1000 >= now - 3 * 3_600_000)
+    .sort((a, b) => a.timestamp - b.timestamp);
 
-  const boardAnchor = boardLive[0] ?? boardToday.find((f) => !f.status.finished) ?? boardToday[0] ?? null;
-  if (boardAnchor) {
-    base.nextMatch = toNextMatch(boardAnchor);
-    base.matchday = boardAnchor.round || null;
-  }
+  base.liveCount = live.length;
+  base.todayCount = today.length + live.length;
 
-  // ودّيات: جدول المزوّد عالمي وضخم — يكفي اللوحة لبطاقة الموجز.
-  const skipSeasonFixtures = comp.slug === "club-friendlies";
-
-  // جدول الموسم فقط إن احتجنا مباراة قادمة خارج لوحة اليوم (أو بطولة قادمة بلا مرساة).
-  let upcoming: SplFixture[] = [];
-  if (!skipSeasonFixtures && (!boardAnchor || meta.status === "upcoming")) {
-    const fixtures = await getFixtures(comp).catch(() => [] as SplFixture[]);
-    const todayKey = riyadhDayKey(Math.floor(now / 1000));
-    // إن غابت اللوحة (كاش بارد جزئي) نعبّئ العدّاد من الجدول المخزّن.
-    if (!boardLive.length && !boardToday.length) {
-      const live = fixtures.filter((f) => f.status.live);
-      const today = fixtures.filter((f) => !f.status.live && riyadhDayKey(f.timestamp) === todayKey);
-      base.liveCount = live.length;
-      base.todayCount = today.length + live.length;
-      const anchor = live[0] ?? today[0] ?? null;
-      if (anchor) {
-        base.nextMatch = toNextMatch(anchor);
-        base.matchday = anchor.round || null;
-      }
-    }
-    upcoming = fixtures
-      .filter((f) => !f.status.finished && !f.status.live && f.timestamp * 1000 >= now - 3 * 3_600_000)
-      .sort((a, b) => a.timestamp - b.timestamp);
-    if (!base.nextMatch && upcoming[0]) {
-      base.nextMatch = toNextMatch(upcoming[0]);
-      base.matchday = upcoming[0].round || null;
-    }
+  const anchor = live[0] ?? today[0] ?? upcoming[0] ?? null;
+  if (anchor) {
+    base.nextMatch = toNextMatch(anchor);
+    base.matchday = anchor.round || null;
   }
 
   if (meta.status === "upcoming") {
     const next = upcoming[0] ?? null;
     if (next) base.daysUntilKickoff = Math.max(0, Math.ceil((next.timestamp * 1000 - now) / 86_400_000));
+    // حامل اللقب من النسخة السابقة يُثري بطاقة البطولة القادمة.
     const history = await getCompetitionHistory(comp).catch(() => null);
     if (history?.champion) base.champion = history.champion;
     return base;
   }
 
+  // جارية/غير معروفة: المتصدّر + الهدّاف الأول (أفضل جهد، حسب دعم البطولة).
   const [standings, scorers] = await Promise.all([
     comp.hasStandings ? getStandings(comp).catch(() => []) : Promise.resolve([]),
     comp.hasScorers ? getTopScorers(comp).catch(() => []) : Promise.resolve([]),
@@ -212,51 +175,25 @@ async function summarizeCompetition(
 }
 
 /**
- * موجز كل البطولات في لقطة واحدة. مخزَّن SWR (دقيقتان طازج / خمس بائت).
- * اللوحات تُجلب مرّة ثم تُوزَّع؛ تزامن 4 تحت حدّ المزوّد.
+ * موجز كل البطولات في لقطة واحدة. مخزَّن SWR (دقيقتان طازج / خمس بائت) فيُحسب
+ * مرّة ويخدم الجميع، وبتوازٍ محدود (بطولتان) تحت حدّ المزوّد أثناء الإقلاع البارد.
  */
 export async function getSportsSummary(): Promise<SpCompetitionSummary[]> {
-  return withSWR("spl:summary:v4", 2 * 60_000, 5 * 60_000, async () => {
-    const [metaList, todayBoard, liveBoard] = await Promise.all([
-      listCompetitionsWithMeta(),
-      getGlobalTodayFixtures().catch(() => [] as SplLiveBoardItem[]),
-      getGlobalLiveFixtures().catch(() => [] as SplLiveBoardItem[]),
-    ]);
-    const boards: BoardIndex = {
-      liveBySlug: indexBoard(liveBoard),
-      todayBySlug: indexBoard(todayBoard),
-    };
+  return withSWR("spl:summary:v3", 2 * 60_000, 5 * 60_000, async () => {
+    const metaList = await listCompetitionsWithMeta();
     const metaBySlug = new Map(metaList.map((m) => [m.slug, m]));
-    const limit = pLimit(4);
+    const limit = pLimit(2);
     const rows = await Promise.all(
       SAUDI_COMPETITIONS.map((comp) =>
         limit(() =>
-          summarizeCompetition(
-            comp,
-            {
-              logo: metaBySlug.get(comp.slug)?.logo ?? null,
-              season: metaBySlug.get(comp.slug)?.season ?? null,
-              status: metaBySlug.get(comp.slug)?.status ?? "unknown",
-            },
-            boards,
-          ).catch(() => null),
+          summarizeCompetition(comp, {
+            logo: metaBySlug.get(comp.slug)?.logo ?? null,
+            season: metaBySlug.get(comp.slug)?.season ?? null,
+            status: metaBySlug.get(comp.slug)?.status ?? "unknown",
+          }).catch(() => null),
         ),
       ),
     );
     return rows.filter((r): r is SpCompetitionSummary => r !== null);
   });
-}
-
-/** تسخين كاش الموجز بعد الإقلاع — لا يدفع أول زائر كلفة المسار البارد. */
-let summaryWarmerStarted = false;
-export function startSportsSummaryWarmer(): void {
-  if (summaryWarmerStarted || !isSaudiLeagueConfigured()) return;
-  summaryWarmerStarted = true;
-  const warm = () => {
-    void getSportsSummary().catch((err) =>
-      console.warn("[SportsSummary] فشل تسخين الموجز:", (err as Error)?.message),
-    );
-  };
-  setTimeout(warm, 45_000).unref();
-  setInterval(warm, 90_000).unref();
 }

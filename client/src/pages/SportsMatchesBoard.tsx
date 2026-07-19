@@ -92,7 +92,7 @@ const RIYADH_TZ = "Asia/Riyadh";
 // رفع التأخير في #465): نتيجة لحظية كل 8ث أثناء وجود مباراة جارية، وتهدئة إلى
 // 30ث عند غياب المباشر (توفير الحصة)، مع اعتبار اللحظي قديمًا بعد 5ث ليُعاد جلبه
 // فورًا عند العودة للتبويب/الشبكة بدل انتظار دورة الاستطلاع التالية.
-const LIVE_ACTIVE_MS = 12_000;
+const LIVE_ACTIVE_MS = 8_000;
 const LIVE_IDLE_MS = 30_000;
 const TODAY_ACTIVE_MS = 10_000;
 const LIVE_STALE_MS = 5_000;
@@ -149,72 +149,18 @@ function kickoffTime(f: SpLiveItem): string {
   return timeFmt.format(new Date(f.timestamp * 1000));
 }
 
-/** تطبيع اسم نادٍ لمطابقة AF ↔ TheSports (الأهلي / الأهلي السعودي). */
-function compactTeamLabel(name: string): string {
-  return (name || "")
-    .toLowerCase()
-    .replace(/[أإآا]/g, "ا")
-    .replace(/ة/g, "ه")
-    .replace(/ى/g, "ي")
-    .replace(/السعودي(ه)?/g, "")
-    .replace(/saudi/g, "")
-    .replace(/[^a-z0-9\u0600-\u06ff]+/g, "");
-}
-
-function teamLabelsMatch(a: string, b: string): boolean {
-  const ca = compactTeamLabel(a);
-  const cb = compactTeamLabel(b);
-  if (!ca || !cb) return false;
-  if (ca === cb) return true;
-  return ca.length >= 3 && cb.length >= 3 && (ca.includes(cb) || cb.includes(ca));
-}
-
-/** نفس المباراة بمعرّفين (موجب AF + سالب TheSports) — موعد + أسماء. */
-function sameBoardMatch(a: SpLiveItem, b: SpLiveItem): boolean {
-  if (a.id === b.id) return true;
-  if (Math.abs(a.timestamp - b.timestamp) > 20 * 60) return false;
-  const sameWay =
-    teamLabelsMatch(a.home.name, b.home.name) && teamLabelsMatch(a.away.name, b.away.name);
-  const swapped =
-    teamLabelsMatch(a.home.name, b.away.name) && teamLabelsMatch(a.away.name, b.home.name);
-  return sameWay || swapped;
-}
-
-/** ركّب نتيجة/حالة المباشر على صفّ اليوم مع الإبقاء على معرّف AF للروابط. */
-function foldLiveOntoToday(todayItem: SpLiveItem, liveItem: SpLiveItem): SpLiveItem {
-  return {
-    ...todayItem,
-    goals: liveItem.goals,
-    penalties: liveItem.penalties ?? todayItem.penalties,
-    status: liveItem.status,
-    competition: todayItem.competition || liveItem.competition,
-    competitionSlug: todayItem.competitionSlug || liveItem.competitionSlug,
-  };
-}
-
 function mergeLiveMatches(today: SpLiveItem[], live: SpLiveItem[], includeLive: boolean): SpLiveItem[] {
   if (!includeLive || live.length === 0) return today;
 
   const liveById = new Map(live.map((m) => [m.id, m]));
-  const consumedLiveIds = new Set<number>();
+  const seen = new Set<number>();
   const merged = today.map((m) => {
-    const byId = liveById.get(m.id);
-    if (byId) {
-      consumedLiveIds.add(byId.id);
-      return byId;
-    }
-    const byIdentity = live.find((l) => !consumedLiveIds.has(l.id) && sameBoardMatch(m, l));
-    if (byIdentity) {
-      consumedLiveIds.add(byIdentity.id);
-      return foldLiveOntoToday(m, byIdentity);
-    }
-    return m;
+    seen.add(m.id);
+    return liveById.get(m.id) ?? m;
   });
 
   for (const m of live) {
-    if (consumedLiveIds.has(m.id)) continue;
-    if (merged.some((t) => sameBoardMatch(t, m))) continue;
-    merged.push(m);
+    if (!seen.has(m.id)) merged.push(m);
   }
 
   return merged.sort((a, b) => {

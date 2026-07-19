@@ -25,7 +25,6 @@
 
 import https from "node:https";
 import { withSWR } from "../memoryCache";
-import { looksLikeSaudiClubTeamName } from "./saudiLeagueNames";
 
 const TS_BASE = "https://api.thesports.com/v1/football";
 
@@ -1611,7 +1610,6 @@ export interface TsPlayerMatchStat {
 // الأسماء عبر language/list. أفضل جهد: أي فشل/تهدئة → [].
 
 const TS_BOARD_NOISE_RE = /friendl|reserve|amateur|ودّي|ودي|احتياط|هواة/i;
-const TS_BOARD_FRIENDLY_RE = /friendl|ودّي|ودي/i;
 
 const TS_STATUS_META: Record<number, { code: string; label: string }> = {
   2: { code: "1H", label: "الشوط الأول" },
@@ -1649,35 +1647,12 @@ export interface TsLiveBoardItem {
   extra: number | null;
 }
 
-type TsBoardBuildMode = "world" | "saudi-friendlies";
-
-/** كاش لوحة TheSports — بلاه كان كل نبض /live يعيد بناء إثراء كل مباريات العالم. */
-const TS_LIVE_BOARD_TTL = 8 * 1000;
-const TS_LIVE_BOARD_SWR = 20 * 1000;
-
 /**
  * كل المباريات الجارية من TheSports مع أسماء البطولة/الفريق — مصدر احتياطي
  * لقائمة «عالمية» عندما يكون API-Football فارغًا أو فقيرًا.
  */
 export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
   if (!isTheSportsConfigured()) return [];
-  return withSWR("ts:live_board:world", TS_LIVE_BOARD_TTL, TS_LIVE_BOARD_SWR, () =>
-    buildTheSportsLiveBoard("world"),
-  );
-}
-
-/**
- * ودّيات أندية سعودية فقط — مسار خفيف للوحات today/live.
- * لا يُثري أسماء/شعارات كل مباريات العالم (ذلك كان سبب البطء بعد تفعيل الودّيات).
- */
-export async function getTheSportsSaudiFriendlyLiveBoard(): Promise<TsLiveBoardItem[]> {
-  if (!isTheSportsConfigured()) return [];
-  return withSWR("ts:live_board:saudi-friendlies", TS_LIVE_BOARD_TTL, TS_LIVE_BOARD_SWR, () =>
-    buildTheSportsLiveBoard("saudi-friendlies"),
-  );
-}
-
-async function buildTheSportsLiveBoard(mode: TsBoardBuildMode): Promise<TsLiveBoardItem[]> {
   try {
     const liveMap = await getLiveMap();
     if (liveMap.size === 0) return [];
@@ -1690,11 +1665,11 @@ async function buildTheSportsLiveBoard(mode: TsBoardBuildMode): Promise<TsLiveBo
     }
     if (liveRows.length === 0) return [];
 
-    // فهرس diary لليوم (بكين + جوار) — بالتوازي لا تسلسليًا.
+    // فهرس diary لليوم (بكين + جوار) لربط competition/home/away/match_time
     const nowSec = Math.floor(Date.now() / 1000);
     const diaryById = new Map<string, any>();
-    const diaryDays = await Promise.all(candidateDateKeys(nowSec).map((key) => getDiaryRaw(key)));
-    for (const day of diaryDays) {
+    for (const key of candidateDateKeys(nowSec)) {
+      const day = await getDiaryRaw(key);
       for (const m of day) {
         if (m?.id == null) continue;
         const mid = String(m.id);
@@ -1729,10 +1704,15 @@ async function buildTheSportsLiveBoard(mode: TsBoardBuildMode): Promise<TsLiveBo
     }
     if (enriched.length === 0) return [];
 
-    // 1) أسماء البطولات أولًا — لفرز الودّيات قبل إثراء مئات الفرق.
-    const uniqueComps = [...new Set(enriched.map((e) => e.competitionId))];
+    const teamIds = [...new Set(enriched.flatMap((e) => [e.homeTeamId, e.awayTeamId]))];
+    const compIds = enriched.map((e) => e.competitionId);
+    const [teamTr, compTr] = await Promise.all([
+      resolveTsNames(TS_I18N_TYPE.team, teamIds),
+      resolveTsNames(TS_I18N_TYPE.competition, compIds),
+    ]);
+
+    const uniqueComps = [...new Set(compIds)];
     const extras = new Map<string, TsCompetitionExtra>();
-    const compTr = await resolveTsNames(TS_I18N_TYPE.competition, uniqueComps);
     await Promise.all(
       uniqueComps.slice(0, 40).map(async (cid) => {
         const ex = await getTsCompetitionExtra(cid);
@@ -1740,33 +1720,8 @@ async function buildTheSportsLiveBoard(mode: TsBoardBuildMode): Promise<TsLiveBo
       }),
     );
 
-    const competitionNameOf = (competitionId: string): string => {
-      const ex = extras.get(competitionId);
-      let competitionName =
-        compTr(competitionId) || (ex?.name?.trim() ? ex.name.trim() : "") || "";
-      if (!competitionName || looksLikeTsUuid(competitionName)) {
-        competitionName = ex?.name?.trim() && !looksLikeTsUuid(ex.name) ? ex.name.trim() : "بطولة";
-      }
-      return competitionName;
-    };
-
-    const isFriendlyComp = (competitionId: string, competitionName: string): boolean => {
-      const ex = extras.get(competitionId);
-      return (
-        TS_BOARD_FRIENDLY_RE.test(competitionName) ||
-        (ex?.name ? TS_BOARD_FRIENDLY_RE.test(ex.name) : false)
-      );
-    };
-
-    let candidates = enriched;
-    if (mode === "saudi-friendlies") {
-      candidates = enriched.filter((e) => isFriendlyComp(e.competitionId, competitionNameOf(e.competitionId)));
-      if (candidates.length === 0) return [];
-    }
-
-    const teamIds = [...new Set(candidates.flatMap((e) => [e.homeTeamId, e.awayTeamId]))];
-    const teamTr = await resolveTsNames(TS_I18N_TYPE.team, teamIds);
-
+    // team/additional: اسم إنجليزي + شعار لكل الفرق (Basic Info).
+    // لا نعرض uuid خامًا أبدًا — كان يظهر كـ «أسماء» غير مفهومة في عالمية.
     const teamExtraNames = new Map<string, string>();
     const teamExtraLogos = new Map<string, string>();
     for (let i = 0; i < teamIds.length; i += I18N_CONCURRENCY) {
@@ -1791,28 +1746,20 @@ async function buildTheSportsLiveBoard(mode: TsBoardBuildMode): Promise<TsLiveBo
     };
 
     const out: TsLiveBoardItem[] = [];
-    for (const e of candidates) {
+    for (const e of enriched) {
       const ex = extras.get(e.competitionId);
-      const competitionName = competitionNameOf(e.competitionId);
+      let competitionName =
+        compTr(e.competitionId) || (ex?.name?.trim() ? ex.name.trim() : "") || "";
+      if (!competitionName || looksLikeTsUuid(competitionName)) {
+        competitionName = ex?.name?.trim() && !looksLikeTsUuid(ex.name) ? ex.name.trim() : "بطولة";
+      }
+      if (TS_BOARD_NOISE_RE.test(competitionName)) continue;
+      if (ex?.name && TS_BOARD_NOISE_RE.test(ex.name)) continue;
+
       const homeName = resolveTeamName(e.homeTeamId);
       const awayName = resolveTeamName(e.awayTeamId);
+      // بدون اسمين مقروءين لا نُظهر الصف (أفضل من uuid مزيف).
       if (!homeName || !awayName) continue;
-
-      const friendly =
-        isFriendlyComp(e.competitionId, competitionName) ||
-        (ex?.name ? TS_BOARD_FRIENDLY_RE.test(ex.name) : false);
-      const saudiClub =
-        looksLikeSaudiClubTeamName(homeName) || looksLikeSaudiClubTeamName(awayName);
-
-      if (mode === "saudi-friendlies") {
-        if (!friendly || !saudiClub) continue;
-      } else {
-        // عالمية: ودّيات/احتياط/هواة = ضجيج — استثناء ودّية فيها نادٍ سعودي.
-        const noisy =
-          TS_BOARD_NOISE_RE.test(competitionName) ||
-          (ex?.name ? TS_BOARD_NOISE_RE.test(ex.name) : false);
-        if (noisy && !(friendly && saudiClub)) continue;
-      }
 
       const meta = TS_STATUS_META[e.decoded.statusId] ?? { code: "LIVE", label: "مباشر" };
       const { elapsed, extra } = tsBoardMinute(

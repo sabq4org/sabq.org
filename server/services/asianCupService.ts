@@ -11,7 +11,7 @@
  * يناير 2027 فلا بيانات حيّة الآن — هذا القسم وضع «معاينة/عدّ تنازلي» ينقلب
  * تلقائيًّا للوضع الحيّ متى توفّرت المباريات.
  */
-import { withSportsSWR as withSWR } from "./sportsCache";
+import { withSWR } from "../memoryCache";
 import { applyProvisionalTable } from "./liveStandings";
 import {
   SAUDI_TEAM_ID,

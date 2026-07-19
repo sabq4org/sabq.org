@@ -10,7 +10,6 @@ import { isSaudiLeagueConfigured } from "../services/saudiLeagueService";
 import { getActiveSnapTeamIds, pruneExpiredTeamSnaps, refreshTeamSnaps } from "../services/sportsSnaps/feed";
 import { isSportsSnapsEnabled } from "../services/sportsSnaps/config";
 import { runSnapsPushCycle } from "../services/sportsSnaps/pushCycle";
-import { runWithSportsPriority } from "../services/sportsRequestContext";
 
 let isGenerateRunning = false;
 let isPushRunning = false;
@@ -80,10 +79,10 @@ export function startSportsSnapsJob(): void {
     return;
   }
 
-  cron.schedule("0 * * * *", () => void runWithSportsPriority("background", () => generateTick("cron")), { timezone: "Asia/Riyadh" });
-  cron.schedule("*/15 * * * *", () => void runWithSportsPriority("background", () => pushTick("cron")), { timezone: "Asia/Riyadh" });
+  cron.schedule("0 * * * *", () => void generateTick("cron"), { timezone: "Asia/Riyadh" });
+  cron.schedule("*/15 * * * *", () => void pushTick("cron"), { timezone: "Asia/Riyadh" });
   console.log("[SportsSnaps Job] scheduled — hourly generation + 15m push cycle");
 
-  setTimeout(() => void runWithSportsPriority("background", () => generateTick("startup")), 30 * 1000);
-  setTimeout(() => void runWithSportsPriority("background", () => pushTick("startup")), 60 * 1000);
+  setTimeout(() => void generateTick("startup"), 30 * 1000);
+  setTimeout(() => void pushTick("startup"), 60 * 1000);
 }

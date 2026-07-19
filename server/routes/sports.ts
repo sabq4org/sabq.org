@@ -54,7 +54,7 @@ import {
   getTopRedCards,
   getTopScorers,
   getTopYellowCards,
-  getUnifiedFixturesResult,
+  getUnifiedFixtures,
   isSaudiLeagueConfigured,
   listCompetitions,
   listCompetitionsWithMeta,
@@ -90,11 +90,9 @@ import {
   removeFollow,
   setFollowNotify,
 } from "../services/sportsFollowsService";
-import { getSportsSummary, startSportsSummaryWarmer } from "../services/sportsSummaryService";
+import { getSportsSummary } from "../services/sportsSummaryService";
 import { requireAuth } from "../rbac";
 import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
-import { runWithSportsPriority } from "../services/sportsRequestContext";
-import { SportsSourceTimeoutError } from "../services/sportsCache";
 
 const RIYADH_TZ = "Asia/Riyadh";
 const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
@@ -173,9 +171,7 @@ function bucketFixtures(fixtures: SplFixture[]) {
 export function registerSportsRoutes(app: Express) {
   // تسخين كاش معلومات البطولات على كل pod — يمنع دفع أول مستخدم بعد deploy
   // كلفة المسار البارد (~35 نداء AF) في شاشة «الأقسام». no-op بلا مفتاح API.
-  runWithSportsPriority("background", () => startCompetitionsMetaWarmer());
-  // تسخين موجز البطولات بعد استقرار اللوحات — كان المسار البارد (~20ث) يزاحم today/live.
-  runWithSportsPriority("background", () => startSportsSummaryWarmer());
+  startCompetitionsMetaWarmer();
 
   // Middleware: يضبط لغة الاستجابة (ar/en) لكل الطلب عبر AsyncLocalStorage —
   // فتقرؤها دوال التعريب المنخفضة، ويفصل withSWR كاش الإنجليزية تلقائيًا (:en).
@@ -184,9 +180,7 @@ export function registerSportsRoutes(app: Express) {
   // المباراة/الفريق/اللاعب).
   const withLang = (req: Request, res: Response, next: () => void) => {
     res.vary("Accept-Language");
-    runWithSportsLang(sportsLangFromReq(req), () =>
-      runWithSportsPriority("interactive", () => next()),
-    );
+    runWithSportsLang(sportsLangFromReq(req), () => next());
   };
   app.use("/api/sports", withLang);
 
@@ -427,22 +421,16 @@ export function registerSportsRoutes(app: Express) {
     const to = dayKey(req.query.to) ?? riyadhDay(45);
     if (from > to) return res.status(400).json({ message: "نطاق تواريخ غير صالح" });
     try {
-      const unified = await getUnifiedFixturesResult(comps, from, to);
-      const fixtures = (await overlayLiveBoardList(unified.fixtures)).map(withClockAnchor);
+      const fixtures = (await overlayLiveBoardList(await getUnifiedFixtures(comps, from, to))).map(withClockAnchor);
       res.set(
         "Cache-Control",
         fixtures.some(isHotFixture)
           ? "public, max-age=0, s-maxage=5, stale-while-revalidate=15"
           : "public, max-age=30, s-maxage=60, stale-while-revalidate=120",
       );
-      res.json({ configured: true, from, to, fixtures, partial: unified.partial });
+      res.json({ configured: true, from, to, fixtures });
     } catch (error) {
       console.error("[Sports] unified fixtures failed:", error);
-      if (error instanceof SportsSourceTimeoutError) {
-        res.set("Cache-Control", "public, max-age=5, s-maxage=15, stale-while-revalidate=60");
-        res.json({ configured: true, from, to, fixtures: [], partial: true });
-        return;
-      }
       res.status(502).json({ message: "تعذر جلب الجدول الموحّد حاليًا" });
     }
   });
@@ -1515,31 +1503,6 @@ export function registerSportsRoutes(app: Express) {
       console.error("[Sports] player card failed:", error);
       res.status(502).json({ message: "تعذر جلب ملف اللاعب حاليًا" });
     }
-  });
-
-  // إثراءات اللاعب منفصلة عن البطاقة الأساسية: تبدأ الواجهة عرض الملف أولًا،
-  // ثم تضيف الأداء التاريخي والانتقالات والإصابات تدريجيًا دون حجز الصفحة.
-  app.get("/api/sports/player/:id/extras", async (req, res) => {
-    if (!isSaudiLeagueConfigured()) {
-      res.json({ history: [], transfers: [], injuries: [], partial: false });
-      return;
-    }
-    const id = parseId(req.params.id);
-    if (id == null) {
-      res.status(400).json({ message: "معرّف لاعب غير صحيح" });
-      return;
-    }
-    const [historyResult, transfersResult, injuriesResult] = await Promise.allSettled([
-      getPlayerSeasonHistory(id),
-      getPlayerTransfers(id),
-      getPlayerInjuries(id),
-    ]);
-    const history = historyResult.status === "fulfilled" ? historyResult.value : [];
-    const transfers = transfersResult.status === "fulfilled" ? transfersResult.value : [];
-    const injuries = injuriesResult.status === "fulfilled" ? injuriesResult.value : [];
-    const partial = [historyResult, transfersResult, injuriesResult].some((result) => result.status === "rejected");
-    res.set("Cache-Control", "public, max-age=1800, s-maxage=3600, stale-while-revalidate=21600");
-    res.json({ history, transfers, injuries, partial });
   });
 
   // القيمة السوقية للاعب + تاريخها (TheSports) — lazy، أفضل جهد، تُخفى إن فرغت.
