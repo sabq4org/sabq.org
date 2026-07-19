@@ -14,6 +14,7 @@ import { deliverPendingAwards } from "../services/predictions/outboxService";
 import { syncCompetitionFixtures } from "../services/predictions/fixtureAdapter";
 import { isGcPredictionsEnabled } from "../services/gcFeatureFlags";
 import { settleMajlisDuels } from "../services/gcDuelsService";
+import { runWithSportsPriority } from "../services/sportsRequestContext";
 
 let isRunning = false;
 
@@ -81,7 +82,7 @@ export function startPredictionCoreJob(): void {
     console.log("[Prediction Core Job] disabled (PREDICTION_CORE_ENABLED != true)");
     return;
   }
-  cron.schedule("* * * * *", () => void tick("cron"), { timezone: "Asia/Riyadh" });
-  setTimeout(() => void tick("startup"), 60 * 1000);
+  cron.schedule("* * * * *", () => void runWithSportsPriority("background", () => tick("cron")), { timezone: "Asia/Riyadh" });
+  setTimeout(() => void runWithSportsPriority("background", () => tick("startup")), 60 * 1000);
   console.log("[Prediction Core Job] scheduled (every minute)");
 }

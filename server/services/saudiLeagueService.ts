@@ -8,8 +8,10 @@
  * كل ما يصل للواجهة معرَّب، وكل نقطة بيانات خلف كاش SWR ليخدم آلاف الزوار
  * من طلب واحد للمزود.
  */
-import { withSWR, swrCache, CACHE_TTL } from "../memoryCache";
-import { isEnglishSports, runWithSportsLang } from "./sportsLang";
+import { swrCache, CACHE_TTL } from "../memoryCache";
+import { withSportsSWR as withSWR, getSportsCachedValue, setSportsCachedValue } from "./sportsCache";
+import { currentSportsLang, isEnglishSports, runWithSportsLang, type SportsLang } from "./sportsLang";
+import { runWithSportsPriority } from "./sportsRequestContext";
 import pLimit from "p-limit";
 import { apiFootballGet } from "./apiFootballClient";
 import { aiManager, AI_MODELS } from "../ai-manager";
@@ -814,11 +816,19 @@ export async function getUnifiedFixtures(
   fromKey: string,
   toKey: string,
 ): Promise<SplLiveBoardItem[]> {
+  return (await getUnifiedFixturesResult(slugs, fromKey, toKey)).fixtures;
+}
+
+export async function getUnifiedFixturesResult(
+  slugs: string[],
+  fromKey: string,
+  toKey: string,
+): Promise<{ fixtures: SplLiveBoardItem[]; partial: boolean }> {
   const bySlug = new Map(SAUDI_COMPETITIONS.map((c) => [c.slug, c]));
   const comps = slugs
     .map((s) => bySlug.get(s))
     .filter((c): c is SaudiCompetition => Boolean(c));
-  const lists = await Promise.all(
+  const results = await Promise.allSettled(
     comps.map((comp) =>
       getFixtures(comp)
         .then((fixtures) =>
@@ -831,10 +841,12 @@ export async function getUnifiedFixtures(
               (fx): SplLiveBoardItem => ({ ...fx, competition: compDisplayName(comp), competitionSlug: comp.slug }),
             ),
         )
-        .catch(() => [] as SplLiveBoardItem[]), // بطولة متعثرة لا تُسقط الجدول
     ),
   );
-  return lists.flat().sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
+  const fixtures = results
+    .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
+    .sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
+  return { fixtures, partial: results.some((result) => result.status === "rejected") };
 }
 
 // ---------- البث المباشر العالمي (الدوريات العالمية التي موسمها قائم الآن) ----------
@@ -2796,9 +2808,11 @@ export interface SplPlayerCard {
 export async function getPlayerCard(playerId: number): Promise<SplPlayerCard | null> {
   // موسم دوري روشن الحالي كمرجع لأرقام الموسم الجاري
   const proLeague = SAUDI_COMPETITIONS.find((c) => c.slug === "pro-league")!;
-  const season = await seasonFor(proLeague);
 
   return withSWR(`spl:player:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
+    // داخل ميزانية البطاقة، مع fallback آمن؛ لا نجعل حلّ الموسم طلبًا حاجبًا
+    // منفصلًا قبل دخول كاش البطاقة الموزّع.
+    const season = await seasonFor(proLeague).catch(() => proLeague.fallbackSeason);
     const [profileRows, careerRows, trophyRows, statsRows] = await Promise.all([
       apiGet("players/profiles", { player: playerId }),
       apiGet("players/teams", { player: playerId }).catch(() => [] as any[]),
@@ -3510,20 +3524,72 @@ export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCom
 // نجاح يُكاش موسمًا كاملًا فتهدأ العاصفة بعد أول دورة. مشترك لمنع رشقات متزامنة.
 const compMetaLimit = pLimit(3);
 
-/** قائمة البطولات مُثراة بالشعار والموسم وحالته — لترويسة البطولة الديناميكية في الواجهة. */
-export async function listCompetitionsWithMeta() {
-  const base = listCompetitions();
-  const metas = await Promise.all(
-    SAUDI_COMPETITIONS.map((c) => compMetaLimit(() => getCompetitionMeta(c).catch(() => null)))
-  );
-  return base.map((c, i) => ({
-    ...c,
-    logo: metas[i]?.logo ?? null,
-    season: metas[i]?.season ?? null,
-    start: metas[i]?.start ?? null,
-    end: metas[i]?.end ?? null,
-    status: metas[i]?.status ?? ("unknown" as CompetitionStatus),
+const COMPETITIONS_SNAPSHOT_KEY = "spl:competitions-meta:v3";
+const competitionSnapshots = new Map<SportsLang, { data: ReturnType<typeof competitionFallback>; cachedAt: number }>();
+const competitionRefreshes = new Map<SportsLang, Promise<ReturnType<typeof competitionFallback>>>();
+
+function competitionFallback() {
+  return listCompetitions().map((competition) => ({
+    ...competition,
+    logo: null as string | null,
+    season: null as number | null,
+    start: null as string | null,
+    end: null as string | null,
+    status: "unknown" as CompetitionStatus,
   }));
+}
+
+async function refreshCompetitionsSnapshot(): Promise<ReturnType<typeof competitionFallback>> {
+  const lang = currentSportsLang();
+  const inflight = competitionRefreshes.get(lang);
+  if (inflight) return inflight;
+
+  const promise = runWithSportsPriority("background", async () => {
+    const base = listCompetitions();
+    const metas = await Promise.all(
+      SAUDI_COMPETITIONS.map((c) => compMetaLimit(() => getCompetitionMeta(c).catch(() => null))),
+    );
+    const data = base.map((c, i) => ({
+      ...c,
+      logo: metas[i]?.logo ?? null,
+      season: metas[i]?.season ?? null,
+      start: metas[i]?.start ?? null,
+      end: metas[i]?.end ?? null,
+      status: metas[i]?.status ?? ("unknown" as CompetitionStatus),
+    }));
+    competitionSnapshots.set(lang, { data, cachedAt: Date.now() });
+    await setSportsCachedValue(COMPETITIONS_SNAPSHOT_KEY, data, COMP_META_TTL, COMP_META_TTL * 3);
+    return data;
+  });
+  competitionRefreshes.set(lang, promise);
+  promise.then(
+    () => competitionRefreshes.delete(lang),
+    (error) => {
+      competitionRefreshes.delete(lang);
+      console.warn(`[SaudiLeague] competitions snapshot refresh failed (${lang}):`, (error as Error)?.message);
+    },
+  );
+  return promise;
+}
+
+/**
+ * قائمة البطولات لا تنتظر 35 نداءً خارجيًا أبدًا: L1 ثم Redis، وإلا القائمة
+ * الأساسية فورًا. التحديث الطويل يعمل في الخلفية ويحفظ لقطة مشتركة بعد النشر.
+ */
+export async function listCompetitionsWithMeta() {
+  const lang = currentSportsLang();
+  const local = competitionSnapshots.get(lang);
+  if (local && Date.now() - local.cachedAt <= COMP_META_TTL) return local.data;
+
+  const distributed = await getSportsCachedValue<ReturnType<typeof competitionFallback>>(COMPETITIONS_SNAPSHOT_KEY);
+  if (distributed) {
+    competitionSnapshots.set(lang, { data: distributed.data, cachedAt: distributed.cachedAt });
+    if (distributed.state === "stale") void refreshCompetitionsSnapshot();
+    return distributed.data;
+  }
+
+  void refreshCompetitionsSnapshot();
+  return local?.data ?? competitionFallback();
 }
 
 /**
@@ -3538,13 +3604,13 @@ export function startCompetitionsMetaWarmer(): void {
   compMetaWarmerStarted = true;
   const warm = async () => {
     for (const lang of ["ar", "en"] as const) {
-      await runWithSportsLang(lang, () => listCompetitionsWithMeta()).catch((err) =>
+      await runWithSportsLang(lang, () => refreshCompetitionsSnapshot()).catch((err) =>
         console.warn(`[SaudiLeague] فشل تسخين كاش البطولات (${lang}):`, (err as Error)?.message),
       );
     }
   };
-  // بعد 20 ثانية من الإقلاع (الزيارات أولًا)، ثم كل 5 ساعات (TTL الكاش 6).
-  setTimeout(() => void warm(), 20_000).unref();
+  // Redis يجعل النشر غير بارد؛ نتحقق منه سريعًا بعد الإقلاع ثم نجدّد كل 5 ساعات.
+  setTimeout(() => void warm(), 1_000).unref();
   setInterval(() => void warm(), 5 * 60 * 60 * 1000).unref();
 }
 

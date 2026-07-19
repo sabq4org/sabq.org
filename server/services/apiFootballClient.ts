@@ -18,6 +18,8 @@
  * ونعيد المحاولة مرّة واحدة بعد حجز دورٍ جديد.
  */
 
+import { currentSportsPriority, type SportsRequestPriority } from "./sportsRequestContext";
+
 const API_BASE = "https://v3.football.api-sports.io";
 const WINDOW_MS = 60_000;
 const DEFAULT_RPM = 250;
@@ -35,8 +37,23 @@ const RATE_LIMIT_COOLDOWN_MS = 4_000;
 let observedRpm: number | null = null;
 /** لا نداءات جديدة قبل هذا الوقت — يُرفع عندما يصرّح المزوّد بتجاوز الحدّ. */
 let cooldownUntil = 0;
-/** أزمنة الإرسال المجدولة داخل النافذة (مرتّبة تصاعديًا تقريبًا). */
+/** أزمنة الإرسال الفعلية داخل النافذة. */
 const scheduled: number[] = [];
+
+interface PendingSlot {
+  priority: SportsRequestPriority;
+  enqueuedAt: number;
+  resolve: (queueMs: number) => void;
+}
+
+const pendingSlots: PendingSlot[] = [];
+let slotPumpRunning = false;
+
+const PRIORITY_RANK: Record<SportsRequestPriority, number> = {
+  interactive: 0,
+  normal: 1,
+  background: 2,
+};
 
 function currentRpm(): number {
   const envRpm = Number.parseInt((process.env.APIFOOTBALL_RPM || "").trim(), 10);
@@ -45,22 +62,55 @@ function currentRpm(): number {
   return DEFAULT_RPM;
 }
 
-/** يحجز دورًا في النافذة الحالية وينتظر حتى يحين (فوريّ ما دمنا تحت الحدّ). */
-async function acquireSlot(): Promise<void> {
-  const now = Date.now();
-  while (scheduled.length && scheduled[0] <= now - WINDOW_MS) scheduled.shift();
-  const rpm = currentRpm();
-  let at = Math.max(now, cooldownUntil);
-  // لا رشقات لحظية: كل نداء يبعد عن سابقه MIN_GAP_MS على الأقل
-  if (scheduled.length) {
-    at = Math.max(at, scheduled[scheduled.length - 1] + MIN_GAP_MS);
+function nextPendingSlot(): PendingSlot | undefined {
+  let bestIndex = -1;
+  for (let i = 0; i < pendingSlots.length; i++) {
+    if (
+      bestIndex < 0 ||
+      PRIORITY_RANK[pendingSlots[i].priority] < PRIORITY_RANK[pendingSlots[bestIndex].priority] ||
+      (pendingSlots[i].priority === pendingSlots[bestIndex].priority &&
+        pendingSlots[i].enqueuedAt < pendingSlots[bestIndex].enqueuedAt)
+    ) {
+      bestIndex = i;
+    }
   }
-  if (scheduled.length >= rpm) {
-    at = Math.max(at, scheduled[scheduled.length - rpm] + WINDOW_MS);
+  return bestIndex >= 0 ? pendingSlots.splice(bestIndex, 1)[0] : undefined;
+}
+
+async function pumpSlots(): Promise<void> {
+  if (slotPumpRunning) return;
+  slotPumpRunning = true;
+  try {
+    while (pendingSlots.length > 0) {
+      let now = Date.now();
+      while (scheduled.length && scheduled[0] <= now - WINDOW_MS) scheduled.shift();
+      const rpm = currentRpm();
+      let at = Math.max(now, cooldownUntil);
+      if (scheduled.length) at = Math.max(at, scheduled[scheduled.length - 1] + MIN_GAP_MS);
+      if (scheduled.length >= rpm) at = Math.max(at, scheduled[scheduled.length - rpm] + WINDOW_MS);
+      const wait = at - now;
+      if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+      // نختار بعد الانتظار لا قبله، كي يتمكن طلب تفاعلي وصل أثناء انتظار
+      // نافذة المعدّل من تجاوز عناصر التسخين القديمة.
+      const item = nextPendingSlot();
+      if (!item) continue;
+      now = Date.now();
+      scheduled.push(now);
+      item.resolve(now - item.enqueuedAt);
+    }
+  } finally {
+    slotPumpRunning = false;
+    // قد يصل عنصر بين فحص الحلقة وfinally.
+    if (pendingSlots.length > 0) void pumpSlots();
   }
-  scheduled.push(at);
-  const wait = at - now;
-  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+}
+
+/** يحجز دورًا، مع تقديم طلبات المستخدم على التسخين والكرون. */
+function acquireSlot(priority: SportsRequestPriority): Promise<number> {
+  return new Promise((resolve) => {
+    pendingSlots.push({ priority, enqueuedAt: Date.now(), resolve });
+    void pumpSlots();
+  });
 }
 
 function noteResponseHeaders(response: Response): void {
@@ -85,6 +135,10 @@ export interface ApiFootballGetOptions {
    * نلفّه في مصفوفة حتى يستهلكه المستدعي عبر rows[0] بنفس النمط.
    */
   wrapObjectResponse?: boolean;
+  /** يُستنتج من سياق الطلب؛ يمكن للخدمات الخاصة تجاوزه صراحةً. */
+  priority?: SportsRequestPriority;
+  /** مهلة اتصال المزوّد فقط؛ انتظار الطابور يُقاس منفصلًا. */
+  timeoutMs?: number;
 }
 
 /**
@@ -104,16 +158,38 @@ export async function apiFootballGet(
   const url = new URL(`${API_BASE}/${path}`);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
+  const priority = opts.priority ?? currentSportsPriority();
+  const timeoutMs = opts.timeoutMs ?? (priority === "interactive" ? 2_800 : priority === "background" ? 15_000 : 8_000);
+  const maxRetries = priority === "interactive" ? 0 : 2;
+  const requestStartedAt = Date.now();
+
   for (let attempt = 0; ; attempt++) {
-    await acquireSlot();
-    const response = await fetch(url, {
-      headers: { "x-apisports-key": apiKey },
-      signal: AbortSignal.timeout(15_000),
-    });
+    const queueMs = await acquireSlot(priority);
+    const providerStartedAt = Date.now();
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { "x-apisports-key": apiKey },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      const providerMs = Date.now() - providerStartedAt;
+      console.warn(
+        `[Sports Provider] tag=${tag} path=${path} priority=${priority} queueMs=${queueMs} providerMs=${providerMs} totalMs=${Date.now() - requestStartedAt} attempt=${attempt + 1} status=network-error`,
+      );
+      throw error;
+    }
+    const providerMs = Date.now() - providerStartedAt;
     noteResponseHeaders(response);
 
+    if (queueMs >= 250 || providerMs >= 1_000 || Date.now() - requestStartedAt >= 2_500) {
+      console.warn(
+        `[Sports Provider] tag=${tag} path=${path} priority=${priority} queueMs=${queueMs} providerMs=${providerMs} totalMs=${Date.now() - requestStartedAt} attempt=${attempt + 1} status=${response.status}`,
+      );
+    }
+
     if (!response.ok) {
-      if (response.status === 429 && attempt < 2) {
+      if (response.status === 429 && attempt < maxRetries) {
         reportRateLimited();
         continue;
       }
@@ -123,7 +199,7 @@ export async function apiFootballGet(
     const data: any = await response.json();
     const errors = data?.errors;
     if (errors && !Array.isArray(errors) && Object.keys(errors).length > 0) {
-      if (errors.rateLimit && attempt < 2) {
+      if (errors.rateLimit && attempt < maxRetries) {
         reportRateLimited();
         continue;
       }

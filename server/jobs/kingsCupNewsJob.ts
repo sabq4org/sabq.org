@@ -11,6 +11,7 @@ import cron from "node-cron";
 import { isLeader } from "../leaderElection";
 import { isKingsCupConfigured } from "../services/kingsCupService";
 import { runKingsCupNewsCycle } from "../services/kingsCupNewsGenerator";
+import { runWithSportsPriority } from "../services/sportsRequestContext";
 
 let isRunning = false;
 
@@ -45,9 +46,9 @@ export function startKingsCupNewsJob(): void {
     return;
   }
 
-  cron.schedule("* * * * *", () => void tick("cron"), { timezone: "Asia/Riyadh" });
+  cron.schedule("* * * * *", () => void runWithSportsPriority("background", () => tick("cron")), { timezone: "Asia/Riyadh" });
   console.log("[KC News Job] 📰 scheduled — every minute (instant post-match reports)");
 
   // دورة أولى بعد دقيقة من الإقلاع لتغطية ما فات أثناء التوقف
-  setTimeout(() => void tick("startup"), 60 * 1000);
+  setTimeout(() => void runWithSportsPriority("background", () => tick("startup")), 60 * 1000);
 }

@@ -14,6 +14,7 @@
  */
 import { isLeader } from "../leaderElection";
 import { runTransferAlertsCycle } from "../services/transferAlertsService";
+import { runWithSportsPriority } from "../services/sportsRequestContext";
 
 const INTERVAL_MS = 10 * 60_000;
 
@@ -48,9 +49,9 @@ export function startTransferAlertsJob(): void {
   }
   if (timer) return;
 
-  timer = setInterval(() => void tick("interval"), INTERVAL_MS);
+  timer = setInterval(() => void runWithSportsPriority("background", () => tick("interval")), INTERVAL_MS);
   console.log("[TransferAlerts Job] 🔁 scheduled — every 10m (confirmed transfers)");
 
   // دورة أولى بعد 20 ثانية لتأسيس خطّ الأساس مبكرًا (بلا إرسال).
-  setTimeout(() => void tick("startup"), 20_000);
+  setTimeout(() => void runWithSportsPriority("background", () => tick("startup")), 20_000);
 }
