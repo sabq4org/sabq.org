@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-17T12:13:14.762Z",
+  "generatedAt": "2026-07-19T13:22:44.168Z",
   "systems": [
     {
       "id": "loyalty",
@@ -31,16 +31,16 @@
     },
     {
       "id": "editorial",
-      "fileCount": 46,
+      "fileCount": 61,
       "samplePaths": [
         "server/routes/articleEditLocks.ts",
         "server/routes/editorAlerts.ts",
         "server/routes/editorPresence.ts",
         "server/routes/dashboardPulse.ts",
+        "server/routes/coverageGaps.ts",
         "server/routes/whatsappAgent.ts",
         "server/routes/emailAgent.ts",
-        "server/routes/visualAiRoutes.ts",
-        "server/routes/nanoBananaRoutes.ts"
+        "server/routes/announcements.ts"
       ]
     },
     {
@@ -87,16 +87,16 @@
     },
     {
       "id": "radar",
-      "fileCount": 14,
+      "fileCount": 34,
       "samplePaths": [
         "server/services/radar/aiChain.ts",
         "server/services/radar/alerts.ts",
         "server/services/radar/analyst.ts",
+        "server/services/radar/clusterer.ts",
         "server/services/radar/cycle.ts",
-        "server/services/radar/exporter.ts",
-        "server/services/radar/fetcher.ts",
-        "server/services/radar/parsing.ts",
-        "server/services/radar/repo.ts"
+        "server/services/radar/data/saudi-negative.json",
+        "server/services/radar/data/saudi-positive.json",
+        "server/services/radar/exporter.ts"
       ]
     },
     {
@@ -129,7 +129,7 @@
     },
     {
       "id": "sports-tournaments",
-      "fileCount": 80,
+      "fileCount": 81,
       "samplePaths": [
         "server/services/gulfCupData.ts",
         "server/services/gulfCupFixtureIdentity.ts",
@@ -171,16 +171,16 @@
     },
     {
       "id": "auth-rbac",
-      "fileCount": 8,
+      "fileCount": 9,
       "samplePaths": [
         "server/auth.ts",
         "server/rbac.ts",
         "server/csrf.ts",
         "server/twoFactor.ts",
+        "server/sessionFailoverStore.ts",
         "server/services/memberSessionService.ts",
         "shared/rbac-constants.ts",
-        "client/src/hooks/useAuth.ts",
-        "docs/architecture/AUTHENTICATION_FLOW.md"
+        "client/src/hooks/useAuth.ts"
       ]
     },
     {
@@ -234,16 +234,16 @@
     },
     {
       "id": "systems-catalog",
-      "fileCount": 28,
+      "fileCount": 29,
       "samplePaths": [
         "docs/systems/AUDIT-2026-07-17.md",
         "docs/systems/GOVERNANCE.md",
         "docs/systems/README.md",
         "docs/systems/ads/SYSTEM.md",
         "docs/systems/ai-hub/SYSTEM.md",
+        "docs/systems/audio-newsletter/OPERATIONS.md",
         "docs/systems/audio-newsletter/SYSTEM.md",
-        "docs/systems/auth-rbac/SYSTEM.md",
-        "docs/systems/calendar/SYSTEM.md"
+        "docs/systems/auth-rbac/SYSTEM.md"
       ]
     }
   ]

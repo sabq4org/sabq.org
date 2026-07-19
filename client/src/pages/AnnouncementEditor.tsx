@@ -42,6 +42,12 @@ const announcementSchema = z.object({
 
 type AnnouncementFormData = z.infer<typeof announcementSchema>;
 
+const announcementChannels = [
+  { value: "dashboardBanner", label: "بانر لوحة التحكم", available: true },
+  { value: "inbox", label: "صندوق الوارد (قيد الربط)", available: false },
+  { value: "toast", label: "إشعار منبثق (قيد الربط)", available: false },
+] as const;
+
 interface Announcement {
   id: string;
   title: string;
@@ -58,6 +64,14 @@ interface Announcement {
   tags: string[] | null;
 }
 
+interface AnnouncementRole {
+  id: string;
+  name: string;
+  nameAr: string;
+  description: string | null;
+  isSystem: boolean;
+}
+
 export default function AnnouncementEditor() {
   const { id } = useParams<{ id?: string }>();
   const [, setLocation] = useLocation();
@@ -71,9 +85,10 @@ export default function AnnouncementEditor() {
     enabled: isEditMode,
   });
 
-  const { data: allUsers } = useQuery<{ id: string; email: string; firstName?: string; lastName?: string }[]>({
-    queryKey: ['/api/users'],
+  const { data: rolesRaw, isLoading: rolesLoading, isError: rolesError } = useQuery<AnnouncementRole[]>({
+    queryKey: ['/api/announcements/roles'],
   });
+  const availableRoles = Array.isArray(rolesRaw) ? rolesRaw : [];
 
   const form = useForm<AnnouncementFormData>({
     resolver: zodResolver(announcementSchema),
@@ -81,7 +96,7 @@ export default function AnnouncementEditor() {
       title: "",
       message: "",
       priority: "normal",
-      channels: [],
+      channels: ["dashboardBanner"],
       audienceRoles: [],
       audienceUserIds: [],
       publishNow: false,
@@ -148,6 +163,16 @@ export default function AnnouncementEditor() {
         title: "❌ خطأ في النموذج", 
         description: "يرجى التحقق من جميع الحقول المطلوبة",
         variant: "destructive" 
+      });
+      return;
+    }
+
+    if (action === 'schedule' && !data.startAt) {
+      form.setError('startAt', { message: 'تاريخ البدء مطلوب عند جدولة الإعلان' });
+      toast({
+        title: "تعذر جدولة الإعلان",
+        description: "اختر تاريخ البدء أولًا",
+        variant: "destructive",
       });
       return;
     }
@@ -312,18 +337,20 @@ export default function AnnouncementEditor() {
                         <FormItem>
                           <FormLabel>القنوات</FormLabel>
                           <div className="space-y-2">
-                            {(['dashboardBanner', 'inbox', 'toast'] as const).map(channel => (
-                              <div key={channel} className="flex items-center gap-2">
+                            {announcementChannels.map((channel) => (
+                              <div key={channel.value} className="flex items-center gap-2">
                                 <Checkbox
-                                  id={`channel-${channel}`}
-                                  checked={form.watch('channels').includes(channel)}
-                                  onCheckedChange={() => toggleChannel(channel)}
-                                  data-testid={`checkbox-channel-${channel}`}
+                                  id={`channel-${channel.value}`}
+                                  checked={form.watch('channels').includes(channel.value)}
+                                  onCheckedChange={() => toggleChannel(channel.value)}
+                                  disabled={!channel.available}
+                                  data-testid={`checkbox-channel-${channel.value}`}
                                 />
-                                <label htmlFor={`channel-${channel}`} className="text-sm cursor-pointer">
-                                  {channel === 'dashboardBanner' && 'بانر لوحة التحكم'}
-                                  {channel === 'inbox' && 'صندوق الوارد'}
-                                  {channel === 'toast' && 'إشعار منبثق'}
+                                <label
+                                  htmlFor={`channel-${channel.value}`}
+                                  className={cn("text-sm", channel.available ? "cursor-pointer" : "text-muted-foreground")}
+                                >
+                                  {channel.label}
                                 </label>
                               </div>
                             ))}
@@ -339,24 +366,34 @@ export default function AnnouncementEditor() {
                       render={() => (
                         <FormItem>
                           <FormLabel>الأدوار المستهدفة</FormLabel>
+                          <p className="text-xs text-muted-foreground">
+                            عدم اختيار أي دور يعني عرض الإعلان لجميع المستخدمين. الاختيار يطابق اسم الدور بشكل دقيق.
+                          </p>
                           <div className="space-y-2">
-                            {['admin', 'editor', 'reporter', 'reader'].map(role => (
-                              <div key={role} className="flex items-center gap-2">
+                            {rolesLoading && (
+                              <p className="text-sm text-muted-foreground">جاري تحميل الأدوار...</p>
+                            )}
+                            {rolesError && (
+                              <p className="text-sm text-destructive">تعذر تحميل الأدوار. أعد فتح الصفحة قبل النشر.</p>
+                            )}
+                            {availableRoles.map((role) => (
+                              <div key={role.id} className="flex items-start gap-2">
                                 <Checkbox
-                                  id={`role-${role}`}
-                                  checked={(form.watch('audienceRoles') || []).includes(role)}
-                                  onCheckedChange={() => toggleRole(role)}
-                                  data-testid={`checkbox-role-${role}`}
+                                  id={`role-${role.name}`}
+                                  checked={(form.watch('audienceRoles') || []).includes(role.name)}
+                                  onCheckedChange={() => toggleRole(role.name)}
+                                  data-testid={`checkbox-role-${role.name}`}
                                 />
-                                <label htmlFor={`role-${role}`} className="text-sm cursor-pointer">
-                                  {role === 'admin' && 'مدير النظام'}
-                                  {role === 'editor' && 'محرر'}
-                                  {role === 'reporter' && 'مراسل'}
-                                  {role === 'reader' && 'قارئ'}
+                                <label htmlFor={`role-${role.name}`} className="cursor-pointer">
+                                  <span className="block text-sm">{role.nameAr}</span>
+                                  {role.description && (
+                                    <span className="block text-xs text-muted-foreground">{role.description}</span>
+                                  )}
                                 </label>
                               </div>
                             ))}
                           </div>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
@@ -450,6 +487,7 @@ export default function AnnouncementEditor() {
                               </Button>
                             )}
                           </div>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
@@ -508,9 +546,12 @@ export default function AnnouncementEditor() {
               <TabsContent value="attachments" className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>المرفقات والإضافات</CardTitle>
+                    <CardTitle>المرفقات والإضافات (قيد الربط)</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      الأيقونة وزر الإجراء غير محفوظين في عقد البيانات الحالي، لذلك أوقفنا إدخالهما مؤقتًا بدل فقدانهما بصمت.
+                    </p>
                     <FormField
                       control={form.control}
                       name="iconName"
@@ -520,6 +561,7 @@ export default function AnnouncementEditor() {
                           <FormControl>
                             <Input
                               {...field}
+                              disabled
                               placeholder="مثال: Bell, AlertCircle, Info"
                               data-testid="input-icon-name"
                             />
@@ -537,6 +579,7 @@ export default function AnnouncementEditor() {
                           <FormControl>
                             <Input
                               {...field}
+                              disabled
                               placeholder="مثال: اقرأ المزيد، تفاصيل"
                               data-testid="input-action-label"
                             />
@@ -554,6 +597,7 @@ export default function AnnouncementEditor() {
                           <FormControl>
                             <Input
                               {...field}
+                              disabled
                               placeholder="مثال: /dashboard/news"
                               data-testid="input-action-url"
                             />
@@ -580,7 +624,7 @@ export default function AnnouncementEditor() {
                 type="button"
                 variant="secondary"
                 onClick={form.handleSubmit((data) => onSubmit(data, 'draft'))}
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={createMutation.isPending || updateMutation.isPending || rolesLoading || rolesError}
                 data-testid="button-save-draft"
               >
                 <Save className="ml-2 h-4 w-4" />
@@ -591,7 +635,7 @@ export default function AnnouncementEditor() {
                 type="button"
                 variant="secondary"
                 onClick={form.handleSubmit((data) => onSubmit(data, 'schedule'))}
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={createMutation.isPending || updateMutation.isPending || rolesLoading || rolesError}
                 data-testid="button-schedule"
               >
                 <Clock className="ml-2 h-4 w-4" />
@@ -601,7 +645,7 @@ export default function AnnouncementEditor() {
               <Button
                 type="button"
                 onClick={form.handleSubmit((data) => onSubmit(data, 'publish'))}
-                disabled={createMutation.isPending || updateMutation.isPending}
+                disabled={createMutation.isPending || updateMutation.isPending || rolesLoading || rolesError}
                 data-testid="button-publish"
               >
                 <Send className="ml-2 h-4 w-4" />

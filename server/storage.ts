@@ -11,6 +11,7 @@ import bcrypt from 'bcrypt';
 import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
 import { bufferArticleViewIncrement } from "./services/articleViewCounterService";
+import { matchesInternalAnnouncementAudience } from "./utils/internalAnnouncementTargeting";
 import {
   users,
   categories,
@@ -13127,25 +13128,17 @@ export class DatabaseStorage implements IStorage {
       );
     }
 
-    // Filter by audience targeting (roles and specific users)
-    filteredAnnouncements = filteredAnnouncements.filter(a => {
-      // If no audience targeting, show to everyone
-      if (!a.audienceRoles && !a.audienceUserIds) {
-        return true;
-      }
-
-      // Check if user is in specific user list
-      if (a.audienceUserIds && (a.audienceUserIds as string[]).includes(userId)) {
-        return true;
-      }
-
-      // Check if user has any of the required roles
-      if (a.audienceRoles && (a.audienceRoles as string[]).some(role => userRoles.includes(role))) {
-        return true;
-      }
-
-      return false;
-    });
+    // Exact role-name targeting; empty arrays have the same meaning as null (everyone).
+    filteredAnnouncements = filteredAnnouncements.filter((announcement) =>
+      matchesInternalAnnouncementAudience(
+        {
+          audienceRoles: announcement.audienceRoles as string[] | null,
+          audienceUserIds: announcement.audienceUserIds as string[] | null,
+        },
+        userId,
+        userRoles,
+      ),
+    );
 
     // Fetch details for each announcement
     const announcementsWithDetails = await Promise.all(

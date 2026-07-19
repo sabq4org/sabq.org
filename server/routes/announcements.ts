@@ -9,6 +9,7 @@ import {
   requireRole,
   logActivity,
   getUserPermissions,
+  getUserRoleNames,
 } from "../rbac";
 import {
   insertInternalAnnouncementSchema,
@@ -16,6 +17,13 @@ import {
 } from "@shared/schema";
 
 export function registerAnnouncementRoutes(app: Express) {
+  async function findUnknownAudienceRoles(audienceRoles: string[] | null | undefined) {
+    if (!audienceRoles || audienceRoles.length === 0) return [];
+    const availableRoles = await storage.getAllRoles();
+    const availableRoleNames = new Set(availableRoles.map((role) => role.name));
+    return audienceRoles.filter((role) => !availableRoleNames.has(role));
+  }
+
   // ============================================================
   // INTERNAL ANNOUNCEMENTS ROUTES - نظام الإعلانات الداخلية المتقدم
   // ============================================================
@@ -34,11 +42,29 @@ export function registerAnnouncementRoutes(app: Express) {
         // Validate request body
         const validatedData = insertInternalAnnouncementSchema.parse(req.body);
 
-        // Create announcement
+        const unknownRoles = await findUnknownAudienceRoles(validatedData.audienceRoles);
+        if (unknownRoles.length > 0) {
+          return res.status(400).json({
+            message: "تتضمن قائمة الاستهداف أدوارًا غير موجودة",
+            roles: unknownRoles,
+          });
+        }
+
+        if (validatedData.status === 'scheduled' && !validatedData.startAt) {
+          return res.status(400).json({ message: "تاريخ البدء مطلوب عند جدولة الإعلان" });
+        }
+
+        // Publishing goes through the publish operation so publisher/time are
+        // always recorded instead of inserting an incomplete published row.
+        const shouldPublish = validatedData.status === 'published';
         const announcement = await storage.createInternalAnnouncement({
           ...validatedData,
+          status: shouldPublish ? 'draft' : validatedData.status,
           createdBy: userId,
         } as any);
+        const result = shouldPublish
+          ? await storage.publishInternalAnnouncement(announcement.id, userId)
+          : announcement;
 
         // Log activity
         await logActivity({
@@ -46,10 +72,10 @@ export function registerAnnouncementRoutes(app: Express) {
           action: 'create',
           entityType: 'internal_announcement',
           entityId: announcement.id,
-          newValue: { title: announcement.title, status: announcement.status },
+          newValue: { title: result.title, status: result.status },
         });
 
-        res.status(201).json(announcement);
+        res.status(201).json(result);
       } catch (error: any) {
         console.error("Error creating announcement:", error);
         if (error.name === 'ZodError') {
@@ -74,9 +100,9 @@ export function registerAnnouncementRoutes(app: Express) {
 
         const { channel } = req.query;
 
-        // Get user roles
-        const userRolesData = await storage.getUserRoles(userId);
-        const userRoles = userRolesData.map(r => r.name);
+        // Use the unified RBAC resolver so legacy users.role accounts and
+        // current user_roles assignments follow the same targeting rules.
+        const userRoles = await getUserRoleNames(userId);
 
         // Get active announcements for this user
         const announcements = await storage.getActiveAnnouncementsForUser(
@@ -93,7 +119,23 @@ export function registerAnnouncementRoutes(app: Express) {
     }
   );
 
-  // 3. GET /api/announcements - List all with filters (admin only)
+  // 3. GET /api/announcements/roles - List every role available for targeting.
+  // IMPORTANT: Keep this before /:id so "roles" is not treated as an announcement id.
+  app.get("/api/announcements/roles",
+    requireAuth,
+    requireRole('admin'),
+    async (_req: any, res) => {
+    try {
+        const availableRoles = await storage.getAllRoles();
+        res.json(availableRoles);
+      } catch (error: any) {
+        console.error("Error fetching announcement roles:", error);
+        res.status(500).json({ message: "فشل في جلب الأدوار المتاحة" });
+      }
+    }
+  );
+
+  // 4. GET /api/announcements - List all with filters (admin only)
   app.get("/api/announcements",
     requireAuth,
     requireRole('admin'),
@@ -171,6 +213,18 @@ export function registerAnnouncementRoutes(app: Express) {
         // Validate request body
         const validatedData = updateInternalAnnouncementSchema.parse(req.body);
 
+        const unknownRoles = await findUnknownAudienceRoles(validatedData.audienceRoles);
+        if (unknownRoles.length > 0) {
+          return res.status(400).json({
+            message: "تتضمن قائمة الاستهداف أدوارًا غير موجودة",
+            roles: unknownRoles,
+          });
+        }
+
+        if (validatedData.status === 'scheduled' && !validatedData.startAt) {
+          return res.status(400).json({ message: "تاريخ البدء مطلوب عند جدولة الإعلان" });
+        }
+
         // Check permissions for editors
         const userPermissions = await getUserPermissions(userId);
         const isAdmin = userPermissions.includes('system.admin') || 
@@ -184,12 +238,19 @@ export function registerAnnouncementRoutes(app: Express) {
         }
 
         // Update announcement (auto-creates version)
+        const shouldPublish = validatedData.status === 'published' && existing.status !== 'published';
         const updated = await storage.updateInternalAnnouncement(
           announcementId,
-          validatedData as any,
+          {
+            ...validatedData,
+            status: shouldPublish ? existing.status : validatedData.status,
+          } as any,
           userId,
           req.body.changeReason
         );
+        const result = shouldPublish
+          ? await storage.publishInternalAnnouncement(announcementId, userId)
+          : updated;
 
         // Log activity
         await logActivity({
@@ -203,14 +264,14 @@ export function registerAnnouncementRoutes(app: Express) {
             message: existing.message 
           },
           newValue: { 
-            title: updated.title, 
-            status: updated.status,
-            message: updated.message 
+            title: result.title,
+            status: result.status,
+            message: result.message
           },
           metadata: { reason: req.body.changeReason },
         });
 
-        res.json(updated);
+        res.json(result);
       } catch (error: any) {
         console.error("Error updating announcement:", error);
         if (error.name === 'ZodError') {

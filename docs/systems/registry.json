@@ -1,7 +1,7 @@
 {
   "$schemaNote": "Machine-readable catalog of Sabq product systems. Consumed by scripts/systems-inventory.mjs and /api/admin/systems-catalog. aiFeatureKeys must be exclusive (one system owner) to avoid double-counting.",
   "version": 2,
-  "updatedAt": "2026-07-17",
+  "updatedAt": "2026-07-19",
   "systems": [
     {
       "id": "loyalty",
@@ -76,6 +76,7 @@
         "server/routes/coverageGaps.ts",
         "server/routes/whatsappAgent.ts",
         "server/routes/emailAgent.ts",
+        "server/routes/announcements.ts",
         "server/routes/visualAiRoutes.ts",
         "server/routes/nanoBananaRoutes.ts",
         "server/routes/infographicAi.ts",
@@ -100,6 +101,7 @@
         "server/services/autoImageGenerationService.ts",
         "server/services/aiImageGenerator.ts",
         "server/services/opinionAuthorWorkspaceService.ts",
+        "server/utils/internalAnnouncementTargeting.ts",
         "server/services/opinionWritersService.ts",
         "server/routes/opinionWriters.ts",
         "client/src/pages/dashboard/OpinionWritersPage.tsx",
@@ -118,6 +120,14 @@
         "client/src/pages/dashboard/SmartJournalist.tsx",
         "client/src/pages/dashboard/SmartLinksManagement.tsx",
         "client/src/pages/dashboard/CommunicationsManagement.tsx",
+        "client/src/pages/AnnouncementsList.tsx",
+        "client/src/pages/AnnouncementEditor.tsx",
+        "client/src/pages/AnnouncementDetail.tsx",
+        "client/src/pages/AnnouncementVersions.tsx",
+        "client/src/pages/AnnouncementAnalytics.tsx",
+        "client/src/pages/AnnouncementsArchive.tsx",
+        "client/src/components/InternalAnnouncement.tsx",
+        "tests/unit/internalAnnouncementTargeting.test.ts",
         "client/src/pages/DataStoryGenerator.tsx",
         "docs/editorial/**"
       ],
