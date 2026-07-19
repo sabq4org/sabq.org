@@ -155,7 +155,7 @@ export function WriterMediaLicenseCard() {
               الترخيص المهني يعزّز حضورك ومصداقيتك
             </p>
             <p className="text-sm leading-relaxed text-muted-foreground">
-              وفق توجيهات الهيئة العامة لتنظيم الإعلام، نرجو تزويدنا برقم ترخيصك المهني وإرفاق صورة منه.
+              وفق توجيهات هيئة تنظيم الإعلام، نرجو تزويدنا برقم ترخيصك المهني وإرفاق صورة منه.
               لديك مهلة حتى <strong className="text-foreground">{deadlineLabel}</strong>.
             </p>
             <a
