@@ -7,7 +7,7 @@ import type { Express, RequestHandler } from "express";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcrypt";
 import { storage } from "./storage";
-import { db, pool } from "./db";
+import { db, getSessionFallbackPool } from "./db";
 import { users, canUserLogin, getUserStatusMessage } from "@shared/schema";
 import { eq, or, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
@@ -25,8 +25,9 @@ export function getSession() {
   }
 
   const pgStoreFactory = connectPg(session);
+  const sessionPool = getSessionFallbackPool();
   const pgStore = new pgStoreFactory({
-    pool: pool,
+    pool: sessionPool,
     createTableIfMissing: false,
     ttl: sessionTtl,
     tableName: "sessions",
@@ -43,9 +44,9 @@ export function getSession() {
       ttl: Math.floor(sessionTtl / 1000),
     });
     store = new SessionFailoverStore(redisStore, pgStore);
-    console.log("[Session] Redis primary + PostgreSQL failover (commandTimeout 2.5s)");
+    console.log("[Session] Redis primary + isolated PostgreSQL failover (commandTimeout 2.5s)");
   } else {
-    console.log("[Session] Using PostgreSQL store (add REDIS_URL for Redis primary + failover)");
+    console.log("[Session] Using isolated PostgreSQL store (add REDIS_URL for Redis primary + failover)");
   }
 
   // Cross-subdomain cookie config (when frontend on Vercel and backend on

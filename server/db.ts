@@ -17,6 +17,10 @@ import { drizzle as drizzlePg, type NodePgDatabase } from 'drizzle-orm/node-post
 import ws from "ws";
 import { sql } from "drizzle-orm";
 import * as schema from "@shared/schema";
+import {
+  getSessionFallbackPoolConfig,
+  shouldRunStartupMaintenance,
+} from "./dbPoolConfig";
 
 neonConfig.webSocketConstructor = ws;
 neonConfig.pipelineConnect = "password";
@@ -40,6 +44,7 @@ let _dbConnected = false;
 let _dbEverConnected = false;
 let _dbLastError: string | null = null;
 let _reconnectTimer: ReturnType<typeof setInterval> | null = null;
+let _sessionFallbackPool: any;
 
 function getDatabaseUrl(): string | undefined {
   return process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
@@ -86,6 +91,35 @@ function initPool(databaseUrl: string): void {
   }
 }
 
+/**
+ * A dedicated pool for connect-pg-simple. During a Redis outage every request
+ * with a session can hit PostgreSQL; sharing the main pool allowed those calls
+ * to consume all 50 content connections. Keeping at most a few short-lived
+ * session connections forms a bulkhead around article/search traffic.
+ */
+export function getSessionFallbackPool(): any {
+  if (_sessionFallbackPool) return _sessionFallbackPool;
+
+  const databaseUrl = getDatabaseUrl();
+  if (!databaseUrl) {
+    throw new Error("Database URL is required for the PostgreSQL session store");
+  }
+
+  const poolConfig = getSessionFallbackPoolConfig(databaseUrl);
+  _sessionFallbackPool = DB_DRIVER === "pg"
+    ? new PgPool(poolConfig)
+    : new NeonPool(poolConfig);
+
+  _sessionFallbackPool.on("error", (err: any) => {
+    console.error("[Session Pool] Unexpected client error:", err.message);
+  });
+
+  console.log(
+    `[Session Pool] Isolated PostgreSQL pool initialized (max=${poolConfig.max}, connTimeout=${poolConfig.connectionTimeoutMillis}ms, queryTimeout=${poolConfig.query_timeout}ms)`,
+  );
+  return _sessionFallbackPool;
+}
+
 async function verifyConnection(): Promise<boolean> {
   try {
     if (!pool) return false;
@@ -128,10 +162,11 @@ let _dbMaintenanceDone = false;
 async function runStartupMaintenance(): Promise<void> {
   if (_dbMaintenanceDone) return;
   _dbMaintenanceDone = true;
-  if (process.env.SKIP_DB_MAINTENANCE === 'true') {
-    console.log('[DB] Startup maintenance skipped (SKIP_DB_MAINTENANCE=true) — read-only mode for safety');
+  if (!shouldRunStartupMaintenance()) {
+    console.log('[DB] Startup maintenance disabled by default (set RUN_DB_STARTUP_MAINTENANCE=true explicitly to enable)');
     return;
   }
+  console.warn('[DB] Startup maintenance explicitly enabled — running database-changing operations');
   try {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_articles_homepage_order ON articles (status, hide_from_homepage, display_order DESC, published_at DESC)`);
     console.log('[DB] Homepage order index ensured');

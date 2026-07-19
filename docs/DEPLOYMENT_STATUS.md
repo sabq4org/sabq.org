@@ -1,6 +1,6 @@
 # حالة النشر الحالية — sabq.org
 
-> **آخر تحديث:** 2026-07-13
+> **آخر تحديث:** 2026-07-19
 >
 > **ملاحظة تشغيلية:** انتقل الإنتاج الرسمي من **Replit** إلى **Cloudflare Pages** (الواجهة) + **Railway** (الـ API) في **منتصف مايو 2026** (~أسبوعين قبل هذا التاريخ). Replit لم يعد مسار النشر الحالي.
 
@@ -60,6 +60,7 @@
 - أوامر Redis لها `commandTimeout=2.5s` و`enableOfflineQueue=false` — لا تعليق بلا نهاية عند انقطاع Upstash أو تغيّر Static IP egress.
 - عند فشل Redis: تحويل تلقائي لجدول `sessions` في Neon لمدة ~30 ثانية (cooldown) ثم إعادة المحاولة.
 - بدون `REDIS_URL`: Postgres فقط.
+- مخزن Postgres للجلسات معزول عن pool المحتوى: افتراضياً 4 اتصالات فقط، بمهلة اتصال 2s ومهلة استعلام 2.5s. يمكن ضبط الحد بين 1 و10 عبر `SESSION_FALLBACK_POOL_MAX`.
 
 | الوظيفة | مع Redis (الإنتاج) | عند انقطاع Redis | بدون REDIS_URL |
 |---------|-------------------|------------------|----------------|
@@ -78,8 +79,8 @@
 ### كيف تتأكد
 
 1. Railway → Variables → `REDIS_URL` موجود
-2. سجلات الإقلاع: `[Session] Redis primary + PostgreSQL failover` ✅  
-   أو `Using PostgreSQL store` ⚠️ بدون Redis
+2. سجلات الإقلاع: `[Session Pool] Isolated PostgreSQL pool initialized` ثم `[Session] Redis primary + isolated PostgreSQL failover` ✅
+   أو `Using isolated PostgreSQL store` ⚠️ بدون Redis
 3. عند انقطاع: `[Session] Redis unhealthy … using PostgreSQL` ثم الموقع يبقى يستجيب (بدون 502 على csrf)
 
 ### محلي
@@ -99,3 +100,4 @@ npm run check    # TypeScript
 - **لا** `db:push` مباشرة على رابط الإنتاج — استخدم `./push-to-production.sh` مع رابط الاتصال الفعلي الذي يختاره Railway (`NEON_DATABASE_URL` أولًا). السكربت يمرره كـ`SCHEMA_DATABASE_URL` حتى لا تستبدله `.env.local`.
 - **لا** تفترض أن الوثائق القديمة التي تذكر «Replit = production» ما زالت صحيحة — راجع هذا الملف أولاً
 - عند تعديل الـ proxy أو SEO على الحافة: **`functions/_middleware.js`** على Pages، وليس `server/seoInjector.ts` وحده (الـ injector يخدم وضع single-process فقط)
+- صيانة قاعدة البيانات عند إقلاع الخادم **متوقفة افتراضياً**. لا تعمل إلا مع `RUN_DB_STARTUP_MAINTENANCE=true`، ويظل `SKIP_DB_MAINTENANCE=true` مانعاً أعلى أولوية. لا تفعّلها على Railway مع رابط Neon pooled؛ نفّذ أعمال الصيانة كعملية تشغيلية مقصودة وباتصال admin مباشر.
