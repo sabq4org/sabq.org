@@ -14,7 +14,6 @@ import cron from "node-cron";
 import { isLeader } from "../leaderElection";
 import { isWorldCupConfigured } from "../services/worldCupService";
 import { runWorldCupNewsCycle } from "../services/worldCupNewsGenerator";
-import { runWithSportsPriority } from "../services/sportsRequestContext";
 
 let isRunning = false;
 
@@ -54,9 +53,9 @@ export function startWorldCupNewsJob(): void {
     return;
   }
 
-  cron.schedule("* * * * *", () => void runWithSportsPriority("background", () => tick("cron")), { timezone: "Asia/Riyadh" });
+  cron.schedule("* * * * *", () => void tick("cron"), { timezone: "Asia/Riyadh" });
   console.log("[WC News Job] 📰 scheduled — every minute (instant post-match reports)");
 
   // دورة أولى بعد دقيقة من الإقلاع لتغطية ما فات أثناء التوقف
-  setTimeout(() => void runWithSportsPriority("background", () => tick("startup")), 60 * 1000);
+  setTimeout(() => void tick("startup"), 60 * 1000);
 }

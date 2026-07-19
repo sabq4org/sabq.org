@@ -8,10 +8,8 @@
  * كل ما يصل للواجهة معرَّب، وكل نقطة بيانات خلف كاش SWR ليخدم آلاف الزوار
  * من طلب واحد للمزود.
  */
-import { swrCache, CACHE_TTL } from "../memoryCache";
-import { withSportsSWR as withSWR, getSportsCachedValue, setSportsCachedValue } from "./sportsCache";
-import { currentSportsLang, isEnglishSports, runWithSportsLang, type SportsLang } from "./sportsLang";
-import { runWithSportsPriority } from "./sportsRequestContext";
+import { withSWR, swrCache, CACHE_TTL } from "../memoryCache";
+import { isEnglishSports, runWithSportsLang } from "./sportsLang";
 import pLimit from "p-limit";
 import { apiFootballGet } from "./apiFootballClient";
 import { aiManager, AI_MODELS } from "../ai-manager";
@@ -33,7 +31,6 @@ import {
   getTheSportsLiveBoard,
   getTheSportsMatchLive,
   getTheSportsMatchLiveByUuid,
-  getTheSportsSaudiFriendlyLiveBoard,
   getTsCompetitionExtra,
   getTsCompetitionId,
   getTsCompetitionMatchPairs,
@@ -53,7 +50,6 @@ import {
   type TsTeamStatSide,
 } from "./theSportsService";
 import {
-  SAUDI_CLUB_TEAM_IDS,
   SPL_CITY_AR,
   SPL_POSITION_AR,
   SPL_POSITION_ORDER,
@@ -70,8 +66,6 @@ import {
   localizeSplRound,
   localizeSplTeamName,
   localizeSplTransferType,
-  looksLikeSaudiClubTeamName,
-  teamNamesLooselyMatch,
 } from "./saudiLeagueNames";
 import { resolveSportsNames, type NameLookup } from "./sportsNamesService";
 
@@ -128,9 +122,6 @@ export const SAUDI_COMPETITIONS: SaudiCompetition[] = [
   { id: 504, slug: "kings-cup", name: "كأس خادم الحرمين الشريفين", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2027, category: "saudi" },
   { id: 826, slug: "super-cup", name: "كأس السوبر السعودي", type: "cup", hasStandings: false, hasScorers: true, hasStats: false, fallbackSeason: 2026, category: "saudi" },
   { id: 1227, slug: "womens-league", name: "الدوري السعودي الممتاز للسيدات", type: "league", hasStandings: true, hasScorers: false, hasStats: false, fallbackSeason: 2026, category: "saudi" },
-  // ودّيات الأندية (API-Football Club Friendlies ≈ 667). الجدول/اللوحات لا تعرض
-  // كل ودّيات العالم — فقط مباريات فيها نادٍ سعودي (انظر isSaudiClubFriendlyRow).
-  { id: 667, slug: "club-friendlies", name: "مباريات ودّية", type: "cup", hasStandings: false, hasScorers: false, hasStats: false, fallbackSeason: 2026, category: "saudi" },
   // بطولات قارية/عالمية تشارك فيها الأندية السعودية. الترتيب متعدّد المجموعات
   // (AFC: مجموعتان، كأس العالم للأندية: 8 مجموعات) فيُترك hasStandings=false حتى
   // ندعم عرض الترتيب متعدّد المجموعات لاحقًا — المباريات والهدّافون يعملان الآن.
@@ -190,7 +181,6 @@ const COMP_NAME_EN: Record<string, string> = {
   "kings-cup": "King's Cup",
   "super-cup": "Saudi Super Cup",
   "womens-league": "Saudi Women's Premier League",
-  "club-friendlies": "Club Friendlies",
   "world-cup": "World Cup",
   "asian-cup": "Asian Cup",
   "afc-champions-league": "AFC Champions League Elite",
@@ -411,55 +401,6 @@ function localizeFixture(item: any, tr: FxTranslators = FX_NOOP_TR): SplFixture 
 
 // ---------- المباريات ----------
 
-/** API-Football: Club Friendlies (ودّيات الأندية). */
-export const CLUB_FRIENDLIES_LEAGUE_ID = 667;
-export const CLUB_FRIENDLIES_SLUG = "club-friendlies";
-
-/** ودّية أندية فيها نادٍ سعودي — لا ودّيات المنتخبات (league 10) ولا بقية العالم. */
-export function isSaudiClubFriendlyRow(r: any): boolean {
-  const lg = r?.league ?? {};
-  const leagueId = Number(lg.id) || 0;
-  const leagueName = String(lg.name ?? "");
-  // Friendlies (10) = منتخبات؛ نقبل Club Friendlies أو أي اسم ودّي فيه نادٍ سعودي.
-  if (leagueId === 10) return false;
-  const looksFriendly = leagueId === CLUB_FRIENDLIES_LEAGUE_ID || /friendl/i.test(leagueName);
-  if (!looksFriendly) return false;
-  const homeId = Number(r?.teams?.home?.id) || 0;
-  const awayId = Number(r?.teams?.away?.id) || 0;
-  return SAUDI_CLUB_TEAM_IDS.has(homeId) || SAUDI_CLUB_TEAM_IDS.has(awayId);
-}
-
-/** صفّ ضمن بطولاتنا، مع ترشيح الودّيات على الأندية السعودية فقط. */
-function isTrackedBoardRow(r: any, byId: Map<number, SaudiCompetition>): boolean {
-  if (isSaudiClubFriendlyRow(r)) return true;
-  const id = r?.league?.id;
-  if (!id || !byId.has(id)) return false;
-  // لا تُمرَّر كل Club Friendlies عبر byId — فقط عبر isSaudiClubFriendlyRow.
-  if (id === CLUB_FRIENDLIES_LEAGUE_ID) return false;
-  return true;
-}
-
-function boardItemFromTrackedRow(
-  r: any,
-  byId: Map<number, SaudiCompetition>,
-  tr: FxTranslators,
-): SplLiveBoardItem {
-  if (isSaudiClubFriendlyRow(r)) {
-    const friendly = byId.get(CLUB_FRIENDLIES_LEAGUE_ID);
-    return {
-      ...localizeFixture(r, tr),
-      competition: friendly
-        ? compDisplayName(friendly)
-        : isEnglishSports()
-          ? "Club Friendlies"
-          : "مباريات ودّية",
-      competitionSlug: CLUB_FRIENDLIES_SLUG,
-    };
-  }
-  const comp = byId.get(r.league.id)!;
-  return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
-}
-
 export async function getFixtures(comp: SaudiCompetition, seasonOverride?: number): Promise<SplFixture[]> {
   // المونديال: جدول worldCupService المُكمّل (mergeFullKnockoutSchedule) بدل جدول
   // المزوّد الخام — يُرقّي المتأهلين للأدوار الإقصائية فور حسمهم ويُبقي الخانات
@@ -469,26 +410,6 @@ export async function getFixtures(comp: SaudiCompetition, seasonOverride?: numbe
     return getWorldCupMergedFixtures();
   }
   const season = seasonOverride ?? await seasonFor(comp);
-  // ودّيات الأندية: موسم Club Friendlies عالمي ضخم — نافذة قصيرة + فلتر أندية سعودية.
-  // نافذة أضيق (−7…+30) تقلّل حمولة AF؛ TTL أطول لأن الجدول لا يتغيّر كل دقيقة.
-  if (comp.slug === CLUB_FRIENDLIES_SLUG) {
-    const FRIENDLY_TTL = 3 * 60 * 1000;
-    return withSWR(`spl:fixtures:${comp.id}:${season}:saudi-clubs:v2`, FRIENDLY_TTL, FRIENDLY_TTL * 2, async () => {
-      const today = riyadhDayFmt.format(new Date());
-      const from = shiftRiyadhDay(today, -7);
-      const to = shiftRiyadhDay(today, 30);
-      const rows = await apiGet("fixtures", {
-        league: comp.id,
-        season,
-        from,
-        to,
-        timezone: TIMEZONE,
-      });
-      const saudi = rows.filter(isSaudiClubFriendlyRow);
-      const tr = await fixtureTranslators(saudi);
-      return saudi.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
-    });
-  }
   return withSWR(`spl:fixtures:${comp.id}:${season}`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { league: comp.id, season, timezone: TIMEZONE });
     const tr = await fixtureTranslators(rows);
@@ -505,9 +426,8 @@ export async function getLiveFixtures(comp: SaudiCompetition): Promise<SplFixtur
       live: "all",
       timezone: TIMEZONE,
     });
-    const filtered = comp.slug === CLUB_FRIENDLIES_SLUG ? rows.filter(isSaudiClubFriendlyRow) : rows;
-    const tr = await fixtureTranslators(filtered);
-    return filtered.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
+    const tr = await fixtureTranslators(rows);
+    return rows.map((r: any) => localizeFixture(r, tr)).sort((a: SplFixture, b: SplFixture) => a.timestamp - b.timestamp);
   });
 }
 
@@ -566,124 +486,46 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
   return withSWR(`spl:live:all`, LIVE_BOARD_TTL, LIVE_BOARD_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { live: "all", timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
-    const ours = rows.filter((r: any) => isTrackedBoardRow(r, byId));
+    const ours = rows.filter((r: any) => byId.has(r.league?.id));
     const tr = await fixtureTranslators(ours);
-    let items = ours.map((r: any): SplLiveBoardItem => boardItemFromTrackedRow(r, byId, tr));
-    const [gcMerged, acMerged] = await Promise.all([
-      getGulfCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getGulfCupMergedFixtures>>),
-      getAsianCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getAsianCupMergedFixtures>>),
-    ]);
-    const gcLive = gcMerged.filter(
-      (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
-    );
-    if (gcLive.length) {
-      const gcComp = byId.get(25);
-      items = [
-        ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
-        ...gcLive.map((fx) => gcFixtureToBoardItem(fx, gcComp ? compDisplayName(gcComp) : "خليجي 27")),
-      ];
-    }
-    const acLive = acMerged.filter(
-      (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
-    );
-    if (acLive.length) {
-      const acComp = byId.get(7);
-      items = [
-        ...items.filter((i) => i.competitionSlug !== "asian-cup"),
-        ...acLive.map((fx) => acFixtureToBoardItem(fx, acComp ? compDisplayName(acComp) : "كأس آسيا")),
-      ];
-    }
-    // ودّيات سعودية على TheSports قد لا تدخل AF live=all (يبقى NS) — نُلحقها هنا.
+    let items = ours.map((r: any): SplLiveBoardItem => {
+      const comp = byId.get(r.league.id)!;
+      return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
+    });
+    // خليجي 27: جدوله مركّب محليًّا (أساس ثابت + تراكب المزوّدين) — نستبدل صفوف
+    // المزوّد الخام بجدولنا كي تصل مبارياته للتنبيهات/السنابات حتى قبل ظهور
+    // الموسم لدى API-Football (نفس منطق دمج المونديال في لوحة اليوم).
     try {
-      items = await mergeTsSaudiClubFriendliesIntoLive(items);
+      const gcLive = (await getGulfCupMergedFixtures()).filter(
+        (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
+      );
+      if (gcLive.length) {
+        const gcComp = byId.get(25);
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
+          ...gcLive.map((fx) => gcFixtureToBoardItem(fx, gcComp ? compDisplayName(gcComp) : "خليجي 27")),
+        ];
+      }
     } catch {
-      // أفضل جهد
+      // تعثّر خليجي لا يُسقط اللوحة الحية.
+    }
+    // كأس آسيا: نفس منطق الدمج عبر asianCupService.
+    try {
+      const acLive = (await getAsianCupMergedFixtures()).filter(
+        (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
+      );
+      if (acLive.length) {
+        const acComp = byId.get(7);
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "asian-cup"),
+          ...acLive.map((fx) => acFixtureToBoardItem(fx, acComp ? compDisplayName(acComp) : "كأس آسيا")),
+        ];
+      }
+    } catch {
+      // تعثّر كأس آسيا لا يُسقط اللوحة الحية.
     }
     return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => a.timestamp - b.timestamp);
   });
-}
-
-/** مهلة قصيرة: لا نحبس today/live خلف إثراء TheSports للودّيات. */
-const SAUDI_FRIENDLY_TS_BUDGET_MS = 450;
-
-async function loadSaudiFriendlyTsBoardBudgeted(): Promise<TsLiveBoardItem[]> {
-  try {
-    return await Promise.race([
-      getTheSportsSaudiFriendlyLiveBoard(),
-      new Promise<TsLiveBoardItem[]>((resolve) =>
-        setTimeout(() => resolve([]), SAUDI_FRIENDLY_TS_BUDGET_MS),
-      ),
-    ]);
-  } catch {
-    return [];
-  }
-}
-
-/** ألحق/حدّث ودّيات أندية سعودية من لوحة TheSports على لوحة المباشر. */
-async function mergeTsSaudiClubFriendliesIntoLive(
-  items: SplLiveBoardItem[],
-): Promise<SplLiveBoardItem[]> {
-  // مسار خفيف + ميزانية زمنية — لا getTheSportsLiveBoard العالمية (كانت تُبطئ /live).
-  const board = await loadSaudiFriendlyTsBoardBudgeted();
-  if (!board.length) return items;
-  const friendlyRe = /friendl|ودّي|ودي/i;
-  const out = [...items];
-  const friendlyComp = getCompetition(CLUB_FRIENDLIES_SLUG);
-  const compName = friendlyComp
-    ? compDisplayName(friendlyComp)
-    : isEnglishSports()
-      ? "Club Friendlies"
-      : "مباريات ودّية";
-
-  for (const m of board) {
-    if (!friendlyRe.test(m.competitionName)) continue;
-    if (!(looksLikeSaudiClubTeamName(m.homeName) || looksLikeSaudiClubTeamName(m.awayName))) continue;
-    const idx = out.findIndex((i) => fixtureMatchesTsBoard(i, m));
-    if (idx >= 0) {
-      out[idx] = {
-        ...applyTsBoardScore(out[idx], m),
-        competition: compName,
-        competitionSlug: CLUB_FRIENDLIES_SLUG,
-      };
-      continue;
-    }
-    const ts = m.matchTime > 0 ? m.matchTime : Math.floor(Date.now() / 1000);
-    out.push({
-      id: tsUuidToNegativeId(m.matchId),
-      date: new Date(ts * 1000).toISOString(),
-      timestamp: ts,
-      status: {
-        code: m.statusCode,
-        label: m.statusLabel,
-        elapsed: m.elapsed,
-        extra: m.extra,
-        live: m.live,
-        finished: m.finished,
-      },
-      round: "",
-      venue: { name: "", city: "" },
-      home: {
-        id: tsUuidToNegativeId(m.homeTeamId),
-        name: m.homeName,
-        logo: m.homeLogo || "",
-        winner: null,
-      },
-      away: {
-        id: tsUuidToNegativeId(m.awayTeamId),
-        name: m.awayName,
-        logo: m.awayLogo || "",
-        winner: null,
-      },
-      goals: { home: m.goalsHome, away: m.goalsAway },
-      penalties:
-        m.penHome != null || m.penAway != null
-          ? { home: m.penHome, away: m.penAway }
-          : null,
-      competition: compName,
-      competitionSlug: CLUB_FRIENDLIES_SLUG,
-    });
-  }
-  return out;
 }
 
 /** تحويل مباراة خليجي (جدول محلي مركّب) إلى عنصر لوحة موحّد. */
@@ -728,14 +570,6 @@ const riyadhDayFmt = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-/** إزاحة يوم تقويمي (YYYY-MM-DD) بعدد أيام — لحصر نافذة ودّيات الأندية. */
-function shiftRiyadhDay(ymd: string, deltaDays: number): string {
-  const [y, m, d] = ymd.split("-").map(Number);
-  // ظهر UTC يتجنّب انزلاق التاريخ عند التنسيق بتوقيت الرياض.
-  const utc = Date.UTC(y, m - 1, d, 12, 0, 0) + deltaDays * 86_400_000;
-  return riyadhDayFmt.format(new Date(utc));
-}
-
 /**
  * كل مباريات الأندية السعودية اليوم عبر جميع بطولاتنا — في نداء واحد
  * (fixtures?date=اليوم عالمي ثم نُرشّح على معرّفات بطولاتنا). تشمل المقرّرة
@@ -748,47 +582,63 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
   return withSWR(`spl:today:${dateKey}`, TODAY_TTL, TODAY_TTL * 2, async () => {
     const rows = await apiGet("fixtures", { date: dateKey, timezone: TIMEZONE });
     const byId = new Map(SAUDI_COMPETITIONS.map((c) => [c.id, c]));
-    const ours = rows.filter((r: any) => isTrackedBoardRow(r, byId));
+    const ours = rows.filter((r: any) => byId.has(r.league?.id));
     const tr = await fixtureTranslators(ours);
-    let items = ours.map((r: any): SplLiveBoardItem => boardItemFromTrackedRow(r, byId, tr));
-    // دمج المونديال/خليجي/آسيا بالتوازي — المسار التسلسلي السابق كان يضاعف الانتظار البارد.
-    const [wcMerged, gcMerged, acMerged] = await Promise.all([
-      getWorldCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getWorldCupMergedFixtures>>),
-      getGulfCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getGulfCupMergedFixtures>>),
-      getAsianCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getAsianCupMergedFixtures>>),
-    ]);
-    const wcDay = wcMerged.filter((fx) => riyadhKeyOf(fx.timestamp) === dateKey);
-    if (wcDay.length) {
-      const wcComp = byId.get(1);
-      const wcName = wcComp ? compDisplayName(wcComp) : (isEnglishSports() ? "World Cup" : "كأس العالم");
-      items = [
-        ...items.filter((i) => i.competitionSlug !== "world-cup"),
-        ...wcDay.map(
-          (fx): SplLiveBoardItem => ({ ...fx, competition: wcName, competitionSlug: "world-cup" }),
-        ),
-      ];
+    let items = ours.map((r: any): SplLiveBoardItem => {
+      const comp = byId.get(r.league.id)!;
+      return { ...localizeFixture(r, tr), competition: compDisplayName(comp), competitionSlug: comp.slug };
+    });
+    // المونديال: استبدال صفوف المزوّد الخام بجدول worldCupService المُكمّل ليوم
+    // التاريخ نفسه — فتظهر مباريات الأدوار الإقصائية بالمتأهلين المُرقّين ورموز
+    // FIFA حتى قبل نشرها من المزوّد (نفس منطق getFixtures للجدول الموحّد).
+    try {
+      const wcDay = (await getWorldCupMergedFixtures()).filter(
+        (fx) => riyadhKeyOf(fx.timestamp) === dateKey,
+      );
+      if (wcDay.length) {
+        const wcComp = byId.get(1);
+        const wcName = wcComp ? compDisplayName(wcComp) : (isEnglishSports() ? "World Cup" : "كأس العالم");
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "world-cup"),
+          ...wcDay.map(
+            (fx): SplLiveBoardItem => ({ ...fx, competition: wcName, competitionSlug: "world-cup" }),
+          ),
+        ];
+      }
+    } catch {
+      // المونديال المتعثر لا يُسقط لوحة اليوم — تبقى صفوف المزوّد الخام.
     }
-    const gcDay = gcMerged.filter(
-      (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
-    );
-    if (gcDay.length) {
-      const gcComp = byId.get(25);
-      const gcName = gcComp ? compDisplayName(gcComp) : "خليجي 27";
-      items = [
-        ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
-        ...gcDay.map((fx) => gcFixtureToBoardItem(fx, gcName)),
-      ];
+    // خليجي 27: نفس المنطق — الجدول المحلي المركّب يستبدل صفوف المزوّد الخام.
+    try {
+      const gcDay = (await getGulfCupMergedFixtures()).filter(
+        (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
+      );
+      if (gcDay.length) {
+        const gcComp = byId.get(25);
+        const gcName = gcComp ? compDisplayName(gcComp) : "خليجي 27";
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
+          ...gcDay.map((fx) => gcFixtureToBoardItem(fx, gcName)),
+        ];
+      }
+    } catch {
+      // تعثّر خليجي لا يُسقط لوحة اليوم.
     }
-    const acDay = acMerged.filter(
-      (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
-    );
-    if (acDay.length) {
-      const acComp = byId.get(7);
-      const acName = acComp ? compDisplayName(acComp) : (isEnglishSports() ? "AFC Asian Cup" : "كأس آسيا");
-      items = [
-        ...items.filter((i) => i.competitionSlug !== "asian-cup"),
-        ...acDay.map((fx) => acFixtureToBoardItem(fx, acName)),
-      ];
+    // كأس آسيا: استبدال صفوف المزوّد بجدول asianCupService لليوم نفسه.
+    try {
+      const acDay = (await getAsianCupMergedFixtures()).filter(
+        (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
+      );
+      if (acDay.length) {
+        const acComp = byId.get(7);
+        const acName = acComp ? compDisplayName(acComp) : (isEnglishSports() ? "AFC Asian Cup" : "كأس آسيا");
+        items = [
+          ...items.filter((i) => i.competitionSlug !== "asian-cup"),
+          ...acDay.map((fx) => acFixtureToBoardItem(fx, acName)),
+        ];
+      }
+    } catch {
+      // تعثّر كأس آسيا لا يُسقط لوحة اليوم.
     }
     return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => {
       if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
@@ -816,19 +666,11 @@ export async function getUnifiedFixtures(
   fromKey: string,
   toKey: string,
 ): Promise<SplLiveBoardItem[]> {
-  return (await getUnifiedFixturesResult(slugs, fromKey, toKey)).fixtures;
-}
-
-export async function getUnifiedFixturesResult(
-  slugs: string[],
-  fromKey: string,
-  toKey: string,
-): Promise<{ fixtures: SplLiveBoardItem[]; partial: boolean }> {
   const bySlug = new Map(SAUDI_COMPETITIONS.map((c) => [c.slug, c]));
   const comps = slugs
     .map((s) => bySlug.get(s))
     .filter((c): c is SaudiCompetition => Boolean(c));
-  const results = await Promise.allSettled(
+  const lists = await Promise.all(
     comps.map((comp) =>
       getFixtures(comp)
         .then((fixtures) =>
@@ -841,12 +683,10 @@ export async function getUnifiedFixturesResult(
               (fx): SplLiveBoardItem => ({ ...fx, competition: compDisplayName(comp), competitionSlug: comp.slug }),
             ),
         )
+        .catch(() => [] as SplLiveBoardItem[]), // بطولة متعثرة لا تُسقط الجدول
     ),
   );
-  const fixtures = results
-    .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
-    .sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
-  return { fixtures, partial: results.some((result) => result.status === "rejected") };
+  return lists.flat().sort((a, b) => a.timestamp - b.timestamp || a.id - b.id);
 }
 
 // ---------- البث المباشر العالمي (الدوريات العالمية التي موسمها قائم الآن) ----------
@@ -1032,9 +872,6 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
       const lg = r.league ?? {};
       const id = lg.id;
       if (!id) return false;
-      // ودّيات أندية سعودية فقط — لا كل Club Friendlies العالمية.
-      if (isSaudiClubFriendlyRow(r)) return true;
-      if (id === CLUB_FRIENDLIES_LEAGUE_ID) return false;
       if (byId.has(id)) return true; // بطولاتنا المنتقاة تظهر دائمًا
       const leagueName = String(lg.name ?? "");
       if (NOISE_LEAGUE_RE.test(leagueName)) return false; // ودّيات/احتياط/هواة
@@ -1071,23 +908,6 @@ export async function getWorldLiveFixtures(): Promise<SplWorldLiveItem[]> {
     return visible
       .map((r: any): SplWorldLiveItem => {
         const lg = r.league ?? {};
-        if (isSaudiClubFriendlyRow(r)) {
-          const friendly = byId.get(CLUB_FRIENDLIES_LEAGUE_ID);
-          return {
-            ...localizeFixture(r, tr),
-            competition: friendly
-              ? compDisplayName(friendly)
-              : isEnglishSports()
-                ? "Club Friendlies"
-                : "مباريات ودّية",
-            competitionSlug: CLUB_FRIENDLIES_SLUG,
-            country: lg.country ?? "World",
-            countryAr: localizeSplCountry(lg.country ?? "World"),
-            flag: lg.flag ?? null,
-            leagueId: lg.id ?? CLUB_FRIENDLIES_LEAGUE_ID,
-            leagueLogo: lg.logo ?? null,
-          };
-        }
         const known = byId.get(lg.id);
         return {
           ...localizeFixture(r, tr),
@@ -1883,130 +1703,18 @@ async function overlayFastScoreOnFixture<T extends SplFixture>(f: T, tsCompId: s
   }
 }
 
-/** AF يقول NS/TBD بعد صافرة البداية — شائع في Club Friendlies. */
-function isStuckPastKickoff(fx: Pick<SplFixture, "timestamp" | "status">): boolean {
-  if (fx.status.live || fx.status.finished) return false;
-  if (fx.status.code !== "NS" && fx.status.code !== "TBD") return false;
-  const mins = (Date.now() / 1000 - fx.timestamp) / 60;
-  return mins >= 2 && mins <= 130;
-}
-
-function annotateStuckKickoff<T extends SplFixture>(fx: T): T {
-  if (!isStuckPastKickoff(fx)) return fx;
-  return {
-    ...fx,
-    status: {
-      ...fx.status,
-      label: isEnglishSports()
-        ? "Kick-off passed — awaiting live feed"
-        : "موعد الانطلاق مرّ — بانتظار التغطية المباشرة",
-    },
-  };
-}
-
-function fixtureMatchesTsBoard(fx: Pick<SplFixture, "home" | "away" | "timestamp">, m: TsLiveBoardItem): boolean {
-  if (m.matchTime > 0 && Math.abs(m.matchTime - fx.timestamp) > 20 * 60) return false;
-  return (
-    (teamNamesLooselyMatch(fx.home.name, m.homeName) && teamNamesLooselyMatch(fx.away.name, m.awayName)) ||
-    (teamNamesLooselyMatch(fx.home.name, m.awayName) && teamNamesLooselyMatch(fx.away.name, m.homeName))
-  );
-}
-
-function applyTsBoardScore<T extends SplFixture>(fx: T, m: TsLiveBoardItem): T {
-  const swapped =
-    teamNamesLooselyMatch(fx.home.name, m.awayName) &&
-    teamNamesLooselyMatch(fx.away.name, m.homeName);
-  return {
-    ...fx,
-    goals: {
-      home: swapped ? m.goalsAway : m.goalsHome,
-      away: swapped ? m.goalsHome : m.goalsAway,
-    },
-    penalties:
-      m.penHome != null || m.penAway != null
-        ? {
-            home: swapped ? m.penAway : m.penHome,
-            away: swapped ? m.penHome : m.penAway,
-          }
-        : fx.penalties,
-    status: {
-      ...fx.status,
-      code: m.statusCode,
-      label: m.statusLabel,
-      elapsed: m.elapsed,
-      extra: m.extra,
-      live: m.live,
-      finished: m.finished,
-    },
-  };
-}
-
-/**
- * ودّيات الأندية: API-Football كثيرًا ما يبقى على NS بعد الانطلاق.
- * نطابق لوحة TheSports بالأسماء/وقت البداية (الودّيات مُستثناة من ضجيج اللوحة
- * إن كان فيها نادٍ سعودي).
- */
-function overlaySaudiClubFriendlyFixtureWithBoard<T extends SplFixture>(
-  fx: T,
-  board: TsLiveBoardItem[],
-): T {
-  if (fx.status.finished) return fx;
-  if (!fx.status.live && !isStuckPastKickoff(fx)) return fx;
-  const hit = board.find((m) => fixtureMatchesTsBoard(fx, m));
-  if (!hit) return annotateStuckKickoff(fx);
-  return applyTsBoardScore(fx, hit);
-}
-
-async function overlaySaudiClubFriendlyFixture<T extends SplFixture>(fx: T): Promise<T> {
-  if (fx.status.finished) return fx;
-  if (!fx.status.live && !isStuckPastKickoff(fx)) return fx;
-  try {
-    const board = await loadSaudiFriendlyTsBoardBudgeted();
-    return overlaySaudiClubFriendlyFixtureWithBoard(fx, board);
-  } catch {
-    return annotateStuckKickoff(fx);
-  }
-}
-
 /**
  * تركيب نتيجة TheSports اللحظية على عنصر لوحة (today/live) — أفضل جهد.
  * يعمل فقط للمباريات الجارية في بطولة مُدرَجة؛ غير ذلك يُعيد العنصر كما هو.
  */
 export async function overlayLiveBoardScore<T extends SplLiveBoardItem>(item: T): Promise<T> {
-  if (item.competitionSlug === CLUB_FRIENDLIES_SLUG) {
-    return overlaySaudiClubFriendlyFixture(item);
-  }
   const tsCompId = getTsCompetitionId(item.competitionSlug);
   if (!tsCompId) return item;
   return overlayFastScoreOnFixture(item, tsCompId);
 }
 
 export async function overlayLiveBoardList<T extends SplLiveBoardItem>(items: T[]): Promise<T[]> {
-  const list = items ?? [];
-  if (!list.length) return list;
-  // لوحة TheSports مرّة واحدة لكل طلب — لا N× await على نفس المصدر للودّيات.
-  let friendlyBoard: TsLiveBoardItem[] | null = null;
-  // ودّيات live سبق دمجها في getGlobalLiveFixtures — هنا فقط NS العالق بعد الصافرة.
-  const needsFriendlyBoard = list.some(
-    (i) =>
-      i.competitionSlug === CLUB_FRIENDLIES_SLUG &&
-      !i.status.finished &&
-      !i.status.live &&
-      isStuckPastKickoff(i),
-  );
-  if (needsFriendlyBoard) {
-    friendlyBoard = await loadSaudiFriendlyTsBoardBudgeted();
-  }
-  return Promise.all(
-    list.map(async (item) => {
-      if (item.competitionSlug === CLUB_FRIENDLIES_SLUG) {
-        return overlaySaudiClubFriendlyFixtureWithBoard(item, friendlyBoard ?? []);
-      }
-      const tsCompId = getTsCompetitionId(item.competitionSlug);
-      if (!tsCompId) return item;
-      return overlayFastScoreOnFixture(item, tsCompId);
-    }),
-  );
+  return Promise.all((items ?? []).map((i) => overlayLiveBoardScore(i)));
 }
 
 /**
@@ -2025,60 +1733,11 @@ export async function overlayLiveFixturesForComp<T extends SplFixture>(
 /**
  * تركيب لقطة TheSports الحيّة الكاملة (نتيجة + أحداث + إحصاءات) على تفاصيل
  * مباراة البوابة — أثناء اللعب فقط وللبطولات المُدرَجة. أفضل جهد.
- * ودّيات الأندية: نحاول حتى لو بقي AF على NS بعد الانطلاق.
  */
 export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<SplMatchDetail> {
   const fx = detail.fixture;
-  const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
-  const isClubFriendly =
-    comp?.slug === CLUB_FRIENDLIES_SLUG || detail.leagueId === CLUB_FRIENDLIES_LEAGUE_ID;
-
-  if (isClubFriendly) {
-    if (fx.status.finished) return detail;
-    if (!fx.status.live && !isStuckPastKickoff(fx)) return detail;
-    try {
-      // مركز المباراة: مسار ودّيات خفيف (لا لوحة العالم الكاملة).
-      const board = await getTheSportsSaudiFriendlyLiveBoard().catch(() => [] as TsLiveBoardItem[]);
-      const hit = board.find((m) => fixtureMatchesTsBoard(fx, m));
-      if (!hit) return { ...detail, fixture: annotateStuckKickoff(fx) };
-      const ts = await getTheSportsMatchLiveByUuid(hit.matchId).catch(() => null);
-      if (!ts || (!ts.live && !ts.finished)) {
-        return { ...detail, fixture: applyTsBoardScore(fx, hit) };
-      }
-      const swapped =
-        teamNamesLooselyMatch(fx.home.name, hit.awayName) &&
-        teamNamesLooselyMatch(fx.away.name, hit.homeName);
-      const home = swapped ? ts.away : ts.home;
-      const away = swapped ? ts.home : ts.away;
-      const penHome = swapped ? ts.penAway : ts.penHome;
-      const penAway = swapped ? ts.penHome : ts.penAway;
-      const fixture: SplFixture = {
-        ...fx,
-        goals: { home, away },
-        penalties:
-          penHome != null || penAway != null ? { home: penHome ?? null, away: penAway ?? null } : fx.penalties,
-        status: {
-          ...fx.status,
-          code: hit.statusCode,
-          label: hit.statusLabel,
-          elapsed: ts.elapsed ?? hit.elapsed ?? fx.status.elapsed,
-          extra: ts.extra ?? hit.extra ?? fx.status.extra,
-          live: ts.live,
-          finished: ts.finished || fx.status.finished,
-          clockStartEpoch: ts.clockStartEpoch ?? fx.status.clockStartEpoch,
-        },
-      };
-      const events = ts.events.length ? await mapTsEventsToSpl(ts.events, fixture) : detail.events;
-      const statistics = ts.stats
-        ? mapTsStatsToSpl(ts.stats, { ...detail, fixture })
-        : detail.statistics;
-      return { ...detail, fixture, events, statistics };
-    } catch {
-      return { ...detail, fixture: annotateStuckKickoff(fx) };
-    }
-  }
-
   if (!fx.status.live) return detail;
+  const comp = detail.leagueId != null ? getCompetitionByLeagueId(detail.leagueId) : undefined;
   const tsCompId = getTsCompetitionId(comp?.slug);
   if (!tsCompId) return detail;
   try {
@@ -2808,11 +2467,9 @@ export interface SplPlayerCard {
 export async function getPlayerCard(playerId: number): Promise<SplPlayerCard | null> {
   // موسم دوري روشن الحالي كمرجع لأرقام الموسم الجاري
   const proLeague = SAUDI_COMPETITIONS.find((c) => c.slug === "pro-league")!;
+  const season = await seasonFor(proLeague);
 
   return withSWR(`spl:player:${playerId}`, PLAYER_CARD_TTL, PLAYER_CARD_TTL * 2, async () => {
-    // داخل ميزانية البطاقة، مع fallback آمن؛ لا نجعل حلّ الموسم طلبًا حاجبًا
-    // منفصلًا قبل دخول كاش البطاقة الموزّع.
-    const season = await seasonFor(proLeague).catch(() => proLeague.fallbackSeason);
     const [profileRows, careerRows, trophyRows, statsRows] = await Promise.all([
       apiGet("players/profiles", { player: playerId }),
       apiGet("players/teams", { player: playerId }).catch(() => [] as any[]),
@@ -3524,72 +3181,20 @@ export async function getCompetitionMeta(comp: SaudiCompetition): Promise<SplCom
 // نجاح يُكاش موسمًا كاملًا فتهدأ العاصفة بعد أول دورة. مشترك لمنع رشقات متزامنة.
 const compMetaLimit = pLimit(3);
 
-const COMPETITIONS_SNAPSHOT_KEY = "spl:competitions-meta:v3";
-const competitionSnapshots = new Map<SportsLang, { data: ReturnType<typeof competitionFallback>; cachedAt: number }>();
-const competitionRefreshes = new Map<SportsLang, Promise<ReturnType<typeof competitionFallback>>>();
-
-function competitionFallback() {
-  return listCompetitions().map((competition) => ({
-    ...competition,
-    logo: null as string | null,
-    season: null as number | null,
-    start: null as string | null,
-    end: null as string | null,
-    status: "unknown" as CompetitionStatus,
-  }));
-}
-
-async function refreshCompetitionsSnapshot(): Promise<ReturnType<typeof competitionFallback>> {
-  const lang = currentSportsLang();
-  const inflight = competitionRefreshes.get(lang);
-  if (inflight) return inflight;
-
-  const promise = runWithSportsPriority("background", async () => {
-    const base = listCompetitions();
-    const metas = await Promise.all(
-      SAUDI_COMPETITIONS.map((c) => compMetaLimit(() => getCompetitionMeta(c).catch(() => null))),
-    );
-    const data = base.map((c, i) => ({
-      ...c,
-      logo: metas[i]?.logo ?? null,
-      season: metas[i]?.season ?? null,
-      start: metas[i]?.start ?? null,
-      end: metas[i]?.end ?? null,
-      status: metas[i]?.status ?? ("unknown" as CompetitionStatus),
-    }));
-    competitionSnapshots.set(lang, { data, cachedAt: Date.now() });
-    await setSportsCachedValue(COMPETITIONS_SNAPSHOT_KEY, data, COMP_META_TTL, COMP_META_TTL * 3);
-    return data;
-  });
-  competitionRefreshes.set(lang, promise);
-  promise.then(
-    () => competitionRefreshes.delete(lang),
-    (error) => {
-      competitionRefreshes.delete(lang);
-      console.warn(`[SaudiLeague] competitions snapshot refresh failed (${lang}):`, (error as Error)?.message);
-    },
-  );
-  return promise;
-}
-
-/**
- * قائمة البطولات لا تنتظر 35 نداءً خارجيًا أبدًا: L1 ثم Redis، وإلا القائمة
- * الأساسية فورًا. التحديث الطويل يعمل في الخلفية ويحفظ لقطة مشتركة بعد النشر.
- */
+/** قائمة البطولات مُثراة بالشعار والموسم وحالته — لترويسة البطولة الديناميكية في الواجهة. */
 export async function listCompetitionsWithMeta() {
-  const lang = currentSportsLang();
-  const local = competitionSnapshots.get(lang);
-  if (local && Date.now() - local.cachedAt <= COMP_META_TTL) return local.data;
-
-  const distributed = await getSportsCachedValue<ReturnType<typeof competitionFallback>>(COMPETITIONS_SNAPSHOT_KEY);
-  if (distributed) {
-    competitionSnapshots.set(lang, { data: distributed.data, cachedAt: distributed.cachedAt });
-    if (distributed.state === "stale") void refreshCompetitionsSnapshot();
-    return distributed.data;
-  }
-
-  void refreshCompetitionsSnapshot();
-  return local?.data ?? competitionFallback();
+  const base = listCompetitions();
+  const metas = await Promise.all(
+    SAUDI_COMPETITIONS.map((c) => compMetaLimit(() => getCompetitionMeta(c).catch(() => null)))
+  );
+  return base.map((c, i) => ({
+    ...c,
+    logo: metas[i]?.logo ?? null,
+    season: metas[i]?.season ?? null,
+    start: metas[i]?.start ?? null,
+    end: metas[i]?.end ?? null,
+    status: metas[i]?.status ?? ("unknown" as CompetitionStatus),
+  }));
 }
 
 /**
@@ -3604,13 +3209,13 @@ export function startCompetitionsMetaWarmer(): void {
   compMetaWarmerStarted = true;
   const warm = async () => {
     for (const lang of ["ar", "en"] as const) {
-      await runWithSportsLang(lang, () => refreshCompetitionsSnapshot()).catch((err) =>
+      await runWithSportsLang(lang, () => listCompetitionsWithMeta()).catch((err) =>
         console.warn(`[SaudiLeague] فشل تسخين كاش البطولات (${lang}):`, (err as Error)?.message),
       );
     }
   };
-  // Redis يجعل النشر غير بارد؛ نتحقق منه سريعًا بعد الإقلاع ثم نجدّد كل 5 ساعات.
-  setTimeout(() => void warm(), 1_000).unref();
+  // بعد 20 ثانية من الإقلاع (الزيارات أولًا)، ثم كل 5 ساعات (TTL الكاش 6).
+  setTimeout(() => void warm(), 20_000).unref();
   setInterval(() => void warm(), 5 * 60 * 60 * 1000).unref();
 }
 

@@ -10,7 +10,7 @@
  * الأسماء معرّبة هنا (منتخبات/ملاعب/جولات/حالات) قبل وصولها للواجهة، وكل نقطة
  * خلف كاش SWR. أفضل جهد بالكامل: أي فشل في API-Football يُبقي الأساس الثابت.
  */
-import { withSportsSWR as withSWR } from "./sportsCache";
+import { withSWR } from "../memoryCache";
 import { applyProvisionalTable } from "./liveStandings";
 import {
   SAUDI_TEAM_ID,

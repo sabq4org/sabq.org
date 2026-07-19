@@ -28,9 +28,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/loyalty-admin",
-      "owners": [
-        "platform"
-      ],
+      "owners": ["platform"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -55,9 +53,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
-      "owners": [
-        "sports"
-      ],
+      "owners": ["sports"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -165,9 +161,7 @@
         "coverage-gap-matcher"
       ],
       "dashboardPath": "/dashboard",
-      "owners": [
-        "editorial"
-      ],
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-19"
     },
     {
@@ -199,9 +193,7 @@
         "ai-task-executor"
       ],
       "dashboardPath": "/dashboard/admin/ifox",
-      "owners": [
-        "ai"
-      ],
+      "owners": ["ai"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -235,9 +227,7 @@
         "entity-extraction"
       ],
       "dashboardPath": "/dashboard/ai-hub",
-      "owners": [
-        "ai"
-      ],
+      "owners": ["ai"],
       "lastReviewed": "2026-07-19"
     },
     {
@@ -260,13 +250,9 @@
         "docs/MUQTARAB.md",
         "docs/MUQTARAB_IOS_PLAN.md"
       ],
-      "aiFeatureKeys": [
-        "muqtarab-ai"
-      ],
+      "aiFeatureKeys": ["muqtarab-ai"],
       "dashboardPath": "/dashboard/muqtarab",
-      "owners": [
-        "editorial"
-      ],
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -294,15 +280,9 @@
         "docs/RADAR_X_WATCHES.md",
         "docs/radar-source-licensing.md"
       ],
-      "aiFeatureKeys": [
-        "radar",
-        "radar-clustering",
-        "radar-relevance"
-      ],
+      "aiFeatureKeys": ["radar", "radar-clustering", "radar-relevance"],
       "dashboardPath": "/dashboard/radar",
-      "owners": [
-        "editorial"
-      ],
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-18"
     },
     {
@@ -329,13 +309,9 @@
         "client/src/pages/dashboard/NewsletterAnalytics.tsx",
         "docs/AUDIO_NEWSLETTER_SYSTEM.md"
       ],
-      "aiFeatureKeys": [
-        "audio-newsletter"
-      ],
+      "aiFeatureKeys": ["audio-newsletter"],
       "dashboardPath": "/dashboard/audio-newsletters",
-      "owners": [
-        "content"
-      ],
+      "owners": ["content"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -356,13 +332,9 @@
         "server/routes/mediaStoreRoutes.ts",
         "client/src/pages/dashboard/MediaLibrary.tsx"
       ],
-      "aiFeatureKeys": [
-        "media-caption"
-      ],
+      "aiFeatureKeys": ["media-caption"],
       "dashboardPath": "/dashboard/media-library",
-      "owners": [
-        "content"
-      ],
+      "owners": ["content"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -371,7 +343,7 @@
       "nameEn": "Sports Tournaments",
       "status": "active",
       "category": "sports",
-      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن). ودّيات أندية سعودية فقط (club-friendlies).",
+      "summary": "خليجي، آسيا، كأس الملك، كأس العالم، مجالس، فانتازي، أخبار Sportmonks، Snaps، والاستخبارات الرياضية. مركز المباراة + مركز الانتقالات (سعودي: API-Football + SportMonks فرق روشن).",
       "docPath": "docs/systems/sports-tournaments/SYSTEM.md",
       "relatedDocs": [
         "docs/SPORTS_PORTAL_ROADMAP.md",
@@ -390,9 +362,6 @@
         "server/services/sportmonksNewsService.ts",
         "server/services/saudiLeagueService.ts",
         "server/services/sportsTournamentsService.ts",
-        "server/services/apiFootballClient.ts",
-        "server/services/sportsCache.ts",
-        "server/services/sportsRequestContext.ts",
         "server/services/sportsNamesService.ts",
         "server/services/worldCupNewsGenerator.ts",
         "server/services/kingsCupNewsGenerator.ts",
@@ -405,20 +374,10 @@
         "server/routes/gcMajlis.ts",
         "server/routes/gcFantasy.ts",
         "server/routes/sports*.ts",
-        "server/jobs/kingsCupNewsJob.ts",
-        "server/jobs/worldCupNewsJob.ts",
-        "server/jobs/sportsSceneJob.ts",
-        "server/jobs/predictionCoreJob.ts",
-        "server/jobs/sportsMatchWarmupJob.ts",
-        "server/jobs/sportsAlertsJob.ts",
-        "server/jobs/sportsSnapsJob.ts",
-        "server/jobs/transferAlertsJob.ts",
-        "server/jobs/wcPredictionsJob.ts",
         "client/src/pages/GulfCup*.tsx",
         "client/src/pages/AsianCup*.tsx",
         "client/src/pages/KingsCup*.tsx",
         "client/src/pages/WorldCup*.tsx",
-        "client/src/pages/Sports*.tsx",
         "client/src/pages/dashboard/Sports*.tsx"
       ],
       "aiFeatureKeys": [
@@ -439,9 +398,7 @@
         "sports-intel-match-post"
       ],
       "dashboardPath": "/dashboard/sports-tournaments",
-      "owners": [
-        "sports"
-      ],
+      "owners": ["sports"],
       "lastReviewed": "2026-07-19"
     },
     {
@@ -467,9 +424,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/notification-admin",
-      "owners": [
-        "platform"
-      ],
+      "owners": ["platform"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -493,9 +448,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/ads",
-      "owners": [
-        "monetization"
-      ],
+      "owners": ["monetization"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -522,9 +475,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/roles",
-      "owners": [
-        "platform"
-      ],
+      "owners": ["platform"],
       "lastReviewed": "2026-07-18"
     },
     {
@@ -550,9 +501,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": null,
-      "owners": [
-        "platform"
-      ],
+      "owners": ["platform"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -578,9 +527,7 @@
         "sentiment-analysis"
       ],
       "dashboardPath": "/dashboard/ai-moderation",
-      "owners": [
-        "engagement"
-      ],
+      "owners": ["engagement"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -597,13 +544,9 @@
         "client/src/pages/dashboard/DeepAnalysis.tsx",
         "client/src/pages/dashboard/DeepAnalysisList.tsx"
       ],
-      "aiFeatureKeys": [
-        "deep-analysis"
-      ],
+      "aiFeatureKeys": ["deep-analysis"],
       "dashboardPath": "/dashboard/deep-analysis",
-      "owners": [
-        "editorial"
-      ],
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -625,13 +568,9 @@
         "client/src/pages/CalendarEventDetail.tsx",
         "docs/architecture/CALENDAR_SYSTEM.md"
       ],
-      "aiFeatureKeys": [
-        "calendar-ai"
-      ],
+      "aiFeatureKeys": ["calendar-ai"],
       "dashboardPath": "/dashboard/calendar",
-      "owners": [
-        "editorial"
-      ],
+      "owners": ["editorial"],
       "lastReviewed": "2026-07-17"
     },
     {
@@ -657,9 +596,7 @@
       ],
       "aiFeatureKeys": [],
       "dashboardPath": "/dashboard/systems-catalog",
-      "owners": [
-        "platform"
-      ],
+      "owners": ["platform"],
       "lastReviewed": "2026-07-17"
     }
   ]

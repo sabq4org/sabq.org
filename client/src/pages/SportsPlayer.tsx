@@ -49,12 +49,6 @@ export interface SpPlayerCard {
   currentTeam?: { id: number; name: string; logo: string } | null;
   history?: SpPlayerSeasonPoint[]; transfers?: SpPlayerTransfer[]; injuries?: SpPlayerInjury[];
 }
-interface SpPlayerExtras {
-  history: SpPlayerSeasonPoint[];
-  transfers: SpPlayerTransfer[];
-  injuries: SpPlayerInjury[];
-  partial?: boolean;
-}
 
 const birthFmt = new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { day: "numeric", month: "long", year: "numeric" });
 function fmtBirth(iso: string | null): string {
@@ -320,27 +314,11 @@ export default function SportsPlayer() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
 
-  const { data: player, isLoading, isError } = useQuery<SpPlayerCard>({
-    queryKey: [`/api/sports/player/${id}`],
+  const { data, isLoading, isError } = useQuery<SpPlayerCard>({
+    queryKey: [`/api/sports/player/${id}`, { with: "extras" }],
     enabled: Number.isFinite(id) && id > 0,
     staleTime: 10 * 60_000,
   });
-
-  // الإثراءات لا تحجز عرض البطاقة: تُجلب بعد ظهور الاسم والصورة والملخص.
-  const { data: extras } = useQuery<SpPlayerExtras>({
-    queryKey: [`/api/sports/player/${id}/extras`],
-    enabled: Number.isFinite(id) && id > 0 && !!player,
-    staleTime: 30 * 60_000,
-  });
-
-  const data: SpPlayerCard | undefined = player
-    ? {
-        ...player,
-        history: extras?.history,
-        transfers: extras?.transfers,
-        injuries: extras?.injuries,
-      }
-    : undefined;
 
   // القيمة السوقية (TheSports) — منفصلة وغير حاجبة, أفضل جهد.
   const { data: market } = useQuery<SpPlayerMarket>({
