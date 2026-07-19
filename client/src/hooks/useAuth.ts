@@ -174,25 +174,45 @@ export function getDefaultRedirectPath(user: User | null | undefined): string {
   return '/';
 }
 
+export function deriveAuthState(
+  user: User | null | undefined,
+  isLoading: boolean,
+  isError: boolean,
+) {
+  return {
+    isAuthenticated: Boolean(user),
+    isUnavailable: !isLoading && isError && !user,
+    shouldRedirectToLogin: !isLoading && !isError && !user,
+  };
+}
+
 export function useAuth(options?: { redirectToLogin?: boolean }) {
   const redirectToLogin = options?.redirectToLogin ?? false;
 
-  const { data: user, isLoading, isError } = useQuery<User | null>({
+  const { data: user, isLoading, isError, isFetching, refetch } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
-    retry: false,
+    // 401 يعيده الـ fetcher كـ null ولا يصل إلى retry. أخطاء الشبكة و5xx
+    // تستخدم سياسة QueryClient العامة (3 محاولات مع backoff).
     staleTime: 5 * 60 * 1000,
   });
 
+  const authState = deriveAuthState(user, isLoading, isError);
+
   useEffect(() => {
-    if (redirectToLogin && !isLoading && (isError || !user)) {
+    // لا نحوّل تعطل الخادم إلى logout. null بلا error فقط يعني 401 مؤكدة.
+    if (redirectToLogin && authState.shouldRedirectToLogin) {
       window.location.href = "/login";
     }
-  }, [user, isLoading, isError, redirectToLogin]);
+  }, [authState.shouldRedirectToLogin, redirectToLogin]);
 
   return {
     user,
     isLoading,
-    isAuthenticated: !!user && !isError,
+    // إن كان لدينا مستخدم محفوظ، يبقى موثقًا أثناء خطأ refetch عابر.
+    isAuthenticated: authState.isAuthenticated,
     isError,
+    isUnavailable: authState.isUnavailable,
+    isRetrying: isFetching && authState.isUnavailable,
+    retryAuth: refetch,
   };
 }
