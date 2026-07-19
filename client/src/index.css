@@ -612,11 +612,11 @@ html[data-dashboard-theme="claude"], .dashboard-theme[data-dashboard-theme="clau
 
 .dashboard-theme .theme-frame-option,
 html[data-dashboard-theme] .theme-frame-option {
-  border: 1px solid hsl(var(--border));
+  border: 1px solid hsl(var(--card-border, var(--border)));
   background: hsl(var(--card));
   border-radius: calc(var(--radius) + 0.15rem);
-  box-shadow: none;
-  transition: border-color 160ms ease, background-color 160ms ease;
+  box-shadow: 0 1px 2px hsl(var(--foreground) / 0.04), 0 3px 8px hsl(var(--foreground) / 0.03);
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
 }
 
 .dashboard-theme .theme-frame-option[data-active="true"],
@@ -624,7 +624,10 @@ html[data-dashboard-theme] .theme-frame-option {
 html[data-dashboard-theme] .theme-frame-option[data-active="true"],
 html[data-dashboard-theme] .theme-frame-option[aria-pressed="true"] {
   border-color: hsl(var(--primary));
-  background: hsl(var(--primary) / 0.06);
+  background: hsl(var(--card));
+  box-shadow:
+    0 0 0 1px hsl(var(--primary) / 0.28),
+    0 2px 8px hsl(var(--foreground) / 0.05);
 }
 
 .dark html[data-dashboard-theme="claude"],
@@ -1085,7 +1088,9 @@ html[data-dashboard-theme] [class*="rounded-2xl"].border,
   border-color: hsl(var(--card-border, var(--border)));
   border-width: 1px;
   border-style: solid;
-  box-shadow: 0 1px 3px hsl(var(--foreground) / 0.04), 0 4px 12px hsl(var(--foreground) / 0.03);
+  box-shadow:
+    0 1px 2px hsl(var(--foreground) / 0.045),
+    0 5px 14px hsl(var(--foreground) / 0.04);
   border-radius: calc(var(--radius) + 0.25rem);
 }
 
