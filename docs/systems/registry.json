@@ -380,7 +380,9 @@
         "client/src/pages/KingsCup*.tsx",
         "client/src/pages/WorldCup*.tsx",
         "client/src/pages/dashboard/Sports*.tsx",
-        "client/src/pages/dashboard/Wc2026NumbersReportPage.tsx"
+        "client/src/pages/dashboard/Wc2026NumbersReportPage.tsx",
+        "client/src/components/worldcup/Wc2026NumbersReportPanel.tsx",
+        "client/src/components/worldcup/WorldCupHomeSection.tsx"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
