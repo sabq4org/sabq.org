@@ -148,7 +148,7 @@ export type WcNumbersReport = {
 };
 
 /** كاش تقرير الأرقام — البطولة انتهت؛ TTL طويل لتقليل ضغط DB. */
-const REPORT_CACHE_KEY = "blocks:wc:numbers-report:v6";
+const REPORT_CACHE_KEY = "blocks:wc:numbers-report:v7";
 const REPORT_TTL_MS = CACHE_TTL.VERY_LONG; // ساعة طازج
 const REPORT_SWR_MS = CACHE_TTL.VERY_LONG * 2; // +ساعة stale-while-revalidate
 
@@ -418,12 +418,24 @@ async function buildTournamentStats(): Promise<TournamentStats> {
     };
   }
 
-  // مهلة قصيرة بعد انتهاء البطولة: لا نعلّق الرئيسية على مزوّد بطيء
+  // المباريات: مهلة قصيرة حتى لا تُعلَّق الرئيسية إن تعطّل المزوّد.
+  // اللوحات (هدّافون/صناعة/بطاقات): بلا مهلة قصيرة — كل واحدة تستدعي أيضاً
+  // aggregateRacesFromEvents؛ قطعها عند 2.5ث كان يعيد [] ثم يُكاش التقرير فارغاً ساعة.
+  // التقرير نفسه مُكاش ساعة؛ بطء الطلب الأول مقبول أفضل من «لا بيانات».
   const [fixtures, scorers, assists, cards] = await Promise.all([
-    withTimeout(getFixtures().catch(() => [] as WcFixture[]), 3500, [] as WcFixture[]),
-    withTimeout(getTopScorers().catch(() => []), 2500, []),
-    withTimeout(getTopAssists().catch(() => []), 2500, []),
-    withTimeout(getTopCards().catch(() => []), 2500, []),
+    withTimeout(getFixtures().catch(() => [] as WcFixture[]), 8000, [] as WcFixture[]),
+    getTopScorers().catch((err) => {
+      console.error("[WcNumbersReport] top scorers failed:", err);
+      return [];
+    }),
+    getTopAssists().catch((err) => {
+      console.error("[WcNumbersReport] top assists failed:", err);
+      return [];
+    }),
+    getTopCards().catch((err) => {
+      console.error("[WcNumbersReport] top cards failed:", err);
+      return [];
+    }),
   ]);
 
   const finished = fixtures.filter((f) => f.status.finished);

@@ -10,7 +10,7 @@
 - **لوحة:** `/dashboard/wc-2026-numbers-report` — نفس اللوحة (`variant=admin`).
 - **API عام:** `GET /api/world-cup/numbers-report` — بدون auth · كاش CDN `s-maxage=900`. واجهة التحميل تعرض «جاري جلب البيانات». لا خلفية سوداء ممتدة على الصفحة — بطاقة داخل الحاوية فقط.
 - **API أدمن:** `GET /api/admin/wc-2026-numbers-report` — `requireAuth` + `system.manage_settings` · `private, no-store`.
-- **كاش خدمة:** SWR `blocks:wc:numbers-report:v6` — ساعة طازج + ساعة SWR. أسماء المنتخبات تُعرَّب عبر `WC_TEAM_AR` (لا تعتمد على كاش fixtures بلغة en). نبض النشر = قائمة آخر 10 أيام + أقوى يوم (لا مخطط أعمدة تفاعلي).
+- **كاش خدمة:** SWR `blocks:wc:numbers-report:v7` — ساعة طازج + ساعة SWR. أسماء المنتخبات تُعرَّب عبر `WC_TEAM_AR` (لا تعتمد على كاش fixtures بلغة en). نبض النشر = قائمة آخر 10 أيام + أقوى يوم. لوحات الهدّافين/الصناعة/البطاقات بلا مهلة 2.5ث (كانت تُكاش فارغة).
 - **عدّاد المواد (مضيّق على 2026):** `wc26-*` + تحريري رياضة منذ 2026-01-01 مع استبعاد أندية/مونديالات قديمة.
 - **التوقعات:** `wc_predictions` → `totalPredictions` + `pointsAwarded` (ولاء بعد التسوية).
 - **الهيدر:** لوقو المونديال أُزيل من `Header.tsx` بعد انتهاء البطولة.
