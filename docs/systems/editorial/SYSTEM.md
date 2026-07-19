@@ -1,6 +1,6 @@
 # نظام التحرير وغرف الأخبار (`editorial`)
 
-> آخر مراجعة: 2026-07-18 | المالك: editorial
+> آخر مراجعة: 2026-07-19 | المالك: editorial
 
 ## الغرض
 غرفة الأخبار اليومية + أدوات التحرير بالذكاء الاصطناعي التي يستخدمها المحررون: عناوين، مقالات، تصنيف، SEO، روابط ذكية، صور، وكلاء بريد/واتساب، ومساعد كاتب الرأي.
@@ -24,6 +24,7 @@
 - أي أداة AI جديدة من المحرر → أضف `featureKey` هنا وفي `defaults.ts`، ولا تكرره بنظام آخر.
 - جزء كبير من الاستدعاءات القديمة ما زال يُحسب تحت `legacy-ai-manager` في `ai-hub` حتى تُهاجر.
 - **فجوات v2** (`RADAR_GAP_V2_ENABLED`): وحدة الفجوة = `radar_stories` لا المادة المنفردة؛ تتطلب صلة ≥ `RADAR_GAP_MIN_RELEVANCE` وزخم ≥ `RADAR_GAP_MIN_MOMENTUM` (أو تعدد مصادر). أعمدة additive: `story_id`, `relevance_score`, `momentum_score`, `gap_reason`. لا تُفعَّل قبل ثبات تجميع القصص أسبوعاً. المستبعد يدوياً لا يُمس؛ التنظيف النظامي يستخدم `dismissReason=auto-irrelevant`.
+- **عرض الداشبورد (2026-07-19):** قسم «فجوات التغطية الآن» في `NewsroomPulseDashboard` مخفي عن كل الأدوار. المكوّن `CoverageGapsSection` ومسارات `/api/admin/coverage-gaps*` تبقى في الكود لإعادة التفعيل لاحقاً.
 - **الموجز في صفحة المقال:** حقل المحرر `excerpt` عند الحفظ يزامن `aiSummary` ويمسح `aiBullets`. تفريغ الملخص يخفي الصندوق (لا إعادة توليد من نص المقال). الواجهة لا تكرر الفقرة تحت النقاط إن كانا نفس النص.
 - **أسلوب الصور المولّدة:** مفتاح `auto_image_generation_settings` يحتوي `newsStyle` (أخبار/تحليل) و`articleStyle` (رأي/عمود). `defaultStyle` يبقى متزامناً مع `newsStyle` للتوافق. الاختيار عبر `resolveStyleForArticleType` في `autoImageGenerationService`. كتّاب الرأي لا يرون ألبوم الصور ولا المرفقات في `ArticleEditor`.
 - **KPI كتّاب الرأي** (`OpinionWritersPage`): تُحسب من قائمة `/api/admin/opinion-writers` في الواجهة — منها «اختاروا يوم النشر» (`schedule.active`) و«بلا نشاط أكثر من شهرين» (لا `lastArticle` أو أقدم من ٦٠ يوماً).
