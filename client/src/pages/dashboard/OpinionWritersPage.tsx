@@ -18,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2, CalendarClock, Eye, MessageSquare, ThumbsUp, X, BadgeCheck, Search, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
@@ -323,32 +324,89 @@ export default function OpinionWritersPage() {
           </Card>
         </div>
 
-        {/* Weekly distribution */}
+        {/* Weekly distribution — stacked on mobile, 7-column grid on md+ */}
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">توزيع الكتّاب على أيام الأسبوع</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-7 gap-2 overflow-x-auto min-w-[640px] lg:min-w-0">
-              {WEEKDAYS.map((day, i) => (
-                <div key={day} className={i === todayWeekday ? "rounded-lg bg-primary/5 p-1" : "p-1"}>
+            {/* Mobile: one day per row, full names, wrap chips */}
+            <div className="space-y-2.5 md:hidden">
+              {WEEKDAYS.map((day, i) => {
+                const writersForDay = byWeekday[i];
+                const isToday = i === todayWeekday;
+                return (
                   <div
-                    className={`text-xs font-bold pb-1 mb-2 border-b-2 ${
+                    key={day}
+                    className={cn(
+                      "rounded-xl border p-3",
+                      isToday ? "border-primary/35 bg-primary/5" : "border-border bg-muted/40",
+                    )}
+                    data-testid={`weekday-mobile-${i}`}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div
+                        className={cn(
+                          "text-sm font-bold",
+                          isToday ? "text-primary" : "text-foreground",
+                        )}
+                      >
+                        {day}
+                        {isToday && (
+                          <span className="ms-1.5 text-xs font-semibold text-primary">(اليوم)</span>
+                        )}
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className="tabular-nums text-[11px] font-semibold"
+                      >
+                        {writersForDay.length}
+                      </Badge>
+                    </div>
+                    {writersForDay.length === 0 ? (
+                      <p className="text-xs italic text-muted-foreground">شاغر</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5">
+                        {writersForDay.map((w) => (
+                          <span
+                            key={w.id}
+                            className="rounded-md border border-border bg-card px-2.5 py-1 text-xs leading-snug text-foreground"
+                          >
+                            {w.name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop / tablet: unchanged 7-column board */}
+            <div className="hidden grid-cols-7 gap-2 md:grid">
+              {WEEKDAYS.map((day, i) => (
+                <div
+                  key={day}
+                  className={i === todayWeekday ? "rounded-lg bg-primary/5 p-1" : "p-1"}
+                  data-testid={`weekday-desktop-${i}`}
+                >
+                  <div
+                    className={`mb-2 border-b-2 pb-1 text-xs font-bold ${
                       i === todayWeekday
-                        ? "text-primary border-primary"
-                        : "text-muted-foreground border-border"
+                        ? "border-primary text-primary"
+                        : "border-border text-muted-foreground"
                     }`}
                   >
                     {day}
                     {i === todayWeekday && " (اليوم)"}
                   </div>
                   {byWeekday[i].length === 0 ? (
-                    <div className="text-xs text-muted-foreground italic">شاغر</div>
+                    <div className="text-xs italic text-muted-foreground">شاغر</div>
                   ) : (
                     byWeekday[i].map((w) => (
                       <div
                         key={w.id}
-                        className="text-xs bg-muted rounded-md px-2 py-1 mb-1 truncate"
+                        className="mb-1 truncate rounded-md bg-muted px-2 py-1 text-xs"
                         title={w.name}
                       >
                         {w.name}
