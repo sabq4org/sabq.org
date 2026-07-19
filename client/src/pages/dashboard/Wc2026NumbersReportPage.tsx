@@ -582,7 +582,7 @@ export default function Wc2026NumbersReportPage() {
                       <h2 className="mb-2 text-lg font-bold text-white">كيف يُحسب العدد؟</h2>
                       <p className="mb-3 text-sm text-sky-50/80">
                         الرقم السابق (~آلاف) كان يلتقط أي ذكر لـ«مونديال/كأس العالم» عبر السنين.
-                        العدّاد الآن مضيّق على مونديال 2026 فقط:
+                        العدّاد الآن مضيّق على مونديال 2026 (عنوان + نافذة زمنية):
                       </p>
                       <div className="mb-4 grid gap-3 sm:grid-cols-2">
                         <div className="rounded-2xl bg-black/20 px-4 py-3">
