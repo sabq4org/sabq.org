@@ -592,7 +592,7 @@ export function getQueryFn<T = unknown>(options: {
   silent?: boolean;
 }): QueryFunction<T> {
   const { on401: unauthorizedBehavior, silent = false } = options;
-  return async ({ queryKey }) => {
+  return async ({ queryKey, signal }) => {
     let url = '';
     const params: Record<string, string> = {};
     
@@ -615,6 +615,7 @@ export function getQueryFn<T = unknown>(options: {
     
     const res = await fetch(apiUrl(withSportsLang(url)), {
       credentials: "include",
+      signal,
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {

@@ -35977,17 +35977,30 @@ Sitemap: https://sabq.org/sitemap-news.xml
       // Primary FTS query (recent articles, AND-mode for precision)
       if (useFts) try {
         const recentResults: any = await searchTimeout(executeWithStatementTimeout(sql`
+          -- Keep FTS selection and pagination as separate optimization fences.
+          -- Otherwise Postgres can walk the date index and filter search_vector
+          -- row-by-row instead of using idx_articles_search_vector.
+          WITH matched AS MATERIALIZED (
+            SELECT id, published_at
+            FROM articles
+            WHERE status = 'published'
+              AND published_at >= ${recentCut.toISOString()}
+              AND search_vector @@ plainto_tsquery('arabic', ${normalizedQuery})
+          ),
+          top_matches AS MATERIALIZED (
+            SELECT id, published_at
+            FROM matched
+            ORDER BY published_at DESC
+            LIMIT ${limit} OFFSET ${offset}
+          )
           SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
             a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
             a.excerpt, a.category_id as "categoryId", a.views,
             c.name_ar as "categoryName", c.slug as "categorySlug"
-          FROM articles a
+          FROM top_matches m
+          JOIN articles a ON a.id = m.id
           LEFT JOIN categories c ON c.id = a.category_id
-          WHERE a.status = 'published'
-            AND a.published_at >= ${recentCut.toISOString()}
-            AND a.search_vector @@ plainto_tsquery('arabic', ${normalizedQuery})
-          ORDER BY a.published_at DESC
-          LIMIT ${limit} OFFSET ${offset}
+          ORDER BY m.published_at DESC
         `, 3000), 4000);
 
         const rows = recentResults?.rows || recentResults;
@@ -36011,18 +36024,29 @@ Sitemap: https://sabq.org/sitemap-news.xml
           const remaining = Math.min(limit - results.length, 10);
 
           const allTimeResults: any = await searchTimeout(executeWithStatementTimeout(sql`
+            -- Use the same GIN-first plan for the older-article fallback.
+            WITH matched AS MATERIALIZED (
+              SELECT id, published_at
+              FROM articles
+              WHERE status = 'published'
+                AND published_at < ${recentCut.toISOString()}
+                AND search_vector @@ plainto_tsquery('arabic', ${normalizedQuery})
+                ${existingIds.length > 0 ? sql`AND id != ALL(${existingIds})` : sql``}
+            ),
+            top_matches AS MATERIALIZED (
+              SELECT id, published_at
+              FROM matched
+              ORDER BY published_at DESC
+              LIMIT ${remaining}
+            )
             SELECT a.id, a.title, a.subtitle, a.slug, a.image_url as "imageUrl",
               a.image_focal_point as "imageFocalPoint", a.published_at as "publishedAt",
               a.excerpt, a.category_id as "categoryId", a.views,
               c.name_ar as "categoryName", c.slug as "categorySlug"
-            FROM articles a
+            FROM top_matches m
+            JOIN articles a ON a.id = m.id
             LEFT JOIN categories c ON c.id = a.category_id
-            WHERE a.status = 'published'
-              AND a.published_at < ${recentCut.toISOString()}
-              AND a.search_vector @@ plainto_tsquery('arabic', ${normalizedQuery})
-              ${existingIds.length > 0 ? sql`AND a.id != ALL(${existingIds})` : sql``}
-            ORDER BY a.published_at DESC
-            LIMIT ${remaining}
+            ORDER BY m.published_at DESC
           `, 2000), 3000);
           const allRows = allTimeResults?.rows || allTimeResults;
           results = [...results, ...(Array.isArray(allRows) ? allRows : []).map((r: any) => ({ ...r, matchType: 'content' }))];
