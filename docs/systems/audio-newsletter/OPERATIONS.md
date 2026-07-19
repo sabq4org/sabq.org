@@ -31,8 +31,9 @@ API / web process
 
 بعد تطبيق schema ونشر الكود:
 
-1. أنشئ خدمة Railway مستقلة من المستودع نفسه.
-2. استخدم أمر التشغيل `npm run start:newsletter-worker` وhealth path `/health`.
+1. أنشئ خدمة Railway مستقلة من المستودع نفسه، واضبط Config File على
+   `/railway.newsletter-worker.json` حتى لا ترث أمر تشغيل الـAPI.
+2. الملف يشغّل `node dist/newsletter-worker.js` ويستخدم health path `/health`.
 3. انسخ متغيرات قاعدة البيانات والبريد والذكاء الاصطناعي المطلوبة من خدمة API دون كشف قيمها في السجلات.
 4. اترك علمي الجدولة والتسليم `false` حتى قرار إعادة التشغيل.
 5. أبقِ `RUN_NEWSLETTER_SCHEDULER_IN_WEB=false` في خدمة API.
