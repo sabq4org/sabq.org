@@ -8,7 +8,7 @@
 ## تقرير كأس العالم 2026 بالأرقام (منشور على الرئيسية)
 - **الرئيسية:** تحت الهيرو مباشرة — `WorldCupHomeSection` → `Wc2026NumbersReportPanel` (بدل شريط المباراة + أخبار المونديال).
 - **لوحة:** `/dashboard/wc-2026-numbers-report` — نفس اللوحة (`variant=admin`).
-- **API عام:** `GET /api/world-cup/numbers-report` — بدون auth · كاش CDN قصير.
+- **API عام:** `GET /api/world-cup/numbers-report` — بدون auth · كاش CDN `s-maxage=900`. واجهة التحميل تعرض «جاري جلب البيانات». لا خلفية سوداء ممتدة على الصفحة — بطاقة داخل الحاوية فقط.
 - **API أدمن:** `GET /api/admin/wc-2026-numbers-report` — `requireAuth` + `system.manage_settings` · `private, no-store`.
 - **كاش خدمة:** SWR `blocks:wc:numbers-report:v5` — ساعة طازج + ساعة SWR.
 - **عدّاد المواد (مضيّق على 2026):** `wc26-*` + تحريري رياضة منذ 2026-01-01 مع استبعاد أندية/مونديالات قديمة.
