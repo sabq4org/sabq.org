@@ -3864,7 +3864,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
           {/* Settings Sidebar — contents على الموبايل لدمج الترتيب مع المحتوى */}
           {!isOpinionAuthor && <div
-            className="contents lg:col-span-4 lg:flex lg:flex-col lg:gap-5 lg:sticky lg:top-20 lg:max-h-[calc(100vh-5.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-2"
+            className="contents lg:col-span-4 lg:flex lg:flex-col lg:gap-5 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100dvh-6.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-12 lg:scroll-pb-12 [scrollbar-gutter:stable]"
             data-editor-panel="publish"
           >
             <div
