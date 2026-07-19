@@ -8,7 +8,12 @@
 ## تقرير كأس العالم 2026 بالأرقام (مسودة داخلية)
 - **لوحة:** `/dashboard/wc-2026-numbers-report` — للمراجعة قبل أي نشر عام (ليست صفحة زائر).
 - **API:** `GET /api/admin/wc-2026-numbers-report` — `requireAuth` + `system.manage_settings` · `Cache-Control: private, no-store`.
-- **خدمة:** `server/services/wcNumbersReportService.ts` — يجمع تغطية سبق (`wc26-*` + كلمات مونديال) + إحصائيات البطولة من `worldCupService` (بطل، أهداف، هدّافون، بطاقات، عرب) مع كاش SWR `blocks:wc:numbers-report:v1`.
+- **خدمة:** `server/services/wcNumbersReportService.ts` — كاش SWR `blocks:wc:numbers-report:v2`.
+- **عدّاد المواد (مضيّق على 2026):**
+  1. `wc26-*` (غرفة المباريات) — دائماً.
+  2. تحريري: قسم `sports` + (مونديال|كأس العالم) + `publishedAt >= 2026-01-01`، مع استبعاد أندية وسنوات 2010/2014/2018/2022 بلا ذكر 2026.
+  3. الاستجابة تعرض `breakdown.matchDesk` / `breakdown.editorialWindow` + `methodology`.
+- **البطولة:** من `worldCupService` (بطل، أهداف، هدّافون، بطاقات، عرب).
 - **الحالة:** `status: "draft"` دائماً حتى يُقرَّر مسار نشر عام لاحقاً.
 
 ## مفاتيح AI (حصرية)
