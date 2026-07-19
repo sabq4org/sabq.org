@@ -10,6 +10,7 @@ import { nanoid } from 'nanoid';
 import bcrypt from 'bcrypt';
 import { generateEnglishSlug } from './utils/slugTransliterator';
 import { notificationBus } from "./notificationBus";
+import { bufferArticleViewIncrement } from "./services/articleViewCounterService";
 import {
   users,
   categories,
@@ -3790,39 +3791,44 @@ export class DatabaseStorage implements IStorage {
 
   async getCategoriesWithStats(): Promise<Array<CategoryWithStats>> {
     const result = await db.execute(sql`
+      WITH reaction_counts AS (
+        SELECT article_id, count(*) AS total_likes
+        FROM reactions
+        GROUP BY article_id
+      ),
+      bookmark_counts AS (
+        SELECT article_id, count(*) AS total_bookmarks
+        FROM bookmarks
+        GROUP BY article_id
+      ),
+      article_stats AS (
+        SELECT
+          a.category_id,
+          count(*) AS article_count,
+          COALESCE(sum(a.views), 0) AS total_views,
+          COALESCE(sum(rc.total_likes), 0) AS total_likes,
+          COALESCE(sum(bc.total_bookmarks), 0) AS total_bookmarks,
+          count(*) FILTER (
+            WHERE a.published_at >= NOW() - INTERVAL '24 hours'
+          ) AS last_24h,
+          count(*) FILTER (
+            WHERE a.published_at >= NOW() - INTERVAL '7 days'
+          ) AS last_7d
+        FROM articles a
+        LEFT JOIN reaction_counts rc ON rc.article_id = a.id
+        LEFT JOIN bookmark_counts bc ON bc.article_id = a.id
+        WHERE a.status = 'published'
+        GROUP BY a.category_id
+      )
       SELECT c.*,
         COALESCE(s.article_count, 0)::int AS "articleCount",
         COALESCE(s.total_views, 0)::int AS "totalViews",
-        COALESCE(lk.total_likes, 0)::int AS "totalLikes",
-        COALESCE(bk.total_bookmarks, 0)::int AS "totalBookmarks",
-        COALESCE(p.last_24h, 0)::int AS "last24h",
-        COALESCE(p.last_7d, 0)::int AS "last7d"
+        COALESCE(s.total_likes, 0)::int AS "totalLikes",
+        COALESCE(s.total_bookmarks, 0)::int AS "totalBookmarks",
+        COALESCE(s.last_24h, 0)::int AS "last24h",
+        COALESCE(s.last_7d, 0)::int AS "last7d"
       FROM categories c
-      LEFT JOIN LATERAL (
-        SELECT count(*) AS article_count, COALESCE(sum(a.views), 0) AS total_views
-        FROM articles a WHERE a.category_id = c.id AND a.status = 'published'
-      ) s ON true
-      LEFT JOIN LATERAL (
-        SELECT count(*) AS total_likes
-        FROM reactions r
-        INNER JOIN articles a ON r.article_id = a.id
-        WHERE a.category_id = c.id AND a.status = 'published'
-      ) lk ON true
-      LEFT JOIN LATERAL (
-        SELECT count(*) AS total_bookmarks
-        FROM bookmarks b
-        INNER JOIN articles a ON b.article_id = a.id
-        WHERE a.category_id = c.id AND a.status = 'published'
-      ) bk ON true
-      LEFT JOIN LATERAL (
-        SELECT
-          count(*) FILTER (WHERE a.published_at >= NOW() - INTERVAL '24 hours') AS last_24h,
-          count(*) FILTER (WHERE a.published_at >= NOW() - INTERVAL '7 days') AS last_7d
-        FROM articles a
-        WHERE a.category_id = c.id
-          AND a.status = 'published'
-          AND a.published_at >= NOW() - INTERVAL '7 days'
-      ) p ON true
+      LEFT JOIN article_stats s ON s.category_id = c.id
       ORDER BY c.display_order, c.name_ar
     `);
 
@@ -3939,8 +3945,14 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (filters?.searchQuery) {
+      const searchPattern = `%${filters.searchQuery}%`;
       conditions.push(
-        sql`${articles.title} ILIKE ${`%${filters.searchQuery}%`} OR ${articles.excerpt} ILIKE ${`%${filters.searchQuery}%`}`
+        or(
+          // Matches idx_articles_title_trgm (GIN on lower(title)) for
+          // published searches while preserving case-insensitive semantics.
+          sql`lower(${articles.title}) LIKE lower(${searchPattern})`,
+          ilike(articles.excerpt, searchPattern),
+        )
       );
     }
 
@@ -4439,11 +4451,8 @@ export class DatabaseStorage implements IStorage {
     // Random boost for team morale (5-10 views per visit)
     const boostOptions = [5, 6, 7, 8, 9, 10];
     const randomBoost = boostOptions[Math.floor(Math.random() * boostOptions.length)];
-    
-    await db
-      .update(articles)
-      .set({ views: sql`${articles.views} + ${randomBoost}` })
-      .where(eq(articles.id, id));
+
+    bufferArticleViewIncrement(id, randomBoost);
   }
 
   async updateArticlesOrder(articleOrders: Array<{ id: string; displayOrder: number }>): Promise<void> {
@@ -4676,30 +4685,13 @@ export class DatabaseStorage implements IStorage {
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const [totalNews, todayNews, avgViews, topArticles] = await Promise.all([
+    const [summaryRows, topArticles] = await Promise.all([
       db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(articles)
-        .where(
-          and(
-            eq(articles.status, "published"),
-            ne(articles.articleType, "opinion")
-          )
-        ),
-
-      db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(articles)
-        .where(
-          and(
-            eq(articles.status, "published"),
-            ne(articles.articleType, "opinion"),
-            gte(articles.publishedAt, todayStart)
-          )
-        ),
-
-      db
-        .select({ avg: sql<number>`COALESCE(AVG(views), 0)::int` })
+        .select({
+          totalNews: sql<number>`count(*)::int`,
+          todayNews: sql<number>`count(*) FILTER (WHERE ${articles.publishedAt} >= ${todayStart})::int`,
+          averageViews: sql<number>`COALESCE(AVG(${articles.views}), 0)::int`,
+        })
         .from(articles)
         .where(
           and(
@@ -4732,6 +4724,8 @@ export class DatabaseStorage implements IStorage {
         .limit(5),
     ]);
 
+    const summary = summaryRows[0];
+
     const topStoriesThisWeek = topArticles.map((row) => ({
       id: row.id,
       title: row.title,
@@ -4745,8 +4739,8 @@ export class DatabaseStorage implements IStorage {
     const lead = topStoriesThisWeek[0] ?? null;
 
     return {
-      totalNews: totalNews[0]?.count ?? 0,
-      todayNews: todayNews[0]?.count ?? 0,
+      totalNews: summary?.totalNews ?? 0,
+      todayNews: summary?.todayNews ?? 0,
       topStoriesThisWeek,
       // Legacy shape for older clients — do not expand this for public UIs.
       topViewedThisWeek: {
@@ -4761,7 +4755,7 @@ export class DatabaseStorage implements IStorage {
           : null,
         views: topArticles[0]?.views ?? 0,
       },
-      averageViews: Math.round(avgViews[0]?.avg ?? 0),
+      averageViews: Math.round(summary?.averageViews ?? 0),
     };
   }
 

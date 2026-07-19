@@ -83,6 +83,7 @@ import { classifyArticle } from "../ai-classifier";
 import { generateAndUploadImage } from "../services/nanoBananaService";
 import { autoGenerateImage } from "../services/autoImageGenerationService";
 import { notifyArticleStakeholders } from "../services/editorialNotifications";
+import { bufferArticleViewIncrement } from "../services/articleViewCounterService";
 import { invalidateArticleWrite } from "../services/contentInvalidation";
 import { notifySearchEngines } from "../indexNow";
 import oauthMobileRouter from "./v1/oauthMobile";
@@ -486,9 +487,7 @@ router.post("/articles/:id/view", async (req: Request, res: Response) => {
     // Increment views counter (same as web: 5-10 random boost)
     const boostOptions = [5, 6, 7, 8, 9, 10];
     const randomBoost = boostOptions[Math.floor(Math.random() * boostOptions.length)];
-    await db.update(articles)
-      .set({ views: sql`${articles.views} + ${randomBoost}` })
-      .where(eq(articles.id, articleId));
+    bufferArticleViewIncrement(articleId, randomBoost);
 
     // Per-view analytics line — very high frequency. Gate behind debug so it
     // no longer floods production logs (set LOG_VERBOSE=1 to re-enable).
@@ -542,32 +541,14 @@ router.post("/articles/batch-view", async (req: Request, res: Response) => {
     }
 
     let successCount = 0;
-    let failCount = invalidCount;
+    const failCount = invalidCount;
 
     if (aggregatedViews.size > 0) {
-      try {
-        const paramValues: any[] = [];
-        const placeholders: string[] = [];
-        let i = 0;
-        for (const [id, totalBoost] of aggregatedViews) {
-          placeholders.push(`($${i * 2 + 1}, $${i * 2 + 2}::integer)`);
-          paramValues.push(id, totalBoost);
-          i++;
-        }
-        
-        await pool.query(
-          `UPDATE articles AS a
-           SET views = a.views + v.increment
-           FROM (VALUES ${placeholders.join(',')}) AS v(id, increment)
-           WHERE a.id = v.id`,
-          paramValues
-        );
-        successCount = viewsToProcess.length - invalidCount;
-        console.log(`[Mobile API] Batch view: bulk updated ${aggregatedViews.size} unique articles (${successCount} views)`);
-      } catch (err) {
-        failCount += viewsToProcess.length - invalidCount;
-        console.error("[Mobile API] Batch view bulk update failed:", err);
+      for (const [id, totalBoost] of aggregatedViews) {
+        bufferArticleViewIncrement(id, totalBoost);
       }
+      successCount = viewsToProcess.length - invalidCount;
+      log.debug(`[Mobile API] Batch view buffered ${aggregatedViews.size} unique articles (${successCount} views)`);
     }
 
     res.json({ 
@@ -5429,9 +5410,7 @@ router.post("/behavior/track", async (req: Request, res: Response) => {
       // /articles/:id/view so trending stays internally consistent).
       const boostOptions = [5, 6, 7, 8, 9, 10];
       const randomBoost = boostOptions[Math.floor(Math.random() * boostOptions.length)];
-      await db.update(articles)
-        .set({ views: sql`${articles.views} + ${randomBoost}` })
-        .where(eq(articles.id, data.articleId));
+      bufferArticleViewIncrement(data.articleId, randomBoost);
 
       // Seed a reading_history row so insights/today and trending can
       // count this open. We do NOT upsert here — every open is a
