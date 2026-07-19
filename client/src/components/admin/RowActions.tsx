@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine } from "lucide-react";
+import { Edit, Star, Trash2, Send, Bell, Loader2, Languages, FilePenLine, HeartPulse } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -58,6 +58,8 @@ export function RowActions({
   const [isSendingNotification, setIsSendingNotification] = useState(false);
   const [translateDialogOpen, setTranslateDialogOpen] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [resurfaceDialogOpen, setResurfaceDialogOpen] = useState(false);
+  const [isResurfacing, setIsResurfacing] = useState(false);
 
   useEffect(() => {
     setIsFeatured(initialIsFeatured);
@@ -108,6 +110,30 @@ export function RowActions({
       });
     } finally {
       setIsTranslating(false);
+    }
+  };
+
+  // «إنعاش»: يعيد الخبر لصدارة الموجز دون تغيير تاريخه أو مشاهداته أو رابطه
+  const handleResurface = async () => {
+    setIsResurfacing(true);
+    try {
+      await apiRequest(`/api/articles/${articleId}/resurface`, {
+        method: "POST",
+      });
+
+      toast({
+        title: "تم الإنعاش",
+        description: "عاد الخبر إلى صدارة الموجز وبدأ دورة جديدة",
+      });
+      setResurfaceDialogOpen(false);
+    } catch (error: any) {
+      toast({
+        title: "خطأ",
+        description: error.message || "فشل إنعاش الخبر",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResurfacing(false);
     }
   };
 
@@ -263,6 +289,22 @@ export function RowActions({
             )}
           </Button>
         )}
+        {canPublish && status === "published" && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setResurfaceDialogOpen(true)}
+            disabled={isLoading || isResurfacing}
+            data-testid={`button-action-resurface-${articleId}`}
+            title="إنعاش (عودة لصدارة الموجز)"
+          >
+            {isResurfacing ? (
+              <Loader2 className="w-4 h-4 animate-spin text-rose-500" />
+            ) : (
+              <HeartPulse className="w-4 h-4 text-rose-500" />
+            )}
+          </Button>
+        )}
         {canSendNotification && status === "published" && (
           <Button
             variant="ghost"
@@ -330,6 +372,42 @@ export function RowActions({
                 <>
                   <Languages className="w-4 h-4 ml-2" />
                   ترجم ونشر
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={resurfaceDialogOpen} onOpenChange={setResurfaceDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>إنعاش الخبر</AlertDialogTitle>
+            <AlertDialogDescription className="text-right">
+              سيعود الخبر إلى صدارة الموجز ويبدأ دورة عرض جديدة، دون أي تغيير في تاريخ نشره أو مشاهداته أو رابطه.
+              {articleTitle && (
+                <span className="block mt-2 font-medium text-foreground">
+                  "{articleTitle}"
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel disabled={isResurfacing}>إلغاء</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleResurface}
+              disabled={isResurfacing}
+              className="bg-rose-600 hover:bg-rose-700"
+            >
+              {isResurfacing ? (
+                <>
+                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                  جاري الإنعاش...
+                </>
+              ) : (
+                <>
+                  <HeartPulse className="w-4 h-4 ml-2" />
+                  أنعش الخبر
                 </>
               )}
             </AlertDialogAction>

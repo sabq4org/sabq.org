@@ -3999,7 +3999,8 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(users, eq(articles.authorId, users.id))
       .leftJoin(reporterAlias, eq(articles.reporterId, reporterAlias.id))
       .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(desc(articles.displayOrder), desc(articles.publishedAt), desc(articles.createdAt))
+      // «إنعاش»: COALESCE يقدّم الخبر المُنعش دون تغيير تاريخ نشره الظاهر
+      .orderBy(desc(articles.displayOrder), desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`), desc(articles.createdAt))
       .limit(filters?.limit || 500);
 
     return results.map((r) => ({
@@ -7994,7 +7995,8 @@ export class DatabaseStorage implements IStorage {
           )
         )
       )
-      .orderBy(desc(articles.publishedAt), desc(articles.createdAt))
+      // «إنعاش»: COALESCE يقدّم الخبر المُنعش دون تغيير تاريخ نشره الظاهر
+      .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`), desc(articles.createdAt))
       .limit(limit * 3)
       .offset(offset);
 

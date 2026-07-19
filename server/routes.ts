@@ -3576,7 +3576,7 @@ export async function registerRoutes(app: Express, httpServer: Server): Promise<
                 eq(articleSmartCategories.categoryId, category.id),
                 eq(articles.status, "published")
               ))
-              .orderBy(desc(articleSmartCategories.score), desc(articles.publishedAt))
+              .orderBy(desc(articleSmartCategories.score), desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
               .limit(requestedLimit);
 
             articlesList = smartAssignments.map(item => item.article);
@@ -12498,7 +12498,8 @@ Respond in valid JSON format only:
           or(isNull(articles.articleType), ne(articles.articleType, "opinion")),
           or(isNull(articles.source), ne(articles.source, "ai"))
         ))
-        .orderBy(desc(articles.publishedAt))
+        // «إنعاش»: الخبر المُنعش يتقدّم الموجز بوقت إنعاشه دون تغيير تاريخ نشره
+        .orderBy(desc(sql`COALESCE(${articles.resurfacedAt}, ${articles.publishedAt})`))
         .limit(limit)
         .offset(offset);
       
