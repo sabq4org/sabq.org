@@ -9153,6 +9153,89 @@ export type NewsletterSubscription = typeof newsletterSubscriptions.$inferSelect
 export type InsertNewsletterSubscription = z.infer<typeof insertNewsletterSubscriptionSchema>;
 
 // ============================================
+// NEWSLETTER DELIVERY QUEUE - طابور تسليم النشرات
+// ============================================
+
+/**
+ * طابور دائم منفصل عن عملية الويب. كل نشرة لها job واحد، ويعالجها
+ * newsletter-worker على دفعات قابلة للاستئناف بعد restart/deploy.
+ */
+export const newsletterDeliveryJobs = pgTable("newsletter_delivery_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  newsletterId: varchar("newsletter_id")
+    .references(() => audioNewsletters.id, { onDelete: "cascade" })
+    .notNull(),
+  newsletterType: text("newsletter_type").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  audioUrl: text("audio_url"),
+  articlesPerSubscriber: integer("articles_per_subscriber").default(5).notNull(),
+  status: text("status").default("queued").notNull(), // queued, processing, completed, failed
+  attempts: integer("attempts").default(0).notNull(),
+  totalRecipients: integer("total_recipients").default(0).notNull(),
+  sentCount: integer("sent_count").default(0).notNull(),
+  failedCount: integer("failed_count").default(0).notNull(),
+  skippedCount: integer("skipped_count").default(0).notNull(),
+  aiCircuitOpened: boolean("ai_circuit_opened").default(false).notNull(),
+  lastError: text("last_error"),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("newsletter_delivery_jobs_newsletter_unique_idx").on(table.newsletterId),
+  index("newsletter_delivery_jobs_status_created_idx").on(table.status, table.createdAt),
+]);
+
+/**
+ * سجل مستقل لكل مستلم يمنع إعادة الإرسال لمن اكتمل تسليمه، ويعمل checkpoint
+ * دقيقًا بدل إعادة تشغيل القائمة من البداية عند توقف الـ worker.
+ */
+export const newsletterDeliveryRecipients = pgTable("newsletter_delivery_recipients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: varchar("job_id")
+    .references(() => newsletterDeliveryJobs.id, { onDelete: "cascade" })
+    .notNull(),
+  subscriptionId: varchar("subscription_id")
+    .references(() => newsletterSubscriptions.id, { onDelete: "cascade" })
+    .notNull(),
+  status: text("status").default("pending").notNull(), // pending, processing, sent, failed, skipped
+  attempts: integer("attempts").default(0).notNull(),
+  lastError: text("last_error"),
+  lockedAt: timestamp("locked_at"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("newsletter_delivery_recipients_job_subscription_unique_idx")
+    .on(table.jobId, table.subscriptionId),
+  index("newsletter_delivery_recipients_job_status_idx").on(table.jobId, table.status),
+  index("newsletter_delivery_recipients_stale_lock_idx").on(table.status, table.lockedAt),
+]);
+
+export const newsletterDeliveryJobsRelations = relations(newsletterDeliveryJobs, ({ one, many }) => ({
+  newsletter: one(audioNewsletters, {
+    fields: [newsletterDeliveryJobs.newsletterId],
+    references: [audioNewsletters.id],
+  }),
+  recipients: many(newsletterDeliveryRecipients),
+}));
+
+export const newsletterDeliveryRecipientsRelations = relations(newsletterDeliveryRecipients, ({ one }) => ({
+  job: one(newsletterDeliveryJobs, {
+    fields: [newsletterDeliveryRecipients.jobId],
+    references: [newsletterDeliveryJobs.id],
+  }),
+  subscription: one(newsletterSubscriptions, {
+    fields: [newsletterDeliveryRecipients.subscriptionId],
+    references: [newsletterSubscriptions.id],
+  }),
+}));
+
+export type NewsletterDeliveryJob = typeof newsletterDeliveryJobs.$inferSelect;
+export type NewsletterDeliveryRecipient = typeof newsletterDeliveryRecipients.$inferSelect;
+
+// ============================================
 // ARTICLE MEDIA ASSETS - تعريفات الصور في المقالات
 // ============================================
 
