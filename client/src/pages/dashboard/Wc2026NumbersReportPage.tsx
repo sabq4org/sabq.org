@@ -187,33 +187,47 @@ function MixMeter({ ai, editorial }: { ai: number; editorial: number }) {
   const aiPct = Math.round((ai / total) * 100);
   const edPct = 100 - aiPct;
   return (
-    <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+    <div className="min-w-0 w-full overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-3 sm:rounded-3xl sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-lg font-bold text-white">مزيج التغطية</h2>
-        <Layers className="h-4 w-4 text-amber-300" />
+        <h2 className="text-base font-bold text-white sm:text-lg">مزيج التغطية</h2>
+        <Layers className="h-4 w-4 shrink-0 text-amber-300" />
       </div>
-      <div className="flex h-3 overflow-hidden rounded-full bg-white/10">
+      <div className="flex h-2 w-full max-w-full overflow-hidden rounded-full bg-white/10 sm:h-2.5">
         <div
-          className="bg-gradient-to-l from-emerald-400 to-teal-500 transition-all duration-700"
+          className="min-w-0 bg-gradient-to-l from-emerald-400 to-teal-500 transition-all duration-700"
           style={{ width: `${aiPct}%` }}
           title={`AI ${aiPct}%`}
         />
         <div
-          className="bg-gradient-to-l from-amber-300 to-orange-500 transition-all duration-700"
+          className="min-w-0 bg-gradient-to-l from-amber-300 to-orange-500 transition-all duration-700"
           style={{ width: `${edPct}%` }}
           title={`تحريري ${edPct}%`}
         />
       </div>
-      <div className="mt-3 flex justify-between text-xs text-white/65">
-        <span>
-          AI · <strong className="text-emerald-300">{ai.toLocaleString("en-US")}</strong> ({aiPct}%)
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] text-white/65 sm:text-xs">
+        <span className="min-w-0 truncate">
+          AI · <strong className="text-emerald-300">{ai.toLocaleString("en-US")}</strong>
+          <span className="text-white/40"> ({aiPct}%)</span>
         </span>
-        <span>
-          تحريري · <strong className="text-amber-300">{editorial.toLocaleString("en-US")}</strong> ({edPct}%)
+        <span className="min-w-0 truncate text-end">
+          تحريري · <strong className="text-amber-300">{editorial.toLocaleString("en-US")}</strong>
+          <span className="text-white/40"> ({edPct}%)</span>
         </span>
       </div>
     </div>
   );
+}
+
+function useIsCompactPhone() {
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const apply = () => setCompact(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+  return compact;
 }
 
 function PulseChart({
@@ -225,15 +239,20 @@ function PulseChart({
   selectedDay: string | null;
   onSelectDay: (day: string | null) => void;
 }) {
+  const compact = useIsCompactPhone();
   const max = Math.max(1, ...days.map((d) => d.count));
-  const recent = days.slice(-28);
+  // على الجوال أعمدة أقل حتى لا يخرج الشريط عن العرض
+  const recent = days.slice(compact ? -14 : -28);
   if (recent.length === 0) {
     return <p className="text-sm text-white/50">لا بيانات يومية بعد</p>;
   }
   const selected = selectedDay ? recent.find((d) => d.day === selectedDay) : null;
   return (
-    <div className="space-y-3">
-      <div className="flex h-44 items-end gap-1">
+    <div className="min-w-0 w-full space-y-3 overflow-hidden">
+      <div
+        className="grid h-36 w-full min-w-0 items-end gap-px sm:h-44 sm:gap-1"
+        style={{ gridTemplateColumns: `repeat(${recent.length}, minmax(0, 1fr))` }}
+      >
         {recent.map((d) => {
           const active = selectedDay === d.day;
           return (
@@ -241,12 +260,12 @@ function PulseChart({
               key={d.day}
               type="button"
               onClick={() => onSelectDay(active ? null : d.day)}
-              className="group flex flex-1 flex-col items-center gap-1 outline-none"
+              className="group flex min-w-0 flex-col items-center gap-1 outline-none"
               title={`${d.day}: ${d.count} مادة · ${d.views} مشاهدة`}
             >
               <div
                 className={cn(
-                  "w-full rounded-t-md transition",
+                  "w-full max-w-full rounded-t-sm transition sm:rounded-t-md",
                   active
                     ? "bg-gradient-to-t from-amber-500 to-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.45)]"
                     : "bg-gradient-to-t from-amber-600/40 to-amber-300/70 group-hover:to-amber-200",
@@ -261,7 +280,7 @@ function PulseChart({
         })}
       </div>
       {selected ? (
-        <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-50">
+        <div className="rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-50 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
           <strong>{selected.day}</strong>
           {" · "}
           {selected.count.toLocaleString("en-US")} مادة
@@ -276,7 +295,7 @@ function PulseChart({
           </button>
         </div>
       ) : (
-        <p className="text-xs text-white/40">انقر يوماً لرؤية تفاصيل النبض</p>
+        <p className="text-[10px] text-white/40 sm:text-xs">انقر يوماً لرؤية تفاصيل النبض</p>
       )}
     </div>
   );
@@ -321,7 +340,7 @@ function StoryRail({
       </div>
       <p className="text-3xl font-black text-amber-200 sm:text-4xl md:text-5xl">{beat.value}</p>
       <p className="mt-2 text-xs text-white/65 sm:text-sm">{beat.detail}</p>
-      <div className="mt-4 flex gap-1.5">
+      <div className="mt-3 flex items-center justify-center gap-1.5 sm:mt-4 sm:gap-2">
         {beats.map((_, i) => (
           <button
             key={i}
@@ -329,8 +348,8 @@ function StoryRail({
             aria-label={`فصل ${i + 1}`}
             onClick={() => onChange(i)}
             className={cn(
-              "h-1.5 flex-1 rounded-full transition",
-              i === index ? "bg-amber-300" : "bg-white/15 hover:bg-white/30",
+              "h-1 w-1.5 rounded-full transition sm:h-1 sm:w-6",
+              i === index ? "bg-amber-300 sm:w-8" : "bg-white/25 hover:bg-white/40",
             )}
           />
         ))}
@@ -401,10 +420,10 @@ export default function Wc2026NumbersReportPage() {
   const tabs = useMemo(
     () =>
       [
-        { id: "pulse" as const, label: "نبض اللحظة", icon: Activity },
-        { id: "sabq" as const, label: "سبق كانت حاضرة", icon: Newspaper },
-        { id: "pitch" as const, label: "الملعب بالأرقام", icon: Goal },
-        { id: "platform" as const, label: "مميزات المنصة", icon: Sparkles },
+        { id: "pulse" as const, label: "نبض اللحظة", shortLabel: "النبض", icon: Activity },
+        { id: "sabq" as const, label: "سبق كانت حاضرة", shortLabel: "التغطية", icon: Newspaper },
+        { id: "pitch" as const, label: "الملعب بالأرقام", shortLabel: "الملعب", icon: Goal },
+        { id: "platform" as const, label: "مميزات المنصة", shortLabel: "المنصة", icon: Sparkles },
       ] as const,
     [],
   );
@@ -518,7 +537,10 @@ export default function Wc2026NumbersReportPage() {
               </div>
             ) : null}
 
-            <div className="flex flex-wrap gap-2">
+            <div
+              className="grid w-full min-w-0 grid-cols-4 gap-0.5 rounded-xl bg-white/[0.04] p-0.5 sm:flex sm:flex-wrap sm:gap-2 sm:rounded-none sm:bg-transparent sm:p-0"
+              role="tablist"
+            >
               {tabs.map((t) => {
                 const Icon = t.icon;
                 const active = tab === t.id;
@@ -526,16 +548,19 @@ export default function Wc2026NumbersReportPage() {
                   <button
                     key={t.id}
                     type="button"
+                    role="tab"
+                    aria-selected={active}
                     onClick={() => setTab(t.id)}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm transition",
+                      "inline-flex min-w-0 items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-medium transition sm:gap-2 sm:rounded-full sm:px-4 sm:py-2 sm:text-sm",
                       active
-                        ? "bg-amber-400 text-amber-950 shadow-lg shadow-amber-500/20"
-                        : "bg-white/5 text-white/70 hover:bg-white/10 hover:text-white",
+                        ? "bg-amber-400 text-amber-950 shadow-sm sm:shadow-lg sm:shadow-amber-500/20"
+                        : "bg-transparent text-white/65 hover:bg-white/10 hover:text-white sm:bg-white/5",
                     )}
                   >
-                    <Icon className="h-4 w-4" />
-                    {t.label}
+                    <Icon className="hidden h-4 w-4 shrink-0 sm:block" />
+                    <span className="truncate sm:hidden">{t.shortLabel}</span>
+                    <span className="hidden sm:inline">{t.label}</span>
                   </button>
                 );
               })}
@@ -583,11 +608,11 @@ export default function Wc2026NumbersReportPage() {
                       ))}
                     </div>
 
-                    <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-                      <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
-                        <div className="mb-4 flex items-center justify-between">
-                          <h2 className="text-lg font-bold text-white">نبض النشر اليومي</h2>
-                          <Activity className="h-4 w-4 text-amber-300" />
+                    <div className="grid min-w-0 gap-3 sm:gap-4 lg:grid-cols-[1.4fr_1fr]">
+                      <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-3 sm:rounded-3xl sm:p-5">
+                        <div className="mb-3 flex items-center justify-between sm:mb-4">
+                          <h2 className="text-base font-bold text-white sm:text-lg">نبض النشر اليومي</h2>
+                          <Activity className="h-4 w-4 shrink-0 text-amber-300" />
                         </div>
                         <PulseChart
                           days={data.sabq.dailyPulse}
@@ -595,9 +620,9 @@ export default function Wc2026NumbersReportPage() {
                           onSelectDay={setSelectedDay}
                         />
                       </div>
-                      <div className="space-y-4">
+                      <div className="min-w-0 space-y-3 sm:space-y-4">
                         <MixMeter ai={data.sabq.aiGenerated} editorial={data.sabq.editorial} />
-                        <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
+                        <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/20 p-3 sm:rounded-3xl sm:p-5">
                           <h2 className="mb-3 text-lg font-bold text-white">خلاصة سريعة</h2>
                           <ul className="space-y-3 text-sm text-white/75">
                             <li className="flex justify-between gap-3 border-b border-white/10 pb-2">
