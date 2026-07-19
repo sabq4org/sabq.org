@@ -90,7 +90,7 @@ import {
   removeFollow,
   setFollowNotify,
 } from "../services/sportsFollowsService";
-import { getSportsSummary } from "../services/sportsSummaryService";
+import { getSportsSummary, startSportsSummaryWarmer } from "../services/sportsSummaryService";
 import { requireAuth } from "../rbac";
 import { runWithSportsLang, sportsLangFromReq } from "../services/sportsLang";
 
@@ -172,6 +172,8 @@ export function registerSportsRoutes(app: Express) {
   // تسخين كاش معلومات البطولات على كل pod — يمنع دفع أول مستخدم بعد deploy
   // كلفة المسار البارد (~35 نداء AF) في شاشة «الأقسام». no-op بلا مفتاح API.
   startCompetitionsMetaWarmer();
+  // تسخين موجز البطولات بعد استقرار اللوحات — كان المسار البارد (~20ث) يزاحم today/live.
+  startSportsSummaryWarmer();
 
   // Middleware: يضبط لغة الاستجابة (ar/en) لكل الطلب عبر AsyncLocalStorage —
   // فتقرؤها دوال التعريب المنخفضة، ويفصل withSWR كاش الإنجليزية تلقائيًا (:en).

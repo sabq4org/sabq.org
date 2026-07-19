@@ -466,12 +466,14 @@ export async function getFixtures(comp: SaudiCompetition, seasonOverride?: numbe
     return getWorldCupMergedFixtures();
   }
   const season = seasonOverride ?? await seasonFor(comp);
-  // ودّيات الأندية: موسم Club Friendlies عالمي ضخم — نافذة ±أيام + فلتر أندية سعودية.
+  // ودّيات الأندية: موسم Club Friendlies عالمي ضخم — نافذة قصيرة + فلتر أندية سعودية.
+  // نافذة أضيق (−7…+30) تقلّل حمولة AF؛ TTL أطول لأن الجدول لا يتغيّر كل دقيقة.
   if (comp.slug === CLUB_FRIENDLIES_SLUG) {
-    return withSWR(`spl:fixtures:${comp.id}:${season}:saudi-clubs`, FIXTURES_TTL, FIXTURES_TTL * 2, async () => {
+    const FRIENDLY_TTL = 3 * 60 * 1000;
+    return withSWR(`spl:fixtures:${comp.id}:${season}:saudi-clubs:v2`, FRIENDLY_TTL, FRIENDLY_TTL * 2, async () => {
       const today = riyadhDayFmt.format(new Date());
-      const from = shiftRiyadhDay(today, -14);
-      const to = shiftRiyadhDay(today, 60);
+      const from = shiftRiyadhDay(today, -7);
+      const to = shiftRiyadhDay(today, 30);
       const rows = await apiGet("fixtures", {
         league: comp.id,
         season,
@@ -564,37 +566,29 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
     const ours = rows.filter((r: any) => isTrackedBoardRow(r, byId));
     const tr = await fixtureTranslators(ours);
     let items = ours.map((r: any): SplLiveBoardItem => boardItemFromTrackedRow(r, byId, tr));
-    // خليجي 27: جدوله مركّب محليًّا (أساس ثابت + تراكب المزوّدين) — نستبدل صفوف
-    // المزوّد الخام بجدولنا كي تصل مبارياته للتنبيهات/السنابات حتى قبل ظهور
-    // الموسم لدى API-Football (نفس منطق دمج المونديال في لوحة اليوم).
-    try {
-      const gcLive = (await getGulfCupMergedFixtures()).filter(
-        (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
-      );
-      if (gcLive.length) {
-        const gcComp = byId.get(25);
-        items = [
-          ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
-          ...gcLive.map((fx) => gcFixtureToBoardItem(fx, gcComp ? compDisplayName(gcComp) : "خليجي 27")),
-        ];
-      }
-    } catch {
-      // تعثّر خليجي لا يُسقط اللوحة الحية.
+    const [gcMerged, acMerged] = await Promise.all([
+      getGulfCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getGulfCupMergedFixtures>>),
+      getAsianCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getAsianCupMergedFixtures>>),
+    ]);
+    const gcLive = gcMerged.filter(
+      (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
+    );
+    if (gcLive.length) {
+      const gcComp = byId.get(25);
+      items = [
+        ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
+        ...gcLive.map((fx) => gcFixtureToBoardItem(fx, gcComp ? compDisplayName(gcComp) : "خليجي 27")),
+      ];
     }
-    // كأس آسيا: نفس منطق الدمج عبر asianCupService.
-    try {
-      const acLive = (await getAsianCupMergedFixtures()).filter(
-        (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
-      );
-      if (acLive.length) {
-        const acComp = byId.get(7);
-        items = [
-          ...items.filter((i) => i.competitionSlug !== "asian-cup"),
-          ...acLive.map((fx) => acFixtureToBoardItem(fx, acComp ? compDisplayName(acComp) : "كأس آسيا")),
-        ];
-      }
-    } catch {
-      // تعثّر كأس آسيا لا يُسقط اللوحة الحية.
+    const acLive = acMerged.filter(
+      (fx) => fx.status.live && !fx.status.finished && fx.home.id > 0 && fx.away.id > 0,
+    );
+    if (acLive.length) {
+      const acComp = byId.get(7);
+      items = [
+        ...items.filter((i) => i.competitionSlug !== "asian-cup"),
+        ...acLive.map((fx) => acFixtureToBoardItem(fx, acComp ? compDisplayName(acComp) : "كأس آسيا")),
+      ];
     }
     // ودّيات سعودية على TheSports قد لا تدخل AF live=all (يبقى NS) — نُلحقها هنا.
     try {
@@ -737,57 +731,44 @@ export async function getGlobalTodayFixtures(date?: string): Promise<SplLiveBoar
     const ours = rows.filter((r: any) => isTrackedBoardRow(r, byId));
     const tr = await fixtureTranslators(ours);
     let items = ours.map((r: any): SplLiveBoardItem => boardItemFromTrackedRow(r, byId, tr));
-    // المونديال: استبدال صفوف المزوّد الخام بجدول worldCupService المُكمّل ليوم
-    // التاريخ نفسه — فتظهر مباريات الأدوار الإقصائية بالمتأهلين المُرقّين ورموز
-    // FIFA حتى قبل نشرها من المزوّد (نفس منطق getFixtures للجدول الموحّد).
-    try {
-      const wcDay = (await getWorldCupMergedFixtures()).filter(
-        (fx) => riyadhKeyOf(fx.timestamp) === dateKey,
-      );
-      if (wcDay.length) {
-        const wcComp = byId.get(1);
-        const wcName = wcComp ? compDisplayName(wcComp) : (isEnglishSports() ? "World Cup" : "كأس العالم");
-        items = [
-          ...items.filter((i) => i.competitionSlug !== "world-cup"),
-          ...wcDay.map(
-            (fx): SplLiveBoardItem => ({ ...fx, competition: wcName, competitionSlug: "world-cup" }),
-          ),
-        ];
-      }
-    } catch {
-      // المونديال المتعثر لا يُسقط لوحة اليوم — تبقى صفوف المزوّد الخام.
+    // دمج المونديال/خليجي/آسيا بالتوازي — المسار التسلسلي السابق كان يضاعف الانتظار البارد.
+    const [wcMerged, gcMerged, acMerged] = await Promise.all([
+      getWorldCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getWorldCupMergedFixtures>>),
+      getGulfCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getGulfCupMergedFixtures>>),
+      getAsianCupMergedFixtures().catch(() => [] as Awaited<ReturnType<typeof getAsianCupMergedFixtures>>),
+    ]);
+    const wcDay = wcMerged.filter((fx) => riyadhKeyOf(fx.timestamp) === dateKey);
+    if (wcDay.length) {
+      const wcComp = byId.get(1);
+      const wcName = wcComp ? compDisplayName(wcComp) : (isEnglishSports() ? "World Cup" : "كأس العالم");
+      items = [
+        ...items.filter((i) => i.competitionSlug !== "world-cup"),
+        ...wcDay.map(
+          (fx): SplLiveBoardItem => ({ ...fx, competition: wcName, competitionSlug: "world-cup" }),
+        ),
+      ];
     }
-    // خليجي 27: نفس المنطق — الجدول المحلي المركّب يستبدل صفوف المزوّد الخام.
-    try {
-      const gcDay = (await getGulfCupMergedFixtures()).filter(
-        (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
-      );
-      if (gcDay.length) {
-        const gcComp = byId.get(25);
-        const gcName = gcComp ? compDisplayName(gcComp) : "خليجي 27";
-        items = [
-          ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
-          ...gcDay.map((fx) => gcFixtureToBoardItem(fx, gcName)),
-        ];
-      }
-    } catch {
-      // تعثّر خليجي لا يُسقط لوحة اليوم.
+    const gcDay = gcMerged.filter(
+      (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
+    );
+    if (gcDay.length) {
+      const gcComp = byId.get(25);
+      const gcName = gcComp ? compDisplayName(gcComp) : "خليجي 27";
+      items = [
+        ...items.filter((i) => i.competitionSlug !== "gulf-cup"),
+        ...gcDay.map((fx) => gcFixtureToBoardItem(fx, gcName)),
+      ];
     }
-    // كأس آسيا: استبدال صفوف المزوّد بجدول asianCupService لليوم نفسه.
-    try {
-      const acDay = (await getAsianCupMergedFixtures()).filter(
-        (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
-      );
-      if (acDay.length) {
-        const acComp = byId.get(7);
-        const acName = acComp ? compDisplayName(acComp) : (isEnglishSports() ? "AFC Asian Cup" : "كأس آسيا");
-        items = [
-          ...items.filter((i) => i.competitionSlug !== "asian-cup"),
-          ...acDay.map((fx) => acFixtureToBoardItem(fx, acName)),
-        ];
-      }
-    } catch {
-      // تعثّر كأس آسيا لا يُسقط لوحة اليوم.
+    const acDay = acMerged.filter(
+      (fx) => riyadhKeyOf(fx.timestamp) === dateKey && fx.home.id > 0 && fx.away.id > 0,
+    );
+    if (acDay.length) {
+      const acComp = byId.get(7);
+      const acName = acComp ? compDisplayName(acComp) : (isEnglishSports() ? "AFC Asian Cup" : "كأس آسيا");
+      items = [
+        ...items.filter((i) => i.competitionSlug !== "asian-cup"),
+        ...acDay.map((fx) => acFixtureToBoardItem(fx, acName)),
+      ];
     }
     return items.sort((a: SplLiveBoardItem, b: SplLiveBoardItem) => {
       if (a.status.live !== b.status.live) return a.status.live ? -1 : 1;
@@ -1935,14 +1916,23 @@ function applyTsBoardScore<T extends SplFixture>(fx: T, m: TsLiveBoardItem): T {
  * نطابق لوحة TheSports بالأسماء/وقت البداية (الودّيات مُستثناة من ضجيج اللوحة
  * إن كان فيها نادٍ سعودي).
  */
+function overlaySaudiClubFriendlyFixtureWithBoard<T extends SplFixture>(
+  fx: T,
+  board: TsLiveBoardItem[],
+): T {
+  if (fx.status.finished) return fx;
+  if (!fx.status.live && !isStuckPastKickoff(fx)) return fx;
+  const hit = board.find((m) => fixtureMatchesTsBoard(fx, m));
+  if (!hit) return annotateStuckKickoff(fx);
+  return applyTsBoardScore(fx, hit);
+}
+
 async function overlaySaudiClubFriendlyFixture<T extends SplFixture>(fx: T): Promise<T> {
   if (fx.status.finished) return fx;
   if (!fx.status.live && !isStuckPastKickoff(fx)) return fx;
   try {
     const board = await getTheSportsLiveBoard();
-    const hit = board.find((m) => fixtureMatchesTsBoard(fx, m));
-    if (!hit) return annotateStuckKickoff(fx);
-    return applyTsBoardScore(fx, hit);
+    return overlaySaudiClubFriendlyFixtureWithBoard(fx, board);
   } catch {
     return annotateStuckKickoff(fx);
   }
@@ -1962,7 +1952,29 @@ export async function overlayLiveBoardScore<T extends SplLiveBoardItem>(item: T)
 }
 
 export async function overlayLiveBoardList<T extends SplLiveBoardItem>(items: T[]): Promise<T[]> {
-  return Promise.all((items ?? []).map((i) => overlayLiveBoardScore(i)));
+  const list = items ?? [];
+  if (!list.length) return list;
+  // لوحة TheSports مرّة واحدة لكل طلب — لا N× await على نفس المصدر للودّيات.
+  let friendlyBoard: TsLiveBoardItem[] | null = null;
+  const needsFriendlyBoard = list.some(
+    (i) =>
+      i.competitionSlug === CLUB_FRIENDLIES_SLUG &&
+      !i.status.finished &&
+      (i.status.live || isStuckPastKickoff(i)),
+  );
+  if (needsFriendlyBoard) {
+    friendlyBoard = await getTheSportsLiveBoard().catch(() => [] as TsLiveBoardItem[]);
+  }
+  return Promise.all(
+    list.map(async (item) => {
+      if (item.competitionSlug === CLUB_FRIENDLIES_SLUG) {
+        return overlaySaudiClubFriendlyFixtureWithBoard(item, friendlyBoard ?? []);
+      }
+      const tsCompId = getTsCompetitionId(item.competitionSlug);
+      if (!tsCompId) return item;
+      return overlayFastScoreOnFixture(item, tsCompId);
+    }),
+  );
 }
 
 /**
