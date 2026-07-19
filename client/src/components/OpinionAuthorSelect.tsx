@@ -86,7 +86,7 @@ export function OpinionAuthorSelect({ value, onChange, disabled }: OpinionAuthor
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium" data-testid="label-opinion-author">
-        كاتب المقال
+        كاتب المقال (يظهر للقارئ)
       </label>
       
       <div className="flex gap-2">
@@ -195,7 +195,7 @@ export function OpinionAuthorSelect({ value, onChange, disabled }: OpinionAuthor
       </div>
 
       <p className="text-xs text-muted-foreground" data-testid="text-opinion-author-helper">
-        اختر كاتب مقال الرأي. سيتم إظهار اسمه في بطاقة المقال وصفحة التفاصيل.
+        اسم كاتب الرأي الظاهر للقارئ في البطاقة وصفحة المقال — يختلف عن المحرّر الذي أدخل المادة في النظام.
       </p>
     </div>
   );
