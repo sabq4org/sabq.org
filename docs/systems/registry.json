@@ -598,6 +598,30 @@
       "dashboardPath": "/dashboard/systems-catalog",
       "owners": ["platform"],
       "lastReviewed": "2026-07-17"
+    },
+    {
+      "id": "smart-blocks",
+      "nameAr": "البلوكات الذكية (مسرح الصفحة)",
+      "nameEn": "Smart Blocks / Homepage Stage",
+      "status": "active",
+      "category": "content",
+      "summary": "مشاهد تحريرية حية على الصفحة الرئيسية: مصادر محتوى، مواضع، جدولة، ترتيب، سيناريوهات، ومخرج يقترح التركيب.",
+      "docPath": "docs/systems/smart-blocks/SYSTEM.md",
+      "relatedDocs": [],
+      "pathGlobs": [
+        "server/services/smartBlocksService.ts",
+        "server/routes/smartBlocks.ts",
+        "client/src/pages/dashboard/SmartBlocksPage.tsx",
+        "client/src/components/SmartNewsBlock.tsx",
+        "client/src/components/en/EnglishSmartNewsBlock.tsx",
+        "client/src/components/ur/UrduSmartNewsBlock.tsx",
+        "client/src/pages/en/EnglishSmartBlocksPage.tsx",
+        "client/src/pages/ur/dashboard/UrduSmartBlocksPage.tsx"
+      ],
+      "aiFeatureKeys": [],
+      "dashboardPath": "/dashboard/smart-blocks",
+      "owners": ["editorial", "platform"],
+      "lastReviewed": "2026-07-19"
     }
   ]
 }

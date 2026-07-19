@@ -75,6 +75,7 @@ import { systemsCatalogRouter } from "./systemsCatalog";
 import surveysRouter from "./surveys";
 import correspondentApplicationsRouter from "./correspondentApplications";
 import publisherPortalRouter from "./publisherPortal";
+import smartBlocksRouter from "./smartBlocks";
 
 /**
  * Registers all route modules that were split out of the monolithic server/routes.ts.
@@ -162,4 +163,6 @@ export function registerSplitRoutes(app: Express) {
   app.use(adminToolsRouter);
   app.use(systemsCatalogRouter);
   app.use(surveysRouter);
+  // Smart Blocks / Homepage Stage — قبل معالجات routes.ts القديمة لنفس المسارات
+  app.use(smartBlocksRouter);
 }

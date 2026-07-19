@@ -11,7 +11,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useCanonical } from "@/hooks/useCanonical";
 import { prefetchArticleDetail, prefetchCategoryPage, prefetchHomeSections, prefetchWhenIdle } from "@/lib/prefetchRoute";
 import { readHomepageCache, writeHomepageCache } from "@/lib/homepageCache";
-import type { ArticleWithDetails, CategoryWithStats } from "@shared/schema";
+import type { ArticleWithDetails, CategoryWithStats, SmartBlock } from "@shared/schema";
 import type { User } from "@/hooks/useAuth";
 
 // === CRITICAL PATH (Eager) - Above the fold content ===
@@ -45,7 +45,60 @@ const KingsCupHomeSection = lazyDefault(() => import("@/components/kingscup/King
 const RoshnHomeSection = lazyDefault(() => import("@/components/rsl/RoshnHomeSection"));
 const AsianCupHomeSection = lazyDefault(() => import("@/components/asiancup/AsianCupHomeSection"));
 const HajjBlock = lazyNamed(() => import("@/components/HajjBlock"), "HajjBlock");
+const SmartNewsBlock = lazyNamed(() => import("@/components/SmartNewsBlock"), "SmartNewsBlock");
 const NewsMap = lazyDefault(() => import("@/components/NewsMap"));
+
+const SMART_BLOCK_PLACEMENTS = [
+  "below_featured",
+  "above_all_news",
+  "between_all_and_murqap",
+  "above_footer",
+] as const;
+
+function useSmartBlocksByPlacement() {
+  return useQuery<Record<string, SmartBlock[]>>({
+    queryKey: ["/api/smart-blocks", "homepage-stage"],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        SMART_BLOCK_PLACEMENTS.map(async (placement) => {
+          const params = new URLSearchParams({
+            isActive: "true",
+            placement,
+            respectSchedule: "true",
+          });
+          const res = await fetch(apiUrl(`/api/smart-blocks?${params}`), {
+            credentials: "include",
+          });
+          if (!res.ok) return [placement, []] as const;
+          const data = await res.json();
+          return [placement, Array.isArray(data) ? data : []] as const;
+        }),
+      );
+      return Object.fromEntries(entries);
+    },
+    staleTime: 60 * 1000,
+  });
+}
+
+function SmartBlocksSlot({
+  blocks,
+}: {
+  blocks: SmartBlock[] | undefined;
+}) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  if (list.length === 0) return null;
+  return (
+    <>
+      {list.map((block) => (
+        <ErrorBoundary key={block.id} fallback={null}>
+          <Suspense fallback={null}>
+            <SmartNewsBlock config={block} />
+          </Suspense>
+        </ErrorBoundary>
+      ))}
+    </>
+  );
+}
 
 function SectionSkeleton({ height = 200 }: { height?: number }) {
   return <div className="animate-pulse bg-muted/30 rounded-lg" style={{ height }} />;
@@ -171,6 +224,8 @@ export default function Home() {
 
   // DMS Ad tracking for homepage
   useAdTracking('Homepage');
+
+  const { data: smartBlocksByPlacement } = useSmartBlocksByPlacement();
   
   const { data: user } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
@@ -512,6 +567,9 @@ export default function Home() {
               <AdSlot slotId="header-banner" className="w-full" />
             </>
           )}
+
+          {/* Smart Blocks Stage: below_featured */}
+          <SmartBlocksSlot blocks={smartBlocksByPlacement?.below_featured} />
         </div>
 
         {/* AI Section with soft gradient background - Lazy loaded */}
@@ -529,6 +587,9 @@ export default function Home() {
         </LazySection>
 
         <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-8">
+          {/* Smart Blocks Stage: above_all_news */}
+          <SmartBlocksSlot blocks={smartBlocksByPlacement?.above_all_news} />
+
           {/* All News Section */}
           {homepage.forYou && homepage.forYou.length > 0 && (
             <div className="scroll-fade-in">
@@ -553,6 +614,11 @@ export default function Home() {
         <LazySection>
           <TrendingWeekSection />
         </LazySection>
+
+        {/* Smart Blocks Stage: between_all_and_murqap */}
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-4">
+          <SmartBlocksSlot blocks={smartBlocksByPlacement?.between_all_and_murqap} />
+        </div>
 
         {/* Muqtarab Topics Showcase - Featured topics from angles */}
         <LazySection>
@@ -605,6 +671,11 @@ export default function Home() {
             </div>
           </LazySection>
         )}
+
+        {/* Smart Blocks Stage: above_footer */}
+        <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 py-6">
+          <SmartBlocksSlot blocks={smartBlocksByPlacement?.above_footer} />
+        </div>
       </main>
       
       <Footer />

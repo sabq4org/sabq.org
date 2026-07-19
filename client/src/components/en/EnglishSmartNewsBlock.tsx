@@ -7,6 +7,7 @@ import { Clock, Tag, Newspaper, Flame, Zap, User, BookOpen } from "lucide-react"
 import { formatDistanceToNow } from "date-fns";
 import type { EnSmartBlock } from "@shared/schema";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { apiUrl } from "@/lib/queryClient";
 
 // Helper function to check if article is new (published within last 30 minutes)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -51,13 +52,9 @@ interface EnglishSmartNewsBlockProps {
 
 export function EnglishSmartNewsBlock({ config }: EnglishSmartNewsBlockProps) {
   const { data: articles, isLoading } = useQuery<ArticleResult[]>({
-    queryKey: ['/api/en/smart-blocks/query/articles', config.keyword, config.limitCount],
+    queryKey: ['/api/en/smart-blocks', config.id, 'articles', config.updatedAt],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        keyword: config.keyword,
-        limit: config.limitCount.toString(),
-      });
-      const res = await fetch(`/api/en/smart-blocks/query/articles?${params}`, {
+      const res = await fetch(apiUrl(`/api/en/smart-blocks/${config.id}/articles`), {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch articles');
@@ -83,15 +80,7 @@ export function EnglishSmartNewsBlock({ config }: EnglishSmartNewsBlockProps) {
   }
 
   if (!articles || articles.length === 0) {
-    return (
-      <div 
-        className="text-center py-8 text-muted-foreground"
-        data-testid={`smart-block-empty-${config.id}`}
-      >
-        <Tag className="h-12 w-12 mx-auto mb-3 opacity-50" />
-        <p>No articles available for "{config.title}"</p>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -112,12 +101,11 @@ export function EnglishSmartNewsBlock({ config }: EnglishSmartNewsBlockProps) {
           {config.title}
         </h2>
         
-        <div className="col-start-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Tag className="h-3.5 w-3.5" />
-          <span data-testid={`text-smart-block-keyword-${config.id}`}>
-            Keyword: {config.keyword}
-          </span>
-        </div>
+        {config.subtitle ? (
+          <p className="col-start-2 text-sm text-muted-foreground">
+            {config.subtitle}
+          </p>
+        ) : null}
       </div>
 
       {config.layoutStyle === 'grid' && <GridLayout articles={articles} blockId={config.id} />}

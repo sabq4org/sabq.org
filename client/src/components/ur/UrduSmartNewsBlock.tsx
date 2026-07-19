@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns";
 import { arSA } from "date-fns/locale";
 import type { UrSmartBlock } from "@shared/schema";
 import { getObjectPosition } from "@/lib/imageUtils";
+import { apiUrl } from "@/lib/queryClient";
 
 // Helper function to check if article is new (published within last 30 minutes)
 const isNewArticle = (publishedAt: Date | string | null | undefined) => {
@@ -52,13 +53,9 @@ interface UrduSmartNewsBlockProps {
 
 export function UrduSmartNewsBlock({ config }: UrduSmartNewsBlockProps) {
   const { data: articles, isLoading } = useQuery<ArticleResult[]>({
-    queryKey: ['/api/ur/smart-blocks/query/articles', config.keyword, config.limitCount],
+    queryKey: ['/api/ur/smart-blocks', config.id, 'articles', config.updatedAt],
     queryFn: async () => {
-      const params = new URLSearchParams({
-        keyword: config.keyword,
-        limit: config.limitCount.toString(),
-      });
-      const res = await fetch(`/api/ur/smart-blocks/query/articles?${params}`, {
+      const res = await fetch(apiUrl(`/api/ur/smart-blocks/${config.id}/articles`), {
         credentials: 'include',
       });
       if (!res.ok) throw new Error('Failed to fetch articles');
@@ -84,16 +81,7 @@ export function UrduSmartNewsBlock({ config }: UrduSmartNewsBlockProps) {
   }
 
   if (!articles || articles.length === 0) {
-    return (
-      <div 
-        className="text-center py-8 text-muted-foreground"
-        dir="rtl"
-        data-testid={`smart-block-empty-${config.id}`}
-      >
-        <Tag className="h-12 w-12 mx-auto mb-3 opacity-50" />
-        <p>کوئی مضامین نہیں ملے "{config.title}"</p>
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -114,12 +102,11 @@ export function UrduSmartNewsBlock({ config }: UrduSmartNewsBlockProps) {
           {config.title}
         </h2>
         
-        <div className="col-start-2 flex items-center gap-1.5 text-sm text-muted-foreground">
-          <Tag className="h-3.5 w-3.5" />
-          <span data-testid={`text-smart-block-keyword-${config.id}`}>
-            مطلوبہ الفاظ: {config.keyword}
-          </span>
-        </div>
+        {config.subtitle ? (
+          <p className="col-start-2 text-sm text-muted-foreground">
+            {config.subtitle}
+          </p>
+        ) : null}
       </div>
 
       {config.layoutStyle === 'grid' && <GridLayout articles={articles} blockId={config.id} />}

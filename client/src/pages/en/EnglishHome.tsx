@@ -39,7 +39,7 @@ export default function EnglishHome() {
   const { data: blocksBelowFeatured } = useQuery<EnSmartBlock[]>({
     queryKey: ['/api/en/smart-blocks', 'below_featured'],
     queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'below_featured' });
+      const params = new URLSearchParams({ isActive: 'true', placement: 'below_featured', respectSchedule: 'true' });
       const res = await fetch(`/api/en/smart-blocks?${params}`, { credentials: 'include' });
       if (!res.ok) return [];
       return await res.json();
@@ -49,7 +49,7 @@ export default function EnglishHome() {
   const { data: blocksAboveAllNews } = useQuery<EnSmartBlock[]>({
     queryKey: ['/api/en/smart-blocks', 'above_all_news'],
     queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'above_all_news' });
+      const params = new URLSearchParams({ isActive: 'true', placement: 'above_all_news', respectSchedule: 'true' });
       const res = await fetch(`/api/en/smart-blocks?${params}`, { credentials: 'include' });
       if (!res.ok) return [];
       return await res.json();
@@ -59,7 +59,7 @@ export default function EnglishHome() {
   const { data: blocksBetweenAllAndMurqap } = useQuery<EnSmartBlock[]>({
     queryKey: ['/api/en/smart-blocks', 'between_all_and_murqap'],
     queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'between_all_and_murqap' });
+      const params = new URLSearchParams({ isActive: 'true', placement: 'between_all_and_murqap', respectSchedule: 'true' });
       const res = await fetch(`/api/en/smart-blocks?${params}`, { credentials: 'include' });
       if (!res.ok) return [];
       return await res.json();
@@ -69,7 +69,7 @@ export default function EnglishHome() {
   const { data: blocksAboveFooter } = useQuery<EnSmartBlock[]>({
     queryKey: ['/api/en/smart-blocks', 'above_footer'],
     queryFn: async () => {
-      const params = new URLSearchParams({ isActive: 'true', placement: 'above_footer' });
+      const params = new URLSearchParams({ isActive: 'true', placement: 'above_footer', respectSchedule: 'true' });
       const res = await fetch(`/api/en/smart-blocks?${params}`, { credentials: 'include' });
       if (!res.ok) return [];
       return await res.json();
