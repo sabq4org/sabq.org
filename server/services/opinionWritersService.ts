@@ -53,6 +53,13 @@ export type OpinionWriterSummary = {
   nextScheduled: { id: string; title: string; scheduledAt: string } | null;
   nextSlot: string | null;
   commitment: "ok" | "due_soon" | "late" | "awaiting_first" | "unassigned";
+  /** الترخيص المهني (هيئة تنظيم الإعلام) المرفوع من مساحة الكاتب */
+  mediaLicense: {
+    hasLicense: boolean;
+    number: string | null;
+    submittedAt: string | null;
+    hasFile: boolean;
+  };
 };
 
 /**
@@ -130,6 +137,9 @@ async function fetchWriterUsers(writerId?: string) {
       profileImageUrl: users.profileImageUrl,
       jobTitle: users.jobTitle,
       gender: users.gender,
+      mediaLicenseNumber: users.mediaLicenseNumber,
+      mediaLicenseFileKey: users.mediaLicenseFileKey,
+      mediaLicenseSubmittedAt: users.mediaLicenseSubmittedAt,
       scheduleWeekday: opinionWriterSchedules.weekday,
       schedulePublishTime: opinionWriterSchedules.publishTime,
       scheduleActive: opinionWriterSchedules.active,
@@ -243,6 +253,10 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
     else if (nextSlot && nextSlot.getTime() - now.getTime() <= 2 * DAY_MS) commitment = "due_soon";
     else commitment = "ok";
 
+    const hasLicense = Boolean(
+      w.mediaLicenseNumber && w.mediaLicenseFileKey && w.mediaLicenseSubmittedAt,
+    );
+
     return {
       id: w.id,
       name: [w.firstName, w.lastName].filter(Boolean).join(" ") || w.email || w.id,
@@ -273,8 +287,24 @@ export async function listOpinionWriters(): Promise<OpinionWriterSummary[]> {
           : null,
       nextSlot: nextSlot ? nextSlot.toISOString() : null,
       commitment,
+      mediaLicense: {
+        hasLicense,
+        number: w.mediaLicenseNumber ?? null,
+        submittedAt: w.mediaLicenseSubmittedAt?.toISOString() ?? null,
+        hasFile: Boolean(w.mediaLicenseFileKey),
+      },
     };
   });
+}
+
+/** مفتاح ملف الترخيص الخاص — للأدمن فقط عبر رابط موقّت. */
+export async function getWriterMediaLicenseFileKey(writerId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ mediaLicenseFileKey: users.mediaLicenseFileKey })
+    .from(users)
+    .where(eq(users.id, writerId))
+    .limit(1);
+  return row?.mediaLicenseFileKey ?? null;
 }
 
 export async function upsertWriterSchedule(

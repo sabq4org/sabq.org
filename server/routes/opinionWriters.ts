@@ -12,11 +12,13 @@ import {
   userHasAnyRole,
   logActivity,
 } from "../rbac";
+import { ObjectStorageService } from "../objectStorage";
 import {
   canSelfAssignSchedule,
   getNextSlotForWriter,
   getWriterArticlesWithStats,
   getWriterDayLoads,
+  getWriterMediaLicenseFileKey,
   getWriterScheduleBanner,
   listOpinionWriters,
   scheduleApprovedOpinionArticle,
@@ -83,6 +85,26 @@ router.get(
     } catch (error) {
       console.error("[opinion-writers] writer articles failed:", error);
       res.status(500).json({ message: "تعذر جلب مقالات الكاتب" });
+    }
+  },
+);
+
+// رابط موقّت لملف الترخيص المهني المرفوع من مساحة الكاتب
+router.get(
+  "/api/admin/opinion-writers/:writerId/media-license-file",
+  requireAuth,
+  requirePermission(PERMISSION_CODES.OPINION_REVIEW),
+  async (req: Request, res: Response) => {
+    try {
+      const key = await getWriterMediaLicenseFileKey(req.params.writerId);
+      if (!key) {
+        return res.status(404).json({ message: "لا يوجد ملف ترخيص لهذا الكاتب" });
+      }
+      const url = await new ObjectStorageService().getPrivateFileDownloadURL(key, 300);
+      res.redirect(url);
+    } catch (error) {
+      console.error("[opinion-writers] media license file failed:", error);
+      res.status(500).json({ message: "تعذر جلب ملف الترخيص" });
     }
   },
 );
