@@ -46,7 +46,7 @@ import storeCustomerRoutes from './routes/storeCustomerRoutes';
 import pollsRoutes from './routes/pollsRoutes';
 import worldDaysRoutes from './routes/worldDays';
 import { registerSplitRoutes } from './routes/splitRoutesIndex';
-import { ObjectStorageService, ObjectNotFoundError, objectStorageClient } from "./objectStorage";
+import { ObjectStorageService, ObjectNotFoundError, objectStorageClient, isPrivateObjectStorageConfigured } from "./objectStorage";
 import newsletterAnalyticsRoutes from './routes/newsletterAnalyticsRoutes';
 import pushNotificationRoutes from './routes/pushNotificationRoutes';
 import imageOptimizationService, { optimizeImage, getOptimizedImage, generateSrcSet, getBestFormat, supportsWebP, IMAGE_SIZES, generateLiteOptimizedImage } from "./services/imageOptimizationService";
@@ -33915,48 +33915,101 @@ Sitemap: https://sabq.org/sitemap-news.xml
   // Opinion Author Applications Routes - طلبات كتّاب الرأي
   // ============================================
 
-  // POST /api/opinion-author-applications - Public registration with photo upload
-  app.post("/api/opinion-author-applications", contactUploadLimiter, upload.single('profilePhoto'), async (req: any, res) => {
+  // POST /api/opinion-author-applications - Public registration (photo + license)
+  // نفس آلية المراسلين: صورة عبر CF Images، الترخيص عبر تخزين خاص S3/R2 فقط
+  // (لا نستخدم Replit sidecar — يكسر التقديم على Railway بـ ECONNREFUSED 127.0.0.1:1106).
+  app.post(
+    "/api/opinion-author-applications",
+    contactUploadLimiter,
+    upload.fields([
+      { name: "profilePhoto", maxCount: 1 },
+      { name: "licenseFile", maxCount: 1 },
+    ]),
+    async (req: any, res) => {
     try {
-      const { arabicName, englishName, email, phone, jobTitle, bio, city, specializations, writingSamples } = req.body;
+      const {
+        arabicName, englishName, email, phone, jobTitle, bio, city,
+        specializations, writingSamples, licenseNumber, licenseExpiresAt, consent,
+      } = req.body;
+      const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+      const profilePhoto = files?.profilePhoto?.[0];
+      const licenseFile = files?.licenseFile?.[0];
 
-      // Validate required fields
-      if (!arabicName || !englishName || !email || !phone || !city) {
+      if (!arabicName || !englishName || !email || !phone || !city || !licenseNumber) {
         return res.status(400).json({ message: "جميع الحقول المطلوبة يجب ملؤها" });
       }
 
-      if (!req.file) {
-        return res.status(400).json({ message: "الصورة الشخصية مطلوبة" });
+      if (consent !== "true") {
+        return res.status(400).json({ message: "يجب الإقرار بصحة البيانات والموافقة على معالجتها" });
       }
 
-      // Upload photo. CF Images first (works everywhere); fall back to GCS
-      // only when CF isn't configured. The previous hardcoded Replit bucket +
-      // sidecar ACL path returned ECONNREFUSED 127.0.0.1:1106 on Railway.
+      if (!profilePhoto) {
+        return res.status(400).json({ message: "الصورة الشخصية مطلوبة" });
+      }
+      if (!profilePhoto.mimetype.startsWith("image/")) {
+        return res.status(400).json({ message: "الصورة الشخصية يجب أن تكون ملف صورة" });
+      }
+      if (!licenseFile) {
+        return res.status(400).json({ message: "صورة الترخيص المهني مطلوبة" });
+      }
+      if (!licenseFile.mimetype.startsWith("image/") && licenseFile.mimetype !== "application/pdf") {
+        return res.status(400).json({ message: "الترخيص المهني يجب أن يكون صورة أو ملف PDF" });
+      }
+
+      const normalizedEmail = String(email).toLowerCase().trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ message: "البريد الإلكتروني غير صحيح" });
+      }
+
+      // Profile photo → Cloudflare Images (public delivery URL)
       let profilePhotoUrl: string | null = null;
 
       if (cloudflareImagesService.isCloudflareConfigured()) {
         const cfResult = await cloudflareImagesService.uploadToCloudflare(
-          req.file.buffer,
-          req.file.originalname || 'profile.jpg',
-          { type: 'opinion-author-application', email },
-          req.file.mimetype
+          profilePhoto.buffer,
+          profilePhoto.originalname || "profile.jpg",
+          { type: "opinion-author-application", email: normalizedEmail },
+          profilePhoto.mimetype,
         );
         if (cfResult.success && cfResult.deliveryUrl) {
           profilePhotoUrl = cfResult.deliveryUrl;
         } else {
-          console.warn('[OpinionAuthor] CF Images upload failed:', cfResult.error);
+          console.warn("[OpinionAuthor] CF Images upload failed:", cfResult.error);
         }
       }
 
       if (!profilePhotoUrl) {
-        return res.status(502).json({ message: 'خدمة رفع الصورة غير متاحة حالياً. حاول لاحقاً.' });
+        return res.status(502).json({ message: "خدمة رفع الصورة غير متاحة حالياً. حاول لاحقاً." });
       }
 
-      // Create application
+      // License document → PRIVATE object storage (S3/R2) only — never Replit sidecar.
+      if (!isPrivateObjectStorageConfigured()) {
+        console.error(
+          "[OpinionAuthor] Private object storage not configured " +
+            "(need R2 via R2_* or NEWS_IMAGES_R2_*, or S3 credentials)",
+        );
+        return res.status(502).json({
+          message: "خدمة رفع المستندات غير متاحة حالياً. حاول لاحقاً.",
+        });
+      }
+
+      const objectStorage = new ObjectStorageService();
+      const docId = randomUUID();
+      const licenseExt = licenseFile.mimetype === "application/pdf" ? "pdf"
+        : (licenseFile.mimetype.split("/")[1] || "jpg");
+      const licenseUpload = await objectStorage.uploadFile(
+        `opinion-author-docs/${docId}-license.${licenseExt}`,
+        licenseFile.buffer,
+        licenseFile.mimetype,
+        "private",
+      );
+
+      const expiresAt = licenseExpiresAt ? new Date(String(licenseExpiresAt)) : null;
+
       const application = await storage.createOpinionAuthorApplication({
         arabicName,
         englishName,
-        email,
+        email: normalizedEmail,
         phone,
         jobTitle: jobTitle || "كاتب رأي",
         bio: bio || null,
@@ -33964,18 +34017,51 @@ Sitemap: https://sabq.org/sitemap-news.xml
         profilePhotoUrl,
         specializations: specializations || null,
         writingSamples: writingSamples || null,
+        licenseNumber: String(licenseNumber).trim(),
+        licenseExpiresAt: expiresAt && !isNaN(expiresAt.getTime()) ? expiresAt : null,
+        licenseFileKey: licenseUpload.path,
+        consentAt: new Date(),
       });
 
       console.log(`✅ Opinion author application created: ${application.id}`);
-      res.status(201).json({ 
-        message: "تم تقديم طلبك بنجاح. سيتم مراجعته والرد عليك قريباً.", 
-        applicationId: application.id 
+      res.status(201).json({
+        message: "تم تقديم طلبك بنجاح. سيتم مراجعته والرد عليك قريباً.",
+        applicationId: application.id,
       });
     } catch (error: any) {
       console.error("Error creating opinion author application:", error);
-      res.status(500).json({ message: "حدث خطأ في تقديم الطلب: " + error.message });
+      // Do not leak backend/storage internals into the public registration form.
+      res.status(500).json({
+        message: "حدث خطأ في تقديم الطلب. يرجى المحاولة مرة أخرى لاحقاً.",
+      });
     }
   });
+
+  // GET /api/admin/opinion-author-applications/:id/file/license - Signed download
+  app.get(
+    "/api/admin/opinion-author-applications/:id/file/license",
+    requireAuth,
+    requireRole("admin", "system_admin"),
+    async (req: any, res) => {
+      try {
+        const application = await storage.getOpinionAuthorApplicationById(req.params.id);
+        if (!application) {
+          return res.status(404).json({ message: "الطلب غير موجود" });
+        }
+        if (!application.licenseFileKey) {
+          return res.status(404).json({ message: "لا يوجد ملف ترخيص مرفق لهذا الطلب" });
+        }
+        const url = await new ObjectStorageService().getPrivateFileDownloadURL(
+          application.licenseFileKey,
+          300,
+        );
+        res.redirect(url);
+      } catch (error: unknown) {
+        console.error("Error fetching opinion author license file:", error);
+        res.status(500).json({ message: "فشل في جلب الملف" });
+      }
+    },
+  );
 
   // News Analytics Endpoint - Smart statistics and insights
 

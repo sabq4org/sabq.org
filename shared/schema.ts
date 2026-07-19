@@ -11837,6 +11837,13 @@ export const opinionAuthorApplications = pgTable("opinion_author_applications", 
   // حقول خاصة بكتّاب الرأي
   specializations: text("specializations"), // التخصصات الكتابية (مثل: سياسة، اقتصاد، تقنية)
   writingSamples: text("writing_samples"), // روابط عينات الكتابة السابقة
+
+  // — الترخيص المهني (نفس آلية طلبات المراسلين، 2026-07-19). nullable للطلبات القديمة. —
+  licenseNumber: text("license_number"), // رقم الترخيص المهني (هيئة تنظيم الإعلام)
+  licenseExpiresAt: timestamp("license_expires_at"), // تاريخ انتهاء الترخيص (اختياري)
+  // مفتاح ملف في التخزين الخاص (R2/S3) — يُفتح فقط عبر مسار الأدمن المحمي
+  licenseFileKey: text("license_file_key"),
+  consentAt: timestamp("consent_at"),
   
   // حالة الطلب
   status: text("status").default("pending").notNull(), // pending, approved, rejected
