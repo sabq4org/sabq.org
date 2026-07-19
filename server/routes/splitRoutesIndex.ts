@@ -64,6 +64,7 @@ import rslPredictionsRouter from "./rslPredictions";
 import mediaLibraryRouter from "./mediaLibrary";
 import promptStudioRouter from "./promptStudio";
 import articleViewStatsRouter from "./articleViewStats";
+import articleResurfaceRouter from "./articleResurface";
 import articlePrClientReportRouter from "./articlePrClientReport";
 import keywordRouter from "./keywordRoutes";
 import editorAlertsRouter from "./editorAlerts";
@@ -153,6 +154,7 @@ export function registerSplitRoutes(app: Express) {
   app.use(mediaLibraryRouter);
   app.use(promptStudioRouter);
   app.use(articleViewStatsRouter);
+  app.use(articleResurfaceRouter);
   app.use(articlePrClientReportRouter);
   app.use(keywordRouter);
   app.use(editorAlertsRouter);

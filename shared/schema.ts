@@ -981,6 +981,9 @@ export const articles = pgTable("articles", {
   previewLength: integer("preview_length").default(300), // Characters shown before paywall
   
   publishedAt: timestamp("published_at"),
+  // «إنعاش»: يعيد الخبر لصدارة الموجز بترتيب COALESCE(resurfaced_at, published_at)
+  // دون المساس بتاريخ النشر الظاهر أو المشاهدات أو الرابط.
+  resurfacedAt: timestamp("resurfaced_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -990,6 +993,8 @@ export const articles = pgTable("articles", {
   index("idx_articles_author_status").on(table.authorId, table.status),
   index("idx_articles_type").on(table.articleType),
   index("idx_articles_published_at").on(table.publishedAt.desc()),
+  // ترتيب الموجز بعد خاصية الإنعاش: يغطي فرز COALESCE(resurfaced_at, published_at)
+  index("idx_articles_feed_order").on(table.status, sql`(COALESCE(${table.resurfacedAt}, ${table.publishedAt})) DESC`),
   // High-traffic optimization: homepage and popular queries
   index("idx_articles_homepage").on(table.status, table.hideFromHomepage, table.publishedAt.desc()),
   index("idx_articles_homepage_order").on(table.status, table.hideFromHomepage, table.displayOrder.desc(), table.publishedAt.desc()),
@@ -6499,6 +6504,7 @@ export const enArticles = pgTable("en_articles", {
     rawResponse?: any;
   }>(),
   publishedAt: timestamp("published_at"),
+  resurfacedAt: timestamp("resurfaced_at"), // مواءمة مع جدول articles العربي (خاصية الإنعاش)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
@@ -6710,6 +6716,7 @@ export const urArticles = pgTable("ur_articles", {
     rawResponse?: any;
   }>(),
   publishedAt: timestamp("published_at"),
+  resurfacedAt: timestamp("resurfaced_at"), // مواءمة مع جدول articles العربي (خاصية الإنعاش)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => [
