@@ -60,7 +60,7 @@ struct sabqApp: App {
                 .environment(SabqLiveStream.shared)
                 .task {
                     SabqLiveStream.shared.start()
-                    await requestPushPermissionIfNeeded()
+                    await ensurePushRegistration()
                 }
                 .fullScreenCover(isPresented: .constant(!hasOnboarded)) {
                     OnboardingView()
@@ -79,25 +79,34 @@ struct sabqApp: App {
             // أوقف SSE في الخلفية لتوفير البطارية؛ يُعاد عند العودة.
             if newPhase == .active {
                 SabqLiveStream.shared.start()
+                // The user may have enabled notifications in Settings while
+                // the app was backgrounded. Refresh the APNs token and link it
+                // to the active account as soon as the app becomes active.
+                Task { await ensurePushRegistration() }
             } else if newPhase == .background {
                 SabqLiveStream.shared.stop()
             }
         }
     }
 
-    /// Safety net for users who completed onboarding under an older build (or
-    /// browse without signing in): on launch, if the notification permission
-    /// is still undetermined we surface the system prompt once. Guarded by
-    /// `hasOnboarded` so it never fires while the onboarding cover is up —
-    /// the onboarding flow itself requests permission on completion. Calling
-    /// requestAuthorization when the status is already granted/denied is a
-    /// no-op (no prompt), so this is idempotent.
+    /// Ask once when permission is undetermined, then register with APNs on
+    /// every launch/foreground transition when permission is already granted.
+    /// Apple can rotate device tokens, and NotificationsStore intentionally
+    /// does not persist them locally, so a returning authenticated session
+    /// must request the current token again before the backend can target it.
     @MainActor
-    private func requestPushPermissionIfNeeded() async {
+    private func ensurePushRegistration() async {
         guard hasOnboarded else { return }
         let status = await NotificationsStore.shared.currentAuthorizationStatus()
-        if status == .notDetermined {
+        switch status {
+        case .notDetermined:
             _ = await NotificationsStore.shared.requestPermission()
+        case .authorized, .provisional, .ephemeral:
+            UIApplication.shared.registerForRemoteNotifications()
+        case .denied:
+            break
+        @unknown default:
+            break
         }
     }
 }
