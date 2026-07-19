@@ -1,8 +1,8 @@
 /**
- * مسودة تقرير كأس العالم 2026 بالأرقام — داخلية فقط، للمراجعة قبل النشر.
+ * تقرير كأس العالم 2026 بالأرقام — لوحة داخلية للمراجعة قبل النشر العام.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,11 @@ type Report = {
   generatedAt: string;
   headline: string;
   subtitle: string;
+  cache?: {
+    source: "cache" | "computed";
+    ttlSeconds: number;
+    forced: boolean;
+  };
   sabq: {
     totalArticles: number;
     aiGenerated: number;
@@ -334,35 +339,64 @@ function StoryRail({
   );
 }
 
+async function fetchReport(fresh: boolean): Promise<Report> {
+  const path = fresh
+    ? "/api/admin/wc-2026-numbers-report?fresh=1"
+    : "/api/admin/wc-2026-numbers-report";
+  const res = await fetch(apiUrl(path), { credentials: "include" });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = (await res.json()) as { message?: string; detail?: string; required?: string };
+      detail = [body.message, body.detail, body.required ? `مطلوب: ${body.required}` : ""]
+        .filter(Boolean)
+        .join(" — ");
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail || `فشل تحميل التقرير (HTTP ${res.status})`);
+  }
+  return res.json();
+}
+
+const REPORT_QUERY_KEY = ["/api/admin/wc-2026-numbers-report"] as const;
+
 export default function Wc2026NumbersReportPage() {
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabId>("pulse");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [storyIndex, setStoryIndex] = useState(0);
   const [focusBeat, setFocusBeat] = useState<number | null>(null);
+  const [busy, setBusy] = useState<"cache" | "fresh" | null>(null);
 
-  const { data, isLoading, isFetching, refetch, error } = useQuery<Report>({
-    queryKey: ["/api/admin/wc-2026-numbers-report"],
-    queryFn: async () => {
-      const res = await fetch(apiUrl("/api/admin/wc-2026-numbers-report"), {
-        credentials: "include",
-      });
-      if (!res.ok) {
-        let detail = "";
-        try {
-          const body = (await res.json()) as { message?: string; detail?: string; required?: string };
-          detail = [body.message, body.detail, body.required ? `مطلوب: ${body.required}` : ""]
-            .filter(Boolean)
-            .join(" — ");
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail || `فشل تحميل التقرير (HTTP ${res.status})`);
-      }
-      return res.json();
-    },
-    staleTime: 60_000,
+  const { data, isLoading, isFetching, error } = useQuery<Report>({
+    queryKey: REPORT_QUERY_KEY,
+    queryFn: () => fetchReport(false),
+    staleTime: 5 * 60_000,
     retry: 1,
   });
+
+  const reloadFromCache = async () => {
+    setBusy("cache");
+    try {
+      const report = await fetchReport(false);
+      queryClient.setQueryData(REPORT_QUERY_KEY, report);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const recomputeFromDb = async () => {
+    setBusy("fresh");
+    try {
+      const report = await fetchReport(true);
+      queryClient.setQueryData(REPORT_QUERY_KEY, report);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const spinning = isFetching || busy != null;
 
   const tabs = useMemo(
     () =>
@@ -402,25 +436,15 @@ export default function Wc2026NumbersReportPage() {
                 "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23fbbf24' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
             }}
           />
-          <div
-            className="pointer-events-none absolute -left-6 top-16 rotate-[-18deg] select-none text-6xl font-black tracking-[0.2em] text-amber-400/10 md:text-8xl"
-            aria-hidden
-          >
-            DRAFT
-          </div>
-
           <div className="relative space-y-4 p-3 sm:space-y-6 sm:p-8">
             <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
               <div className="max-w-3xl space-y-2 sm:space-y-3">
                 <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                  <Badge className="bg-amber-400 text-[10px] text-amber-950 hover:bg-amber-400 sm:text-xs">
-                    مسودة — غير منشورة للعامة
-                  </Badge>
                   <Badge variant="outline" className="border-white/20 text-[10px] text-white/70 sm:text-xs">
-                    WC 2026 Numbers
+                    كأس العالم 2026
                   </Badge>
-                  <Badge variant="outline" className="hidden border-emerald-400/30 text-emerald-200/80 sm:inline-flex">
-                    داخل لوحة التحكم فقط
+                  <Badge variant="outline" className="border-amber-300/30 text-[10px] text-amber-100/80 sm:text-xs">
+                    مراجعة داخلية
                   </Badge>
                 </div>
                 <h1 className="text-2xl font-black leading-tight text-white sm:text-3xl md:text-5xl">
@@ -428,23 +452,44 @@ export default function Wc2026NumbersReportPage() {
                 </h1>
                 <p className="text-xs text-white/65 sm:text-sm md:text-base">
                   {data?.subtitle ||
-                    "راجع الأرقام هنا قبل أي نشر. الصفحة العامة لن تُفعَّل إلا بأمرك."}
+                    "أرقام تغطية سبق مع نبض البطولة: المواد، المشاهدات، الأهداف، والبطل."}
                 </p>
               </div>
 
               <div className="flex flex-col items-end gap-2">
-                <Button
-                  variant="outline"
-                  className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                  onClick={() => refetch()}
-                  disabled={isFetching}
-                >
-                  <RefreshCw className={cn("ml-2 h-4 w-4", isFetching && "animate-spin")} />
-                  تحديث الأرقام
-                </Button>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                    onClick={() => void reloadFromCache()}
+                    disabled={spinning}
+                  >
+                    <RefreshCw className={cn("ml-2 h-4 w-4", busy === "cache" && "animate-spin")} />
+                    تحديث العرض
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-amber-300/30 bg-amber-400/10 text-amber-50 hover:bg-amber-400/20"
+                    onClick={() => void recomputeFromDb()}
+                    disabled={spinning}
+                    title="يعيد حساب الأرقام من قاعدة البيانات والمزوّد — أثقل على الخادم"
+                  >
+                    <RefreshCw className={cn("ml-2 h-4 w-4", busy === "fresh" && "animate-spin")} />
+                    إعادة الحساب
+                  </Button>
+                </div>
+                {data?.cache ? (
+                  <p className="max-w-xs text-left text-[11px] leading-relaxed text-white/45" dir="rtl">
+                    {data.cache.source === "cache"
+                      ? `من ذاكرة الخادم · بلا ضغط إضافي على قاعدة البيانات (يُعاد الحساب تلقائياً كل ${Math.round(data.cache.ttlSeconds / 60)} دقائق)`
+                      : data.cache.forced
+                        ? "أُعيد حسابها الآن من قاعدة البيانات والمزوّد"
+                        : "حُسبت للتو وخُزّنت في الذاكرة للطلبات التالية"}
+                  </p>
+                ) : null}
                 {data?.generatedAt ? (
                   <p className="text-[11px] text-white/40">
-                    آخر توليد: {new Date(data.generatedAt).toLocaleString("ar-SA")}
+                    وقت الأرقام: {new Date(data.generatedAt).toLocaleString("ar-SA")}
                   </p>
                 ) : null}
               </div>
@@ -504,10 +549,10 @@ export default function Wc2026NumbersReportPage() {
               </div>
             ) : error || !data ? (
               <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-6 text-rose-100">
-                <p className="font-bold">تعذر تحميل المسودة</p>
+                <p className="font-bold">تعذر تحميل التقرير</p>
                 <p className="mt-2 text-sm text-rose-100/80">
                   {(error as Error)?.message ||
-                    "خطأ غير معروف — جرّب تحديث الأرقام أو راجع سجلات API."}
+                    "خطأ غير معروف — جرّب «تحديث العرض» أو «إعادة الحساب»."}
                 </p>
               </div>
             ) : (
@@ -583,20 +628,19 @@ export default function Wc2026NumbersReportPage() {
                 {tab === "sabq" && (
                   <div className="space-y-6">
                     <div className="rounded-3xl border border-sky-400/20 bg-sky-500/10 p-5">
-                      <h2 className="mb-2 text-lg font-bold text-white">كيف يُحسب العدد؟</h2>
+                      <h2 className="mb-2 text-lg font-bold text-white">ماذا نعدّ؟</h2>
                       <p className="mb-3 text-sm text-sky-50/80">
-                        الرقم السابق (~آلاف) كان يلتقط أي ذكر لـ«مونديال/كأس العالم» عبر السنين.
-                        العدّاد الآن مضيّق على مونديال 2026 (عنوان + نافذة زمنية):
+                        تغطية مونديال 2026 فقط — مقسومة إلى غرفة المباريات والمواد التحريرية:
                       </p>
                       <div className="mb-4 grid grid-cols-2 gap-2 sm:gap-3">
                         <div className="rounded-xl bg-black/20 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
-                          <p className="text-[10px] text-white/50 sm:text-xs">غرفة المباريات (wc26-*)</p>
+                          <p className="text-[10px] text-white/50 sm:text-xs">غرفة المباريات</p>
                           <p className="text-xl font-black text-amber-200 sm:text-2xl">
                             {(data.sabq.breakdown?.matchDesk ?? 0).toLocaleString("en-US")}
                           </p>
                         </div>
                         <div className="rounded-xl bg-black/20 px-3 py-2.5 sm:rounded-2xl sm:px-4 sm:py-3">
-                          <p className="text-[10px] text-white/50 sm:text-xs">تحريري رياضة منذ 2026-01-01</p>
+                          <p className="text-[10px] text-white/50 sm:text-xs">مواد تحريرية 2026</p>
                           <p className="text-xl font-black text-sky-200 sm:text-2xl">
                             {(data.sabq.breakdown?.editorialWindow ?? 0).toLocaleString("en-US")}
                           </p>
@@ -757,7 +801,7 @@ export default function Wc2026NumbersReportPage() {
             )}
 
             <p className="border-t border-white/10 pt-4 text-center text-xs text-white/35">
-              هذه مسودة داخلية للمراجعة فقط — لن تظهر في واجهة الزائر حتى تُعتمد وتنشر لاحقاً.
+              للمعاينة الداخلية الآن — النشر العام للقرّاء يُفعَّل لاحقاً بقرار منفصل.
             </p>
           </div>
         </div>
