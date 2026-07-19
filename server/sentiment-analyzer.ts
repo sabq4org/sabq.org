@@ -200,6 +200,7 @@ export async function analyzeSentiment(
           ...AI_MODELS.CLAUDE_SONNET,
           maxTokens: 150,
           temperature: 0.3, // Lower temperature for more consistent results
+          feature: "sentiment-analysis",
         });
         
         if (response.error) {
@@ -240,6 +241,7 @@ export async function analyzeSentiment(
             ...AI_MODELS.GEMINI_FLASH,
             maxTokens: 150,
             temperature: 0.3,
+            feature: "sentiment-analysis",
           });
           
           if (response.error) {

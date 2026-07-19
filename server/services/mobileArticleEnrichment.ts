@@ -206,6 +206,7 @@ export async function enrichArticleAsync(articleId: string): Promise<void> {
     const aiResponse = await aiManager.generate(prompt, {
       provider: "openai",
       model: "gpt-4o-mini",
+      feature: "mobile-article-enrichment",
     });
     if (aiResponse.error) {
       throw new Error(`AI enrichment failed: ${aiResponse.error}`);

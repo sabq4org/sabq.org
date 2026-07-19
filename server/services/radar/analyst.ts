@@ -10,8 +10,8 @@ import { approvedCategories, updateItem } from "./repo";
 import { parseAnalysisPayload } from "./parsing";
 
 const ANALYST_MODEL_CHAIN: AIModelConfig[] = [
-  { provider: "anthropic", model: "claude-haiku-4-5", maxTokens: 6000, temperature: 0.2 },
-  { provider: "openai", model: "gpt-5.1", maxTokens: 6000, jsonMode: true },
+  { provider: "anthropic", model: "claude-haiku-4-5", maxTokens: 6000, temperature: 0.2, feature: "radar" },
+  { provider: "openai", model: "gpt-5.1", maxTokens: 6000, jsonMode: true, feature: "radar" },
 ];
 
 const fmtRiyadh = (date: Date): string =>

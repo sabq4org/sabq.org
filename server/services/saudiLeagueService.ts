@@ -3903,7 +3903,11 @@ export async function generateMatchStory(fixtureId: number): Promise<SplMatchSto
     const prompt = `أنت محرّر رياضي في صحيفة «سبق». اكتب تقريرًا صحفيًا موجزًا بالعربية الفصحى عن هذه المباراة اعتمادًا حصريًا على الوقائع التالية، دون اختلاق أي معلومة غير مذكورة ودون تحيّز. ${live ? "المباراة ما زالت جارية فاكتب بصيغة الحاضر وبما حدث حتى الآن." : "المباراة انتهت فاكتب بصيغة الماضي."} فقرة أو فقرتان (٩٠-١٦٠ كلمة)، نصًّا متّصلًا دون عناوين أو نقاط أو رموز.\n\nالوقائع:\n${lines.join("\n")}`;
 
     try {
-      const res = await aiManager.generate(prompt, { ...AI_MODELS.GPT_5_1, maxTokens: 700 });
+      const res = await aiManager.generate(prompt, {
+        ...AI_MODELS.GPT_4O_MINI,
+        maxTokens: 700,
+        feature: "saudi-league-story",
+      });
       const text = (res.content || "").trim();
       if (!text) return null;
       return { text, generatedAt: Date.now(), live };
@@ -3953,7 +3957,11 @@ export async function generateMatchPreview(fixtureId: number): Promise<SplMatchP
     const prompt = `أنت محرّر رياضي في صحيفة «سبق». اكتب معاينة تشويقية موجزة بالعربية الفصحى لهذه المباراة المرتقبة اعتمادًا حصريًا على المعطيات التالية دون اختلاق أي معلومة غير مذكورة. اذكر سياق اللقاء وأبرز ما يُنتظر فيه. ممنوع منعًا باتًّا ذكر أي مراهنات أو رهانات أو أنصبة أو توصيات مراهنة أو مواقع مراهنة. فقرة أو فقرتان (٩٠-١٥٠ كلمة)، نصًّا متّصلًا دون عناوين أو نقاط أو رموز.\n\nالمعطيات:\n${lines.join("\n")}`;
 
     try {
-      const res = await aiManager.generate(prompt, { ...AI_MODELS.GPT_5_1, maxTokens: 600 });
+      const res = await aiManager.generate(prompt, {
+        ...AI_MODELS.GPT_4O_MINI,
+        maxTokens: 600,
+        feature: "saudi-league-preview",
+      });
       const text = (res.content || "").trim();
       if (!text) return null;
       return { text, generatedAt: Date.now() };

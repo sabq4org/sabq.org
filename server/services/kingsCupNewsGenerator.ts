@@ -283,8 +283,8 @@ function parseGenerated(raw: string): GeneratedKcArticle {
 }
 
 const KC_MODEL_CHAIN: AIModelConfig[] = [
-  { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4 },
-  { provider: "openai", model: SABQ_FALLBACK_EDITOR_MODEL },
+  { provider: "anthropic", model: SABQ_PRIMARY_EDITOR_MODEL, maxTokens: 8000, temperature: 0.4, feature: "kings-cup-news" },
+  { provider: "openai", model: SABQ_FALLBACK_EDITOR_MODEL, feature: "kings-cup-news" },
 ];
 
 async function generateArticleText(prompt: string): Promise<AIResponse> {

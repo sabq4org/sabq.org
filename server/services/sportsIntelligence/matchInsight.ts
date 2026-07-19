@@ -108,7 +108,8 @@ export async function getMatchInsight(fixtureId: number): Promise<SmartMatchCard
 
     const parsed = await generateJson<{ headline?: string; body?: string; bullets?: string[] }>(prompt, {
       feature: `sports-intel-match-${phase}`,
-      tier: "strong",
+      // معاينة ما قبل المباراة على mini؛ المباشر/بعدها تبقى strong (سرد أثقل).
+      tier: phase === "pre" ? "mini" : "strong",
       maxTokens: 800,
     });
     if (!parsed || !parsed.headline || !parsed.body) return null;

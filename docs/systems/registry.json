@@ -218,7 +218,7 @@
       ],
       "dashboardPath": "/dashboard/ai-hub",
       "owners": ["ai"],
-      "lastReviewed": "2026-07-17"
+      "lastReviewed": "2026-07-19"
     },
     {
       "id": "muqtarab",
@@ -350,6 +350,7 @@
         "server/services/gc*.ts",
         "server/services/sportmonksService.ts",
         "server/services/sportmonksNewsService.ts",
+        "server/services/saudiLeagueService.ts",
         "server/services/sportsTournamentsService.ts",
         "server/services/sportsNamesService.ts",
         "server/services/worldCupNewsGenerator.ts",
@@ -372,17 +373,23 @@
       "aiFeatureKeys": [
         "world-cup-news",
         "sportmonks-news",
+        "kings-cup-news",
+        "saudi-league-story",
+        "saudi-league-preview",
         "sports-names",
         "sports-snaps",
         "sports-intel-trends",
         "sports-intel-prediction",
         "sports-intel-scene",
         "sports-intel-digest",
-        "sports-intel-copilot"
+        "sports-intel-copilot",
+        "sports-intel-match-pre",
+        "sports-intel-match-live",
+        "sports-intel-match-post"
       ],
       "dashboardPath": "/dashboard/sports-tournaments",
       "owners": ["sports"],
-      "lastReviewed": "2026-07-18"
+      "lastReviewed": "2026-07-19"
     },
     {
       "id": "push-notifications",

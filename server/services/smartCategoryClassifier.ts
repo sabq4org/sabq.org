@@ -112,6 +112,7 @@ ${articleContent}
       model: 'gpt-4o-mini',
       maxTokens: 500,
       jsonMode: true,
+      feature: 'smart-category-classifier',
     });
 
     let parsed: { categoryId: string; confidence: number; reason: string; alternatives?: Array<{ categoryId: string; confidence: number }> };
@@ -230,6 +231,7 @@ ${articleContent}
       model: 'gpt-4o-mini',
       maxTokens: 300,
       jsonMode: true,
+      feature: 'smart-category-classifier',
     });
 
     let parsed: { subtitle?: string; excerpt?: string };

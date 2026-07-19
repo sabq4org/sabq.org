@@ -207,6 +207,7 @@ export async function optimizePrompt(
         maxTokens: 4000,
         temperature: 0.4,
         jsonMode: provider === "openai",
+        feature: "prompt-studio",
       });
 
       if (res.error) throw new Error(res.error);

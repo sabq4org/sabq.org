@@ -88,6 +88,7 @@ export async function generateSmartCaption(params: {
       maxTokens: 400,
       temperature: 0.4,
       jsonMode: true,
+      feature: "media-caption",
     });
     const parsed = extractJson(res.content || "");
     if (parsed?.caption && typeof parsed.caption === "string") caption = parsed.caption.trim();

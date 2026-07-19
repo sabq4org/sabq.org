@@ -69,10 +69,13 @@ class AIManager {
     prompt: string,
     config: AIModelConfig
   ): Promise<AIResponse> {
-    // Legacy model forcing: all OpenAI requests ran on gpt-5.1 unless o3-mini.
+    // Legacy OpenAI model forcing: keep gpt-5.1 as the default for unspecified /
+    // migrated aliases, but honor explicit cheap models (gpt-4o-mini / gpt-4o /
+    // o3-mini). Without this escape hatch every "mini" caller was billed as 5.1.
+    const OPENAI_HONOR_AS_IS = new Set(['o3-mini', 'gpt-4o-mini', 'gpt-4o']);
     const modelId =
       config.provider === 'openai'
-        ? (config.model === 'o3-mini' ? 'o3-mini' : 'gpt-5.1')
+        ? (OPENAI_HONOR_AS_IS.has(config.model) ? config.model : 'gpt-5.1')
         : config.model;
 
     // Legacy per-provider defaults: Anthropic/Gemini used 500 tokens / 0.7
