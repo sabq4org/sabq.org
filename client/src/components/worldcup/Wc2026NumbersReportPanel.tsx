@@ -223,85 +223,74 @@ function MixMeter({ ai, editorial }: { ai: number; editorial: number }) {
   );
 }
 
-function useIsCompactPhone() {
-  const [compact, setCompact] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
-    const apply = () => setCompact(mq.matches);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
-  return compact;
+function formatPulseDay(day: string): string {
+  const d = new Date(`${day}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return day;
+  return d.toLocaleDateString("ar-SA", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
 }
 
-function PulseChart({
-  days,
-  selectedDay,
-  onSelectDay,
-}: {
-  days: Report["sabq"]["dailyPulse"];
-  selectedDay: string | null;
-  onSelectDay: (day: string | null) => void;
-}) {
-  const compact = useIsCompactPhone();
-  const max = Math.max(1, ...days.map((d) => d.count));
-  // على الجوال أعمدة أقل حتى لا يخرج الشريط عن العرض
-  const recent = days.slice(compact ? -14 : -28);
-  if (recent.length === 0) {
+/** قائمة أيام عملية بدل مخطط أعمدة تفاعلي صغير. */
+function DailyPulseList({ days }: { days: Report["sabq"]["dailyPulse"] }) {
+  if (days.length === 0) {
     return <p className="text-sm text-white/50">لا بيانات يومية بعد</p>;
   }
-  const selected = selectedDay ? recent.find((d) => d.day === selectedDay) : null;
+
+  const peak = days.reduce((best, cur) => (cur.count > best.count ? cur : best), days[0]!);
+  const recent = [...days].slice(-10).reverse();
+  const recentTotal = recent.reduce((s, d) => s + d.count, 0);
+  const avg = Math.round(recentTotal / recent.length);
+
   return (
-    <div className="min-w-0 w-full space-y-3 overflow-hidden">
-      <div
-        className="grid h-36 w-full min-w-0 items-end gap-px sm:h-44 sm:gap-1"
-        style={{ gridTemplateColumns: `repeat(${recent.length}, minmax(0, 1fr))` }}
-      >
-        {recent.map((d) => {
-          const active = selectedDay === d.day;
-          return (
-            <button
-              key={d.day}
-              type="button"
-              onClick={() => onSelectDay(active ? null : d.day)}
-              className="group flex min-w-0 flex-col items-center gap-1 outline-none"
-              title={`${d.day}: ${d.count} مادة · ${d.views} مشاهدة`}
-            >
-              <div
-                className={cn(
-                  "w-full max-w-full rounded-t-sm transition sm:rounded-t-md",
-                  active
-                    ? "bg-gradient-to-t from-amber-500 to-amber-200 shadow-[0_0_12px_rgba(251,191,36,0.45)]"
-                    : "bg-gradient-to-t from-amber-600/40 to-amber-300/70 group-hover:to-amber-200",
-                )}
-                style={{ height: `${Math.max(8, (d.count / max) * 100)}%` }}
-              />
-              <span className="hidden text-[9px] text-white/40 sm:block">
-                {d.day.slice(5)}
-              </span>
-            </button>
-          );
-        })}
+    <div className="min-w-0 w-full space-y-3">
+      <div className="rounded-xl border border-amber-300/25 bg-amber-400/10 px-3 py-2.5 sm:rounded-2xl sm:px-4">
+        <p className="text-[10px] text-amber-200/80 sm:text-xs">أقوى يوم نشر</p>
+        <p className="mt-0.5 text-sm font-bold text-white sm:text-base">
+          {formatPulseDay(peak.day)}
+          <span className="mx-1.5 font-normal text-white/40">·</span>
+          {peak.count.toLocaleString("en-US")} مادة
+          <span className="mx-1.5 font-normal text-white/40">·</span>
+          {peak.views.toLocaleString("en-US")} مشاهدة
+        </p>
       </div>
-      {selected ? (
-        <div className="rounded-xl border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs text-amber-50 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
-          <strong>{selected.day}</strong>
-          {" · "}
-          {selected.count.toLocaleString("en-US")} مادة
-          {" · "}
-          {selected.views.toLocaleString("en-US")} مشاهدة
-          <button
-            type="button"
-            className="mr-3 text-amber-200/80 underline-offset-2 hover:underline"
-            onClick={() => onSelectDay(null)}
-          >
-            إلغاء التحديد
-          </button>
+
+      <div className="overflow-hidden rounded-xl border border-white/10 sm:rounded-2xl">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-2 border-b border-white/10 bg-white/[0.04] px-3 py-2 text-[10px] text-white/45 sm:px-4 sm:text-xs">
+          <span>اليوم</span>
+          <span className="min-w-[3.5rem] text-end">مواد</span>
+          <span className="min-w-[4.5rem] text-end">مشاهدات</span>
         </div>
-      ) : (
-        <p className="text-[10px] text-white/40 sm:text-xs">انقر يوماً لرؤية تفاصيل النبض</p>
-      )}
+        <ul className="divide-y divide-white/5">
+          {recent.map((d) => {
+            const isPeak = d.day === peak.day;
+            return (
+              <li
+                key={d.day}
+                className={cn(
+                  "grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2 text-xs sm:px-4 sm:text-sm",
+                  isPeak ? "bg-amber-400/10 text-amber-50" : "text-white/80",
+                )}
+              >
+                <span className="min-w-0 truncate font-medium">{formatPulseDay(d.day)}</span>
+                <span className="min-w-[3.5rem] text-end tabular-nums font-semibold text-white">
+                  {d.count.toLocaleString("en-US")}
+                </span>
+                <span className="min-w-[4.5rem] text-end tabular-nums text-white/60">
+                  {d.views.toLocaleString("en-US")}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <p className="text-[10px] text-white/45 sm:text-xs">
+        متوسط آخر {recent.length} أيام:{" "}
+        <strong className="text-white/70">{avg.toLocaleString("en-US")}</strong> مادة/يوم
+      </p>
     </div>
   );
 }
@@ -393,7 +382,6 @@ export function Wc2026NumbersReportPanel({
     : "/api/world-cup/numbers-report";
 
   const [tab, setTab] = useState<TabId>("pulse");
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [storyIndex, setStoryIndex] = useState(0);
   const [focusBeat, setFocusBeat] = useState<number | null>(null);
 
@@ -591,11 +579,7 @@ export function Wc2026NumbersReportPanel({
                           <h2 className="text-base font-bold text-white sm:text-lg">نبض النشر اليومي</h2>
                           <Activity className="h-4 w-4 shrink-0 text-amber-300" />
                         </div>
-                        <PulseChart
-                          days={data.sabq.dailyPulse}
-                          selectedDay={selectedDay}
-                          onSelectDay={setSelectedDay}
-                        />
+                        <DailyPulseList days={data.sabq.dailyPulse} />
                       </div>
                       <div className="min-w-0 space-y-3 sm:space-y-4">
                         <MixMeter ai={data.sabq.aiGenerated} editorial={data.sabq.editorial} />
