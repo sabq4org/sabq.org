@@ -1231,8 +1231,8 @@ export default function NewsroomPulseDashboard() {
           <OnlineModeratorsWidget />
         </section>
 
-        {/* رادار الفجوات التحريرية — بين «إجراءات سريعة» و«موجز سبق الذكي»؛ يتبع شروط canViewStats ويُخفى عن content_manager كبقية الأقسام التحليلية */}
-        {canViewStats && !isContentManager && <CoverageGapsSection />}
+        {/* فجوات التغطية — مخفية من الداشبورد بقرار تشغيلي (2026-07-19). غيّر الشرط لإعادة التفعيل. */}
+        {false && canViewStats && !isContentManager && <CoverageGapsSection />}
 
         {stats && <SmartBrief stats={stats} muqtarabCount={muqtarabCount} operationalOnly={isContentManager} />}
 
