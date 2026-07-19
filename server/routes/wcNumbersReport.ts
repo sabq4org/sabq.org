@@ -19,9 +19,10 @@ async function handleReport(req: Request, res: Response, opts: { publicCache: bo
       req.query.refresh === "1";
     const report = await getWcNumbersReport({ forceFresh });
     if (opts.publicCache) {
+      // البطولة انتهت — كاش أطول على الحافة لتقليل الانتظار على الرئيسية
       res.setHeader(
         "Cache-Control",
-        "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
+        "public, max-age=120, s-maxage=900, stale-while-revalidate=1800",
       );
     } else {
       res.setHeader("Cache-Control", "private, no-store");

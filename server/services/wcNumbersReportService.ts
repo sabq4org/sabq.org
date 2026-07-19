@@ -371,6 +371,15 @@ function computeArabStats(fixtures: WcFixture[]) {
   return { matchesPlayed, goalsFor, goalsAgainst };
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      setTimeout(() => resolve(fallback), ms);
+    }),
+  ]);
+}
+
 async function buildTournamentStats(): Promise<TournamentStats> {
   if (!isWorldCupConfigured()) {
     return {
@@ -390,11 +399,12 @@ async function buildTournamentStats(): Promise<TournamentStats> {
     };
   }
 
+  // مهلة قصيرة بعد انتهاء البطولة: لا نعلّق الرئيسية على مزوّد بطيء
   const [fixtures, scorers, assists, cards] = await Promise.all([
-    getFixtures().catch(() => [] as WcFixture[]),
-    getTopScorers().catch(() => []),
-    getTopAssists().catch(() => []),
-    getTopCards().catch(() => []),
+    withTimeout(getFixtures().catch(() => [] as WcFixture[]), 3500, [] as WcFixture[]),
+    withTimeout(getTopScorers().catch(() => []), 2500, []),
+    withTimeout(getTopAssists().catch(() => []), 2500, []),
+    withTimeout(getTopCards().catch(() => []), 2500, []),
   ]);
 
   const finished = fixtures.filter((f) => f.status.finished);

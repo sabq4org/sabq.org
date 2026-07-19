@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
+  Loader2,
 } from "lucide-react";
 
 export type WcNumbersReportVariant = "public" | "admin";
@@ -425,6 +426,27 @@ export function Wc2026NumbersReportPanel({
     return () => window.clearInterval(id);
   }, [data?.storyBeats.length]);
 
+  if (isLoading) {
+    return (
+      <div
+        className={cn(
+          "flex min-h-[240px] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 py-12 text-center shadow-sm sm:min-h-[280px]",
+          isAdmin && "mx-auto max-w-[1600px]",
+        )}
+        dir="rtl"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+      >
+        <Loader2 className="h-9 w-9 animate-spin text-amber-600" aria-hidden />
+        <p className="text-sm font-semibold text-foreground sm:text-base">
+          جاري جلب بيانات تقرير المونديال…
+        </p>
+        <p className="text-xs text-muted-foreground">لحظة واحدة ونعرض لك الحصاد بالأرقام</p>
+      </div>
+    );
+  }
+
   return (
       <div
         className={cn(
@@ -434,19 +456,14 @@ export function Wc2026NumbersReportPanel({
         dir="rtl"
       >
         <div
-          className={cn(
-            "relative overflow-hidden border border-amber-400/20 shadow-2xl",
-            isAdmin
-              ? "rounded-[1.25rem] sm:rounded-[2rem]"
-              : "rounded-none border-x-0 sm:rounded-[1.25rem] sm:border-x sm:mx-0",
-          )}
+          className="relative overflow-hidden rounded-2xl border border-amber-400/25 shadow-lg sm:rounded-3xl"
           style={{
             background:
-              "radial-gradient(ellipse at 20% 0%, #3b1d0f 0%, #0a0f1c 45%, #05070d 100%)",
+              "radial-gradient(ellipse at 20% 0%, #3b1d0f 0%, #121826 55%, #0f1419 100%)",
           }}
         >
           <div
-            className="pointer-events-none absolute inset-0 opacity-[0.07]"
+            className="pointer-events-none absolute inset-0 opacity-[0.06]"
             style={{
               backgroundImage:
                 "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23fbbf24' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
@@ -534,13 +551,7 @@ export function Wc2026NumbersReportPanel({
               })}
             </div>
 
-            {isLoading ? (
-              <div className="grid grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <Skeleton key={i} className="h-20 rounded-2xl bg-white/10 sm:h-28 sm:rounded-3xl" />
-                ))}
-              </div>
-            ) : error || !data ? (
+            {error || !data ? (
               <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-6 text-rose-100">
                 <p className="font-bold">تعذر تحميل التقرير</p>
                 <p className="mt-2 text-sm text-rose-100/80">
