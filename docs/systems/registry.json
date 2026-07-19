@@ -371,6 +371,7 @@
         "server/routes/asianCup.ts",
         "server/routes/kingsCup.ts",
         "server/routes/worldCup.ts",
+        "server/routes/wcNumbersReport.ts",
         "server/routes/gcMajlis.ts",
         "server/routes/gcFantasy.ts",
         "server/routes/sports*.ts",
@@ -378,7 +379,8 @@
         "client/src/pages/AsianCup*.tsx",
         "client/src/pages/KingsCup*.tsx",
         "client/src/pages/WorldCup*.tsx",
-        "client/src/pages/dashboard/Sports*.tsx"
+        "client/src/pages/dashboard/Sports*.tsx",
+        "client/src/pages/dashboard/Wc2026NumbersReportPage.tsx"
       ],
       "aiFeatureKeys": [
         "world-cup-news",
