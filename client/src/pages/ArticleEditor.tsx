@@ -2653,7 +2653,7 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
           </DialogContent>
         </Dialog>
 
-        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "flex flex-col gap-5 pb-24 lg:grid lg:grid-cols-12 lg:pb-0"}>
+        <div className={isOpinionAuthor ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start" : "flex flex-col gap-5 pb-24 lg:grid lg:grid-cols-12 lg:items-start lg:pb-10"}>
           {/* Main Content Area — contents على الموبايل لدمج الترتيب مع الشريط الجانبي */}
           <div className={isOpinionAuthor ? "flex min-w-0 flex-col gap-5" : "contents lg:col-span-8 lg:flex lg:min-w-0 lg:flex-col lg:gap-5"}>
             {isOpinionAuthor && (
@@ -3862,9 +3862,11 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
 
           {isOpinionAuthor && <WriterEditorialNoticesAside />}
 
-          {/* Settings Sidebar — contents على الموبايل لدمج الترتيب مع المحتوى */}
+          {/* Settings Sidebar — contents على الموبايل لدمج الترتيب مع المحتوى.
+              لا نستخدم sticky+max-h هنا: كانت تقصّ أسفل السايدبار (SEO/الكلمات)
+              داخل منطقة التمرير للداشبورد ولا يمكن الوصول لآخر الحقول. */}
           {!isOpinionAuthor && <div
-            className="contents lg:col-span-4 lg:flex lg:flex-col lg:gap-5 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100dvh-6.5rem)] lg:overflow-y-auto lg:overscroll-contain lg:pb-12 lg:scroll-pb-12 [scrollbar-gutter:stable]"
+            className="contents lg:col-span-4 lg:flex lg:flex-col lg:gap-5"
             data-editor-panel="publish"
           >
             <div
@@ -4883,6 +4885,8 @@ Style: Soft 2.5D illustration with gentle shadows, smooth gradients, rounded sha
                       placeholder="اكتب كلمة واضغط Enter..."
                       testId="input-keywords"
                     />
+                    {/* مساحة سفلية حتى لا يُقطع آخر صف من الكلمات عند نهاية الصفحة */}
+                    <div className="h-6 lg:h-10" aria-hidden />
                   </TabsContent>
 
                   <TabsContent value="preview">
