@@ -289,11 +289,11 @@ function StoryRail({
   if (beats.length === 0) return null;
   const beat = beats[Math.min(index, beats.length - 1)]!;
   return (
-    <div className="rounded-3xl border border-white/10 bg-gradient-to-l from-red-950/40 via-black/20 to-amber-950/30 p-5">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <div className="rounded-2xl border border-white/10 bg-gradient-to-l from-red-950/40 via-black/20 to-amber-950/30 p-3 sm:rounded-3xl sm:p-5">
+      <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
         <div>
-          <p className="text-xs text-amber-200/70">حكاية الأرقام · فصل {index + 1}/{beats.length}</p>
-          <h2 className="text-xl font-black text-white">{beat.label}</h2>
+          <p className="text-[10px] text-amber-200/70 sm:text-xs">حكاية الأرقام · فصل {index + 1}/{beats.length}</p>
+          <h2 className="text-base font-black text-white sm:text-xl">{beat.label}</h2>
         </div>
         <div className="flex gap-1">
           <Button
@@ -314,8 +314,8 @@ function StoryRail({
           </Button>
         </div>
       </div>
-      <p className="text-4xl font-black text-amber-200 md:text-5xl">{beat.value}</p>
-      <p className="mt-2 text-sm text-white/65">{beat.detail}</p>
+      <p className="text-3xl font-black text-amber-200 sm:text-4xl md:text-5xl">{beat.value}</p>
+      <p className="mt-2 text-xs text-white/65 sm:text-sm">{beat.detail}</p>
       <div className="mt-4 flex gap-1.5">
         {beats.map((_, i) => (
           <button
@@ -387,9 +387,9 @@ export default function Wc2026NumbersReportPage() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto w-full max-w-[1600px] px-4 pb-12 sm:px-6" dir="rtl">
+      <div className="mx-auto w-full max-w-[1600px] px-3 pb-10 sm:px-6 sm:pb-12" dir="rtl">
         <div
-          className="relative overflow-hidden rounded-[2rem] border border-amber-400/20 shadow-2xl"
+          className="relative overflow-hidden rounded-[1.25rem] border border-amber-400/20 shadow-2xl sm:rounded-[2rem]"
           style={{
             background:
               "radial-gradient(ellipse at 20% 0%, #3b1d0f 0%, #0a0f1c 45%, #05070d 100%)",
@@ -409,24 +409,24 @@ export default function Wc2026NumbersReportPage() {
             DRAFT
           </div>
 
-          <div className="relative space-y-6 p-5 sm:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="max-w-3xl space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge className="bg-amber-400 text-amber-950 hover:bg-amber-400">
+          <div className="relative space-y-4 p-3 sm:space-y-6 sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-3 sm:gap-4">
+              <div className="max-w-3xl space-y-2 sm:space-y-3">
+                <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <Badge className="bg-amber-400 text-[10px] text-amber-950 hover:bg-amber-400 sm:text-xs">
                     مسودة — غير منشورة للعامة
                   </Badge>
-                  <Badge variant="outline" className="border-white/20 text-white/70">
+                  <Badge variant="outline" className="border-white/20 text-[10px] text-white/70 sm:text-xs">
                     WC 2026 Numbers
                   </Badge>
-                  <Badge variant="outline" className="border-emerald-400/30 text-emerald-200/80">
+                  <Badge variant="outline" className="hidden border-emerald-400/30 text-emerald-200/80 sm:inline-flex">
                     داخل لوحة التحكم فقط
                   </Badge>
                 </div>
-                <h1 className="text-3xl font-black leading-tight text-white md:text-5xl">
+                <h1 className="text-2xl font-black leading-tight text-white sm:text-3xl md:text-5xl">
                   {data?.headline || "كأس العالم 2026 بالأرقام"}
                 </h1>
-                <p className="text-sm text-white/65 md:text-base">
+                <p className="text-xs text-white/65 sm:text-sm md:text-base">
                   {data?.subtitle ||
                     "راجع الأرقام هنا قبل أي نشر. الصفحة العامة لن تُفعَّل إلا بأمرك."}
                 </p>
