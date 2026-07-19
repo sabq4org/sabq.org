@@ -25,6 +25,7 @@
 
 import https from "node:https";
 import { withSWR } from "../memoryCache";
+import { looksLikeSaudiClubTeamName } from "./saudiLeagueNames";
 
 const TS_BASE = "https://api.thesports.com/v1/football";
 
@@ -1610,6 +1611,7 @@ export interface TsPlayerMatchStat {
 // الأسماء عبر language/list. أفضل جهد: أي فشل/تهدئة → [].
 
 const TS_BOARD_NOISE_RE = /friendl|reserve|amateur|ودّي|ودي|احتياط|هواة/i;
+const TS_BOARD_FRIENDLY_RE = /friendl|ودّي|ودي/i;
 
 const TS_STATUS_META: Record<number, { code: string; label: string }> = {
   2: { code: "1H", label: "الشوط الأول" },
@@ -1753,13 +1755,24 @@ export async function getTheSportsLiveBoard(): Promise<TsLiveBoardItem[]> {
       if (!competitionName || looksLikeTsUuid(competitionName)) {
         competitionName = ex?.name?.trim() && !looksLikeTsUuid(ex.name) ? ex.name.trim() : "بطولة";
       }
-      if (TS_BOARD_NOISE_RE.test(competitionName)) continue;
-      if (ex?.name && TS_BOARD_NOISE_RE.test(ex.name)) continue;
-
       const homeName = resolveTeamName(e.homeTeamId);
       const awayName = resolveTeamName(e.awayTeamId);
       // بدون اسمين مقروءين لا نُظهر الصف (أفضل من uuid مزيف).
       if (!homeName || !awayName) continue;
+
+      // ودّيات/احتياط/هواة = ضجيج عالمي — استثناء: ودّية فيها نادٍ سعودي
+      // (API-Football يتأخر كثيرًا على Club Friendlies؛ نُبقيها من TheSports).
+      const noisy =
+        TS_BOARD_NOISE_RE.test(competitionName) ||
+        (ex?.name ? TS_BOARD_NOISE_RE.test(ex.name) : false);
+      if (noisy) {
+        const friendlyNoise =
+          TS_BOARD_FRIENDLY_RE.test(competitionName) ||
+          (ex?.name ? TS_BOARD_FRIENDLY_RE.test(ex.name) : false);
+        const saudiClub =
+          looksLikeSaudiClubTeamName(homeName) || looksLikeSaudiClubTeamName(awayName);
+        if (!(friendlyNoise && saudiClub)) continue;
+      }
 
       const meta = TS_STATUS_META[e.decoded.statusId] ?? { code: "LIVE", label: "مباشر" };
       const { elapsed, extra } = tsBoardMinute(
