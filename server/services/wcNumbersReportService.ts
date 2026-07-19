@@ -6,7 +6,7 @@
 
 import { and, eq, gte, ilike, like, notIlike, or, sql, type SQL } from "drizzle-orm";
 import { db } from "../db";
-import { articles, categories } from "@shared/schema";
+import { articles, categories, wcPredictions } from "@shared/schema";
 import { CACHE_TTL, swrCache, withSWR } from "../memoryCache";
 import {
   detectChampion,
@@ -39,8 +39,6 @@ export type SabqCoverageStats = {
   editorial: number;
   previews: number;
   matchReports: number;
-  infographics: number;
-  analyses: number;
   opinions: number;
   totalViews: number;
   avgViews: number;
@@ -58,6 +56,16 @@ export type SabqCoverageStats = {
     imageUrl: string | null;
   }>;
   dailyPulse: Array<{ day: string; count: number; views: number }>;
+};
+
+/** توقعات مباريات المونديال (legacy wc*) — النقاط = نقاط الولاء المصروفة للفائزين بعد التسوية. */
+export type WcPredictionsEngagement = {
+  totalPredictions: number;
+  pendingPredictions: number;
+  settledPredictions: number;
+  /** مجموع points_awarded — لا يشمل مباريات لم تُسوَّ بعد (مثل مباراة الليلة قبل الصافرة النهائية) */
+  pointsAwarded: number;
+  note: string;
 };
 
 export type TournamentStats = {
@@ -113,16 +121,17 @@ export type WcNumbersReport = {
   headline: string;
   subtitle: string;
   sabq: SabqCoverageStats;
+  predictions: WcPredictionsEngagement;
   tournament: TournamentStats;
   platform: PlatformHighlight[];
   storyBeats: StoryBeat[];
   cache: WcNumbersReportCacheMeta;
 };
 
-/** كاش تقرير الأرقام — طويل لأن التقرير تلخيصي وليس لحظياً. */
-const REPORT_CACHE_KEY = "blocks:wc:numbers-report:v4";
-const REPORT_TTL_MS = CACHE_TTL.LONG; // 15 دقيقة طازج
-const REPORT_SWR_MS = CACHE_TTL.LONG * 2; // +15 دقيقة stale-while-revalidate
+/** كاش تقرير الأرقام — البطولة انتهت؛ TTL طويل لتقليل ضغط DB. */
+const REPORT_CACHE_KEY = "blocks:wc:numbers-report:v5";
+const REPORT_TTL_MS = CACHE_TTL.VERY_LONG; // ساعة طازج
+const REPORT_SWR_MS = CACHE_TTL.VERY_LONG * 2; // +ساعة stale-while-revalidate
 
 function matchDeskSlugPredicate() {
   return or(
@@ -210,8 +219,6 @@ async function queryCoverage(where: SQL | undefined): Promise<{
     aiGenerated: number;
     previews: number;
     matchReports: number;
-    infographics: number;
-    analyses: number;
     opinions: number;
     totalViews: number;
   };
@@ -235,8 +242,6 @@ async function queryCoverage(where: SQL | undefined): Promise<{
       aiGenerated: sql<number>`count(*) filter (where ${articles.aiGenerated} = true)::int`,
       previews: sql<number>`count(*) filter (where ${articles.slug} like ${`${SLUG_PREFIX}-preview-%`} or ${articles.legacySlug} like ${`${SLUG_PREFIX}-preview-%`})::int`,
       matchReports: sql<number>`count(*) filter (where ${articles.slug} like ${`${SLUG_PREFIX}-report-%`} or ${articles.legacySlug} like ${`${SLUG_PREFIX}-report-%`})::int`,
-      infographics: sql<number>`count(*) filter (where ${articles.articleType} = 'infographic')::int`,
-      analyses: sql<number>`count(*) filter (where ${articles.articleType} = 'analysis')::int`,
       opinions: sql<number>`count(*) filter (where ${articles.articleType} = 'opinion')::int`,
       totalViews: sql<number>`coalesce(sum(${articles.views}), 0)::int`,
     })
@@ -278,8 +283,6 @@ async function queryCoverage(where: SQL | undefined): Promise<{
       aiGenerated: Number(agg?.aiGenerated ?? 0),
       previews: Number(agg?.previews ?? 0),
       matchReports: Number(agg?.matchReports ?? 0),
-      infographics: Number(agg?.infographics ?? 0),
-      analyses: Number(agg?.analyses ?? 0),
       opinions: Number(agg?.opinions ?? 0),
       totalViews: Number(agg?.totalViews ?? 0),
     },
@@ -307,8 +310,6 @@ function toSabqStats(
     editorial: Math.max(total - agg.aiGenerated, 0),
     previews: agg.previews,
     matchReports: agg.matchReports,
-    infographics: agg.infographics,
-    analyses: agg.analyses,
     opinions: agg.opinions,
     totalViews,
     avgViews: total > 0 ? Math.round(totalViews / total) : 0,
@@ -518,10 +519,51 @@ function buildStoryBeats(sabq: SabqCoverageStats, tournament: TournamentStats): 
 
 type ReportPayload = Omit<WcNumbersReport, "cache">;
 
+async function buildPredictionsEngagement(): Promise<WcPredictionsEngagement> {
+  try {
+    const [row] = await db
+      .select({
+        total: sql<number>`count(*)::int`,
+        pending: sql<number>`count(*) filter (where ${wcPredictions.status} = 'pending')::int`,
+        settled: sql<number>`count(*) filter (where ${wcPredictions.status} <> 'pending')::int`,
+        points: sql<number>`coalesce(sum(${wcPredictions.pointsAwarded}), 0)::int`,
+      })
+      .from(wcPredictions);
+
+    const totalPredictions = Number(row?.total ?? 0);
+    const pendingPredictions = Number(row?.pending ?? 0);
+    const settledPredictions = Number(row?.settled ?? 0);
+    const pointsAwarded = Number(row?.points ?? 0);
+
+    const note =
+      pendingPredictions > 0
+        ? `منها ${pendingPredictions.toLocaleString("en-US")} توقعاً لم تُسوَّ بعد — نقاط مباراة الليلة (وما زال معلّقاً) تُضاف بعد صافرة النهاية وتسوية النظام.`
+        : "كل التوقعات المسجّلة حُسمت وصُرفت نقاطها للفائزين بالنتيجة الصحيحة.";
+
+    return {
+      totalPredictions,
+      pendingPredictions,
+      settledPredictions,
+      pointsAwarded,
+      note,
+    };
+  } catch (err) {
+    console.error("[WcNumbersReport] predictions engagement failed:", err);
+    return {
+      totalPredictions: 0,
+      pendingPredictions: 0,
+      settledPredictions: 0,
+      pointsAwarded: 0,
+      note: "تعذر قراءة إحصائيات التوقعات في هذه اللحظة.",
+    };
+  }
+}
+
 async function buildReportPayload(): Promise<ReportPayload> {
-  const [sabq, tournament] = await Promise.all([
+  const [sabq, tournament, predictions] = await Promise.all([
     buildSabqCoverage(),
     buildTournamentStats(),
+    buildPredictionsEngagement(),
   ]);
 
   const champName = tournament.champion?.team?.name;
@@ -534,8 +576,9 @@ async function buildReportPayload(): Promise<ReportPayload> {
     generatedAt: new Date().toISOString(),
     headline,
     subtitle:
-      "أرقام تغطية سبق لحظة بلحظة مع نبض البطولة: المواد، المشاهدات، الأهداف، والبطل.",
+      "حصاد نهائي: تغطية سبق، نبض البطولة، توقعات الجمهور، والنقاط المصروفة للفائزين.",
     sabq,
+    predictions,
     tournament,
     platform: platformHighlights(),
     storyBeats: buildStoryBeats(sabq, tournament),

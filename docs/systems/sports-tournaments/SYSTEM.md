@@ -8,12 +8,13 @@
 ## تقرير كأس العالم 2026 بالأرقام (مراجعة داخلية)
 - **لوحة:** `/dashboard/wc-2026-numbers-report` — للمراجعة قبل أي نشر عام (ليست صفحة زائر).
 - **API:** `GET /api/admin/wc-2026-numbers-report` — `requireAuth` + `system.manage_settings` · `Cache-Control: private, no-store`.
-- **كاش:** SWR في ذاكرة العملية `blocks:wc:numbers-report:v4` — طازج 15د + SWR 15د. الطلب الأول يحسب؛ اللاحق من الذاكرة. `?fresh=1` يعيد الحساب. الحقل `cache.source` = `cache` | `computed`.
+- **كاش:** SWR في ذاكرة العملية `blocks:wc:numbers-report:v5` — طازج ساعة + SWR ساعة (البطولة انتهت). الواجهة بلا أزرار تحديث/إعادة حساب. `?fresh=1` يبقى متاحاً للـ API فقط إن لزم.
 - **عدّاد المواد (مضيّق على 2026):**
   1. `wc26-*` (غرفة المباريات) — دائماً.
   2. تحريري: قسم `sports` + عنوان فيه (مونديال|كأس العالم) + `publishedAt >= 2026-01-01`، مع استبعاد أندية وسنوات 2010/2014/2018/2022 بلا ذكر 2026.
   3. عند فشل مسار التحريري: سقوط آمن إلى `wc26-*` فقط + تنبيه في `methodology`.
   4. الاستجابة تعرض `breakdown.matchDesk` / `breakdown.editorialWindow` + `methodology`.
+- **التوقعات (`predictions`):** من جدول `wc_predictions` — `totalPredictions` + `pointsAwarded` (نقاط الولاء المصروفة بعد التسوية). التوقعات `pending` (مثل مباراة لم تُصفَّر بعد) لا تدخل مجموع النقاط حتى يعمل `settleFinishedMatches`.
 - **البطولة:** من `worldCupService` (بطل، أهداف، هدّافون، بطاقات، عرب).
 - **الحالة:** `status: "draft"` حتى يُقرَّر مسار نشر عام لاحقاً.
 

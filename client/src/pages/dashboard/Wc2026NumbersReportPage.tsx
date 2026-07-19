@@ -2,7 +2,7 @@
  * تقرير كأس العالم 2026 بالأرقام — لوحة داخلية للمراجعة قبل النشر العام.
  */
 import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,6 @@ import {
   Flag,
   Activity,
   ExternalLink,
-  RefreshCw,
   Crown,
   ChevronLeft,
   ChevronRight,
@@ -43,8 +42,6 @@ type Report = {
     editorial: number;
     previews: number;
     matchReports: number;
-    infographics: number;
-    analyses: number;
     opinions: number;
     totalViews: number;
     avgViews: number;
@@ -61,6 +58,13 @@ type Report = {
       imageUrl: string | null;
     }>;
     dailyPulse: Array<{ day: string; count: number; views: number }>;
+  };
+  predictions: {
+    totalPredictions: number;
+    pendingPredictions: number;
+    settledPredictions: number;
+    pointsAwarded: number;
+    note: string;
   };
   tournament: {
     configured: boolean;
@@ -358,11 +362,10 @@ function StoryRail({
   );
 }
 
-async function fetchReport(fresh: boolean): Promise<Report> {
-  const path = fresh
-    ? "/api/admin/wc-2026-numbers-report?fresh=1"
-    : "/api/admin/wc-2026-numbers-report";
-  const res = await fetch(apiUrl(path), { credentials: "include" });
+async function fetchReport(): Promise<Report> {
+  const res = await fetch(apiUrl("/api/admin/wc-2026-numbers-report"), {
+    credentials: "include",
+  });
   if (!res.ok) {
     let detail = "";
     try {
@@ -378,44 +381,19 @@ async function fetchReport(fresh: boolean): Promise<Report> {
   return res.json();
 }
 
-const REPORT_QUERY_KEY = ["/api/admin/wc-2026-numbers-report"] as const;
-
 export default function Wc2026NumbersReportPage() {
-  const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabId>("pulse");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [storyIndex, setStoryIndex] = useState(0);
   const [focusBeat, setFocusBeat] = useState<number | null>(null);
-  const [busy, setBusy] = useState<"cache" | "fresh" | null>(null);
 
-  const { data, isLoading, isFetching, error } = useQuery<Report>({
-    queryKey: REPORT_QUERY_KEY,
-    queryFn: () => fetchReport(false),
-    staleTime: 5 * 60_000,
+  const { data, isLoading, error } = useQuery<Report>({
+    queryKey: ["/api/admin/wc-2026-numbers-report"],
+    queryFn: fetchReport,
+    // البطولة انتهت — الأرقام شبه ثابتة؛ كاش طويل على المتصفح أيضاً
+    staleTime: 60 * 60_000,
     retry: 1,
   });
-
-  const reloadFromCache = async () => {
-    setBusy("cache");
-    try {
-      const report = await fetchReport(false);
-      queryClient.setQueryData(REPORT_QUERY_KEY, report);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const recomputeFromDb = async () => {
-    setBusy("fresh");
-    try {
-      const report = await fetchReport(true);
-      queryClient.setQueryData(REPORT_QUERY_KEY, report);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const spinning = isFetching || busy != null;
 
   const tabs = useMemo(
     () =>
@@ -462,6 +440,9 @@ export default function Wc2026NumbersReportPage() {
                   <Badge variant="outline" className="border-white/20 text-[10px] text-white/70 sm:text-xs">
                     كأس العالم 2026
                   </Badge>
+                  <Badge className="bg-emerald-500/90 text-[10px] text-emerald-950 hover:bg-emerald-500/90 sm:text-xs">
+                    البطولة انتهت
+                  </Badge>
                   <Badge variant="outline" className="border-amber-300/30 text-[10px] text-amber-100/80 sm:text-xs">
                     مراجعة داخلية
                   </Badge>
@@ -473,44 +454,6 @@ export default function Wc2026NumbersReportPage() {
                   {data?.subtitle ||
                     "أرقام تغطية سبق مع نبض البطولة: المواد، المشاهدات، الأهداف، والبطل."}
                 </p>
-              </div>
-
-              <div className="flex flex-col items-end gap-2">
-                <div className="flex flex-wrap justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                    onClick={() => void reloadFromCache()}
-                    disabled={spinning}
-                  >
-                    <RefreshCw className={cn("ml-2 h-4 w-4", busy === "cache" && "animate-spin")} />
-                    تحديث العرض
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="border-amber-300/30 bg-amber-400/10 text-amber-50 hover:bg-amber-400/20"
-                    onClick={() => void recomputeFromDb()}
-                    disabled={spinning}
-                    title="يعيد حساب الأرقام من قاعدة البيانات والمزوّد — أثقل على الخادم"
-                  >
-                    <RefreshCw className={cn("ml-2 h-4 w-4", busy === "fresh" && "animate-spin")} />
-                    إعادة الحساب
-                  </Button>
-                </div>
-                {data?.cache ? (
-                  <p className="max-w-xs text-left text-[11px] leading-relaxed text-white/45" dir="rtl">
-                    {data.cache.source === "cache"
-                      ? `من ذاكرة الخادم · بلا ضغط إضافي على قاعدة البيانات (يُعاد الحساب تلقائياً كل ${Math.round(data.cache.ttlSeconds / 60)} دقائق)`
-                      : data.cache.forced
-                        ? "أُعيد حسابها الآن من قاعدة البيانات والمزوّد"
-                        : "حُسبت للتو وخُزّنت في الذاكرة للطلبات التالية"}
-                  </p>
-                ) : null}
-                {data?.generatedAt ? (
-                  <p className="text-[11px] text-white/40">
-                    وقت الأرقام: {new Date(data.generatedAt).toLocaleString("ar-SA")}
-                  </p>
-                ) : null}
               </div>
             </div>
 
@@ -576,8 +519,7 @@ export default function Wc2026NumbersReportPage() {
               <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-6 text-rose-100">
                 <p className="font-bold">تعذر تحميل التقرير</p>
                 <p className="mt-2 text-sm text-rose-100/80">
-                  {(error as Error)?.message ||
-                    "خطأ غير معروف — جرّب «تحديث العرض» أو «إعادة الحساب»."}
+                  {(error as Error)?.message || "خطأ غير معروف — أعد فتح الصفحة أو راجع سجلات API."}
                 </p>
               </div>
             ) : (
@@ -688,11 +630,31 @@ export default function Wc2026NumbersReportPage() {
                         hint={`متوسط ${data.sabq.avgViews.toLocaleString("en-US")}`}
                         accent="#ef4444"
                       />
-                      <StatOrb label="إنفوجرافيك" value={data.sabq.infographics} accent="#a78bfa" />
-                      <StatOrb label="تحليلات" value={data.sabq.analyses} accent="#fb7185" />
+                      <StatOrb
+                        label="توقعات المباريات"
+                        value={data.predictions?.totalPredictions ?? 0}
+                        hint={
+                          (data.predictions?.pendingPredictions ?? 0) > 0
+                            ? `${(data.predictions?.pendingPredictions ?? 0).toLocaleString("en-US")} بانتظار التسوية`
+                            : "كل التوقعات محسومة"
+                        }
+                        accent="#a78bfa"
+                      />
+                      <StatOrb
+                        label="نقاط صُرفت للفائزين"
+                        value={data.predictions?.pointsAwarded ?? 0}
+                        hint="ولاء — بعد تسوية النتيجة الصحيحة"
+                        accent="#fb7185"
+                      />
                       <StatOrb label="رأي" value={data.sabq.opinions} accent="#fbbf24" />
                       <StatOrb label="AI مولَّد" value={data.sabq.aiGenerated} accent="#34d399" />
                     </div>
+
+                    {data.predictions?.note ? (
+                      <p className="rounded-xl border border-violet-400/20 bg-violet-500/10 px-3 py-2 text-[11px] text-violet-100/85 sm:text-xs">
+                        {data.predictions.note}
+                      </p>
+                    ) : null}
 
                     <div className="rounded-3xl border border-white/10 bg-black/20 p-5">
                       <div className="mb-4 flex items-center gap-2">
