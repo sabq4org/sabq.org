@@ -31,6 +31,7 @@ import {
   getTheSportsLiveBoard,
   getTheSportsMatchLive,
   getTheSportsMatchLiveByUuid,
+  getTheSportsSaudiFriendlyLiveBoard,
   getTsCompetitionExtra,
   getTsCompetitionId,
   getTsCompetitionMatchPairs,
@@ -600,11 +601,28 @@ export async function getGlobalLiveFixtures(): Promise<SplLiveBoardItem[]> {
   });
 }
 
+/** مهلة قصيرة: لا نحبس today/live خلف إثراء TheSports للودّيات. */
+const SAUDI_FRIENDLY_TS_BUDGET_MS = 450;
+
+async function loadSaudiFriendlyTsBoardBudgeted(): Promise<TsLiveBoardItem[]> {
+  try {
+    return await Promise.race([
+      getTheSportsSaudiFriendlyLiveBoard(),
+      new Promise<TsLiveBoardItem[]>((resolve) =>
+        setTimeout(() => resolve([]), SAUDI_FRIENDLY_TS_BUDGET_MS),
+      ),
+    ]);
+  } catch {
+    return [];
+  }
+}
+
 /** ألحق/حدّث ودّيات أندية سعودية من لوحة TheSports على لوحة المباشر. */
 async function mergeTsSaudiClubFriendliesIntoLive(
   items: SplLiveBoardItem[],
 ): Promise<SplLiveBoardItem[]> {
-  const board = await getTheSportsLiveBoard();
+  // مسار خفيف + ميزانية زمنية — لا getTheSportsLiveBoard العالمية (كانت تُبطئ /live).
+  const board = await loadSaudiFriendlyTsBoardBudgeted();
   if (!board.length) return items;
   const friendlyRe = /friendl|ودّي|ودي/i;
   const out = [...items];
@@ -1931,7 +1949,7 @@ async function overlaySaudiClubFriendlyFixture<T extends SplFixture>(fx: T): Pro
   if (fx.status.finished) return fx;
   if (!fx.status.live && !isStuckPastKickoff(fx)) return fx;
   try {
-    const board = await getTheSportsLiveBoard();
+    const board = await loadSaudiFriendlyTsBoardBudgeted();
     return overlaySaudiClubFriendlyFixtureWithBoard(fx, board);
   } catch {
     return annotateStuckKickoff(fx);
@@ -1956,14 +1974,16 @@ export async function overlayLiveBoardList<T extends SplLiveBoardItem>(items: T[
   if (!list.length) return list;
   // لوحة TheSports مرّة واحدة لكل طلب — لا N× await على نفس المصدر للودّيات.
   let friendlyBoard: TsLiveBoardItem[] | null = null;
+  // ودّيات live سبق دمجها في getGlobalLiveFixtures — هنا فقط NS العالق بعد الصافرة.
   const needsFriendlyBoard = list.some(
     (i) =>
       i.competitionSlug === CLUB_FRIENDLIES_SLUG &&
       !i.status.finished &&
-      (i.status.live || isStuckPastKickoff(i)),
+      !i.status.live &&
+      isStuckPastKickoff(i),
   );
   if (needsFriendlyBoard) {
-    friendlyBoard = await getTheSportsLiveBoard().catch(() => [] as TsLiveBoardItem[]);
+    friendlyBoard = await loadSaudiFriendlyTsBoardBudgeted();
   }
   return Promise.all(
     list.map(async (item) => {
@@ -2005,7 +2025,8 @@ export async function overlayLiveMatchDetail(detail: SplMatchDetail): Promise<Sp
     if (fx.status.finished) return detail;
     if (!fx.status.live && !isStuckPastKickoff(fx)) return detail;
     try {
-      const board = await getTheSportsLiveBoard();
+      // مركز المباراة: مسار ودّيات خفيف (لا لوحة العالم الكاملة).
+      const board = await getTheSportsSaudiFriendlyLiveBoard().catch(() => [] as TsLiveBoardItem[]);
       const hit = board.find((m) => fixtureMatchesTsBoard(fx, m));
       if (!hit) return { ...detail, fixture: annotateStuckKickoff(fx) };
       const ts = await getTheSportsMatchLiveByUuid(hit.matchId).catch(() => null);
